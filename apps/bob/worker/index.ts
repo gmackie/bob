@@ -70,6 +70,11 @@ export default Sentry.withSentry(
       // API — so this no longer requires ANTHROPIC_API_KEY.
       const autoMergeOn =
         String(runtimeEnv.BOB_AUTO_MERGE_ENABLED ?? "") === "true";
+      // Checklist-driven execution driver. Dark by default (off): flip
+      // BOB_ADVANCE_CHECKLIST_ENABLED=true to roll it out, same lever as the
+      // other drivers — no redeploy needed to disable.
+      const advanceChecklistOn =
+        String(runtimeEnv.BOB_ADVANCE_CHECKLIST_ENABLED ?? "") === "true";
       // Keep the Linear backlog fresh server-side (default on) — the sync was
       // webhook-only, so new Linear tasks stopped reaching Bob when the webhook
       // went quiet. This pull backfills + maintains. Gated to ~every 15 min to
@@ -81,7 +86,7 @@ export default Sentry.withSentry(
           ? (_event as any).scheduledTime
           : Date.now();
       const syncLinearDue = Math.floor(scheduledTime / 60_000) % 15 === 0;
-      if (!autoDrainOn && !autoMergeOn && !syncLinearOn) {
+      if (!autoDrainOn && !autoMergeOn && !syncLinearOn && !advanceChecklistOn) {
         return;
       }
       const concurrency = Number(runtimeEnv.BOB_AUTO_DRAIN_CONCURRENCY ?? 4);
@@ -241,6 +246,28 @@ export default Sentry.withSentry(
           throw error;
         }
         }
+
+        // 1b. Walk active plan checklists one gated item at a time (dark by
+        // default). Independent of auto-drain; safe no-op when no plan is active.
+        if (advanceChecklistOn) {
+          try {
+            const { advanceChecklist } = await import(
+              "@bob/api/handlers/advanceChecklist"
+            );
+            const r = await advanceChecklist({});
+            if (r.actions.length) {
+              console.log(
+                `[advance-checklist] plans=${r.plansSeen} ` +
+                  r.actions
+                    .map((a) => `${a.action}${a.itemId ? `(${a.itemId})` : ""}`)
+                    .join(","),
+              );
+            }
+          } catch (error) {
+            console.error("[advance-checklist] failed:", error);
+          }
+        }
+
         // 2. Review + auto-merge the PRs those tasks produced.
         if (autoMergeOn) {
           const { autoReviewAndMerge } = await import(

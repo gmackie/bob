@@ -43,6 +43,11 @@
     // that are CI-green + AI-approved + conflict-free. Needs the ANTHROPIC_API_KEY
     // secret (set via `wrangler secret put`, NOT a plaintext var here).
     "BOB_AUTO_MERGE_ENABLED": "true",
+    // Checklist-driven execution driver (advanceChecklist). Enabled 2026-08-14
+    // after the dark release verified healthy; safe (no-op) until an active plan
+    // with checklist items exists. Flip to "false" to disable — no redeploy of
+    // logic needed, same lever as the other drivers.
+    "BOB_ADVANCE_CHECKLIST_ENABLED": "true",
     "BOB_AUTO_MERGE_MAX_PER_RUN": "5",
     "BOB_AUTO_MERGE_MODEL": "claude-sonnet-5",
     "BOB_AUTO_MERGE_INSTANCE_HINT": "gitea @ git.forgegraf.com",

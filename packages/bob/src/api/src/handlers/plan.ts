@@ -281,6 +281,36 @@ export async function planUpdateTask(
   return updated;
 }
 
+/**
+ * Human gate resolution: a person signs off (or rejects) a checklist item whose
+ * gate is `{kind:"human"}`. The advanceChecklist driver holds such an item at
+ * `pending` until this sets `gateOutcome` — which the driver's evaluateGate
+ * reads first. `pass` advances the item; `fail` reopens it (the driver reprompts
+ * for a fix, bounded by the attempt cap). This is the whole human-in-the-loop
+ * gate tier: the pause/resume is free from the existing walk logic.
+ */
+export async function planResolveGate(
+  ctx: HandlerContext,
+  input: { id: string; outcome: "pass" | "fail" },
+) {
+  const task = await ctx.db.query.planTaskItems.findFirst({
+    where: eq(planTaskItems.id, input.id),
+    with: { plan: true },
+  });
+
+  if (task?.plan.userId !== ctx.userId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+  }
+
+  const [updated] = await ctx.db
+    .update(planTaskItems)
+    .set({ gateOutcome: input.outcome, updatedAt: new Date().toISOString() })
+    .where(eq(planTaskItems.id, input.id))
+    .returning();
+
+  return updated;
+}
+
 export async function planDeleteTask(
   ctx: HandlerContext,
   input: { id: string },

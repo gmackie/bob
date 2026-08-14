@@ -570,6 +570,12 @@ export const planDrafts = pgTable(
     sortOrder: t.integer().notNull().default(0),
     status: t.varchar({ length: 20 }).notNull().default("draft"),
     // status: "draft" | "committed" | "discarded"
+    // Per-draft gate (definition-of-done) + acceptance criteria the planner
+    // agent may author; carried into planTaskItems.gate/acceptanceCriteria when
+    // the plan is committed as a gated checklist (validated by gateSpecSchema at
+    // the API boundary). Null = the checklist's default gate.
+    gate: t.jsonb(),
+    acceptanceCriteria: t.text(),
     createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
     updatedAt: t
       .timestamp({ mode: "string", withTimezone: true })
@@ -713,6 +719,24 @@ export const planTaskItems = pgTable("plan_task_items", (t) => ({
   taskKey: t.varchar({ length: 20 }).notNull(),
   content: t.text().notNull(),
   status: t.varchar({ length: 20 }).notNull().default("pending"),
+  // Machine-checkable definition-of-done for this checklist item
+  // (test/build/ci/reviewer/human). Validated by gateSpecSchema at the API
+  // boundary; kept as untyped jsonb here to avoid a work-items→api dependency.
+  // Null means "use the checklist's default gate".
+  gate: t.jsonb(),
+  // Human-readable acceptance criteria the reviewer-gate (and humans) judge
+  // against. Authored during planning alongside the item's work.
+  acceptanceCriteria: t.text(),
+  // Reprompt/repair attempts spent on this item after a failed gate; the
+  // advanceChecklist driver blocks the item once this exceeds the cap.
+  gateAttempts: t.integer().notNull().default(0),
+  // The agent session currently (or last) executing this item. The driver reads
+  // its workflowStatus to tell "still working" from "finished its turn, ready to
+  // gate". Plain uuid (no cross-package FK to chat schema).
+  sessionId: t.uuid(),
+  // Reported outcome of this item's gate for the current attempt, set by the
+  // execution side once the agent + gate have run: "pass" | "fail" | null.
+  gateOutcome: t.varchar({ length: 10 }),
   priority: t.varchar({ length: 10 }).notNull().default("medium"),
   parentTaskKey: t.varchar({ length: 20 }),
   sortOrder: t.integer().notNull().default(0),

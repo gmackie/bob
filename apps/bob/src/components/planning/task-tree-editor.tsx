@@ -277,6 +277,27 @@ export function TaskTreeEditor({
     }),
   );
 
+  // Commit as a gated CHECKLIST: auto-provisions a worktree from the session's
+  // repo and hands the ordered, gated items to the advanceChecklist driver,
+  // which executes them one at a time. Distinct from commitPlan (which files
+  // tasks into the planning provider for humans to pick up).
+  const commitAsChecklist = useMutation(
+    trpc.planSession.commitAsChecklist.mutationOptions({
+      onSuccess: (result) => {
+        if (!result.planId || result.items === 0) {
+          toast("No tasks to run");
+          return;
+        }
+        toast(
+          `Running checklist — ${result.items} item${result.items === 1 ? "" : "s"} dispatched`,
+        );
+        invalidate();
+        onCommit?.({ committed: result.items });
+      },
+      onError: (err) => toast(err.message),
+    }),
+  );
+
   // ---- Pointer sensor with activation distance to avoid accidental drags ----
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -417,16 +438,37 @@ export function TaskTreeEditor({
         </button>
       </div>
 
-      {/* Commit button */}
-      <Button
-        className="w-full rounded-md bg-primary text-white hover:bg-primary/90"
-        onClick={() => commitPlan.mutate({ sessionId })}
-        disabled={commitPlan.isPending || sorted.length === 0}
-      >
-        {commitPlan.isPending
-          ? "Committing..."
-          : `Commit ${sorted.length} task${sorted.length === 1 ? "" : "s"}`}
-      </Button>
+      {/* Commit actions */}
+      <div className="flex flex-col gap-2">
+        <Button
+          className="w-full rounded-md bg-primary text-white hover:bg-primary/90"
+          onClick={() => commitPlan.mutate({ sessionId })}
+          disabled={
+            commitPlan.isPending ||
+            commitAsChecklist.isPending ||
+            sorted.length === 0
+          }
+        >
+          {commitPlan.isPending
+            ? "Committing..."
+            : `Commit ${sorted.length} task${sorted.length === 1 ? "" : "s"}`}
+        </Button>
+        <Button
+          variant="outline"
+          className="w-full rounded-md"
+          onClick={() => commitAsChecklist.mutate({ sessionId })}
+          disabled={
+            commitAsChecklist.isPending ||
+            commitPlan.isPending ||
+            sorted.length === 0
+          }
+          title="Auto-provision a worktree and let Bob run these items one at a time, gated"
+        >
+          {commitAsChecklist.isPending
+            ? "Starting run..."
+            : "Run as checklist"}
+        </Button>
+      </div>
     </div>
   );
 }
