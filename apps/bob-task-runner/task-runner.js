@@ -164,10 +164,21 @@ function scratchDirFor(slug) {
   return dir;
 }
 
-// Slugs whose clone failed this process: skipped until restart so a repo
-// that exists nowhere (stale startup_repo row) can't burn a scan slot
-// every cycle.
-const _cloneFailed = new Set();
+// Slugs whose clone recently failed, mapped to the failure timestamp. A failed
+// slug is benched for CLONE_FAIL_COOLDOWN_MS so a repo that exists nowhere (a
+// stale/wrong startup_repo row) can't burn a scan slot every cycle — but the
+// bench EXPIRES so a *transient* clone failure (a momentary forge/network blip
+// on a repo that really does exist) self-heals on the next scan after the
+// cooldown, instead of benching a good repo until the process restarts.
+const CLONE_FAIL_COOLDOWN_MS = 30 * 60_000; // 30 min
+const _cloneFailed = new Map(); // slug -> last failure timestamp (ms)
+
+// Pure (exported for tests): is this slug currently benched for a recent clone
+// failure? `cloneFailed` is the slug->timestamp map.
+function cloneBenched(slug, cloneFailed, now, cooldownMs = CLONE_FAIL_COOLDOWN_MS) {
+  const t = cloneFailed.get(slug);
+  return t != null && now - t < cooldownMs;
+}
 
 // Clone a missing repo at claim time so provisioning a new company needs
 // zero host access. Returns true when the dir exists (already or after
@@ -194,7 +205,7 @@ function ensureRepoDir(slug) {
       console.log(`[runner] clone failed (${url}): ${e.message.split("\n")[0]}`);
     }
   }
-  _cloneFailed.add(slug);
+  _cloneFailed.set(slug, Date.now());
   return false;
 }
 
@@ -215,9 +226,9 @@ function ensureRepoDir(slug) {
 // _cloneFailed on a failed clone; this is the read the claim-time guard always
 // assumed existed ("the slug goes on _cloneFailed, so this process won't
 // thrash on it").
-function slugEligible(slug, { projectId, repoDir, cloneFailed, repoExists, hasRemote, repoOptional }) {
+function slugEligible(slug, { projectId, repoDir, cloneBenched, repoExists, hasRemote, repoOptional }) {
   if (!projectId) return false;
-  if (cloneFailed.has(slug)) return false;
+  if (cloneBenched) return false;
   // Repo-optional (knowledge/ops) startups have a Linear project but no code
   // repo; their issues run in a scratch dir with no clone, so they need neither
   // a repoDir nor a remote to be materializable.
@@ -830,7 +841,7 @@ async function runOnce() {
       !slugEligible(slug, {
         projectId,
         repoDir,
-        cloneFailed: _cloneFailed,
+        cloneBenched: cloneBenched(slug, _cloneFailed, Date.now()),
         repoExists: repoDir ? existsSync(repoDir) : false,
         hasRemote: !!remoteEntry(slug),
         repoOptional,
@@ -944,7 +955,7 @@ async function main() {
 // Exported for regression tests. Only auto-run the poller when invoked
 // directly (node task-runner.js), so requiring the module in a test does not
 // start the 2-minute scan loop.
-module.exports = { slugEligible, issueClaimable };
+module.exports = { slugEligible, issueClaimable, cloneBenched };
 
 if (require.main === module) {
   main().catch(e => {

@@ -13,7 +13,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { slugEligible, issueClaimable } = require("./task-runner.js");
+const { slugEligible, issueClaimable, cloneBenched } = require("./task-runner.js");
 
 const NOW = Date.parse("2026-08-13T00:00:00Z");
 const DEFAULT_SLUGS = new Set(["bizpulse", "classcheck", "bob"]);
@@ -22,25 +22,36 @@ function eligibleArgs(overrides = {}) {
   return {
     projectId: "proj-1",
     repoDir: "/home/bob/dev/whatever",
-    cloneFailed: new Set(),
+    cloneBenched: false,
     repoExists: true,
     hasRemote: true,
     ...overrides,
   };
 }
 
-test("slugEligible: a slug whose clone failed this process is skipped", () => {
-  const cloneFailed = new Set(["classcheck"]);
+test("slugEligible: a slug currently benched for a clone failure is skipped", () => {
   assert.equal(
-    slugEligible("classcheck", eligibleArgs({ cloneFailed })),
+    slugEligible("classcheck", eligibleArgs({ cloneBenched: true })),
     false,
-    "classcheck must be excluded once it is in _cloneFailed",
+    "classcheck must be excluded while benched",
   );
   assert.equal(
-    slugEligible("bob", eligibleArgs({ cloneFailed })),
+    slugEligible("bob", eligibleArgs({ cloneBenched: false })),
     true,
-    "an unrelated slug is unaffected by classcheck's clone failure",
+    "an unrelated (un-benched) slug is unaffected",
   );
+});
+
+test("cloneBenched: benches within cooldown, self-heals after it (transient failures retry)", () => {
+  const map = new Map([["classcheck", NOW]]);
+  const cooldown = 30 * 60_000;
+  // Just failed -> benched.
+  assert.equal(cloneBenched("classcheck", map, NOW + 60_000, cooldown), true);
+  // After the cooldown -> retryable again (a transient blip must not bench a
+  // good repo forever).
+  assert.equal(cloneBenched("classcheck", map, NOW + cooldown + 1, cooldown), false);
+  // A slug that never failed is never benched.
+  assert.equal(cloneBenched("bob", map, NOW, cooldown), false);
 });
 
 test("slugEligible: missing project or repo is skipped", () => {
@@ -87,7 +98,7 @@ test("poison-pill: one un-clonable slug does not starve the rest of the queue", 
   // The scan sees two startups. classcheck's repo does not exist, so after the
   // first cycle its slug is on _cloneFailed. On the next cycle the loop must
   // drop classcheck entirely and let bob's issue through.
-  const cloneFailed = new Set(["classcheck"]);
+  const benched = new Set(["classcheck"]); // classcheck failed to clone last cycle
   const scan = [
     { slug: "classcheck", repoExists: false, hasRemote: true, issues: [
       { id: "i-406", identifier: "GMA-406", title: "Refresh stale KB entries", priority: 0, updatedAt: "2026-08-12T00:00:00Z", description: "" },
@@ -99,7 +110,7 @@ test("poison-pill: one un-clonable slug does not starve the rest of the queue", 
 
   const candidates = [];
   for (const s of scan) {
-    if (!slugEligible(s.slug, eligibleArgs({ cloneFailed, repoExists: s.repoExists, hasRemote: s.hasRemote }))) continue;
+    if (!slugEligible(s.slug, eligibleArgs({ cloneBenched: benched.has(s.slug), repoExists: s.repoExists, hasRemote: s.hasRemote }))) continue;
     for (const issue of s.issues) {
       if (issueClaimable(s.slug, issue, { now: NOW, defaultSlugs: DEFAULT_SLUGS })) {
         candidates.push({ slug: s.slug, id: issue.id });
