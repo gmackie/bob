@@ -61,6 +61,20 @@ export interface DecideOptions {
 }
 
 /**
+ * The session workflowStatuses that mean the agent has finished its turn for an
+ * item and the gate can now be evaluated. `awaiting_review` counts as finished:
+ * the agent produced work and is handing off — it does not consume a slot and
+ * must not block the checklist waiting for itself. `working` (and the pre-start
+ * states) mean still in progress; `awaiting_input`/`blocked` are human-gated and
+ * are handled by the driver as a hold, not as "finished".
+ */
+export function agentFinishedFromWorkflow(
+  workflowStatus: string | null | undefined,
+): boolean {
+  return workflowStatus === "awaiting_review" || workflowStatus === "completed";
+}
+
+/**
  * Decide the single next action for a checklist. Pure. Walks strictly in
  * sortOrder: the "current" item is the first that is neither completed nor
  * cancelled, and no later item is ever acted on before it. The checklist is

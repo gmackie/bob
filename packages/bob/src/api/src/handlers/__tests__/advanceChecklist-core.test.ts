@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   decideChecklistAction,
+  agentFinishedFromWorkflow,
   gateSpecSchema,
   type ChecklistItemState,
 } from "../advanceChecklist-core";
@@ -89,6 +90,18 @@ describe("decideChecklistAction", () => {
       mk("c", "pending", { sortOrder: 2 }),
     ];
     expect(decideChecklistAction(items)).toEqual({ type: "dispatch", itemId: "b" });
+  });
+});
+
+describe("agentFinishedFromWorkflow", () => {
+  it("treats completed and awaiting_review as finished (ready to gate)", () => {
+    expect(agentFinishedFromWorkflow("completed")).toBe(true);
+    expect(agentFinishedFromWorkflow("awaiting_review")).toBe(true);
+  });
+  it("treats working / pre-start / human-gated / null as not finished", () => {
+    for (const s of ["started", "working", "awaiting_input", "blocked", null, undefined, ""]) {
+      expect(agentFinishedFromWorkflow(s as string | null)).toBe(false);
+    }
   });
 });
 

@@ -724,6 +724,13 @@ export const planTaskItems = pgTable("plan_task_items", (t) => ({
   // Reprompt/repair attempts spent on this item after a failed gate; the
   // advanceChecklist driver blocks the item once this exceeds the cap.
   gateAttempts: t.integer().notNull().default(0),
+  // The agent session currently (or last) executing this item. The driver reads
+  // its workflowStatus to tell "still working" from "finished its turn, ready to
+  // gate". Plain uuid (no cross-package FK to chat schema).
+  sessionId: t.uuid(),
+  // Reported outcome of this item's gate for the current attempt, set by the
+  // execution side once the agent + gate have run: "pass" | "fail" | null.
+  gateOutcome: t.varchar({ length: 10 }),
   priority: t.varchar({ length: 10 }).notNull().default("medium"),
   parentTaskKey: t.varchar({ length: 20 }),
   sortOrder: t.integer().notNull().default(0),
