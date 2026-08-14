@@ -1,0 +1,39 @@
+appId: com.gmacko.bob.dev
+tags:
+  - offline
+  - android
+onFlowComplete:
+  - setAirplaneMode: disabled
+---
+# Android-only production witness. Maestro's airplane-mode command has no
+# effect on iOS; iOS restart persistence is covered separately on device.
+- launchApp
+- extendedWaitUntil:
+    visible: "Hold to talk"
+    timeout: 60000
+- setAirplaneMode: enabled
+- extendedWaitUntil:
+    visible: "offline"
+    timeout: 30000
+- tapOn: "Keyboard"
+- tapOn: "Type a message..."
+- inputText: "OODA offline restart witness"
+- tapOn: "Send"
+- assertVisible: "OODA offline restart witness"
+- assertVisible: "Queued"
+- pressKey: Home
+- killApp
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "OODA offline restart witness"
+    timeout: 30000
+- assertVisible: "Queued"
+- setAirplaneMode: disabled
+- extendedWaitUntil:
+    visible: "connected"
+    timeout: 60000
+- extendedWaitUntil:
+    notVisible: "Queued"
+    timeout: 60000
+- takeScreenshot: screenshots/08-ooda-offline-restart
