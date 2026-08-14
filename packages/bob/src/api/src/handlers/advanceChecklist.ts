@@ -94,11 +94,33 @@ async function evaluateGate(
     return "pending";
   }
   if (gate?.kind === "reviewer") {
-    // Reviewer-agent gate: dispatch an item-scoped reviewer that writes
-    // gateOutcome, then read it here. Not yet wired (needs the item-scoped
-    // reviewer dispatch — the PR-bound dispatchReviewSession can't be reused for
-    // a mid-plan item with no PR). Holds at "pending" until then.
-    return "pending";
+    // Reviewer-agent gate: a review session is dispatched (in the run_gate
+    // action) to judge this item's uncommitted work against its acceptance
+    // criteria. We read that session's TERMINAL outcome here and map it:
+    //   finished-ok (completed / awaiting_review, or a completed review run) → pass
+    //   failed / blocked / error                                             → fail
+    //   still running                                                        → pending
+    // The reviewer signals rejection by failing its session (prompt contract in
+    // dispatchItemReview) — a plain completion counts as approval.
+    if (!item.gateReviewSessionId) return "pending"; // not dispatched yet
+    const reviewRun = await db.query.taskRuns.findFirst({
+      where: eq(taskRuns.sessionId, item.gateReviewSessionId),
+      columns: { status: true },
+      orderBy: [desc(taskRuns.createdAt)],
+    });
+    if (reviewRun?.status === "completed") return "pass";
+    if (reviewRun?.status === "failed" || reviewRun?.status === "blocked") {
+      return "fail";
+    }
+    const reviewSession = await db.query.chatConversations.findFirst({
+      where: eq(chatConversations.id, item.gateReviewSessionId),
+      columns: { workflowStatus: true, status: true },
+    });
+    if (agentFinishedFromWorkflow(reviewSession?.workflowStatus)) return "pass";
+    if (reviewSession?.status === "failed" || reviewSession?.status === "error") {
+      return "fail";
+    }
+    return "pending"; // reviewer still working
   }
 
   if (gate?.kind === "ci") {
@@ -178,8 +200,70 @@ async function dispatchItem(
       status: "in_progress",
       sessionId: result.sessionId || null,
       gateOutcome: null,
+      // Clear any prior review session so the reviewer gate re-runs against the
+      // new work on the next run_gate.
+      gateReviewSessionId: null,
       ...(opts.repair ? { gateAttempts: (item.gateAttempts ?? 0) + 1 } : {}),
     })
+    .where(eq(planTaskItems.id, item.id));
+}
+
+// Dispatch a review session to judge a completed item's uncommitted work
+// against its acceptance criteria. Reuses the executeTask path (same as item
+// dispatch) but with a REVIEW preamble whose contract is: finish successfully to
+// approve, FAIL the session to reject. evaluateGate maps that terminal outcome
+// into gateOutcome. Stores the review session id on the item.
+async function dispatchItemReview(
+  plan: typeof worktreePlans.$inferSelect,
+  item: PlanItemRow,
+): Promise<void> {
+  const { executeTask } = await import("@bob/execution/runtime/taskExecutor");
+
+  const preamble = [
+    `You are REVIEWING a single checklist item for plan "${plan.title ?? plan.filePath}".`,
+    `You are a GATE, not an implementer.`,
+    ``,
+    `## The item`,
+    item.content,
+    item.acceptanceCriteria
+      ? `\n## Acceptance criteria\n${item.acceptanceCriteria}`
+      : ``,
+    ``,
+    `## Rules`,
+    `- Inspect the uncommitted changes in this worktree (\`git diff\`, read the`,
+    `  changed files). Do NOT edit files, do NOT run git write commands, do NOT`,
+    `  open a PR.`,
+    `- Judge the work against the item and its acceptance criteria.`,
+    ``,
+    `## Verdict contract (important)`,
+    `- If the changes FULLY satisfy the item and acceptance criteria: finish`,
+    `  normally — a successful completion is your APPROVAL.`,
+    `- If they do NOT: you MUST FAIL this session. End with an explicit failure`,
+    `  (do not complete successfully) and state what is missing. A plain`,
+    `  completion is read as approval, so never finish normally on a rejection.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const result = await executeTask(
+    plan.userId,
+    {
+      id: item.id,
+      identifier: `${item.taskKey}-review`,
+      title: `Review ${item.taskKey}: ${item.content.slice(0, 100)}`,
+      description: item.content,
+      workspaceId: "",
+      projectId: "",
+      assigneeId: null,
+      labels: [],
+      priority: 0,
+    },
+    { contextPreamble: preamble },
+  );
+
+  await db
+    .update(planTaskItems)
+    .set({ gateReviewSessionId: result.sessionId || null })
     .where(eq(planTaskItems.id, item.id));
 }
 
@@ -230,6 +314,20 @@ async function advanceOnePlan(
     case "run_gate": {
       const item = itemById.get(action.itemId);
       if (!item) return { action: "run_gate" };
+
+      // Reviewer gate: dispatch the review session once (on first run_gate for
+      // this item), then fall through to evaluateGate on later ticks to read its
+      // outcome. Parsing here keeps evaluateGate a pure reader.
+      let gateKind: GateSpec["kind"] | null = null;
+      if (item.gate != null) {
+        const parsed = gateSpecSchema.safeParse(item.gate);
+        if (parsed.success) gateKind = parsed.data.kind;
+      }
+      if (gateKind === "reviewer" && !item.gateReviewSessionId) {
+        await dispatchItemReview(plan, item);
+        return { action: "run_gate:review-dispatched", itemId: action.itemId };
+      }
+
       const outcome = await evaluateGate(item);
       if (outcome !== "pending") {
         await db
