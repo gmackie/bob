@@ -1259,6 +1259,86 @@ export async function planSessionCommitPlanLocal(
 }
 
 /**
+ * Resolve (or provision) the worktree a checklist commit targets.
+ *
+ * If the caller supplies a worktreeId we verify ownership and use it. Otherwise
+ * we auto-provision a FRESH worktree for the session's repository — a new
+ * worktree per checklist so concurrent plans never interleave edits on the same
+ * tree. The DB row is authoritative; the Go daemon materializes the on-disk
+ * worktree lazily on first execution (same contract as repositoryCreateWorktree).
+ */
+async function resolveChecklistWorktree(
+  ctx: HandlerContext,
+  session: typeof chatConversations.$inferSelect,
+  worktreeId: string | undefined,
+): Promise<string> {
+  if (worktreeId) {
+    const wt = await ctx.db.query.worktrees.findFirst({
+      where: and(
+        eq(worktrees.id, worktreeId),
+        eq(worktrees.userId, ctx.userId),
+      ),
+      columns: { id: true },
+    });
+    if (!wt) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Worktree not found" });
+    }
+    return wt.id;
+  }
+
+  // Resolve the repository from the session's planning project (the same map
+  // planSessionStart uses: repositories.planningProjectId = projectId), falling
+  // back to any repo in the session's workspace.
+  let repo = session.planningProjectId
+    ? await ctx.db.query.repositories.findFirst({
+        where: and(
+          eq(repositories.planningProjectId, session.planningProjectId),
+          eq(repositories.userId, ctx.userId),
+        ),
+      })
+    : null;
+  if (!repo && session.planningWorkspaceId) {
+    repo = await ctx.db.query.repositories.findFirst({
+      where: and(
+        eq(repositories.workspaceId, session.planningWorkspaceId),
+        eq(repositories.userId, ctx.userId),
+      ),
+    });
+  }
+  if (!repo) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message:
+        "No repository linked to this planning session — cannot auto-provision a worktree for the checklist.",
+    });
+  }
+
+  // A fresh branch per checklist. sessionId prefix keeps it deterministic (no
+  // Date.now needed) and readable; the daemon creates it off the repo's branch.
+  const branchName = `checklist/${session.id.slice(0, 8)}`;
+  const worktreePath = `~/.bob/${repo.name}-${branchName.replace("/", "-")}`;
+
+  const [wt] = await ctx.db
+    .insert(worktrees)
+    .values({
+      userId: ctx.userId,
+      repositoryId: repo.id,
+      path: worktreePath,
+      branch: branchName,
+      preferredAgent: "claude",
+      isMainWorktree: false,
+    })
+    .returning({ id: worktrees.id });
+  if (!wt) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to provision worktree for checklist",
+    });
+  }
+  return wt.id;
+}
+
+/**
  * Commit a planning session's drafts as a GATED CHECKLIST — the bridge from
  * planning (planDrafts) to the live execution model (worktreePlans +
  * planTaskItems) that the advanceChecklist driver walks. Unlike
@@ -1267,19 +1347,24 @@ export async function planSessionCommitPlanLocal(
  * acceptanceCriteria, so the driver picks the plan up on its next tick and walks
  * it one gated item at a time.
  *
- * The worktree is provided by the caller (the RPC resolves the repo's worktree /
- * the planning session's worktree); auto-provisioning a fresh worktree per plan
- * is a thin follow-on.
+ * `worktreeId` is optional: omit it to auto-provision a fresh worktree from the
+ * session's linked repository (see resolveChecklistWorktree).
  */
 export async function planSessionCommitAsChecklist(
   ctx: HandlerContext,
   input: {
     sessionId: string;
-    worktreeId: string;
+    worktreeId?: string;
     title?: string;
     goal?: string;
   },
 ) {
+  const session = await loadOwnedPlanningSession(
+    ctx.db,
+    ctx.userId,
+    input.sessionId,
+  );
+
   const drafts = await ctx.db.query.planDrafts.findMany({
     where: and(
       eq(planDrafts.sessionId, input.sessionId),
@@ -1288,28 +1373,23 @@ export async function planSessionCommitAsChecklist(
     orderBy: [planDrafts.sortOrder, planDrafts.createdAt],
   });
   if (drafts.length === 0) {
-    return { planId: null, items: 0 };
+    return { planId: null, worktreeId: null, items: 0 };
   }
 
-  const wt = await ctx.db.query.worktrees.findFirst({
-    where: and(
-      eq(worktrees.id, input.worktreeId),
-      eq(worktrees.userId, ctx.userId),
-    ),
-    columns: { id: true },
-  });
-  if (!wt) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Worktree not found" });
-  }
+  const worktreeId = await resolveChecklistWorktree(
+    ctx,
+    session,
+    input.worktreeId,
+  );
 
   return ctx.db.transaction(async (tx) => {
     const [plan] = await tx
       .insert(worktreePlans)
       .values({
-        worktreeId: input.worktreeId,
+        worktreeId,
         userId: ctx.userId,
         filePath: "checklist.md",
-        title: input.title ?? "Checklist",
+        title: input.title ?? session.title ?? "Checklist",
         goal: input.goal,
         // The advanceChecklist driver only walks status="active" plans.
         status: "active",
@@ -1346,6 +1426,6 @@ export async function planSessionCommitAsChecklist(
         ),
       );
 
-    return { planId: plan.id, items: itemValues.length };
+    return { planId: plan.id, worktreeId, items: itemValues.length };
   });
 }

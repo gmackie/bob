@@ -322,7 +322,8 @@ export const planSessionRouter = {
     .input(
       z.object({
         sessionId: z.string().uuid(),
-        worktreeId: z.string().uuid(),
+        // Omit to auto-provision a fresh worktree from the session's repo.
+        worktreeId: z.string().uuid().optional(),
         title: z.string().optional(),
         goal: z.string().optional(),
       }),
