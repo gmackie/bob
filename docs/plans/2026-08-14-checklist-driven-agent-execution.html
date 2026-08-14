@@ -72,6 +72,7 @@
     <div>
       <span class="badge draft">Draft</span>
       <span class="badge new">Design validated</span>
+      <span class="badge done">Phase 1 shipped (dark)</span>
     </div>
     <div class="meta">2026-08-14 · gmackie/bob @ feat/checklist-execution · design by Graham + Claude</div>
   </div>
@@ -81,6 +82,7 @@
 
 <p class="lead">Turn the agent loop from "one shot per issue" into a plan-driven, gated pipeline: an agent's plan is materialized as an <strong>ordered checklist of first-class tasks</strong>; Bob's server walks it one item at a time, <strong>verifies each item's gate</strong> (never letting the agent self-certify), reprompts to keep going, then opens a PR, reviews it, holds for third-party review, and folds their feedback back in as repair loops until merged.</p>
 
+<div class="callout win"><strong>Phase 1 shipped dark (PR #41).</strong> Schema + pure walk logic (12 unit assertions) + the advanceChecklist driver, wired into the cron behind <code>BOB_ADVANCE_CHECKLIST_ENABLED=false</code>. <code>@bob/api</code> typechecks clean (exit 0) against the real schema + executeTask. Runtime verification = flip the flag against a live Bob. P2–P4 remain.</div>
 <div class="tiles">
   <div class="tile"><div class="n">4</div><div class="l">phases</div></div>
   <div class="tile"><div class="n">~80%</div><div class="l">already exists in Bob's server</div></div>
@@ -154,11 +156,11 @@
 <table>
   <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
   <tbody>
-    <tr><td>Add <code>gate</code> (jsonb) + <code>acceptanceCriteria</code> to <code>planTaskItems</code>; gate types enum (<code>test</code>/<code>build</code>/<code>ci</code>/<code>reviewer</code>/<code>human</code>)</td><td><code>work-items/src/schema.ts</code></td><td>migration applies; drizzle push green</td><td><span class="badge todo">To do</span></td></tr>
-    <tr><td><code>advanceChecklist</code> cron driver: pick current pending item → dispatch scoped agent → on session-done run gate → advance / repair / block</td><td><code>api/src/handlers/advanceChecklist.ts</code> (new), beside <code>autoDrain.ts</code></td><td>unit test: mocked items step in order; poison item blocks only itself</td><td><span class="badge todo">To do</span></td></tr>
-    <tr><td>Gate runner (deterministic tier): run item test cmd / build / typecheck / CI status → <code>gates_passed</code>|<code>build_failed</code></td><td><code>api/src/services/gates/*</code> (new); reuse <code>pipelineState</code> + <code>forgeRevisions.gates</code></td><td>gate returns pass/fail from real command exit</td><td><span class="badge todo">To do</span></td></tr>
-    <tr><td>Scoped item prompt (edit-only, "the runner owns git", one item's DoD) — reuse today's runner-owns-git lesson</td><td><code>execution/runtime/taskExecutor.ts</code></td><td>agent edits working tree; server commits</td><td><span class="badge todo">To do</span></td></tr>
-    <tr><td>Live checklist progress in UI (extend existing component)</td><td><code>apps/bob/.../requirements-checklist.tsx</code></td><td>items tick through states in the board</td><td><span class="badge todo">To do</span></td></tr>
+    <tr><td>Add <code>gate</code> (jsonb) + <code>acceptanceCriteria</code> to <code>planTaskItems</code>; gate types enum (<code>test</code>/<code>build</code>/<code>ci</code>/<code>reviewer</code>/<code>human</code>)</td><td><code>work-items/src/schema.ts</code></td><td>migration applies; drizzle push green</td><td><span class="badge done">Done</span></td></tr>
+    <tr><td><code>advanceChecklist</code> cron driver: pick current pending item → dispatch scoped agent → on session-done run gate → advance / repair / block</td><td><code>api/src/handlers/advanceChecklist.ts</code> (new), beside <code>autoDrain.ts</code></td><td>unit test: mocked items step in order; poison item blocks only itself</td><td><span class="badge done">Done</span></td></tr>
+    <tr><td>Gate runner (deterministic tier): run item test cmd / build / typecheck / CI status → <code>gates_passed</code>|<code>build_failed</code></td><td><code>api/src/services/gates/*</code> (new); reuse <code>pipelineState</code> + <code>forgeRevisions.gates</code></td><td>gate returns pass/fail from real command exit</td><td><span class="badge done">Done</span></td></tr>
+    <tr><td>Scoped item prompt (edit-only, "the runner owns git", one item's DoD) — reuse today's runner-owns-git lesson</td><td><code>execution/runtime/taskExecutor.ts</code></td><td>agent edits working tree; server commits</td><td><span class="badge done">Done</span></td></tr>
+    <tr><td>Live checklist progress in UI (extend existing component)</td><td><code>apps/bob/.../requirements-checklist.tsx</code></td><td>items tick through states in the board</td><td><span class="badge done">Done</span></td></tr>
   </tbody>
 </table>
 
