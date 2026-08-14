@@ -19,6 +19,7 @@ import {
   planSyncFromFile,
   planAddTask,
   planUpdateTask,
+  planResolveGate,
   planDeleteTask,
   planReorderTasks,
 } from "../handlers/plan";
@@ -92,6 +93,20 @@ export const planRouter = {
     )
     .mutation(({ ctx, input }) =>
       planUpdateTask({ db: ctx.db, userId: ctx.session.user.id }, input),
+    ),
+
+  // Human gate resolution — sign off (or reject) a checklist item whose gate is
+  // {kind:"human"}. Sets gateOutcome, which the advanceChecklist driver reads
+  // first; the item is held at pending until then.
+  resolveGate: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        outcome: z.enum(["pass", "fail"]),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      planResolveGate({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
 
   deleteTask: protectedProcedure

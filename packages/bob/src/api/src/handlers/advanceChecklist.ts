@@ -86,8 +86,19 @@ async function evaluateGate(
       })
     : null;
 
-  if (gate?.kind === "reviewer" || gate?.kind === "human") {
-    return "pending"; // handled by P2; do not advance or loop on these yet
+  if (gate?.kind === "human") {
+    // Human sign-off gate (P2): hold at "pending" until a person resolves it via
+    // the plan.resolveGate RPC, which sets gateOutcome — read at the very top of
+    // this function. The driver's existing wait/hold semantics give pause/resume
+    // for free; nothing else to do here.
+    return "pending";
+  }
+  if (gate?.kind === "reviewer") {
+    // Reviewer-agent gate: dispatch an item-scoped reviewer that writes
+    // gateOutcome, then read it here. Not yet wired (needs the item-scoped
+    // reviewer dispatch — the PR-bound dispatchReviewSession can't be reused for
+    // a mid-plan item with no PR). Holds at "pending" until then.
+    return "pending";
   }
 
   if (gate?.kind === "ci") {
