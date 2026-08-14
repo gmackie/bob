@@ -713,6 +713,17 @@ export const planTaskItems = pgTable("plan_task_items", (t) => ({
   taskKey: t.varchar({ length: 20 }).notNull(),
   content: t.text().notNull(),
   status: t.varchar({ length: 20 }).notNull().default("pending"),
+  // Machine-checkable definition-of-done for this checklist item
+  // (test/build/ci/reviewer/human). Validated by gateSpecSchema at the API
+  // boundary; kept as untyped jsonb here to avoid a work-items→api dependency.
+  // Null means "use the checklist's default gate".
+  gate: t.jsonb(),
+  // Human-readable acceptance criteria the reviewer-gate (and humans) judge
+  // against. Authored during planning alongside the item's work.
+  acceptanceCriteria: t.text(),
+  // Reprompt/repair attempts spent on this item after a failed gate; the
+  // advanceChecklist driver blocks the item once this exceeds the cap.
+  gateAttempts: t.integer().notNull().default(0),
   priority: t.varchar({ length: 10 }).notNull().default("medium"),
   parentTaskKey: t.varchar({ length: 20 }),
   sortOrder: t.integer().notNull().default(0),
