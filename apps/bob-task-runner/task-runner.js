@@ -737,13 +737,20 @@ async function processIssue(issue, slug, repoDir) {
 ${issue.description || "No description provided."}
 
 ## Instructions
-1. Read CLAUDE.md to understand the project
-2. Find the relevant code referenced in the issue description
-3. Implement the fix with minimal changes
-4. Run any available tests to verify your changes
-5. Create a git commit with a descriptive message referencing ${issue.identifier}
+1. Read CLAUDE.md to understand the project.
+2. Find the relevant code referenced in the issue description.
+3. Implement the change with minimal edits, directly in the working tree.
+4. Run any available tests to verify your changes.
 
-If you cannot fully resolve the issue, make as much progress as possible and document what remains in a commit message.
+## IMPORTANT — do NOT touch git
+The runner owns version control. Do NOT run any git commands — no branch, no
+commit, no push — and do NOT open a pull request. Just leave your changes in the
+working tree. The runner will stage everything, commit it on branch
+\`${branchName}\`, push it, and open the PR for you. If you create your own
+branch/commit/PR, the runner will not see your work and it will be lost.
+
+If you cannot fully resolve the issue, make as much progress as possible and
+leave the partial changes in the working tree (uncommitted).
 
 Do NOT modify unrelated files. Stay focused on this specific issue.`;
 
@@ -752,52 +759,67 @@ Do NOT modify unrelated files. Stay focused on this specific issue.`;
   console.log(`[runner] Codex exited with code ${result.exitCode}`);
   await bobPushLog(bobRunId, result.output);
 
-  // Check if any commits were made
-  let hasCommits = false;
+  // The runner owns git: detect what the agent changed in the WORKING TREE
+  // (staged, unstaged, or untracked) rather than expecting the agent to have
+  // committed. This is robust to the agent editing files without touching git
+  // (the instructed behavior) and fixes the prior bug where an agent that made
+  // its own commit/branch (e.g. bob/GMA-412 vs the runner's bob/gma-412) was
+  // reported as "no_changes" while its work sat on an orphaned branch.
+  let hasChanges = false;
   try {
-    const diffCount = execSync(`git log main..HEAD --oneline 2>/dev/null | wc -l`, {
-      cwd: repoDir, encoding: "utf8"
+    const porcelain = execSync(`git status --porcelain`, {
+      cwd: repoDir, encoding: "utf8",
     }).trim();
-    hasCommits = parseInt(diffCount) > 0;
-  } catch {
-    try {
-      const diffCount = execSync(`git log master..HEAD --oneline 2>/dev/null | wc -l`, {
-        cwd: repoDir, encoding: "utf8"
-      }).trim();
-      hasCommits = parseInt(diffCount) > 0;
-    } catch {}
+    hasChanges = porcelain.length > 0;
+  } catch (e) {
+    console.log(`[runner] git status failed: ${e.message}`);
   }
 
-  if (hasCommits) {
-    console.log(`[runner] Commits found, pushing branch`);
+  if (hasChanges) {
+    console.log(`[runner] Working-tree changes found, committing + pushing ${branchName}`);
+    let pushed = false;
     try {
-      // Plain push: --force is both unnecessary (branches are per-issue) and
-      // rejected by some repos (preflight-app blocks force pushes).
+      const msg = `${issue.identifier}: ${issue.title}\n\nAutomated change by the Bob task runner for ${issue.identifier}.`;
+      execSync(`git add -A`, { cwd: repoDir, stdio: "pipe" });
+      // Inline identity so the commit never fails on an unconfigured git user.
+      execSync(`git -c user.name=bob -c user.email=bob@blder.bot commit -F -`, {
+        cwd: repoDir, input: msg, stdio: ["pipe", "pipe", "pipe"],
+      });
+      // Plain push: --force is unnecessary (per-issue branch) and rejected by
+      // some repos (preflight-app blocks force pushes).
       execSync(`git push -u origin ${branchName}`, { cwd: repoDir, stdio: "pipe" });
+      pushed = true;
     } catch (e) {
-      console.log(`[runner] Push failed: ${e.message}`);
+      console.log(`[runner] Commit/push failed: ${e.message.split("\n")[0]}`);
     }
 
     try {
-      await addIssueComment(issue.id, `✅ Bob agent completed work on branch \`${branchName}\`.\n\nReview the changes and merge when ready.`);
+      const note = pushed
+        ? `✅ Bob agent completed this issue. Changes committed and pushed to branch \`${branchName}\` — review and merge when ready.`
+        : `⚠️ Bob agent produced changes but the runner could not push branch \`${branchName}\`. Log: ${logFile}`;
+      await addIssueComment(issue.id, note);
+      await updateIssueState(issue.id, pushed ? "completed" : "unstarted");
     } catch {}
 
-    await bobFinishRun(bobRunId, "completed", { exitCode: result.exitCode });
-    return "completed";
+    await bobFinishRun(bobRunId, pushed ? "completed" : "failed", {
+      exitCode: result.exitCode,
+      ...(pushed ? {} : { reason: "push_failed" }),
+    });
+    return pushed ? "completed" : "push_failed";
   } else {
-    console.log(`[runner] No commits made`);
+    console.log(`[runner] No working-tree changes`);
     try {
-      await addIssueComment(issue.id, `⚠️ Bob agent attempted this issue but did not produce commits.\n\nLog: ${logFile}\nMay need manual intervention.`);
+      await addIssueComment(issue.id, `⚠️ Bob agent attempted this issue but produced no changes.\n\nLog: ${logFile}\nMay need manual intervention.`);
       await updateIssueState(issue.id, "unstarted");
     } catch {}
 
-    // Clean up branch
+    // Clean up the empty branch.
     try {
       execSync(`git checkout main 2>/dev/null || git checkout master`, { cwd: repoDir, stdio: "pipe" });
       execSync(`git branch -D ${branchName} 2>/dev/null || true`, { cwd: repoDir, stdio: "pipe" });
     } catch {}
 
-    await bobFinishRun(bobRunId, "failed", { exitCode: result.exitCode, reason: "no_commits" });
+    await bobFinishRun(bobRunId, "failed", { exitCode: result.exitCode, reason: "no_changes" });
     return "no_changes";
   }
 }
