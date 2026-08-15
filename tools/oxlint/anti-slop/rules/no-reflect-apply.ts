@@ -1,6 +1,6 @@
 import { defineRule } from "@oxlint/plugins";
 
-import { isGlobalReflectMethodCall } from "../shared/reflect-method.ts";
+import { isGlobalReflectMethodCall, isInsideProxyTrap } from "../shared/reflect-method.ts";
 
 /** Ban Reflect.apply, which bypasses ordinary typed function calls. */
 export const noReflectApplyRule = defineRule({
@@ -20,6 +20,8 @@ export const noReflectApplyRule = defineRule({
       CallExpression(node) {
         if (node.callee.type === "Super" || node.callee.type === "V8IntrinsicExpression") return;
         if (isGlobalReflectMethodCall(context.sourceCode, node.callee, "apply")) {
+          // Forwarding through Reflect is the correct body of a Proxy `apply` trap.
+          if (isInsideProxyTrap(node, "apply")) return;
           context.report({ node, messageId: "reflectApply" });
         }
       },
