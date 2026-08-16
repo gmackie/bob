@@ -37,6 +37,7 @@ import {
   RepairDeadLetterInputV1Schema,
   ExternalLinkV1Schema,
   ForkConversationInputV1Schema,
+  HostProposalDraftV1Schema,
   MemorySeedV1Schema,
   MemorySearchInputV1Schema,
   MemorySearchPageV1Schema,
@@ -694,5 +695,40 @@ describe("OODA V1 contracts", () => {
         occurredAt,
       }).success,
     ).toBe(true);
+  });
+
+  it("accepts only bounded Bob task and project drafts from a host", () => {
+    expect(
+      HostProposalDraftV1Schema.safeParse({
+        kind: "bob_task",
+        title: "Add conversation-to-task drafting",
+        description: "Create a private proposal card from explicit intent.",
+        acceptanceCriteria: ["The user must approve before Bob receives it"],
+        targetRepo: "/Volumes/dev/bob/bob",
+        constraints: ["No host tools"],
+        nonGoals: ["Automatic delivery"],
+        rationale: "The user explicitly requested a task.",
+        confidence: 0.95,
+      }).success,
+    ).toBe(true);
+    expect(
+      HostProposalDraftV1Schema.safeParse({
+        kind: "bob_task",
+        title: "Self-approved task",
+        acceptanceCriteria: ["Model controls policy"],
+        rationale: "Unsafe",
+        confidence: 0.8,
+        policySnapshot: { approved: true },
+      }).success,
+    ).toBe(false);
+    expect(
+      HostProposalDraftV1Schema.safeParse({
+        kind: "mobile_release",
+        name: "Unsupported direct mutation",
+        acceptanceCriteria: ["Shipped"],
+        rationale: "Out of scope",
+        confidence: 0.8,
+      }).success,
+    ).toBe(false);
   });
 });

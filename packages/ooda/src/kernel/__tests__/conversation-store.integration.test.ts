@@ -393,6 +393,128 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     });
   });
 
+  it("atomically turns an explicit host draft into one approval-gated Bob proposal", async () => {
+    const created = await createConversation(db!, "owner-host-proposal", {
+      title: "Conversation to task",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "create-conversation-host-proposal",
+    });
+    const user = await appendConversationEvent(db!, "owner-host-proposal", {
+      conversationId: created.conversation.id,
+      branchId: created.branch.id,
+      type: "user_turn",
+      actor: { type: "user", id: "owner-host-proposal" },
+      payload: {
+        display: "Turn our barge-in discussion into a Bob task.",
+      },
+      sensitivity: "personal",
+      correlationId: "host-proposal-proof",
+      idempotencyKey: "host-proposal-user-event",
+      occurredAt: "2026-08-08T19:00:00.000Z",
+    });
+    const queued = await enqueueHostTurn(
+      db!,
+      "owner-host-proposal",
+      {
+        conversationId: created.conversation.id,
+        userEventId: user.event.id,
+        idempotencyKey: "host-proposal-turn",
+      },
+      { now: new Date("2026-08-08T19:00:01.000Z") },
+    );
+    const claim = await claimHostTurn(
+      db!,
+      {
+        runnerId: "runner-host-proposal",
+        providers: ["grok"],
+        leaseSeconds: 90,
+      },
+      { now: new Date("2026-08-08T19:00:02.000Z") },
+    );
+    expect(claim?.system).toContain('"proposal"');
+
+    const completionInput = {
+      executionId: queued.executionId,
+      runnerId: "runner-host-proposal",
+      leaseToken: claim!.leaseToken,
+      provider: "grok" as const,
+      model: "grok-subscription-default",
+      providerResponseId: "grok-session-proposal:turn-1",
+      response: JSON.stringify({
+        display: "I drafted the barge-in telemetry task for your review.",
+        speakable: "I drafted the task for your review.",
+        proposal: {
+          kind: "bob_task",
+          title: "Add voice barge-in telemetry",
+          description: "Measure interruption behavior without retaining audio.",
+          acceptanceCriteria: [
+            "Record TTS stop latency without raw audio",
+            "Link the implementation evidence back to OODA",
+          ],
+          targetRepo: "/Volumes/dev/bob/bob",
+          constraints: ["No raw microphone retention"],
+          nonGoals: ["Replacing ElevenLabs"],
+          rationale: "The user explicitly asked to create a Bob task.",
+          confidence: 0.94,
+        },
+      }),
+      failures: [],
+      idempotencyKey: "host-proposal-complete",
+      occurredAt: "2026-08-08T19:00:03.000Z",
+    };
+    const completed = await completeHostTurn(db!, completionInput);
+    const replay = await completeHostTurn(db!, completionInput);
+    expect(completed.replayed).toBe(false);
+    expect(replay.replayed).toBe(true);
+    expect(completed.assistantEvent.payload).not.toHaveProperty("proposal");
+
+    const storedProposals = await db!
+      .select()
+      .from(schema.proposals)
+      .where(eq(schema.proposals.conversationId, created.conversation.id));
+    expect(storedProposals).toHaveLength(1);
+    expect(storedProposals[0]).toMatchObject({
+      kind: "bob_task",
+      destination: "bob",
+      risk: "durable_work",
+      status: "awaiting_approval",
+      preview: {
+        title: "Add voice barge-in telemetry",
+        acceptanceCriteria: [
+          "Record TTS stop latency without raw audio",
+          "Link the implementation evidence back to OODA",
+        ],
+      },
+      policySnapshot: {
+        version: "host-proposal-v1",
+        source: "host_turn",
+        sourceEventId: user.event.id,
+        assistantEventId: completed.assistantEvent.id,
+        approval: {
+          required: true,
+          scope: "single_delivery",
+          inherited: false,
+        },
+        enforcedBoundary: {
+          destination: "bob",
+          risk: "durable_work",
+        },
+      },
+    });
+    const proposalEvents = await db!
+      .select()
+      .from(schema.conversationEvents)
+      .where(eq(schema.conversationEvents.type, "proposal"));
+    expect(
+      proposalEvents.filter(
+        (event) => event.conversationId === created.conversation.id,
+      ),
+    ).toHaveLength(1);
+  });
+
   it("repairs a host execution after the assistant event was persisted before a crash", async () => {
     const created = await createConversation(db!, "owner-host-recovery", {
       title: "Recover persisted host response",

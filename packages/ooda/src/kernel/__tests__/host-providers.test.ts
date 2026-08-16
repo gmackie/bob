@@ -47,8 +47,21 @@ describe("conversational host providers", () => {
               speakable: {
                 anyOf: [{ type: "string" }, { type: "null" }],
               },
+              proposal: {
+                anyOf: [
+                  { type: "null" },
+                  expect.objectContaining({
+                    type: "object",
+                    additionalProperties: false,
+                  }),
+                  expect.objectContaining({
+                    type: "object",
+                    additionalProperties: false,
+                  }),
+                ],
+              },
             },
-            required: ["display", "speakable"],
+            required: ["display", "speakable", "proposal"],
             additionalProperties: false,
           },
         },
