@@ -1,25 +1,32 @@
 import type {
+  AgentJobV1,
   ContextPackV1,
   MemoryDetailV1,
   MemorySeedV1,
+  ProposalV1,
 } from "@gmacko/ooda-client/v1";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Redirect, router } from "expo-router";
+import { v4 as uuidv4 } from "uuid";
 
 import { Screen } from "~/components/ui";
 import { authClient } from "~/utils/auth";
 import { ContextInspector } from "./components/context-inspector";
 import { ConversationDrawer } from "./components/conversation-drawer";
+import { JobInspector } from "./components/job-inspector";
 import { MemorySearch } from "./components/memory-search";
 import { MessageList } from "./components/message-list";
+import { ProposalInspector } from "./components/proposal-inspector";
 import { VaultBrowser } from "./components/vault-browser";
 import { VoiceInputBar } from "./components/voice-input-bar";
 import { findLatestContextPackId } from "./context-inspector-model";
 import { useOodaConversation } from "./hooks/use-ooda-conversation";
 import { useOodaTts } from "./hooks/use-ooda-tts";
 import { useVaultBrowser } from "./hooks/use-vault-browser";
+import { buildJobCancellation } from "./job-inspector-model";
 import { buildMemorySearchInput } from "./memory-search-model";
+import { buildProposalDecision } from "./proposal-inspector-model";
 
 export function ChatScreen() {
   const { data: session, isPending } = authClient.useSession();
@@ -47,8 +54,24 @@ export function ChatScreen() {
   const [memoryFeedbackEdgeId, setMemoryFeedbackEdgeId] = useState<
     string | null
   >(null);
+  const [proposalVisible, setProposalVisible] = useState(false);
+  const [selectedProposalId, setSelectedProposalId] = useState<string | null>(
+    null,
+  );
+  const [proposal, setProposal] = useState<ProposalV1 | null>(null);
+  const [proposalError, setProposalError] = useState<string | null>(null);
+  const [isProposalLoading, setIsProposalLoading] = useState(false);
+  const [isProposalDeciding, setIsProposalDeciding] = useState(false);
+  const [jobVisible, setJobVisible] = useState(false);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [agentJob, setAgentJob] = useState<AgentJobV1 | null>(null);
+  const [jobError, setJobError] = useState<string | null>(null);
+  const [isJobLoading, setIsJobLoading] = useState(false);
+  const [isJobCancelling, setIsJobCancelling] = useState(false);
   const memorySearchRequestRef = useRef(0);
   const memoryDetailRequestRef = useRef(0);
+  const proposalRequestRef = useRef(0);
+  const jobRequestRef = useRef(0);
   const lastSubmittedAtRef = useRef<number | null>(null);
   const spokenEventIdsRef = useRef(new Set<string>());
   const latestContextPackId = findLatestContextPackId(chat.timeline);
@@ -56,6 +79,10 @@ export function ChatScreen() {
   const searchMemories = chat.searchMemories;
   const inspectMemory = chat.inspectMemory;
   const submitMemoryFeedback = chat.submitMemoryFeedback;
+  const getProposal = chat.getProposal;
+  const decideProposal = chat.decideProposal;
+  const getAgentJob = chat.getAgentJob;
+  const cancelAgentJob = chat.cancelAgentJob;
 
   const loadContextPack = useCallback(async () => {
     setContextPack(null);
@@ -167,6 +194,135 @@ export function ChatScreen() {
     },
     [submitMemoryFeedback],
   );
+
+  const loadProposal = useCallback(
+    async (proposalId: string) => {
+      const requestId = proposalRequestRef.current + 1;
+      proposalRequestRef.current = requestId;
+      setSelectedProposalId(proposalId);
+      setProposal(null);
+      setProposalError(null);
+      setIsProposalLoading(true);
+      setIsProposalDeciding(false);
+      try {
+        const nextProposal = await getProposal(proposalId);
+        if (proposalRequestRef.current !== requestId) return;
+        setProposal(nextProposal);
+      } catch (caught) {
+        if (proposalRequestRef.current !== requestId) return;
+        setProposalError(
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      } finally {
+        if (proposalRequestRef.current === requestId) {
+          setIsProposalLoading(false);
+        }
+      }
+    },
+    [getProposal],
+  );
+
+  const openProposal = useCallback(
+    (proposalId: string) => {
+      setProposalVisible(true);
+      void loadProposal(proposalId);
+    },
+    [loadProposal],
+  );
+
+  const closeProposal = useCallback(() => {
+    proposalRequestRef.current += 1;
+    setProposalVisible(false);
+    setSelectedProposalId(null);
+    setProposal(null);
+    setProposalError(null);
+    setIsProposalDeciding(false);
+  }, []);
+
+  const makeProposalDecision = useCallback(
+    async (decision: "approve" | "reject") => {
+      if (!proposal) return;
+      const requestId = proposalRequestRef.current;
+      setProposalError(null);
+      setIsProposalDeciding(true);
+      try {
+        const result = await decideProposal(
+          buildProposalDecision(proposal, decision),
+        );
+        if (proposalRequestRef.current !== requestId) return;
+        setProposal(result.proposal);
+      } catch (caught) {
+        if (proposalRequestRef.current !== requestId) return;
+        setProposalError(
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      } finally {
+        if (proposalRequestRef.current === requestId) {
+          setIsProposalDeciding(false);
+        }
+      }
+    },
+    [decideProposal, proposal],
+  );
+
+  const loadAgentJob = useCallback(
+    async (jobId: string) => {
+      const requestId = jobRequestRef.current + 1;
+      jobRequestRef.current = requestId;
+      setSelectedJobId(jobId);
+      setAgentJob(null);
+      setJobError(null);
+      setIsJobLoading(true);
+      setIsJobCancelling(false);
+      try {
+        const nextJob = await getAgentJob(jobId);
+        if (jobRequestRef.current !== requestId) return;
+        setAgentJob(nextJob);
+      } catch (caught) {
+        if (jobRequestRef.current !== requestId) return;
+        setJobError(caught instanceof Error ? caught.message : String(caught));
+      } finally {
+        if (jobRequestRef.current === requestId) setIsJobLoading(false);
+      }
+    },
+    [getAgentJob],
+  );
+
+  const openAgentJob = useCallback(
+    (jobId: string) => {
+      setJobVisible(true);
+      void loadAgentJob(jobId);
+    },
+    [loadAgentJob],
+  );
+
+  const closeAgentJob = useCallback(() => {
+    jobRequestRef.current += 1;
+    setJobVisible(false);
+    setSelectedJobId(null);
+    setAgentJob(null);
+    setJobError(null);
+    setIsJobCancelling(false);
+  }, []);
+
+  const requestAgentJobCancellation = useCallback(async () => {
+    if (!agentJob) return;
+    const requestId = jobRequestRef.current;
+    setJobError(null);
+    setIsJobCancelling(true);
+    try {
+      const result = await cancelAgentJob(
+        buildJobCancellation(agentJob, uuidv4()),
+      );
+      if (jobRequestRef.current !== requestId) return;
+      setAgentJob(result.job);
+    } catch (caught) {
+      if (jobRequestRef.current !== requestId) return;
+      setJobError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      if (jobRequestRef.current === requestId) setIsJobCancelling(false);
+    }
+  }, [agentJob, cancelAgentJob]);
 
   const send = chat.send;
   const handleSend = useCallback(
@@ -310,6 +466,8 @@ export function ChatScreen() {
           onSpeak={(item) => {
             if (item.event) void tts.play(item.event.id, "manual");
           }}
+          onOpenProposal={openProposal}
+          onOpenJob={openAgentJob}
         />
       </View>
 
@@ -422,6 +580,33 @@ export function ChatScreen() {
           closeMemoryDetail();
           setMemoryVisible(false);
         }}
+      />
+      <ProposalInspector
+        visible={proposalVisible}
+        expectedProposalId={selectedProposalId}
+        proposal={proposal}
+        rollout={chat.rollout}
+        isLoading={isProposalLoading}
+        isDeciding={isProposalDeciding}
+        error={proposalError}
+        onClose={closeProposal}
+        onRetry={() => {
+          if (selectedProposalId) void loadProposal(selectedProposalId);
+        }}
+        onDecision={(decision) => void makeProposalDecision(decision)}
+      />
+      <JobInspector
+        visible={jobVisible}
+        expectedJobId={selectedJobId}
+        job={agentJob}
+        isLoading={isJobLoading}
+        isCancelling={isJobCancelling}
+        error={jobError}
+        onClose={closeAgentJob}
+        onRetry={() => {
+          if (selectedJobId) void loadAgentJob(selectedJobId);
+        }}
+        onCancel={() => void requestAgentJobCancellation()}
       />
     </Screen>
   );

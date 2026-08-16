@@ -1,4 +1,6 @@
 import type {
+  ApprovalDecisionV1,
+  CancelAgentJobInputV1,
   ConversationBranchV1,
   ConversationEventV1,
   ConversationV1,
@@ -393,6 +395,26 @@ export function useOodaConversation() {
     [client],
   );
 
+  const getProposal = useCallback(
+    (proposalId: string) => client.proposals.get(proposalId),
+    [client],
+  );
+
+  const decideProposal = useCallback(
+    (decision: ApprovalDecisionV1) => client.proposals.decide(decision),
+    [client],
+  );
+
+  const getAgentJob = useCallback(
+    (jobId: string) => client.jobs.get(jobId),
+    [client],
+  );
+
+  const cancelAgentJob = useCallback(
+    (input: CancelAgentJobInputV1) => client.jobs.cancel(input),
+    [client],
+  );
+
   const togglePin = useCallback((conversationId: string) => {
     setPinnedIds((current) => {
       const next = current.includes(conversationId)
@@ -472,6 +494,10 @@ export function useOodaConversation() {
     searchMemories,
     inspectMemory,
     submitMemoryFeedback,
+    getProposal,
+    decideProposal,
+    getAgentJob,
+    cancelAgentJob,
     requestTtsSource,
     togglePin,
   };
