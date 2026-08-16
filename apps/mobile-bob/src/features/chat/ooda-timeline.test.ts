@@ -58,6 +58,7 @@ describe("canonical OODA timeline", () => {
       event("host", 2, "assistant_turn", {
         display: "Here is the full answer",
         speakable: "Here is the short answer",
+        contextPackId: "context-pack-1",
       }, { type: "host", id: "grok" }),
       event("tool", 3, "tool_call", { name: "web.search", status: "running" }, { type: "worker" }),
       event("citation", 4, "citation", { title: "Primary source", url: "https://example.test/source" }),
@@ -78,7 +79,12 @@ describe("canonical OODA timeline", () => {
       "system",
     ]);
     expect(result[0]).toMatchObject({ kind: "message", role: "user", display: "Research this" });
-    expect(result[1]).toMatchObject({ kind: "message", role: "assistant", speakable: "Here is the short answer" });
+    expect(result[1]).toMatchObject({
+      kind: "message",
+      role: "assistant",
+      speakable: "Here is the short answer",
+      contextPackId: "context-pack-1",
+    });
     expect(result[4]).toMatchObject({ kind: "proposal", proposalId: "proposal-1", status: "awaiting_approval" });
     expect(result[7]).toMatchObject({ kind: "system", tone: "error", display: "Provider unavailable" });
   });

@@ -1,4 +1,5 @@
 import { Redirect, router } from "expo-router";
+import type { ContextPackV1 } from "@gmacko/ooda-client/v1";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
@@ -6,9 +7,11 @@ import { Screen } from "~/components/ui";
 import { authClient } from "~/utils/auth";
 
 import { ConversationDrawer } from "./components/conversation-drawer";
+import { ContextInspector } from "./components/context-inspector";
 import { MessageList } from "./components/message-list";
 import { VaultBrowser } from "./components/vault-browser";
 import { VoiceInputBar } from "./components/voice-input-bar";
+import { findLatestContextPackId } from "./context-inspector-model";
 import { useOodaConversation } from "./hooks/use-ooda-conversation";
 import { useOodaTts } from "./hooks/use-ooda-tts";
 import { useVaultBrowser } from "./hooks/use-vault-browser";
@@ -20,8 +23,36 @@ export function ChatScreen() {
   const vault = useVaultBrowser();
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [vaultVisible, setVaultVisible] = useState(false);
+  const [contextVisible, setContextVisible] = useState(false);
+  const [contextPack, setContextPack] = useState<ContextPackV1 | null>(null);
+  const [contextError, setContextError] = useState<string | null>(null);
+  const [isContextLoading, setIsContextLoading] = useState(false);
   const lastSubmittedAtRef = useRef<number | null>(null);
   const spokenEventIdsRef = useRef(new Set<string>());
+  const latestContextPackId = findLatestContextPackId(chat.timeline);
+  const getContextPack = chat.getContextPack;
+
+  const loadContextPack = useCallback(async () => {
+    setContextPack(null);
+    setContextError(null);
+    if (!latestContextPackId) {
+      setIsContextLoading(false);
+      return;
+    }
+    setIsContextLoading(true);
+    try {
+      setContextPack(await getContextPack(latestContextPackId));
+    } catch (caught) {
+      setContextError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setIsContextLoading(false);
+    }
+  }, [getContextPack, latestContextPackId]);
+
+  const openContextInspector = useCallback(() => {
+    setContextVisible(true);
+    void loadContextPack();
+  }, [loadContextPack]);
 
   const send = chat.send;
   const handleSend = useCallback((text: string) => {
@@ -110,6 +141,15 @@ export function ChatScreen() {
         >
           <Text className="text-xs font-semibold text-accent">Vault</Text>
         </Pressable>
+        <Pressable
+          onPress={(event) => {
+            event.stopPropagation();
+            openContextInspector();
+          }}
+          className="ml-3 active:opacity-70"
+        >
+          <Text className="text-xs font-semibold text-accent">Context</Text>
+        </Pressable>
       </Pressable>
 
       <View className="min-h-0 flex-1">
@@ -186,6 +226,15 @@ export function ChatScreen() {
         vault={vault}
         visible={vaultVisible}
         onClose={() => setVaultVisible(false)}
+      />
+      <ContextInspector
+        visible={contextVisible}
+        expectedPackId={latestContextPackId}
+        pack={contextPack}
+        isLoading={isContextLoading}
+        error={contextError}
+        onClose={() => setContextVisible(false)}
+        onRetry={() => void loadContextPack()}
       />
     </Screen>
   );

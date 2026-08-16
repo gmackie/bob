@@ -367,6 +367,11 @@ export function useOodaConversation() {
     [client, rollout],
   );
 
+  const getContextPack = useCallback(
+    (contextPackId: string) => client.context.get(contextPackId),
+    [client],
+  );
+
   const togglePin = useCallback((conversationId: string) => {
     setPinnedIds((current) => {
       const next = current.includes(conversationId)
@@ -442,6 +447,7 @@ export function useOodaConversation() {
     refreshConversations,
     send,
     retry,
+    getContextPack,
     requestTtsSource,
     togglePin,
   };
