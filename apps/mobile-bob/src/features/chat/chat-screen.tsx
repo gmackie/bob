@@ -10,11 +10,12 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Redirect, router } from "expo-router";
 import { v4 as uuidv4 } from "uuid";
 
+import type { OodaMessageTimelineItem } from "./ooda-timeline";
 import { Screen } from "~/components/ui";
 import { authClient } from "~/utils/auth";
 import { ContextInspector } from "./components/context-inspector";
-import { CorrectionEditor } from "./components/correction-editor";
 import { ConversationDrawer } from "./components/conversation-drawer";
+import { CorrectionEditor } from "./components/correction-editor";
 import { JobInspector } from "./components/job-inspector";
 import { MemorySearch } from "./components/memory-search";
 import { MessageList } from "./components/message-list";
@@ -28,7 +29,6 @@ import { useVaultBrowser } from "./hooks/use-vault-browser";
 import { buildJobCancellation } from "./job-inspector-model";
 import { buildMemorySearchInput } from "./memory-search-model";
 import { buildProposalDecision } from "./proposal-inspector-model";
-import type { OodaMessageTimelineItem } from "./ooda-timeline";
 
 export function ChatScreen() {
   const { data: session, isPending } = authClient.useSession();
@@ -70,6 +70,10 @@ export function ChatScreen() {
   const [jobError, setJobError] = useState<string | null>(null);
   const [isJobLoading, setIsJobLoading] = useState(false);
   const [isJobCancelling, setIsJobCancelling] = useState(false);
+  const [researchingItemId, setResearchingItemId] = useState<string | null>(
+    null,
+  );
+  const [researchError, setResearchError] = useState<string | null>(null);
   const [correctionItem, setCorrectionItem] =
     useState<OodaMessageTimelineItem | null>(null);
   const [correctionError, setCorrectionError] = useState<string | null>(null);
@@ -89,6 +93,29 @@ export function ChatScreen() {
   const decideProposal = chat.decideProposal;
   const getAgentJob = chat.getAgentJob;
   const cancelAgentJob = chat.cancelAgentJob;
+
+  const startResearch = useCallback(
+    async (item: OodaMessageTimelineItem) => {
+      setResearchingItemId(item.id);
+      setResearchError(null);
+      try {
+        const result = await chat.createResearchJob(item);
+        setSelectedJobId(result.job.id);
+        setAgentJob(result.job);
+        setJobError(null);
+        setIsJobLoading(false);
+        setIsJobCancelling(false);
+        setJobVisible(true);
+      } catch (caught) {
+        setResearchError(
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      } finally {
+        setResearchingItemId(null);
+      }
+    },
+    [chat],
+  );
 
   const closeCorrection = useCallback(() => {
     if (isCorrectionSaving) return;
@@ -328,6 +355,20 @@ export function ChatScreen() {
     [loadAgentJob],
   );
 
+  useEffect(() => {
+    if (!jobVisible || !selectedJobId || !agentJob) return;
+    const timelineItem = [...chat.timeline]
+      .reverse()
+      .find((item) => item.kind === "job" && item.jobId === selectedJobId);
+    const timelineStatus =
+      timelineItem?.kind === "job" ? timelineItem.status : undefined;
+    if (timelineStatus && timelineStatus !== agentJob.status) {
+      const refresh = setTimeout(() => void loadAgentJob(selectedJobId), 0);
+      return () => clearTimeout(refresh);
+    }
+    return undefined;
+  }, [agentJob, chat.timeline, jobVisible, loadAgentJob, selectedJobId]);
+
   const closeAgentJob = useCallback(() => {
     jobRequestRef.current += 1;
     setJobVisible(false);
@@ -503,10 +544,19 @@ export function ChatScreen() {
             setCorrectionError(null);
             setCorrectionItem(item);
           }}
+          canResearch={chat.canResearch}
+          researchingItemId={researchingItemId}
+          onResearch={(item) => void startResearch(item)}
           onOpenProposal={openProposal}
           onOpenJob={openAgentJob}
         />
       </View>
+
+      {researchError ? (
+        <View className="border-danger/40 bg-danger/10 mb-2 rounded-xl border px-3 py-2">
+          <Text className="text-danger text-xs leading-5">{researchError}</Text>
+        </View>
+      ) : null}
 
       {tts.activeEventId ? (
         <View className="border-border bg-card mb-2 flex-row items-center gap-2 rounded-xl border px-3 py-2">

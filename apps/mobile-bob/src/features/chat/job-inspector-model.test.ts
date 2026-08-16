@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildJobCancellation,
   jobCancellationAvailability,
+  jobResultPresentation,
 } from "./job-inspector-model";
 
 function job(status: AgentJobV1["status"] = "running"): AgentJobV1 {
@@ -56,5 +57,21 @@ describe("mobile agent-job inspector model", () => {
       jobId: "job-1",
       idempotencyKey: "cancel-device-1",
     });
+  });
+
+  it("presents completed research findings and promoted artifacts", () => {
+    expect(
+      jobResultPresentation({
+        ...job("completed"),
+        result: {
+          response: "Start with the reversible prototype.",
+          artifactRef: "scratch://job-1/report.md",
+        },
+      }),
+    ).toEqual({
+      response: "Start with the reversible prototype.",
+      artifactRef: "scratch://job-1/report.md",
+    });
+    expect(jobResultPresentation(job("running"))).toBeNull();
   });
 });
