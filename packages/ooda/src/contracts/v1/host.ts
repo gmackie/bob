@@ -6,6 +6,65 @@ import { ConversationEventV1Schema } from "./events";
 export const HostProviderV1Schema = z.enum(["grok", "claude", "openai"]);
 export type HostProviderV1 = z.infer<typeof HostProviderV1Schema>;
 
+const HostProposalTextListV1Schema = z
+  .array(z.string().trim().min(1).max(2_000))
+  .max(20);
+const HostProposalOptionalTextV1Schema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(20_000)
+  .nullish()
+  .transform((value) => value ?? undefined);
+const HostProposalOptionalShortTextV1Schema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(2_048)
+  .nullish()
+  .transform((value) => value ?? undefined);
+const HostProposalOptionalIdV1Schema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(256)
+  .nullish()
+  .transform((value) => value ?? undefined);
+const HostProposalOptionalTextListV1Schema =
+  HostProposalTextListV1Schema.nullish().transform(
+    (value) => value ?? undefined,
+  );
+
+const HostProposalDraftCommonV1 = {
+  description: HostProposalOptionalTextV1Schema,
+  acceptanceCriteria: HostProposalTextListV1Schema.min(1),
+  targetRepo: HostProposalOptionalShortTextV1Schema,
+  constraints: HostProposalOptionalTextListV1Schema,
+  nonGoals: HostProposalOptionalTextListV1Schema,
+  rationale: z.string().trim().min(1).max(20_000),
+  confidence: z.number().min(0).max(1),
+};
+
+export const HostProposalDraftV1Schema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("bob_task"),
+      title: z.string().trim().min(1).max(500),
+      projectId: HostProposalOptionalIdV1Schema,
+      ...HostProposalDraftCommonV1,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("bob_project"),
+      name: z.string().trim().min(1).max(500),
+      tasks: HostProposalOptionalTextListV1Schema,
+      ...HostProposalDraftCommonV1,
+    })
+    .strict(),
+]);
+export type HostProposalDraftV1 = z.infer<typeof HostProposalDraftV1Schema>;
+
 export const HostProviderFailureV1Schema = z
   .object({
     provider: HostProviderV1Schema,

@@ -13,6 +13,39 @@ export interface HostProviderConfig {
   openaiModel?: string;
 }
 
+const NULLABLE_HOST_TEXT = {
+  anyOf: [{ type: "string" }, { type: "null" }],
+} as const;
+const NULLABLE_HOST_TEXT_LIST = {
+  anyOf: [
+    { type: "array", items: { type: "string" }, maxItems: 20 },
+    { type: "null" },
+  ],
+} as const;
+const HOST_PROPOSAL_COMMON_PROPERTIES = {
+  description: NULLABLE_HOST_TEXT,
+  acceptanceCriteria: {
+    type: "array",
+    items: { type: "string" },
+    minItems: 1,
+    maxItems: 20,
+  },
+  targetRepo: NULLABLE_HOST_TEXT,
+  constraints: NULLABLE_HOST_TEXT_LIST,
+  nonGoals: NULLABLE_HOST_TEXT_LIST,
+  rationale: { type: "string" },
+  confidence: { type: "number", minimum: 0, maximum: 1 },
+} as const;
+const HOST_PROPOSAL_COMMON_REQUIRED = [
+  "description",
+  "acceptanceCriteria",
+  "targetRepo",
+  "constraints",
+  "nonGoals",
+  "rationale",
+  "confidence",
+] as const;
+
 const OODA_HOST_RESPONSE_FORMAT = {
   type: "json_schema",
   name: "ooda_host_response",
@@ -24,8 +57,45 @@ const OODA_HOST_RESPONSE_FORMAT = {
       speakable: {
         anyOf: [{ type: "string" }, { type: "null" }],
       },
+      proposal: {
+        anyOf: [
+          { type: "null" },
+          {
+            type: "object",
+            properties: {
+              kind: { type: "string", const: "bob_task" },
+              title: { type: "string" },
+              projectId: NULLABLE_HOST_TEXT,
+              ...HOST_PROPOSAL_COMMON_PROPERTIES,
+            },
+            required: [
+              "kind",
+              "title",
+              "projectId",
+              ...HOST_PROPOSAL_COMMON_REQUIRED,
+            ],
+            additionalProperties: false,
+          },
+          {
+            type: "object",
+            properties: {
+              kind: { type: "string", const: "bob_project" },
+              name: { type: "string" },
+              tasks: NULLABLE_HOST_TEXT_LIST,
+              ...HOST_PROPOSAL_COMMON_PROPERTIES,
+            },
+            required: [
+              "kind",
+              "name",
+              "tasks",
+              ...HOST_PROPOSAL_COMMON_REQUIRED,
+            ],
+            additionalProperties: false,
+          },
+        ],
+      },
     },
-    required: ["display", "speakable"],
+    required: ["display", "speakable", "proposal"],
     additionalProperties: false,
   },
 } as const;

@@ -1,3 +1,7 @@
+import {
+  HostProposalDraftV1Schema,
+  type HostProposalDraftV1,
+} from "../contracts/v1";
 import { isSafeSpeakableText } from "./tts-policy";
 
 export type HostProviderId = "grok" | "claude" | "openai";
@@ -25,6 +29,7 @@ export interface HostProviderClient {
 export interface HostOutput {
   display: string;
   speakable?: string;
+  proposal?: HostProposalDraftV1;
 }
 
 export interface HostProviderFailure {
@@ -63,18 +68,18 @@ export function normalizeHostOutput(text: string): HostOutput {
         : trimmed;
     const speakable =
       typeof record.speakable === "string" ? record.speakable.trim() : "";
-    return {
-      display,
-      ...(speakable && isSafeSpeakableText(speakable) ? { speakable } : {}),
-    };
+    const proposal = HostProposalDraftV1Schema.safeParse(record.proposal);
+    const output: HostOutput = { display };
+    if (speakable && isSafeSpeakableText(speakable))
+      output.speakable = speakable;
+    if (proposal.success) output.proposal = proposal.data;
+    return output;
   }
 
-  return {
-    display: trimmed,
-    ...(trimmed && trimmed.length <= 700 && isSafeSpeakableText(trimmed)
-      ? { speakable: trimmed }
-      : {}),
-  };
+  const output: HostOutput = { display: trimmed };
+  if (trimmed && trimmed.length <= 700 && isSafeSpeakableText(trimmed))
+    output.speakable = trimmed;
+  return output;
 }
 
 export async function routeHostCompletion(input: {
