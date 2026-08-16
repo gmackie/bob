@@ -1,4 +1,8 @@
-import type { MemorySeedV1 } from "@gmacko/ooda-client/v1";
+import type {
+  MemoryConnectionV1,
+  MemoryDetailV1,
+  MemorySeedV1,
+} from "@gmacko/ooda-client/v1";
 import { memo, useCallback, useMemo } from "react";
 import {
   ActivityIndicator,
@@ -10,7 +14,10 @@ import {
 } from "react-native";
 import { LegendList } from "@legendapp/list";
 
-import { buildMemorySearchSummary } from "../memory-search-model";
+import {
+  buildMemorySearchSummary,
+  sortMemoryConnections,
+} from "../memory-search-model";
 
 interface MemorySearchProps {
   visible: boolean;
@@ -19,14 +26,30 @@ interface MemorySearchProps {
   isLoading: boolean;
   hasSearched: boolean;
   error: string | null;
+  selectedMemoryId: string | null;
+  detail: MemoryDetailV1 | null;
+  detailError: string | null;
+  isDetailLoading: boolean;
+  feedbackEdgeId: string | null;
   onQueryChange: (query: string) => void;
   onSearch: () => void;
+  onSelectMemory: (memoryId: string) => void;
+  onCloseDetail: () => void;
+  onRetryDetail: () => void;
+  onFeedback: (
+    edgeId: string,
+    feedbackState: "confirmed" | "suppressed",
+  ) => void;
   onClose: () => void;
 }
 
 const MemoryRow = memo(function MemoryRow({ item }: { item: MemorySeedV1 }) {
+  return <MemoryCard item={item} />;
+});
+
+function MemoryCard({ item }: { item: MemorySeedV1 }) {
   return (
-    <View className="border-border bg-card mb-3 rounded-xl border px-4 py-3">
+    <View className="border-border bg-card rounded-xl border px-4 py-3">
       <View className="flex-row items-center justify-between gap-3">
         <Text className="text-accent text-xs font-semibold uppercase">
           {item.kind}
@@ -49,6 +72,59 @@ const MemoryRow = memo(function MemoryRow({ item }: { item: MemorySeedV1 }) {
       </View>
     </View>
   );
+}
+
+const MemoryConnectionRow = memo(function MemoryConnectionRow({
+  connection,
+  feedbackEdgeId,
+  onFeedback,
+}: {
+  connection: MemoryConnectionV1;
+  feedbackEdgeId: string | null;
+  onFeedback: MemorySearchProps["onFeedback"];
+}) {
+  const isUpdating = feedbackEdgeId === connection.edge.id;
+  return (
+    <View className="mb-3 gap-3">
+      <MemoryCard item={connection.memory} />
+      <View className="border-border bg-card mx-2 rounded-xl border px-3 py-3">
+        <View className="flex-row items-center justify-between gap-3">
+          <Text className="text-accent text-xs font-semibold uppercase">
+            {connection.edge.kind} · {connection.direction}
+          </Text>
+          <Text className="text-muted text-xs">
+            {Math.round(connection.edge.score * 100)}% match
+          </Text>
+        </View>
+        <Text className="text-muted mt-2 text-xs leading-5">
+          {connection.edge.explanation}
+        </Text>
+        <View className="mt-3 flex-row items-center gap-3">
+          <Pressable
+            onPress={() => onFeedback(connection.edge.id, "confirmed")}
+            disabled={
+              isUpdating || connection.edge.feedbackState === "confirmed"
+            }
+            className="active:opacity-70 disabled:opacity-40"
+          >
+            <Text className="text-success text-xs font-semibold">Confirm</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => onFeedback(connection.edge.id, "suppressed")}
+            disabled={
+              isUpdating || connection.edge.feedbackState === "suppressed"
+            }
+            className="active:opacity-70 disabled:opacity-40"
+          >
+            <Text className="text-warning text-xs font-semibold">Hide</Text>
+          </Pressable>
+          <Text className="text-muted2 ml-auto text-xs">
+            {isUpdating ? "Saving…" : connection.edge.feedbackState}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
 });
 
 export function MemorySearch({
@@ -58,14 +134,44 @@ export function MemorySearch({
   isLoading,
   hasSearched,
   error,
+  selectedMemoryId,
+  detail,
+  detailError,
+  isDetailLoading,
+  feedbackEdgeId,
   onQueryChange,
   onSearch,
+  onSelectMemory,
+  onCloseDetail,
+  onRetryDetail,
+  onFeedback,
   onClose,
 }: MemorySearchProps) {
   const summary = useMemo(() => buildMemorySearchSummary(items), [items]);
+  const connections = useMemo(
+    () => sortMemoryConnections(detail?.connections ?? []),
+    [detail?.connections],
+  );
   const renderItem = useCallback(
-    ({ item }: { item: MemorySeedV1 }) => <MemoryRow item={item} />,
-    [],
+    ({ item }: { item: MemorySeedV1 }) => (
+      <Pressable
+        onPress={() => onSelectMemory(item.id)}
+        className="mb-3 active:opacity-80"
+      >
+        <MemoryRow item={item} />
+      </Pressable>
+    ),
+    [onSelectMemory],
+  );
+  const renderConnection = useCallback(
+    ({ item }: { item: MemoryConnectionV1 }) => (
+      <MemoryConnectionRow
+        connection={item}
+        feedbackEdgeId={feedbackEdgeId}
+        onFeedback={onFeedback}
+      />
+    ),
+    [feedbackEdgeId, onFeedback],
   );
 
   return (
@@ -79,7 +185,7 @@ export function MemorySearch({
         <View className="mb-4 flex-row items-center justify-between gap-3">
           <View className="min-w-0 flex-1">
             <Text className="text-foreground text-xl font-semibold">
-              Memory
+              {selectedMemoryId ? "Memory connections" : "Memory"}
             </Text>
             <Text className="text-muted mt-0.5 text-xs">
               Recover questions and ideas without creating work.
@@ -90,29 +196,85 @@ export function MemorySearch({
           </Pressable>
         </View>
 
-        <View className="mb-4 flex-row items-center gap-2">
-          <TextInput
-            value={query}
-            onChangeText={onQueryChange}
-            onSubmitEditing={onSearch}
-            returnKeyType="search"
-            autoCorrect={false}
-            placeholder="Search past questions, ideas, decisions…"
-            placeholderTextColor="#777"
-            className="border-border bg-card text-foreground min-w-0 flex-1 rounded-xl border px-3 py-2.5 text-sm"
-          />
-          <Pressable
-            onPress={onSearch}
-            disabled={isLoading}
-            className="bg-primary rounded-xl px-4 py-2.5 active:opacity-80 disabled:opacity-50"
-          >
-            <Text className="text-primary-foreground text-sm font-semibold">
-              Find
+        {selectedMemoryId ? (
+          <Pressable onPress={onCloseDetail} className="mb-4 active:opacity-70">
+            <Text className="text-accent text-sm font-semibold">
+              Back to search
             </Text>
           </Pressable>
-        </View>
+        ) : (
+          <View className="mb-4 flex-row items-center gap-2">
+            <TextInput
+              value={query}
+              onChangeText={onQueryChange}
+              onSubmitEditing={onSearch}
+              returnKeyType="search"
+              autoCorrect={false}
+              placeholder="Search past questions, ideas, decisions…"
+              placeholderTextColor="#777"
+              className="border-border bg-card text-foreground min-w-0 flex-1 rounded-xl border px-3 py-2.5 text-sm"
+            />
+            <Pressable
+              onPress={onSearch}
+              disabled={isLoading}
+              className="bg-primary rounded-xl px-4 py-2.5 active:opacity-80 disabled:opacity-50"
+            >
+              <Text className="text-primary-foreground text-sm font-semibold">
+                Find
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
-        {isLoading ? (
+        {selectedMemoryId && isDetailLoading ? (
+          <View className="flex-1 items-center justify-center gap-3">
+            <ActivityIndicator />
+            <Text className="text-muted text-sm">Loading connections…</Text>
+          </View>
+        ) : selectedMemoryId && !detail && detailError ? (
+          <View className="border-border bg-card rounded-xl border px-4 py-4">
+            <Text className="text-danger text-sm">{detailError}</Text>
+            <Pressable
+              onPress={onRetryDetail}
+              className="mt-3 active:opacity-70"
+            >
+              <Text className="text-accent text-sm font-semibold">
+                Try again
+              </Text>
+            </Pressable>
+          </View>
+        ) : selectedMemoryId && detail ? (
+          <LegendList
+            data={connections}
+            renderItem={renderConnection}
+            keyExtractor={(connection) => connection.edge.id}
+            estimatedItemSize={236}
+            recycleItems
+            contentContainerStyle={{ paddingBottom: 32 }}
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={
+              <View className="mb-4 gap-3">
+                <MemoryCard item={detail.memory} />
+                {detailError ? (
+                  <View className="border-danger/40 bg-danger/10 rounded-xl border px-3 py-3">
+                    <Text className="text-danger text-xs">{detailError}</Text>
+                  </View>
+                ) : null}
+                <Text className="text-muted text-xs">
+                  {connections.length} connection
+                  {connections.length === 1 ? "" : "s"}, ordered by relevance.
+                </Text>
+              </View>
+            }
+            ListEmptyComponent={
+              <View className="border-border bg-card rounded-xl border px-4 py-4">
+                <Text className="text-muted text-sm">
+                  No connections have been discovered for this memory yet.
+                </Text>
+              </View>
+            }
+          />
+        ) : isLoading ? (
           <View className="flex-1 items-center justify-center gap-3">
             <ActivityIndicator />
             <Text className="text-muted text-sm">Searching memory…</Text>

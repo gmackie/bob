@@ -378,6 +378,21 @@ export function useOodaConversation() {
     [client],
   );
 
+  const inspectMemory = useCallback(
+    (memoryId: string) => client.memories.inspect(memoryId),
+    [client],
+  );
+
+  const submitMemoryFeedback = useCallback(
+    (edgeId: string, feedbackState: "confirmed" | "suppressed") =>
+      client.memories.feedback({
+        edgeId,
+        feedbackState,
+        idempotencyKey: uuidv4(),
+      }),
+    [client],
+  );
+
   const togglePin = useCallback((conversationId: string) => {
     setPinnedIds((current) => {
       const next = current.includes(conversationId)
@@ -455,6 +470,8 @@ export function useOodaConversation() {
     retry,
     getContextPack,
     searchMemories,
+    inspectMemory,
+    submitMemoryFeedback,
     requestTtsSource,
     togglePin,
   };
