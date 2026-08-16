@@ -47,6 +47,8 @@ export function ChatScreen() {
   const [memoryFeedbackEdgeId, setMemoryFeedbackEdgeId] = useState<
     string | null
   >(null);
+  const memorySearchRequestRef = useRef(0);
+  const memoryDetailRequestRef = useRef(0);
   const lastSubmittedAtRef = useRef<number | null>(null);
   const spokenEventIdsRef = useRef(new Set<string>());
   const latestContextPackId = findLatestContextPackId(chat.timeline);
@@ -80,16 +82,22 @@ export function ChatScreen() {
   }, [loadContextPack]);
 
   const runMemorySearch = useCallback(async () => {
+    const requestId = memorySearchRequestRef.current + 1;
+    memorySearchRequestRef.current = requestId;
     setMemoryError(null);
     setIsMemoryLoading(true);
     try {
       const page = await searchMemories(buildMemorySearchInput(memoryQuery));
+      if (memorySearchRequestRef.current !== requestId) return;
       setMemoryItems(page.items);
       setHasMemorySearched(true);
     } catch (caught) {
+      if (memorySearchRequestRef.current !== requestId) return;
       setMemoryError(caught instanceof Error ? caught.message : String(caught));
     } finally {
-      setIsMemoryLoading(false);
+      if (memorySearchRequestRef.current === requestId) {
+        setIsMemoryLoading(false);
+      }
     }
   }, [memoryQuery, searchMemories]);
 
@@ -100,24 +108,32 @@ export function ChatScreen() {
 
   const openMemoryDetail = useCallback(
     async (memoryId: string) => {
+      const requestId = memoryDetailRequestRef.current + 1;
+      memoryDetailRequestRef.current = requestId;
       setSelectedMemoryId(memoryId);
       setMemoryDetail(null);
       setMemoryDetailError(null);
       setIsMemoryDetailLoading(true);
       try {
-        setMemoryDetail(await inspectMemory(memoryId));
+        const nextDetail = await inspectMemory(memoryId);
+        if (memoryDetailRequestRef.current !== requestId) return;
+        setMemoryDetail(nextDetail);
       } catch (caught) {
+        if (memoryDetailRequestRef.current !== requestId) return;
         setMemoryDetailError(
           caught instanceof Error ? caught.message : String(caught),
         );
       } finally {
-        setIsMemoryDetailLoading(false);
+        if (memoryDetailRequestRef.current === requestId) {
+          setIsMemoryDetailLoading(false);
+        }
       }
     },
     [inspectMemory],
   );
 
   const closeMemoryDetail = useCallback(() => {
+    memoryDetailRequestRef.current += 1;
     setSelectedMemoryId(null);
     setMemoryDetail(null);
     setMemoryDetailError(null);
