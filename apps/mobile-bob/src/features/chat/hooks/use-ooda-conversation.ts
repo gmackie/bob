@@ -19,6 +19,10 @@ import { authClient } from "~/utils/auth";
 import { getMobileAuthHeaders } from "~/utils/auth-headers";
 import { isDevAuthBypassEnabled } from "~/utils/dev-auth-bypass";
 import {
+  buildForkConversationInput,
+  findLatestForkPoint,
+} from "../conversation-branch-model";
+import {
   cacheOodaOfflineShell,
   hydrateOodaLocalStartup,
   OODA_PINNED_CONVERSATIONS_STORAGE_KEY,
@@ -446,6 +450,64 @@ export function useOodaConversation() {
       ),
     [branches, events, selectedBranchId, selectedOutbox],
   );
+  const forkPoint = useMemo(() => findLatestForkPoint(timeline), [timeline]);
+  const forkConversation = useCallback(
+    async (name: string, reason?: string) => {
+      const conversationId = selectedConversationRef.current;
+      if (
+        !conversationId ||
+        !forkPoint ||
+        !isOnline ||
+        !rollout?.capabilities.conversation_write
+      ) {
+        throw new Error(
+          "Branching needs an online conversation with at least one durable event.",
+        );
+      }
+      const result = await client.conversations.fork(
+        buildForkConversationInput({
+          conversationId,
+          parentBranchId: forkPoint.branchId,
+          forkEventId: forkPoint.eventId,
+          name,
+          reason,
+          idempotencyKey: uuidv4(),
+        }),
+      );
+      setBranches((current) => {
+        const withoutReplay = current.filter(
+          (branch) => branch.id !== result.branch.id,
+        );
+        return [...withoutReplay, result.branch];
+      });
+      setSelectedBranchId(result.branch.id);
+      setConversations((current) =>
+        current.map((conversation) =>
+          conversation.id === conversationId
+            ? { ...conversation, activeBranchId: result.branch.id }
+            : conversation,
+        ),
+      );
+      if (selectedConversation) {
+        const cachedConversation = {
+          ...selectedConversation,
+          activeBranchId: result.branch.id,
+        };
+        const cachedBranches = [
+          ...branches.filter((branch) => branch.id !== result.branch.id),
+          result.branch,
+        ];
+        void cacheOodaOfflineShell(AsyncStorage, {
+          conversation: cachedConversation,
+          branches: cachedBranches,
+          rollout,
+          cachedAt: new Date().toISOString(),
+        }).catch(() => undefined);
+      }
+      return result.branch;
+    },
+    [branches, client, forkPoint, isOnline, rollout, selectedConversation],
+  );
   const isSyncing = selectedOutbox.some((item) => item.status === "syncing");
   const hasFailures = selectedOutbox.some((item) => item.status === "failed");
   const status = !isOnline
@@ -483,10 +545,17 @@ export function useOodaConversation() {
       selectedBranchId &&
       rollout?.capabilities.mobile_text,
     ),
+    canFork: Boolean(
+      selectedConversation &&
+      forkPoint &&
+      isOnline &&
+      rollout?.capabilities.conversation_write,
+    ),
     rollout,
     openConversation,
     selectBranch: setSelectedBranchId,
     createConversation,
+    forkConversation,
     refreshConversations,
     send,
     retry,
