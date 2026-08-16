@@ -42,6 +42,7 @@ describe("mobile conversation research model", () => {
 
     expect(input).toEqual({
       conversationId: "conversation-1",
+      sourceEventId: "event-assistant-1",
       class: "read_only_research",
       prompt:
         "Research the following durable OODA conversation excerpt. Return concise findings, uncertainty, and source links. Do not modify repositories or external systems.\n\nSource role: assistant\nSource event: event-assistant-1\n\nA battery-backed device could solve this.",
@@ -63,6 +64,15 @@ describe("mobile conversation research model", () => {
     ).toBe(false);
     expect(
       canResearchConversationItem({ ...assistantItem(), event: undefined }),
+    ).toBe(false);
+    const sensitive = assistantItem();
+    if (!sensitive.event) throw new Error("Expected a durable event fixture");
+    expect(
+      canResearchConversationItem({
+        ...sensitive,
+        sensitivity: "sensitive",
+        event: { ...sensitive.event, sensitivity: "sensitive" },
+      }),
     ).toBe(false);
   });
 

@@ -210,6 +210,7 @@ async function appendAgentJobStatusEvent(
     .select({
       branchId: conversationEvents.branchId,
       sensitivity: conversationEvents.sensitivity,
+      causationId: conversationEvents.causationId,
     })
     .from(conversationEvents)
     .where(
@@ -249,6 +250,7 @@ async function appendAgentJobStatusEvent(
     },
     sensitivity: source.sensitivity,
     correlationId: job.correlationId,
+    causationId: source.causationId,
     idempotencyKey: `agent-job:${job.id}:status:${job.lastSequence}`,
     occurredAt,
   });
@@ -383,6 +385,44 @@ export async function createAgentJob(
         .limit(1);
       if (!conversation) throw notFound("Conversation");
 
+      const [sourceEvent] = input.sourceEventId
+        ? await tx
+            .select({
+              id: conversationEvents.id,
+              branchId: conversationEvents.branchId,
+              sensitivity: conversationEvents.sensitivity,
+            })
+            .from(conversationEvents)
+            .where(
+              and(
+                eq(conversationEvents.id, input.sourceEventId),
+                eq(conversationEvents.conversationId, input.conversationId),
+                inArray(conversationEvents.type, [
+                  "user_turn",
+                  "assistant_turn",
+                ]),
+              ),
+            )
+            .limit(1)
+        : [];
+      if (input.sourceEventId && !sourceEvent) {
+        throw new OodaKernelProblem(
+          "VALIDATION_FAILED",
+          422,
+          "The research source must be a user or assistant turn in this conversation",
+        );
+      }
+      if (
+        sourceEvent?.sensitivity === "sensitive" ||
+        sourceEvent?.sensitivity === "restricted"
+      ) {
+        throw new OodaKernelProblem(
+          "CONTEXT_DISCLOSURE_DENIED",
+          403,
+          "Sensitive research requires explicit disclosure approval",
+        );
+      }
+
       if (contextPackId) {
         const [pack] = await tx
           .select()
@@ -475,7 +515,7 @@ export async function createAgentJob(
         .returning({ sequence: conversations.lastSequence });
       await tx.insert(conversationEvents).values({
         conversationId: conversation.id,
-        branchId: conversation.activeBranchId,
+        branchId: sourceEvent?.branchId ?? conversation.activeBranchId,
         sequence: BigInt(allocated!.sequence),
         type: "agent_job_progress",
         actorType: "system",
@@ -490,8 +530,9 @@ export async function createAgentJob(
           status: job.status,
           provider: job.provider,
         },
-        sensitivity: "general",
+        sensitivity: sourceEvent?.sensitivity ?? "general",
         correlationId: job.correlationId,
+        causationId: sourceEvent?.id,
         idempotencyKey: `agent-job:${input.idempotencyKey}:queued`,
         occurredAt: now,
       });

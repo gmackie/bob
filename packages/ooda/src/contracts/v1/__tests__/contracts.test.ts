@@ -474,6 +474,7 @@ describe("OODA V1 contracts", () => {
   it("defines a bounded, resumable worker protocol without durable-write capabilities", () => {
     const create = {
       conversationId: "conversation-1",
+      sourceEventId: "event-1",
       class: "scratch_prototype",
       prompt: "Prototype this only in disposable storage.",
       capabilities: ["scratch.write", "process.execute"],

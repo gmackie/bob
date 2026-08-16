@@ -1,5 +1,8 @@
 import type { CreateAgentJobInputV1 } from "@gmacko/ooda-client/v1";
-import { buildConversationResearchJobInputV1 } from "@gmacko/ooda-client/v1";
+import {
+  buildConversationResearchJobInputV1,
+  canAutomaticallyResearchSensitivityV1,
+} from "@gmacko/ooda-client/v1";
 
 import type { OodaMessageTimelineItem } from "./ooda-timeline";
 
@@ -11,6 +14,7 @@ export function canResearchConversationItem(
       item.event &&
       (item.event.type === "user_turn" ||
         item.event.type === "assistant_turn") &&
+      canAutomaticallyResearchSensitivityV1(item.event.sensitivity) &&
       item.display.trim(),
   );
 }
@@ -31,6 +35,7 @@ export function buildConversationResearchJobInput(input: {
     eventId: event.id,
     role: input.item.role,
     body: input.item.display,
+    sensitivity: event.sensitivity,
     correlationId: event.correlationId,
     idempotencyKey: input.idempotencyKey,
   });

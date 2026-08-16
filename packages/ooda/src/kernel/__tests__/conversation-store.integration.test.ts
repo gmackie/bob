@@ -1118,8 +1118,29 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       ttsPolicy: "allowed",
       idempotencyKey: "jobs-conversation",
     });
+    const source = await appendConversationEvent(db!, "owner-jobs", {
+      conversationId: conversation.conversation.id,
+      branchId: conversation.branch.id,
+      type: "user_turn",
+      actor: { type: "user", id: "owner-jobs" },
+      payload: { display: "Compare the two implementation approaches." },
+      sensitivity: "personal",
+      correlationId: "research-source-turn",
+      idempotencyKey: "research-source-event",
+      occurredAt: "2026-08-07T14:59:00.000Z",
+    });
+    const fork = await forkConversation(db!, "owner-jobs", {
+      conversationId: conversation.conversation.id,
+      parentBranchId: conversation.branch.id,
+      forkEventId: source.event.id,
+      name: "different-active-branch",
+      reason: "Prove research remains anchored to its source turn",
+      idempotencyKey: "research-source-branch-fork",
+    });
+    expect(fork.branch.id).not.toBe(source.event.branchId);
     const input = {
       conversationId: conversation.conversation.id,
+      sourceEventId: source.event.id,
       class: "read_only_research" as const,
       prompt: "Compare the two implementation approaches.",
       capabilities: ["web.read", "project_context.read"],
@@ -1141,8 +1162,12 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       limit: 10,
     });
     expect(conversationPage.items).toEqual([
+      expect.objectContaining({ id: source.event.id }),
       expect.objectContaining({
         type: "agent_job_progress",
+        branchId: source.event.branchId,
+        sensitivity: "personal",
+        causationId: source.event.id,
         correlationId: "research-job-1",
         payload: expect.objectContaining({
           jobId: created.job.id,
@@ -1209,31 +1234,81 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     });
     expect(completed.job.result).not.toHaveProperty("runtimeSession");
     expect(eventReplay).toEqual({ ...completed, replayed: true });
+    await expect(
+      createAgentJob(db!, "owner-jobs", {
+        conversationId: conversation.conversation.id,
+        sourceEventId: conversationPage.items[1]!.id,
+        class: "read_only_research",
+        prompt: "This progress card is not a valid source turn.",
+        idempotencyKey: "research-invalid-source-event",
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION_FAILED", status: 422 });
+    const sensitiveSource = await appendConversationEvent(
+      db!,
+      "owner-jobs",
+      {
+        conversationId: conversation.conversation.id,
+        branchId: fork.branch.id,
+        type: "user_turn",
+        actor: { type: "user", id: "owner-jobs" },
+        payload: { display: "A sensitive detail requiring disclosure approval." },
+        sensitivity: "sensitive",
+        correlationId: "research-sensitive-source",
+        idempotencyKey: "research-sensitive-source-event",
+        occurredAt: "2026-08-07T15:01:00.000Z",
+      },
+    );
+    await expect(
+      createAgentJob(db!, "owner-jobs", {
+        conversationId: conversation.conversation.id,
+        sourceEventId: sensitiveSource.event.id,
+        class: "read_only_research",
+        prompt: "This must not leave the trusted environment automatically.",
+        idempotencyKey: "research-sensitive-source-job",
+      }),
+    ).rejects.toMatchObject({
+      code: "CONTEXT_DISCLOSURE_DENIED",
+      status: 403,
+    });
     const lifecyclePage = await listConversationEvents(db!, "owner-jobs", {
       conversationId: conversation.conversation.id,
       limit: 10,
     });
     expect(
-      lifecyclePage.items.map((event) => ({
+      lifecyclePage.items
+        .filter((event) => event.type === "agent_job_progress")
+        .map((event) => ({
         type: event.type,
         status: event.payload.status,
         jobId: event.payload.jobId,
+        branchId: event.branchId,
+        sensitivity: event.sensitivity,
+        causationId: event.causationId,
       })),
     ).toEqual([
       {
         type: "agent_job_progress",
         status: "queued",
         jobId: created.job.id,
+        branchId: source.event.branchId,
+        sensitivity: "personal",
+        causationId: source.event.id,
       },
       {
         type: "agent_job_progress",
         status: "running",
         jobId: created.job.id,
+        branchId: source.event.branchId,
+        sensitivity: "personal",
+        causationId: source.event.id,
       },
       {
         type: "agent_job_progress",
         status: "completed",
         jobId: created.job.id,
+        branchId: source.event.branchId,
+        sensitivity: "personal",
+        causationId: source.event.id,
       },
     ]);
     await expect(

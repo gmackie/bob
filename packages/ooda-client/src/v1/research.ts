@@ -1,6 +1,7 @@
 import type {
   AgentJobV1,
   CreateAgentJobInputV1,
+  SensitivityV1,
 } from "@gmacko/ooda/contracts/v1";
 
 export type ConversationResearchSourceV1 = {
@@ -8,17 +9,28 @@ export type ConversationResearchSourceV1 = {
   eventId: string;
   role: "user" | "assistant";
   body: string;
+  sensitivity: SensitivityV1;
   correlationId?: string;
   idempotencyKey: string;
 };
+
+export function canAutomaticallyResearchSensitivityV1(
+  sensitivity: SensitivityV1,
+): boolean {
+  return sensitivity === "general" || sensitivity === "personal";
+}
 
 export function buildConversationResearchJobInputV1(
   source: ConversationResearchSourceV1,
 ): CreateAgentJobInputV1 {
   const excerpt = source.body.trim().slice(0, 50_000);
   if (!excerpt) throw new Error("Research excerpt is required");
+  if (!canAutomaticallyResearchSensitivityV1(source.sensitivity)) {
+    throw new Error("Sensitive research requires explicit disclosure approval");
+  }
   return {
     conversationId: source.conversationId,
+    sourceEventId: source.eventId,
     class: "read_only_research",
     prompt: [
       "Research the following durable OODA conversation excerpt. Return concise findings, uncertainty, and source links. Do not modify repositories or external systems.",
