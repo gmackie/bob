@@ -13,6 +13,8 @@ interface MessageListProps {
   statusText: string;
   onRetry?: (outboxId: string) => void;
   onSpeak?: (item: OodaMessageTimelineItem) => void;
+  canCorrect?: boolean;
+  onCorrect?: (item: OodaMessageTimelineItem) => void;
   onOpenProposal?: (proposalId: string) => void;
   onOpenJob?: (jobId: string) => void;
 }
@@ -27,10 +29,14 @@ const MessageRow = memo(function MessageRow({
   item,
   onRetry,
   onSpeak,
+  canCorrect,
+  onCorrect,
 }: {
   item: OodaMessageTimelineItem;
   onRetry?: (outboxId: string) => void;
   onSpeak?: (item: OodaMessageTimelineItem) => void;
+  canCorrect?: boolean;
+  onCorrect?: (item: OodaMessageTimelineItem) => void;
 }) {
   const isUser = item.role === "user";
   const status =
@@ -111,6 +117,25 @@ const MessageRow = memo(function MessageRow({
             className="mt-3 self-start active:opacity-70"
           >
             <Text className="text-accent text-xs font-semibold">Listen</Text>
+          </Pressable>
+        ) : null}
+        {isUser &&
+        item.deliveryState === "synced" &&
+        item.event?.type === "user_turn" &&
+        canCorrect &&
+        onCorrect ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Correct saved turn"
+            onPress={() => onCorrect(item)}
+            className="mt-3 self-end active:opacity-70"
+          >
+            <Text
+              className="text-xs font-semibold"
+              style={{ color: colors.primaryForeground }}
+            >
+              Edit
+            </Text>
           </Pressable>
         ) : null}
       </View>
@@ -206,13 +231,21 @@ export function MessageList({
   statusText,
   onRetry,
   onSpeak,
+  canCorrect,
+  onCorrect,
   onOpenProposal,
   onOpenJob,
 }: MessageListProps) {
   const renderItem = useCallback(
     ({ item }: { item: OodaTimelineItem }) =>
       item.kind === "message" ? (
-        <MessageRow item={item} onRetry={onRetry} onSpeak={onSpeak} />
+        <MessageRow
+          item={item}
+          onRetry={onRetry}
+          onSpeak={onSpeak}
+          canCorrect={canCorrect}
+          onCorrect={onCorrect}
+        />
       ) : (
         <ActivityRow
           item={item}
@@ -220,7 +253,7 @@ export function MessageList({
           onOpenJob={onOpenJob}
         />
       ),
-    [onOpenJob, onOpenProposal, onRetry, onSpeak],
+    [canCorrect, onCorrect, onOpenJob, onOpenProposal, onRetry, onSpeak],
   );
 
   if (!items.length) {

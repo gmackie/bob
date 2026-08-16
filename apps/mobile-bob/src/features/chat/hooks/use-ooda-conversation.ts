@@ -23,6 +23,10 @@ import {
   findLatestForkPoint,
 } from "../conversation-branch-model";
 import {
+  buildConversationCorrectionInput,
+  canCorrectConversationEvent,
+} from "../conversation-correction-model";
+import {
   cacheOodaOfflineShell,
   hydrateOodaLocalStartup,
   OODA_PINNED_CONVERSATIONS_STORAGE_KEY,
@@ -354,6 +358,37 @@ export function useOodaConversation() {
     [flushOutbox, isOnline, outbox],
   );
 
+  const correctEvent = useCallback(
+    async (
+      event: ConversationEventV1,
+      text: string,
+      reason: string,
+    ) => {
+      if (
+        !isOnline ||
+        !rollout?.capabilities.mobile_text ||
+        !canCorrectConversationEvent(event)
+      ) {
+        throw new Error(
+          "Correcting a saved turn needs an online OODA conversation.",
+        );
+      }
+      setError(null);
+      const result = await client.events.correct(
+        buildConversationCorrectionInput({
+          event,
+          text,
+          reason,
+          idempotencyKey: uuidv4(),
+          occurredAt: new Date().toISOString(),
+        }),
+      );
+      setEvents((current) => mergeEvents(current, [result.event]));
+      return result.event;
+    },
+    [client, isOnline, rollout],
+  );
+
   const requestTtsSource = useCallback(
     async (eventId: string, requestMode: "automatic" | "manual") => {
       const conversationId = selectedConversationRef.current;
@@ -551,6 +586,11 @@ export function useOodaConversation() {
       isOnline &&
       rollout?.capabilities.conversation_write,
     ),
+    canCorrect: Boolean(
+      selectedConversation &&
+      isOnline &&
+      rollout?.capabilities.mobile_text,
+    ),
     rollout,
     openConversation,
     selectBranch: setSelectedBranchId,
@@ -559,6 +599,7 @@ export function useOodaConversation() {
     refreshConversations,
     send,
     retry,
+    correctEvent,
     getContextPack,
     searchMemories,
     inspectMemory,

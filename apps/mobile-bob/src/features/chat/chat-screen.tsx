@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from "uuid";
 import { Screen } from "~/components/ui";
 import { authClient } from "~/utils/auth";
 import { ContextInspector } from "./components/context-inspector";
+import { CorrectionEditor } from "./components/correction-editor";
 import { ConversationDrawer } from "./components/conversation-drawer";
 import { JobInspector } from "./components/job-inspector";
 import { MemorySearch } from "./components/memory-search";
@@ -27,6 +28,7 @@ import { useVaultBrowser } from "./hooks/use-vault-browser";
 import { buildJobCancellation } from "./job-inspector-model";
 import { buildMemorySearchInput } from "./memory-search-model";
 import { buildProposalDecision } from "./proposal-inspector-model";
+import type { OodaMessageTimelineItem } from "./ooda-timeline";
 
 export function ChatScreen() {
   const { data: session, isPending } = authClient.useSession();
@@ -68,6 +70,10 @@ export function ChatScreen() {
   const [jobError, setJobError] = useState<string | null>(null);
   const [isJobLoading, setIsJobLoading] = useState(false);
   const [isJobCancelling, setIsJobCancelling] = useState(false);
+  const [correctionItem, setCorrectionItem] =
+    useState<OodaMessageTimelineItem | null>(null);
+  const [correctionError, setCorrectionError] = useState<string | null>(null);
+  const [isCorrectionSaving, setIsCorrectionSaving] = useState(false);
   const memorySearchRequestRef = useRef(0);
   const memoryDetailRequestRef = useRef(0);
   const proposalRequestRef = useRef(0);
@@ -83,6 +89,32 @@ export function ChatScreen() {
   const decideProposal = chat.decideProposal;
   const getAgentJob = chat.getAgentJob;
   const cancelAgentJob = chat.cancelAgentJob;
+
+  const closeCorrection = useCallback(() => {
+    if (isCorrectionSaving) return;
+    setCorrectionItem(null);
+    setCorrectionError(null);
+  }, [isCorrectionSaving]);
+
+  const saveCorrection = useCallback(
+    async (text: string, reason: string) => {
+      const event = correctionItem?.event;
+      if (!event) return;
+      setCorrectionError(null);
+      setIsCorrectionSaving(true);
+      try {
+        await chat.correctEvent(event, text, reason);
+        setCorrectionItem(null);
+      } catch (caught) {
+        setCorrectionError(
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      } finally {
+        setIsCorrectionSaving(false);
+      }
+    },
+    [chat, correctionItem],
+  );
 
   const loadContextPack = useCallback(async () => {
     setContextPack(null);
@@ -466,6 +498,11 @@ export function ChatScreen() {
           onSpeak={(item) => {
             if (item.event) void tts.play(item.event.id, "manual");
           }}
+          canCorrect={chat.canCorrect}
+          onCorrect={(item) => {
+            setCorrectionError(null);
+            setCorrectionItem(item);
+          }}
           onOpenProposal={openProposal}
           onOpenJob={openAgentJob}
         />
@@ -544,6 +581,16 @@ export function ChatScreen() {
         onFork={chat.forkConversation}
         onTogglePin={chat.togglePin}
       />
+      {correctionItem ? (
+        <CorrectionEditor
+          visible
+          originalText={correctionItem.display}
+          isSaving={isCorrectionSaving}
+          error={correctionError}
+          onClose={closeCorrection}
+          onSave={(text, reason) => void saveCorrection(text, reason)}
+        />
+      ) : null}
       <VaultBrowser
         vault={vault}
         visible={vaultVisible}
