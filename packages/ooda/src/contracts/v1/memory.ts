@@ -115,6 +115,7 @@ export const MemoryConnectionV1Schema = z
     memory: MemorySeedV1Schema,
   })
   .strict();
+export type MemoryConnectionV1 = z.infer<typeof MemoryConnectionV1Schema>;
 
 export const MemoryDetailV1Schema = z
   .object({

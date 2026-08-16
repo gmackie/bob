@@ -1,13 +1,17 @@
-import { Redirect, router } from "expo-router";
-import type { ContextPackV1 } from "@gmacko/ooda-client/v1";
+import type {
+  ContextPackV1,
+  MemoryDetailV1,
+  MemorySeedV1,
+} from "@gmacko/ooda-client/v1";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Redirect, router } from "expo-router";
 
 import { Screen } from "~/components/ui";
 import { authClient } from "~/utils/auth";
-
-import { ConversationDrawer } from "./components/conversation-drawer";
 import { ContextInspector } from "./components/context-inspector";
+import { ConversationDrawer } from "./components/conversation-drawer";
+import { MemorySearch } from "./components/memory-search";
 import { MessageList } from "./components/message-list";
 import { VaultBrowser } from "./components/vault-browser";
 import { VoiceInputBar } from "./components/voice-input-bar";
@@ -15,6 +19,7 @@ import { findLatestContextPackId } from "./context-inspector-model";
 import { useOodaConversation } from "./hooks/use-ooda-conversation";
 import { useOodaTts } from "./hooks/use-ooda-tts";
 import { useVaultBrowser } from "./hooks/use-vault-browser";
+import { buildMemorySearchInput } from "./memory-search-model";
 
 export function ChatScreen() {
   const { data: session, isPending } = authClient.useSession();
@@ -27,10 +32,30 @@ export function ChatScreen() {
   const [contextPack, setContextPack] = useState<ContextPackV1 | null>(null);
   const [contextError, setContextError] = useState<string | null>(null);
   const [isContextLoading, setIsContextLoading] = useState(false);
+  const [memoryVisible, setMemoryVisible] = useState(false);
+  const [memoryQuery, setMemoryQuery] = useState("");
+  const [memoryItems, setMemoryItems] = useState<MemorySeedV1[]>([]);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
+  const [isMemoryLoading, setIsMemoryLoading] = useState(false);
+  const [hasMemorySearched, setHasMemorySearched] = useState(false);
+  const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
+  const [memoryDetail, setMemoryDetail] = useState<MemoryDetailV1 | null>(null);
+  const [memoryDetailError, setMemoryDetailError] = useState<string | null>(
+    null,
+  );
+  const [isMemoryDetailLoading, setIsMemoryDetailLoading] = useState(false);
+  const [memoryFeedbackEdgeId, setMemoryFeedbackEdgeId] = useState<
+    string | null
+  >(null);
+  const memorySearchRequestRef = useRef(0);
+  const memoryDetailRequestRef = useRef(0);
   const lastSubmittedAtRef = useRef<number | null>(null);
   const spokenEventIdsRef = useRef(new Set<string>());
   const latestContextPackId = findLatestContextPackId(chat.timeline);
   const getContextPack = chat.getContextPack;
+  const searchMemories = chat.searchMemories;
+  const inspectMemory = chat.inspectMemory;
+  const submitMemoryFeedback = chat.submitMemoryFeedback;
 
   const loadContextPack = useCallback(async () => {
     setContextPack(null);
@@ -43,7 +68,9 @@ export function ChatScreen() {
     try {
       setContextPack(await getContextPack(latestContextPackId));
     } catch (caught) {
-      setContextError(caught instanceof Error ? caught.message : String(caught));
+      setContextError(
+        caught instanceof Error ? caught.message : String(caught),
+      );
     } finally {
       setIsContextLoading(false);
     }
@@ -54,11 +81,101 @@ export function ChatScreen() {
     void loadContextPack();
   }, [loadContextPack]);
 
+  const runMemorySearch = useCallback(async () => {
+    const requestId = memorySearchRequestRef.current + 1;
+    memorySearchRequestRef.current = requestId;
+    setMemoryError(null);
+    setIsMemoryLoading(true);
+    try {
+      const page = await searchMemories(buildMemorySearchInput(memoryQuery));
+      if (memorySearchRequestRef.current !== requestId) return;
+      setMemoryItems(page.items);
+      setHasMemorySearched(true);
+    } catch (caught) {
+      if (memorySearchRequestRef.current !== requestId) return;
+      setMemoryError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      if (memorySearchRequestRef.current === requestId) {
+        setIsMemoryLoading(false);
+      }
+    }
+  }, [memoryQuery, searchMemories]);
+
+  const openMemorySearch = useCallback(() => {
+    setMemoryVisible(true);
+    void runMemorySearch();
+  }, [runMemorySearch]);
+
+  const openMemoryDetail = useCallback(
+    async (memoryId: string) => {
+      const requestId = memoryDetailRequestRef.current + 1;
+      memoryDetailRequestRef.current = requestId;
+      setSelectedMemoryId(memoryId);
+      setMemoryDetail(null);
+      setMemoryDetailError(null);
+      setIsMemoryDetailLoading(true);
+      try {
+        const nextDetail = await inspectMemory(memoryId);
+        if (memoryDetailRequestRef.current !== requestId) return;
+        setMemoryDetail(nextDetail);
+      } catch (caught) {
+        if (memoryDetailRequestRef.current !== requestId) return;
+        setMemoryDetailError(
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      } finally {
+        if (memoryDetailRequestRef.current === requestId) {
+          setIsMemoryDetailLoading(false);
+        }
+      }
+    },
+    [inspectMemory],
+  );
+
+  const closeMemoryDetail = useCallback(() => {
+    memoryDetailRequestRef.current += 1;
+    setSelectedMemoryId(null);
+    setMemoryDetail(null);
+    setMemoryDetailError(null);
+  }, []);
+
+  const provideMemoryFeedback = useCallback(
+    async (edgeId: string, feedbackState: "confirmed" | "suppressed") => {
+      setMemoryFeedbackEdgeId(edgeId);
+      setMemoryDetailError(null);
+      try {
+        const result = await submitMemoryFeedback(edgeId, feedbackState);
+        setMemoryDetail((current) =>
+          current
+            ? {
+                ...current,
+                connections: current.connections.map((connection) =>
+                  connection.edge.id === edgeId
+                    ? { ...connection, edge: result.edge }
+                    : connection,
+                ),
+              }
+            : current,
+        );
+      } catch (caught) {
+        setMemoryDetailError(
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      } finally {
+        setMemoryFeedbackEdgeId(null);
+      }
+    },
+    [submitMemoryFeedback],
+  );
+
   const send = chat.send;
-  const handleSend = useCallback((text: string) => {
-    lastSubmittedAtRef.current = Date.now();
-    void send(text);
-  }, [send]);
+  const handleSend = useCallback(
+    (text: string) => {
+      lastSubmittedAtRef.current = Date.now();
+      void send(text);
+    },
+    [send],
+  );
 
   const playTts = tts.play;
   useEffect(() => {
@@ -68,15 +185,19 @@ export function ChatScreen() {
 
   useEffect(() => {
     const submittedAt = lastSubmittedAtRef.current;
-    if (!submittedAt || chat.selectedConversation?.ttsPolicy !== "allowed") return;
-    const latest = [...chat.timeline].reverse().find((item) =>
-      item.kind === "message"
-      && item.role === "assistant"
-      && item.event?.type === "assistant_turn"
-      && Boolean(item.speakable)
-      && new Date(item.timestamp).getTime() >= submittedAt - 5_000
-      && !spokenEventIdsRef.current.has(item.event.id),
-    );
+    if (!submittedAt || chat.selectedConversation?.ttsPolicy !== "allowed")
+      return;
+    const latest = [...chat.timeline]
+      .reverse()
+      .find(
+        (item) =>
+          item.kind === "message" &&
+          item.role === "assistant" &&
+          item.event?.type === "assistant_turn" &&
+          Boolean(item.speakable) &&
+          new Date(item.timestamp).getTime() >= submittedAt - 5_000 &&
+          !spokenEventIdsRef.current.has(item.event.id),
+      );
     if (!latest?.event) return;
     spokenEventIdsRef.current.add(latest.event.id);
     void playTts(latest.event.id, "automatic");
@@ -92,44 +213,60 @@ export function ChatScreen() {
 
   if (!session) return <Redirect href="/" />;
 
-  const activeBranch = chat.branches.find((branch) => branch.id === chat.selectedBranchId);
-  const statusColor = chat.status === "connected"
-    ? "bg-success"
-    : chat.status === "error"
-      ? "bg-danger"
-      : "bg-warning";
+  const activeBranch = chat.branches.find(
+    (branch) => branch.id === chat.selectedBranchId,
+  );
+  const statusColor =
+    chat.status === "connected"
+      ? "bg-success"
+      : chat.status === "error"
+        ? "bg-danger"
+        : "bg-warning";
 
   return (
     <Screen className="pt-4">
       <View className="mb-4 flex-row items-center justify-between gap-3">
         <Pressable onPress={() => router.back()} className="active:opacity-70">
-          <Text className="text-base font-semibold text-muted">Back</Text>
+          <Text className="text-muted text-base font-semibold">Back</Text>
         </Pressable>
         <Pressable
           onPress={() => setDrawerVisible(true)}
           className="min-w-0 flex-1 items-center active:opacity-70"
         >
-          <Text className="text-lg font-semibold text-foreground" numberOfLines={1}>
+          <Text
+            className="text-foreground text-lg font-semibold"
+            numberOfLines={1}
+          >
             {chat.selectedConversation?.title ?? "OODA"}
           </Text>
           {activeBranch && activeBranch.name !== "main" ? (
-            <Text className="text-xs text-accent" numberOfLines={1}>{activeBranch.name}</Text>
+            <Text className="text-accent text-xs" numberOfLines={1}>
+              {activeBranch.name}
+            </Text>
           ) : null}
         </Pressable>
-        <Pressable onPress={() => setDrawerVisible(true)} className="active:opacity-70">
-          <Text className="text-sm font-semibold text-accent">History</Text>
+        <Pressable
+          onPress={() => setDrawerVisible(true)}
+          className="active:opacity-70"
+        >
+          <Text className="text-accent text-sm font-semibold">History</Text>
         </Pressable>
       </View>
 
       <Pressable
         onPress={() => setDrawerVisible(true)}
-        className="mb-3 flex-row items-center justify-between rounded-xl bg-card px-3 py-2 active:opacity-80"
+        className="bg-card mb-3 flex-row items-center justify-between rounded-xl px-3 py-2 active:opacity-80"
       >
         <View className="flex-row items-center gap-2">
           <View className={`h-2.5 w-2.5 rounded-full ${statusColor}`} />
-          <Text className="text-xs font-semibold text-muted">{chat.status}</Text>
+          <Text className="text-muted text-xs font-semibold">
+            {chat.status}
+          </Text>
         </View>
-        <Text className="ml-3 flex-1 text-right text-xs text-muted2" numberOfLines={1}>
+        <Text
+          className="text-muted2 ml-3 flex-1 text-right text-xs"
+          numberOfLines={1}
+        >
           {chat.statusText}
         </Text>
         <Pressable
@@ -139,7 +276,16 @@ export function ChatScreen() {
           }}
           className="ml-3 active:opacity-70"
         >
-          <Text className="text-xs font-semibold text-accent">Vault</Text>
+          <Text className="text-accent text-xs font-semibold">Vault</Text>
+        </Pressable>
+        <Pressable
+          onPress={(event) => {
+            event.stopPropagation();
+            openMemorySearch();
+          }}
+          className="ml-3 active:opacity-70"
+        >
+          <Text className="text-accent text-xs font-semibold">Memory</Text>
         </Pressable>
         <Pressable
           onPress={(event) => {
@@ -148,16 +294,18 @@ export function ChatScreen() {
           }}
           className="ml-3 active:opacity-70"
         >
-          <Text className="text-xs font-semibold text-accent">Context</Text>
+          <Text className="text-accent text-xs font-semibold">Context</Text>
         </Pressable>
       </Pressable>
 
       <View className="min-h-0 flex-1">
         <MessageList
           items={chat.timeline}
-          statusText={chat.selectedConversation
-            ? "Speak or type naturally. Accepted turns are saved before delivery."
-            : "Create a new thought to begin your durable conversation history."}
+          statusText={
+            chat.selectedConversation
+              ? "Speak or type naturally. Accepted turns are saved before delivery."
+              : "Create a new thought to begin your durable conversation history."
+          }
           onRetry={(outboxId) => void chat.retry(outboxId)}
           onSpeak={(item) => {
             if (item.event) void tts.play(item.event.id, "manual");
@@ -166,25 +314,37 @@ export function ChatScreen() {
       </View>
 
       {tts.activeEventId ? (
-        <View className="mb-2 flex-row items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
-          <Text className="min-w-0 flex-1 text-xs font-semibold text-muted" numberOfLines={1}>
-            {tts.error ?? (tts.isBuffering
+        <View className="border-border bg-card mb-2 flex-row items-center gap-2 rounded-xl border px-3 py-2">
+          <Text
+            className="text-muted min-w-0 flex-1 text-xs font-semibold"
+            numberOfLines={1}
+          >
+            {tts.error ??
+              (tts.isBuffering
                 ? "Preparing voice…"
                 : tts.isPlaying
                   ? "OODA is speaking"
                   : "Voice ready to replay")}
           </Text>
           {tts.isPlaying || tts.isBuffering ? (
-            <Pressable onPress={() => void tts.stop()} className="active:opacity-70">
-              <Text className="text-xs font-semibold text-accent">Stop</Text>
+            <Pressable
+              onPress={() => void tts.stop()}
+              className="active:opacity-70"
+            >
+              <Text className="text-accent text-xs font-semibold">Stop</Text>
             </Pressable>
           ) : (
-            <Pressable onPress={() => void tts.replay()} className="active:opacity-70">
-              <Text className="text-xs font-semibold text-accent">Replay</Text>
+            <Pressable
+              onPress={() => void tts.replay()}
+              className="active:opacity-70"
+            >
+              <Text className="text-accent text-xs font-semibold">Replay</Text>
             </Pressable>
           )}
           <Pressable onPress={tts.cycleRate} className="active:opacity-70">
-            <Text className="text-xs font-semibold text-accent">{tts.rate}×</Text>
+            <Text className="text-accent text-xs font-semibold">
+              {tts.rate}×
+            </Text>
           </Pressable>
         </View>
       ) : null}
@@ -193,14 +353,16 @@ export function ChatScreen() {
         <Pressable
           onPress={() => void chat.createConversation()}
           disabled={!chat.isOnline}
-          className="mb-3 rounded-2xl bg-primary py-4 active:opacity-80 disabled:opacity-50"
+          className="bg-primary mb-3 rounded-2xl py-4 active:opacity-80 disabled:opacity-50"
         >
-          <Text className="text-center font-semibold text-primary-foreground">
-            {chat.isOnline ? "Start a new thought" : "Connect once to start a conversation"}
+          <Text className="text-primary-foreground text-center font-semibold">
+            {chat.isOnline
+              ? "Start a new thought"
+              : "Connect once to start a conversation"}
           </Text>
         </Pressable>
       ) : (
-        <View className="pb-3 pt-2">
+        <View className="pt-2 pb-3">
           <VoiceInputBar
             onSend={handleSend}
             disabled={!chat.canSend}
@@ -235,6 +397,31 @@ export function ChatScreen() {
         error={contextError}
         onClose={() => setContextVisible(false)}
         onRetry={() => void loadContextPack()}
+      />
+      <MemorySearch
+        visible={memoryVisible}
+        query={memoryQuery}
+        items={memoryItems}
+        isLoading={isMemoryLoading}
+        hasSearched={hasMemorySearched}
+        error={memoryError}
+        selectedMemoryId={selectedMemoryId}
+        detail={memoryDetail}
+        detailError={memoryDetailError}
+        isDetailLoading={isMemoryDetailLoading}
+        feedbackEdgeId={memoryFeedbackEdgeId}
+        onQueryChange={setMemoryQuery}
+        onSearch={() => void runMemorySearch()}
+        onSelectMemory={openMemoryDetail}
+        onCloseDetail={closeMemoryDetail}
+        onRetryDetail={() => {
+          if (selectedMemoryId) void openMemoryDetail(selectedMemoryId);
+        }}
+        onFeedback={provideMemoryFeedback}
+        onClose={() => {
+          closeMemoryDetail();
+          setMemoryVisible(false);
+        }}
       />
     </Screen>
   );
