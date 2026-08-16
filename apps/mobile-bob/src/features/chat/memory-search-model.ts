@@ -1,4 +1,8 @@
-import type { MemorySearchInputV1, MemorySeedV1 } from "@gmacko/ooda-client/v1";
+import type {
+  MemoryConnectionV1,
+  MemorySearchInputV1,
+  MemorySeedV1,
+} from "@gmacko/ooda-client/v1";
 
 const MOBILE_MEMORY_SEARCH_LIMIT = 100;
 
@@ -29,4 +33,14 @@ export function buildMemorySearchSummary(items: readonly MemorySeedV1[]) {
     lifecycle: countByLabel(items.map((item) => item.lifecycleState)),
     kinds: countByLabel(items.map((item) => item.kind)),
   };
+}
+
+export function sortMemoryConnections(
+  connections: readonly MemoryConnectionV1[],
+): MemoryConnectionV1[] {
+  return [...connections].sort(
+    (left, right) =>
+      right.edge.score - left.edge.score ||
+      left.edge.id.localeCompare(right.edge.id),
+  );
 }

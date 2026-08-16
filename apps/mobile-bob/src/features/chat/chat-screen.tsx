@@ -1,4 +1,8 @@
-import type { ContextPackV1, MemorySeedV1 } from "@gmacko/ooda-client/v1";
+import type {
+  ContextPackV1,
+  MemoryDetailV1,
+  MemorySeedV1,
+} from "@gmacko/ooda-client/v1";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Redirect, router } from "expo-router";
@@ -34,11 +38,22 @@ export function ChatScreen() {
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [isMemoryLoading, setIsMemoryLoading] = useState(false);
   const [hasMemorySearched, setHasMemorySearched] = useState(false);
+  const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
+  const [memoryDetail, setMemoryDetail] = useState<MemoryDetailV1 | null>(null);
+  const [memoryDetailError, setMemoryDetailError] = useState<string | null>(
+    null,
+  );
+  const [isMemoryDetailLoading, setIsMemoryDetailLoading] = useState(false);
+  const [memoryFeedbackEdgeId, setMemoryFeedbackEdgeId] = useState<
+    string | null
+  >(null);
   const lastSubmittedAtRef = useRef<number | null>(null);
   const spokenEventIdsRef = useRef(new Set<string>());
   const latestContextPackId = findLatestContextPackId(chat.timeline);
   const getContextPack = chat.getContextPack;
   const searchMemories = chat.searchMemories;
+  const inspectMemory = chat.inspectMemory;
+  const submitMemoryFeedback = chat.submitMemoryFeedback;
 
   const loadContextPack = useCallback(async () => {
     setContextPack(null);
@@ -82,6 +97,60 @@ export function ChatScreen() {
     setMemoryVisible(true);
     void runMemorySearch();
   }, [runMemorySearch]);
+
+  const openMemoryDetail = useCallback(
+    async (memoryId: string) => {
+      setSelectedMemoryId(memoryId);
+      setMemoryDetail(null);
+      setMemoryDetailError(null);
+      setIsMemoryDetailLoading(true);
+      try {
+        setMemoryDetail(await inspectMemory(memoryId));
+      } catch (caught) {
+        setMemoryDetailError(
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      } finally {
+        setIsMemoryDetailLoading(false);
+      }
+    },
+    [inspectMemory],
+  );
+
+  const closeMemoryDetail = useCallback(() => {
+    setSelectedMemoryId(null);
+    setMemoryDetail(null);
+    setMemoryDetailError(null);
+  }, []);
+
+  const provideMemoryFeedback = useCallback(
+    async (edgeId: string, feedbackState: "confirmed" | "suppressed") => {
+      setMemoryFeedbackEdgeId(edgeId);
+      setMemoryDetailError(null);
+      try {
+        const result = await submitMemoryFeedback(edgeId, feedbackState);
+        setMemoryDetail((current) =>
+          current
+            ? {
+                ...current,
+                connections: current.connections.map((connection) =>
+                  connection.edge.id === edgeId
+                    ? { ...connection, edge: result.edge }
+                    : connection,
+                ),
+              }
+            : current,
+        );
+      } catch (caught) {
+        setMemoryDetailError(
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      } finally {
+        setMemoryFeedbackEdgeId(null);
+      }
+    },
+    [submitMemoryFeedback],
+  );
 
   const send = chat.send;
   const handleSend = useCallback(
@@ -320,9 +389,23 @@ export function ChatScreen() {
         isLoading={isMemoryLoading}
         hasSearched={hasMemorySearched}
         error={memoryError}
+        selectedMemoryId={selectedMemoryId}
+        detail={memoryDetail}
+        detailError={memoryDetailError}
+        isDetailLoading={isMemoryDetailLoading}
+        feedbackEdgeId={memoryFeedbackEdgeId}
         onQueryChange={setMemoryQuery}
         onSearch={() => void runMemorySearch()}
-        onClose={() => setMemoryVisible(false)}
+        onSelectMemory={openMemoryDetail}
+        onCloseDetail={closeMemoryDetail}
+        onRetryDetail={() => {
+          if (selectedMemoryId) void openMemoryDetail(selectedMemoryId);
+        }}
+        onFeedback={provideMemoryFeedback}
+        onClose={() => {
+          closeMemoryDetail();
+          setMemoryVisible(false);
+        }}
       />
     </Screen>
   );
