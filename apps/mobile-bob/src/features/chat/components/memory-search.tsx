@@ -84,6 +84,7 @@ const MemoryConnectionRow = memo(function MemoryConnectionRow({
   onFeedback: MemorySearchProps["onFeedback"];
 }) {
   const isUpdating = feedbackEdgeId === connection.edge.id;
+  const isFeedbackPending = feedbackEdgeId !== null;
   return (
     <View className="mb-3 gap-3">
       <MemoryCard item={connection.memory} />
@@ -103,7 +104,7 @@ const MemoryConnectionRow = memo(function MemoryConnectionRow({
           <Pressable
             onPress={() => onFeedback(connection.edge.id, "confirmed")}
             disabled={
-              isUpdating || connection.edge.feedbackState === "confirmed"
+              isFeedbackPending || connection.edge.feedbackState === "confirmed"
             }
             className="active:opacity-70 disabled:opacity-40"
           >
@@ -112,7 +113,8 @@ const MemoryConnectionRow = memo(function MemoryConnectionRow({
           <Pressable
             onPress={() => onFeedback(connection.edge.id, "suppressed")}
             disabled={
-              isUpdating || connection.edge.feedbackState === "suppressed"
+              isFeedbackPending ||
+              connection.edge.feedbackState === "suppressed"
             }
             className="active:opacity-70 disabled:opacity-40"
           >
