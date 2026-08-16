@@ -1,4 +1,5 @@
 import type { CreateAgentJobInputV1 } from "@gmacko/ooda-client/v1";
+import { buildConversationResearchJobInputV1 } from "@gmacko/ooda-client/v1";
 
 import type { OodaMessageTimelineItem } from "./ooda-timeline";
 
@@ -19,21 +20,18 @@ export function buildConversationResearchJobInput(input: {
   idempotencyKey: string;
 }): CreateAgentJobInputV1 {
   const event = input.item.event;
-  const excerpt = input.item.display.trim().slice(0, 50_000);
-  if (!event || !excerpt) throw new Error("Research excerpt is required");
+  if (!event || !input.item.display.trim())
+    throw new Error("Research excerpt is required");
   if (!canResearchConversationItem(input.item)) {
     throw new Error("Research needs a durable synced conversation message");
   }
 
-  return {
+  return buildConversationResearchJobInputV1({
     conversationId: event.conversationId,
-    class: "read_only_research",
-    prompt: [
-      "Research the following durable OODA conversation excerpt. Return concise findings, uncertainty, and source links. Do not modify repositories or external systems.",
-      `Source role: ${input.item.role}\nSource event: ${event.id}`,
-      excerpt,
-    ].join("\n\n"),
+    eventId: event.id,
+    role: input.item.role,
+    body: input.item.display,
     correlationId: event.correlationId,
     idempotencyKey: input.idempotencyKey,
-  };
+  });
 }

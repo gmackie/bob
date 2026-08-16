@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  agentJobResultPreviewV1,
+  buildConversationResearchJobInputV1,
   buildConversationTimelineView,
   createOodaV1Client,
   streamConversationEvents,
@@ -353,6 +355,33 @@ export function ConversationWorkspace() {
     }
   };
 
+  const researchTurn = async (item: ConversationTimelineItemV1) => {
+    if (!selected || item.kind !== "message" || !item.role || item.streaming)
+      return;
+    const researchActionId = `research:${item.eventId}`;
+    const sourceEvent = events.find((event) => event.id === item.eventId);
+    setActionId(researchActionId);
+    setError(null);
+    try {
+      await client.jobs.create(
+        buildConversationResearchJobInputV1({
+          conversationId: selected.id,
+          eventId: item.eventId,
+          role: item.role,
+          body: item.body,
+          correlationId: sourceEvent?.correlationId,
+          idempotencyKey: makeId(),
+        }),
+      );
+      await refreshActivity(selected.id);
+      setInspector("activity");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setActionId(null);
+    }
+  };
+
   const decideProposal = async (
     proposal: ProposalV1,
     decision: "approve" | "reject",
@@ -462,7 +491,16 @@ export function ConversationWorkspace() {
                 <EmptyTimeline label="Say what is on your mind. OODA will preserve it, recall relevant context, and help decide what deserves action." />
               ) : null}
               {timeline.map((item) => (
-                <TimelineCard key={item.id} item={item} />
+                <TimelineCard
+                  key={item.id}
+                  item={item}
+                  canResearch={
+                    (rollout?.capabilities.agent_jobs ?? false) &&
+                    !item.streaming
+                  }
+                  researching={actionId === `research:${item.eventId}`}
+                  onResearch={researchTurn}
+                />
               ))}
             </div>
           </div>
@@ -618,7 +656,17 @@ function EmptyTimeline({ label }: { label: string }) {
   );
 }
 
-function TimelineCard({ item }: { item: ConversationTimelineItemV1 }) {
+function TimelineCard({
+  item,
+  canResearch,
+  researching,
+  onResearch,
+}: {
+  item: ConversationTimelineItemV1;
+  canResearch: boolean;
+  researching: boolean;
+  onResearch: (item: ConversationTimelineItemV1) => void;
+}) {
   if (item.kind === "message") {
     const user = item.role === "user";
     return (
@@ -640,6 +688,16 @@ function TimelineCard({ item }: { item: ConversationTimelineItemV1 }) {
           <p className="whitespace-pre-wrap text-sm leading-6 text-[#E8E4DF]">
             {item.body}
           </p>
+          {canResearch ? (
+            <button
+              type="button"
+              onClick={() => onResearch(item)}
+              disabled={researching}
+              className="mt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[#D4A04A] hover:text-[#E0B96E] disabled:opacity-50"
+            >
+              {researching ? "Researching…" : "Research"}
+            </button>
+          ) : null}
         </div>
       </article>
     );
@@ -890,7 +948,9 @@ function Inspector(props: {
                 id: job.id,
                 title: job.class.replaceAll("_", " "),
                 status: job.status,
-                detail: `${job.provider} · ${job.billingPolicy.replaceAll("_", " ")}`,
+                detail:
+                  agentJobResultPreviewV1(job) ??
+                  `${job.provider} · ${job.billingPolicy.replaceAll("_", " ")}`,
               }))}
             />
             <ActivityGroup
@@ -966,7 +1026,7 @@ function ActivityGroup(props: {
                 <p className="truncate text-xs">{item.title}</p>
                 <StatusPill status={item.status} />
               </div>
-              <p className="mt-1 text-[10px] leading-4 text-[#6F6B67]">
+              <p className="mt-1 whitespace-pre-wrap text-[10px] leading-4 text-[#6F6B67]">
                 {item.detail}
               </p>
             </div>
