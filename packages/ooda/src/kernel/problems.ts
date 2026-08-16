@@ -6,6 +6,7 @@ export type OodaKernelProblemCode =
   | "IDEMPOTENCY_CONFLICT"
   | "NOT_FOUND"
   | "HOST_TURN_IN_PROGRESS"
+  | "CONTEXT_DISCLOSURE_DENIED"
   | "TTS_DISCLOSURE_DENIED"
   | "TTS_GRANT_UNAVAILABLE"
   | "VALIDATION_FAILED";
@@ -16,6 +17,7 @@ const titles: Record<OodaKernelProblemCode, string> = {
   IDEMPOTENCY_CONFLICT: "Idempotency conflict",
   NOT_FOUND: "Not found",
   HOST_TURN_IN_PROGRESS: "Host turn in progress",
+  CONTEXT_DISCLOSURE_DENIED: "Context disclosure denied",
   TTS_DISCLOSURE_DENIED: "Text-to-speech disclosure denied",
   TTS_GRANT_UNAVAILABLE: "Text-to-speech grant unavailable",
   VALIDATION_FAILED: "Validation failed",

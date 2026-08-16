@@ -3,6 +3,7 @@
 import {
   agentJobResultPreviewV1,
   buildConversationResearchJobInputV1,
+  canAutomaticallyResearchSensitivityV1,
   buildConversationTimelineView,
   createOodaV1Client,
   streamConversationEvents,
@@ -369,6 +370,7 @@ export function ConversationWorkspace() {
           eventId: item.eventId,
           role: item.role,
           body: item.body,
+          sensitivity: item.sensitivity,
           correlationId: sourceEvent?.correlationId,
           idempotencyKey: makeId(),
         }),
@@ -496,7 +498,8 @@ export function ConversationWorkspace() {
                   item={item}
                   canResearch={
                     (rollout?.capabilities.agent_jobs ?? false) &&
-                    !item.streaming
+                    !item.streaming &&
+                    canAutomaticallyResearchSensitivityV1(item.sensitivity)
                   }
                   researching={actionId === `research:${item.eventId}`}
                   onResearch={researchTurn}

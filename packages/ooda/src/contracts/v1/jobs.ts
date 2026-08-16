@@ -81,6 +81,7 @@ export type AgentJobV1 = z.infer<typeof AgentJobV1Schema>;
 export const CreateAgentJobInputV1Schema = z
   .object({
     conversationId: z.string().min(1),
+    sourceEventId: z.string().min(1).optional(),
     class: AgentJobClassV1Schema,
     prompt: z.string().min(1).max(100_000),
     provider: z.string().min(1).max(64).optional(),
