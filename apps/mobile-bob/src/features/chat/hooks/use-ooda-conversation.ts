@@ -14,6 +14,7 @@ import NetInfo from "@react-native-community/netinfo";
 import { v4 as uuidv4 } from "uuid";
 
 import type { OodaOutboxItem } from "../ooda-outbox";
+import type { OodaMessageTimelineItem } from "../ooda-timeline";
 import { env } from "~/config/env";
 import { authClient } from "~/utils/auth";
 import { getMobileAuthHeaders } from "~/utils/auth-headers";
@@ -26,6 +27,7 @@ import {
   buildConversationCorrectionInput,
   canCorrectConversationEvent,
 } from "../conversation-correction-model";
+import { buildConversationResearchJobInput } from "../conversation-research-model";
 import {
   cacheOodaOfflineShell,
   hydrateOodaLocalStartup,
@@ -359,11 +361,7 @@ export function useOodaConversation() {
   );
 
   const correctEvent = useCallback(
-    async (
-      event: ConversationEventV1,
-      text: string,
-      reason: string,
-    ) => {
+    async (event: ConversationEventV1, text: string, reason: string) => {
       if (
         !isOnline ||
         !rollout?.capabilities.mobile_text ||
@@ -452,6 +450,24 @@ export function useOodaConversation() {
   const cancelAgentJob = useCallback(
     (input: CancelAgentJobInputV1) => client.jobs.cancel(input),
     [client],
+  );
+
+  const createResearchJob = useCallback(
+    async (item: OodaMessageTimelineItem) => {
+      if (!isOnline || !rollout?.capabilities.agent_jobs) {
+        throw new Error(
+          "Read-only research needs an online OODA agent-jobs rollout.",
+        );
+      }
+      setError(null);
+      return client.jobs.create(
+        buildConversationResearchJobInput({
+          item,
+          idempotencyKey: uuidv4(),
+        }),
+      );
+    },
+    [client, isOnline, rollout],
   );
 
   const togglePin = useCallback((conversationId: string) => {
@@ -577,19 +593,20 @@ export function useOodaConversation() {
     isSyncing,
     canSend: Boolean(
       selectedConversation &&
-      selectedBranchId &&
-      rollout?.capabilities.mobile_text,
+        selectedBranchId &&
+        rollout?.capabilities.mobile_text,
     ),
     canFork: Boolean(
       selectedConversation &&
-      forkPoint &&
-      isOnline &&
-      rollout?.capabilities.conversation_write,
+        forkPoint &&
+        isOnline &&
+        rollout?.capabilities.conversation_write,
     ),
     canCorrect: Boolean(
-      selectedConversation &&
-      isOnline &&
-      rollout?.capabilities.mobile_text,
+      selectedConversation && isOnline && rollout?.capabilities.mobile_text,
+    ),
+    canResearch: Boolean(
+      selectedConversation && isOnline && rollout?.capabilities.agent_jobs,
     ),
     rollout,
     openConversation,
@@ -607,6 +624,7 @@ export function useOodaConversation() {
     getProposal,
     decideProposal,
     getAgentJob,
+    createResearchJob,
     cancelAgentJob,
     requestTtsSource,
     togglePin,

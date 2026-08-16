@@ -9,7 +9,10 @@ import {
   View,
 } from "react-native";
 
-import { jobCancellationAvailability } from "../job-inspector-model";
+import {
+  jobCancellationAvailability,
+  jobResultPresentation,
+} from "../job-inspector-model";
 
 interface JobInspectorProps {
   visible: boolean;
@@ -41,6 +44,7 @@ export function JobInspector({
   const cancellation = job
     ? jobCancellationAvailability(job)
     : { allowed: false, reason: "Load the job before cancelling." };
+  const result = job ? jobResultPresentation(job) : null;
 
   const confirmCancellation = () => {
     if (!job || !cancellation.allowed) return;
@@ -178,6 +182,30 @@ export function JobInspector({
                 </View>
               ) : null}
 
+              {result ? (
+                <View className="border-accent/40 bg-accent/5 mt-5 rounded-xl border px-4 py-4">
+                  <Text className="text-accent text-xs font-semibold tracking-wide uppercase">
+                    Findings
+                  </Text>
+                  {result.response || result.summary ? (
+                    <Text
+                      selectable
+                      className="text-foreground mt-3 text-sm leading-6"
+                    >
+                      {result.response ?? result.summary}
+                    </Text>
+                  ) : null}
+                  {result.artifactRef ? (
+                    <Text
+                      selectable
+                      className="text-muted mt-3 text-xs leading-5"
+                    >
+                      Artifact: {result.artifactRef}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+
               <View className="border-border bg-card mt-5 rounded-xl border px-4 py-3">
                 <Text className="text-foreground text-sm font-semibold">
                   Owner control
@@ -189,6 +217,14 @@ export function JobInspector({
                 {error ? (
                   <Text className="text-danger mt-2 text-xs">{error}</Text>
                 ) : null}
+                <Pressable
+                  onPress={onRetry}
+                  className="mt-3 self-start active:opacity-70"
+                >
+                  <Text className="text-accent text-xs font-semibold">
+                    Refresh status
+                  </Text>
+                </Pressable>
               </View>
             </ScrollView>
 

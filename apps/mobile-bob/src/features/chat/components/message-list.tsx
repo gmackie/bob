@@ -7,6 +7,7 @@ import type {
   OodaTimelineItem,
 } from "../ooda-timeline";
 import { colors } from "~/lib/colors";
+import { canResearchConversationItem } from "../conversation-research-model";
 
 interface MessageListProps {
   items: OodaTimelineItem[];
@@ -15,6 +16,9 @@ interface MessageListProps {
   onSpeak?: (item: OodaMessageTimelineItem) => void;
   canCorrect?: boolean;
   onCorrect?: (item: OodaMessageTimelineItem) => void;
+  canResearch?: boolean;
+  researchingItemId?: string | null;
+  onResearch?: (item: OodaMessageTimelineItem) => void;
   onOpenProposal?: (proposalId: string) => void;
   onOpenJob?: (jobId: string) => void;
 }
@@ -31,12 +35,18 @@ const MessageRow = memo(function MessageRow({
   onSpeak,
   canCorrect,
   onCorrect,
+  canResearch,
+  researchingItemId,
+  onResearch,
 }: {
   item: OodaMessageTimelineItem;
   onRetry?: (outboxId: string) => void;
   onSpeak?: (item: OodaMessageTimelineItem) => void;
   canCorrect?: boolean;
   onCorrect?: (item: OodaMessageTimelineItem) => void;
+  canResearch?: boolean;
+  researchingItemId?: string | null;
+  onResearch?: (item: OodaMessageTimelineItem) => void;
 }) {
   const isUser = item.role === "user";
   const status =
@@ -44,6 +54,18 @@ const MessageRow = memo(function MessageRow({
       ? undefined
       : item.deliveryState;
   const retryId = item.outboxId;
+  const showListen = !isUser && Boolean(item.speakable && onSpeak);
+  const showCorrection = Boolean(
+    isUser &&
+      item.deliveryState === "synced" &&
+      item.event?.type === "user_turn" &&
+      canCorrect &&
+      onCorrect,
+  );
+  const showResearch = Boolean(
+    canResearch && onResearch && canResearchConversationItem(item),
+  );
+  const isResearching = researchingItemId === item.id;
   return (
     <View className={`mb-3 ${isUser ? "items-end" : "items-start"}`}>
       <View
@@ -111,32 +133,54 @@ const MessageRow = memo(function MessageRow({
             ) : null}
           </View>
         ) : null}
-        {!isUser && item.speakable && onSpeak ? (
-          <Pressable
-            onPress={() => onSpeak(item)}
-            className="mt-3 self-start active:opacity-70"
+        {showListen || showCorrection || showResearch ? (
+          <View
+            className={`mt-3 flex-row items-center gap-4 ${isUser ? "self-end" : "self-start"}`}
           >
-            <Text className="text-accent text-xs font-semibold">Listen</Text>
-          </Pressable>
-        ) : null}
-        {isUser &&
-        item.deliveryState === "synced" &&
-        item.event?.type === "user_turn" &&
-        canCorrect &&
-        onCorrect ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Correct saved turn"
-            onPress={() => onCorrect(item)}
-            className="mt-3 self-end active:opacity-70"
-          >
-            <Text
-              className="text-xs font-semibold"
-              style={{ color: colors.primaryForeground }}
-            >
-              Edit
-            </Text>
-          </Pressable>
+            {showListen ? (
+              <Pressable
+                onPress={() => onSpeak?.(item)}
+                className="active:opacity-70"
+              >
+                <Text className="text-accent text-xs font-semibold">
+                  Listen
+                </Text>
+              </Pressable>
+            ) : null}
+            {showCorrection ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Correct saved turn"
+                onPress={() => onCorrect?.(item)}
+                className="active:opacity-70"
+              >
+                <Text
+                  className="text-xs font-semibold"
+                  style={{ color: colors.primaryForeground }}
+                >
+                  Edit
+                </Text>
+              </Pressable>
+            ) : null}
+            {showResearch ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Research this message"
+                disabled={isResearching}
+                onPress={() => onResearch?.(item)}
+                className="active:opacity-70 disabled:opacity-50"
+              >
+                <Text
+                  className="text-xs font-semibold"
+                  style={{
+                    color: isUser ? colors.primaryForeground : colors.accent,
+                  }}
+                >
+                  {isResearching ? "Researching…" : "Research"}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
       </View>
     </View>
@@ -233,6 +277,9 @@ export function MessageList({
   onSpeak,
   canCorrect,
   onCorrect,
+  canResearch,
+  researchingItemId,
+  onResearch,
   onOpenProposal,
   onOpenJob,
 }: MessageListProps) {
@@ -245,6 +292,9 @@ export function MessageList({
           onSpeak={onSpeak}
           canCorrect={canCorrect}
           onCorrect={onCorrect}
+          canResearch={canResearch}
+          researchingItemId={researchingItemId}
+          onResearch={onResearch}
         />
       ) : (
         <ActivityRow
@@ -253,7 +303,17 @@ export function MessageList({
           onOpenJob={onOpenJob}
         />
       ),
-    [canCorrect, onCorrect, onOpenJob, onOpenProposal, onRetry, onSpeak],
+    [
+      canCorrect,
+      canResearch,
+      onCorrect,
+      onOpenJob,
+      onOpenProposal,
+      onResearch,
+      onRetry,
+      onSpeak,
+      researchingItemId,
+    ],
   );
 
   if (!items.length) {
