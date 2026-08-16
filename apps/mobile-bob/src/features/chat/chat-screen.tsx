@@ -536,10 +536,12 @@ export function ChatScreen() {
         selectedConversationId={chat.selectedConversationId}
         selectedBranchId={chat.selectedBranchId}
         pinnedIds={chat.pinnedIds}
+        canFork={chat.canFork}
         onClose={() => setDrawerVisible(false)}
         onSelectConversation={chat.openConversation}
         onSelectBranch={chat.selectBranch}
         onCreate={chat.createConversation}
+        onFork={chat.forkConversation}
         onTogglePin={chat.togglePin}
       />
       <VaultBrowser
