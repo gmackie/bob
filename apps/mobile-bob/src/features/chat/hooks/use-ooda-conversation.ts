@@ -2,6 +2,7 @@ import type {
   ConversationBranchV1,
   ConversationEventV1,
   ConversationV1,
+  MemorySearchInputV1,
   OodaRolloutPolicyV1,
 } from "@gmacko/ooda-client/v1";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -372,6 +373,11 @@ export function useOodaConversation() {
     [client],
   );
 
+  const searchMemories = useCallback(
+    (input: Partial<MemorySearchInputV1> = {}) => client.memories.search(input),
+    [client],
+  );
+
   const togglePin = useCallback((conversationId: string) => {
     setPinnedIds((current) => {
       const next = current.includes(conversationId)
@@ -448,6 +454,7 @@ export function useOodaConversation() {
     send,
     retry,
     getContextPack,
+    searchMemories,
     requestTtsSource,
     togglePin,
   };
