@@ -36,6 +36,15 @@ export const AgentJobBudgetV1Schema = z
   })
   .strict();
 
+export const AgentJobResultV1Schema = z
+  .object({
+    response: z.string().max(200_000).optional(),
+    summary: z.string().max(20_000).optional(),
+    artifactRef: z.string().max(2_048).optional(),
+  })
+  .strict();
+export type AgentJobResultV1 = z.infer<typeof AgentJobResultV1Schema>;
+
 export const AgentJobV1Schema = z
   .object({
     id: z.string().min(1),
@@ -56,6 +65,7 @@ export const AgentJobV1Schema = z
     budget: AgentJobBudgetV1Schema,
     contextPackId: z.string().min(1).optional(),
     correlationId: z.string().min(1).max(256).optional(),
+    result: AgentJobResultV1Schema.optional(),
     error: z.string().max(20_000).optional(),
     createdAt: z.iso.datetime({ offset: true }),
     updatedAt: z.iso.datetime({ offset: true }),

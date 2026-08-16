@@ -6,6 +6,7 @@ import type {
   AgentJobClassV1,
   AgentJobListInputV1,
   AgentJobListPageV1,
+  AgentJobResultV1,
   AgentJobV1,
   CancelAgentJobInputV1,
   ClaimAgentJobInputV1,
@@ -16,7 +17,7 @@ import type {
   ContextItemV1,
 } from "../contracts/v1";
 import type { db as database } from "../db/client";
-import { conversations } from "../db/schema/conversations";
+import { conversationEvents, conversations } from "../db/schema/conversations";
 import {
   agentJobEvents,
   agentJobs,
@@ -34,6 +35,7 @@ import { buildAgentJobContextPack } from "./context-packs";
 import type { ConversationContextSource } from "./context-sources";
 
 type OodaDatabase = typeof database;
+type OodaExecutor = Pick<OodaDatabase, "insert" | "select" | "update">;
 
 export type AgentJobPolicy = {
   provider: string;
@@ -114,7 +116,32 @@ const TERMINAL_STATUSES = new Set([
 ]);
 const SUPPORTED_PROVIDERS = new Set(["codex", "claude", "grok", "openai"]);
 
+function mapAgentJobResult(
+  value: Record<string, unknown> | null,
+): AgentJobResultV1 | undefined {
+  if (!value) return undefined;
+  const response =
+    typeof value.response === "string"
+      ? value.response.slice(0, 200_000)
+      : undefined;
+  const summary =
+    typeof value.summary === "string"
+      ? value.summary.slice(0, 20_000)
+      : undefined;
+  const artifactRef =
+    typeof value.artifactRef === "string"
+      ? value.artifactRef.slice(0, 2_048)
+      : undefined;
+  if (!response && !summary && !artifactRef) return undefined;
+  return {
+    ...(response ? { response } : {}),
+    ...(summary ? { summary } : {}),
+    ...(artifactRef ? { artifactRef } : {}),
+  };
+}
+
 function mapAgentJob(row: typeof agentJobs.$inferSelect): AgentJobV1 {
+  const result = mapAgentJobResult(row.result);
   return {
     id: row.id,
     conversationId: row.conversationId,
@@ -140,6 +167,7 @@ function mapAgentJob(row: typeof agentJobs.$inferSelect): AgentJobV1 {
     },
     ...(row.contextPackId ? { contextPackId: row.contextPackId } : {}),
     ...(row.correlationId ? { correlationId: row.correlationId } : {}),
+    ...(result ? { result } : {}),
     ...(row.error ? { error: row.error } : {}),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -150,6 +178,80 @@ function mapAgentJob(row: typeof agentJobs.$inferSelect): AgentJobV1 {
       : {}),
     ...(row.expiresAt ? { expiresAt: row.expiresAt.toISOString() } : {}),
   };
+}
+
+function agentJobStatusDisplay(
+  jobClass: string,
+  status: AgentJobV1["status"],
+): string {
+  const subject =
+    jobClass === "read_only_research"
+      ? "Read-only research"
+      : jobClass.replaceAll("_", " ");
+  const verb =
+    status === "running"
+      ? "started"
+      : status === "completed"
+        ? "completed"
+        : status === "timed_out"
+          ? "timed out"
+          : status;
+  return `${subject} ${verb}`;
+}
+
+async function appendAgentJobStatusEvent(
+  tx: OodaExecutor,
+  job: typeof agentJobs.$inferSelect,
+  status: AgentJobV1["status"],
+  occurredAt: Date,
+  actorType: "system" | "worker",
+): Promise<void> {
+  const [source] = await tx
+    .select({
+      branchId: conversationEvents.branchId,
+      sensitivity: conversationEvents.sensitivity,
+    })
+    .from(conversationEvents)
+    .where(
+      and(
+        eq(conversationEvents.conversationId, job.conversationId),
+        eq(conversationEvents.type, "agent_job_progress"),
+        sql`${conversationEvents.payload}->>'jobId' = ${job.id}`,
+      ),
+    )
+    .orderBy(asc(conversationEvents.sequence))
+    .limit(1);
+  if (!source) return;
+
+  const [allocated] = await tx
+    .update(conversations)
+    .set({
+      lastSequence: sql`${conversations.lastSequence} + 1`,
+      updatedAt: occurredAt,
+    })
+    .where(eq(conversations.id, job.conversationId))
+    .returning({ sequence: conversations.lastSequence });
+  if (!allocated) throw notFound("Conversation");
+
+  await tx.insert(conversationEvents).values({
+    conversationId: job.conversationId,
+    branchId: source.branchId,
+    sequence: BigInt(allocated.sequence),
+    type: "agent_job_progress",
+    actorType,
+    actorId: actorType === "worker" ? job.claimedBy : "ooda",
+    payload: {
+      display: agentJobStatusDisplay(job.class, status),
+      jobId: job.id,
+      class: job.class,
+      status,
+      provider: job.provider,
+    },
+    sensitivity: source.sensitivity,
+    correlationId: job.correlationId,
+    idempotencyKey: `agent-job:${job.id}:status:${job.lastSequence}`,
+    occurredAt,
+  });
 }
 
 function effectiveJobPolicy(input: CreateAgentJobInputV1): AgentJobPolicy {
@@ -266,7 +368,10 @@ export async function createAgentJob(
   try {
     return await db.transaction(async (tx) => {
       const [conversation] = await tx
-        .select({ id: conversations.id })
+        .select({
+          id: conversations.id,
+          activeBranchId: conversations.activeBranchId,
+        })
         .from(conversations)
         .where(
           and(
@@ -356,6 +461,38 @@ export async function createAgentJob(
           policy,
         },
         idempotencyKey: `create:${input.idempotencyKey}`,
+        occurredAt: now,
+      });
+      if (!conversation.activeBranchId)
+        throw new Error("Agent-job conversation has no active branch");
+      const [allocated] = await tx
+        .update(conversations)
+        .set({
+          lastSequence: sql`${conversations.lastSequence} + 1`,
+          updatedAt: now,
+        })
+        .where(eq(conversations.id, conversation.id))
+        .returning({ sequence: conversations.lastSequence });
+      await tx.insert(conversationEvents).values({
+        conversationId: conversation.id,
+        branchId: conversation.activeBranchId,
+        sequence: BigInt(allocated!.sequence),
+        type: "agent_job_progress",
+        actorType: "system",
+        actorId: "ooda",
+        payload: {
+          display:
+            input.class === "read_only_research"
+              ? "Read-only research queued"
+              : `${input.class.replaceAll("_", " ")} queued`,
+          jobId: job.id,
+          class: job.class,
+          status: job.status,
+          provider: job.provider,
+        },
+        sensitivity: "general",
+        correlationId: job.correlationId,
+        idempotencyKey: `agent-job:${input.idempotencyKey}:queued`,
         occurredAt: now,
       });
       return { job: mapAgentJob(job), replayed: false };
@@ -503,6 +640,9 @@ export async function cancelAgentJob(
       idempotencyKey: `cancel:${input.idempotencyKey}`,
       occurredAt: now,
     });
+    if (immediate) {
+      await appendAgentJobStatusEvent(tx, updated, "cancelled", now, "system");
+    }
     return { job: mapAgentJob(updated), replayed: false };
   });
 }
@@ -565,6 +705,13 @@ export async function claimAgentJob(
         idempotencyKey: `cancel-on-reclaim:${cancelled.id}:${cancelled.lastSequence}`,
         occurredAt: now,
       });
+      await appendAgentJobStatusEvent(
+        tx,
+        cancelled,
+        "cancelled",
+        now,
+        "system",
+      );
       return null;
     }
     const [queuedEvent] = await tx
@@ -613,6 +760,7 @@ export async function claimAgentJob(
       idempotencyKey: `claim:${claimed.id}:attempt:${nextAttempt}`,
       occurredAt: now,
     });
+    await appendAgentJobStatusEvent(tx, claimed, "running", now, "system");
     const disclosedContext = claimed.contextPackId
       ? await tx
           .select()
@@ -788,6 +936,15 @@ export async function recordAgentJobEvent(
       idempotencyKey: input.idempotencyKey,
       occurredAt,
     });
+    if (terminal) {
+      await appendAgentJobStatusEvent(
+        tx,
+        updated,
+        updated.status as AgentJobV1["status"],
+        occurredAt,
+        "worker",
+      );
+    }
     return { job: mapAgentJob(updated), replayed: false };
   });
 }

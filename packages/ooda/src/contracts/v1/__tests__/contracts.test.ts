@@ -505,6 +505,22 @@ describe("OODA V1 contracts", () => {
       job,
       replayed: false,
     });
+    const completedJob = AgentJobV1Schema.parse({
+      ...job,
+      status: "completed",
+      result: {
+        response: "The evidence favors the smaller reversible test.",
+        artifactRef: "scratch://job-1/report.md",
+      },
+      completedAt: occurredAt,
+    });
+    expect(completedJob.result?.response).toContain("reversible test");
+    expect(
+      AgentJobV1Schema.safeParse({
+        ...completedJob,
+        result: { response: "ok", rawToolPayload: { secret: "no" } },
+      }).success,
+    ).toBe(false);
     expect(
       ClaimAgentJobInputV1Schema.safeParse({
         runnerId: "runner-1",

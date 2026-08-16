@@ -1136,6 +1136,21 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       budget: { deadlineSeconds: 900, aggregateTokens: 150_000 },
       status: "queued",
     });
+    const conversationPage = await listConversationEvents(db!, "owner-jobs", {
+      conversationId: conversation.conversation.id,
+      limit: 10,
+    });
+    expect(conversationPage.items).toEqual([
+      expect.objectContaining({
+        type: "agent_job_progress",
+        correlationId: "research-job-1",
+        payload: expect.objectContaining({
+          jobId: created.job.id,
+          class: "read_only_research",
+          status: "queued",
+        }),
+      }),
+    ]);
 
     const claim = await claimAgentJob(db!, {
       runnerId: "runner-a",
@@ -1159,7 +1174,11 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       leaseToken: claim!.leaseToken,
       type: "completed",
       payload: {
-        result: { summary: "Approach A is lower risk." },
+        result: {
+          response: "Approach A is lower risk.",
+          artifactRef: "scratch://research-job-1/report.md",
+          runtimeSession: { sessionId: "must-not-leak-through-result" },
+        },
         tokensUsed: 42,
       },
       idempotencyKey: "runner-complete-1",
@@ -1171,14 +1190,52 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       leaseToken: claim!.leaseToken,
       type: "completed",
       payload: {
-        result: { summary: "Approach A is lower risk." },
+        result: {
+          response: "Approach A is lower risk.",
+          artifactRef: "scratch://research-job-1/report.md",
+          runtimeSession: { sessionId: "must-not-leak-through-result" },
+        },
         tokensUsed: 42,
       },
       idempotencyKey: "runner-complete-1",
       occurredAt: "2026-08-07T15:00:00.000Z",
     });
-    expect(completed.job.status).toBe("completed");
+    expect(completed.job).toMatchObject({
+      status: "completed",
+      result: {
+        response: "Approach A is lower risk.",
+        artifactRef: "scratch://research-job-1/report.md",
+      },
+    });
+    expect(completed.job.result).not.toHaveProperty("runtimeSession");
     expect(eventReplay).toEqual({ ...completed, replayed: true });
+    const lifecyclePage = await listConversationEvents(db!, "owner-jobs", {
+      conversationId: conversation.conversation.id,
+      limit: 10,
+    });
+    expect(
+      lifecyclePage.items.map((event) => ({
+        type: event.type,
+        status: event.payload.status,
+        jobId: event.payload.jobId,
+      })),
+    ).toEqual([
+      {
+        type: "agent_job_progress",
+        status: "queued",
+        jobId: created.job.id,
+      },
+      {
+        type: "agent_job_progress",
+        status: "running",
+        jobId: created.job.id,
+      },
+      {
+        type: "agent_job_progress",
+        status: "completed",
+        jobId: created.job.id,
+      },
+    ]);
     await expect(
       getAgentJob(db!, "another-owner", created.job.id),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });

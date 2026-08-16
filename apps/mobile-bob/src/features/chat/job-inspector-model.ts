@@ -1,5 +1,14 @@
 import type { AgentJobV1, CancelAgentJobInputV1 } from "@gmacko/ooda-client/v1";
 
+export function jobResultPresentation(
+  job: AgentJobV1,
+): AgentJobV1["result"] | null {
+  if (job.status !== "completed" || !job.result) return null;
+  if (!job.result.response && !job.result.summary && !job.result.artifactRef)
+    return null;
+  return job.result;
+}
+
 export function jobCancellationAvailability(job: AgentJobV1): {
   allowed: boolean;
   reason: string;
