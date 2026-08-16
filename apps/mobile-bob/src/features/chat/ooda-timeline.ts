@@ -14,6 +14,7 @@ interface TimelineBase {
   display: string;
   timestamp: string;
   sensitivity: SensitivityV1;
+  contextPackId?: string;
   event?: ConversationEventV1;
 }
 
@@ -130,11 +131,13 @@ function canonicalItem(
   const event = correction
     ? { ...original, payload: correction.payload }
     : original;
+  const contextPackId = stringValue(event.payload, "contextPackId");
   const base = {
     id: `event:${event.id}`,
     display: eventDisplay(event),
     timestamp: event.occurredAt,
     sensitivity: event.sensitivity,
+    ...(contextPackId ? { contextPackId } : {}),
     event: original,
   };
 
