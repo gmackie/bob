@@ -14,6 +14,7 @@ interface MessageListProps {
   onRetry?: (outboxId: string) => void;
   onSpeak?: (item: OodaMessageTimelineItem) => void;
   onOpenProposal?: (proposalId: string) => void;
+  onOpenJob?: (jobId: string) => void;
 }
 
 function formatTime(timestamp: string): string {
@@ -120,9 +121,11 @@ const MessageRow = memo(function MessageRow({
 const ActivityRow = memo(function ActivityRow({
   item,
   onOpenProposal,
+  onOpenJob,
 }: {
   item: Exclude<OodaTimelineItem, OodaMessageTimelineItem>;
   onOpenProposal?: (proposalId: string) => void;
+  onOpenJob?: (jobId: string) => void;
 }) {
   const label =
     item.kind === "tool"
@@ -141,6 +144,7 @@ const ActivityRow = memo(function ActivityRow({
   const link = "url" in item ? item.url : undefined;
   const status = "status" in item ? item.status : undefined;
   const proposalId = item.kind === "proposal" ? item.proposalId : undefined;
+  const jobId = item.kind === "job" ? item.jobId : undefined;
   return (
     <View className="mb-3 items-start">
       <View
@@ -176,6 +180,14 @@ const ActivityRow = memo(function ActivityRow({
             <Text className="text-accent text-xs font-semibold">Review</Text>
           </Pressable>
         ) : null}
+        {jobId && onOpenJob ? (
+          <Pressable
+            onPress={() => onOpenJob(jobId)}
+            className="mt-3 self-start active:opacity-70"
+          >
+            <Text className="text-accent text-xs font-semibold">Inspect</Text>
+          </Pressable>
+        ) : null}
         {link ? (
           <Pressable
             onPress={() => void Linking.openURL(link)}
@@ -195,15 +207,20 @@ export function MessageList({
   onRetry,
   onSpeak,
   onOpenProposal,
+  onOpenJob,
 }: MessageListProps) {
   const renderItem = useCallback(
     ({ item }: { item: OodaTimelineItem }) =>
       item.kind === "message" ? (
         <MessageRow item={item} onRetry={onRetry} onSpeak={onSpeak} />
       ) : (
-        <ActivityRow item={item} onOpenProposal={onOpenProposal} />
+        <ActivityRow
+          item={item}
+          onOpenProposal={onOpenProposal}
+          onOpenJob={onOpenJob}
+        />
       ),
-    [onOpenProposal, onRetry, onSpeak],
+    [onOpenJob, onOpenProposal, onRetry, onSpeak],
   );
 
   if (!items.length) {
