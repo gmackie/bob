@@ -11,7 +11,7 @@
 // marks the item done and moves on. This is the durable fix for agents
 // self-certifying completion.
 
-import { and, asc, desc, eq } from "@bob/db";
+import { asc, desc, eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
   chatConversations,
@@ -22,12 +22,11 @@ import {
   worktreePlans,
 } from "@bob/db/schema";
 
+import type { ChecklistItemState, GateSpec } from "./advanceChecklist-core";
 import {
   agentFinishedFromWorkflow,
   decideChecklistAction,
   gateSpecSchema,
-  type ChecklistItemState,
-  type GateSpec,
 } from "./advanceChecklist-core";
 
 export interface AdvanceChecklistOptions {
@@ -178,7 +177,7 @@ async function dispatchItem(
       status: "in_progress",
       sessionId: result.sessionId || null,
       gateOutcome: null,
-      ...(opts.repair ? { gateAttempts: (item.gateAttempts ?? 0) + 1 } : {}),
+      ...(opts.repair ? { gateAttempts: item.gateAttempts + 1 } : {}),
     })
     .where(eq(planTaskItems.id, item.id));
 }
@@ -205,7 +204,7 @@ async function advanceOnePlan(
         it.gateOutcome === "pass" || it.gateOutcome === "fail"
           ? it.gateOutcome
           : null,
-      gateAttempts: it.gateAttempts ?? 0,
+      gateAttempts: it.gateAttempts,
     });
   }
 

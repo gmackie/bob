@@ -1,10 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 
+import type { ChecklistItemState } from "../advanceChecklist-core";
 import {
-  decideChecklistAction,
   agentFinishedFromWorkflow,
+  decideChecklistAction,
   gateSpecSchema,
-  type ChecklistItemState,
 } from "../advanceChecklist-core";
 
 // Shorthand builder; sortOrder defaults to declaration order via index below.
@@ -32,7 +32,10 @@ describe("decideChecklistAction", () => {
       mk("a", "pending", { sortOrder: 0 }),
       mk("b", "pending", { sortOrder: 1 }),
     ];
-    expect(decideChecklistAction(items)).toEqual({ type: "dispatch", itemId: "a" });
+    expect(decideChecklistAction(items)).toEqual({
+      type: "dispatch",
+      itemId: "a",
+    });
   });
 
   it("walks strictly in sortOrder regardless of array order", () => {
@@ -42,7 +45,10 @@ describe("decideChecklistAction", () => {
       mk("c", "pending", { sortOrder: 3 }),
     ];
     // a is done; b (sortOrder 2) is next, not c.
-    expect(decideChecklistAction(items)).toEqual({ type: "dispatch", itemId: "b" });
+    expect(decideChecklistAction(items)).toEqual({
+      type: "dispatch",
+      itemId: "b",
+    });
   });
 
   it("never acts on a later item while an earlier one is unfinished", () => {
@@ -55,18 +61,32 @@ describe("decideChecklistAction", () => {
   });
 
   it("runs the gate once the agent finishes and no gate has run yet", () => {
-    const items = [mk("a", "in_progress", { agentFinished: true, gateOutcome: null })];
-    expect(decideChecklistAction(items)).toEqual({ type: "run_gate", itemId: "a" });
+    const items = [
+      mk("a", "in_progress", { agentFinished: true, gateOutcome: null }),
+    ];
+    expect(decideChecklistAction(items)).toEqual({
+      type: "run_gate",
+      itemId: "a",
+    });
   });
 
   it("advances when the gate passes", () => {
-    const items = [mk("a", "in_progress", { agentFinished: true, gateOutcome: "pass" })];
-    expect(decideChecklistAction(items)).toEqual({ type: "advance", itemId: "a" });
+    const items = [
+      mk("a", "in_progress", { agentFinished: true, gateOutcome: "pass" }),
+    ];
+    expect(decideChecklistAction(items)).toEqual({
+      type: "advance",
+      itemId: "a",
+    });
   });
 
   it("repairs (reprompts the same item) when the gate fails under the cap", () => {
     const items = [
-      mk("a", "in_progress", { agentFinished: true, gateOutcome: "fail", gateAttempts: 1 }),
+      mk("a", "in_progress", {
+        agentFinished: true,
+        gateOutcome: "fail",
+        gateAttempts: 1,
+      }),
     ];
     expect(decideChecklistAction(items, { maxAttempts: 3 })).toEqual({
       type: "repair",
@@ -76,7 +96,11 @@ describe("decideChecklistAction", () => {
 
   it("blocks the item once failed-gate attempts hit the cap", () => {
     const items = [
-      mk("a", "in_progress", { agentFinished: true, gateOutcome: "fail", gateAttempts: 3 }),
+      mk("a", "in_progress", {
+        agentFinished: true,
+        gateOutcome: "fail",
+        gateAttempts: 3,
+      }),
     ];
     const action = decideChecklistAction(items, { maxAttempts: 3 });
     expect(action.type).toBe("block");
@@ -89,7 +113,10 @@ describe("decideChecklistAction", () => {
       mk("b", "pending", { sortOrder: 1 }),
       mk("c", "pending", { sortOrder: 2 }),
     ];
-    expect(decideChecklistAction(items)).toEqual({ type: "dispatch", itemId: "b" });
+    expect(decideChecklistAction(items)).toEqual({
+      type: "dispatch",
+      itemId: "b",
+    });
   });
 });
 
@@ -99,7 +126,15 @@ describe("agentFinishedFromWorkflow", () => {
     expect(agentFinishedFromWorkflow("awaiting_review")).toBe(true);
   });
   it("treats working / pre-start / human-gated / null as not finished", () => {
-    for (const s of ["started", "working", "awaiting_input", "blocked", null, undefined, ""]) {
+    for (const s of [
+      "started",
+      "working",
+      "awaiting_input",
+      "blocked",
+      null,
+      undefined,
+      "",
+    ]) {
       expect(agentFinishedFromWorkflow(s as string | null)).toBe(false);
     }
   });
@@ -107,7 +142,9 @@ describe("agentFinishedFromWorkflow", () => {
 
 describe("gateSpecSchema", () => {
   it("accepts a deterministic test gate with a command", () => {
-    expect(gateSpecSchema.parse({ kind: "test", command: "pnpm test" })).toEqual({
+    expect(
+      gateSpecSchema.parse({ kind: "test", command: "pnpm test" }),
+    ).toEqual({
       kind: "test",
       command: "pnpm test",
     });
@@ -115,7 +152,12 @@ describe("gateSpecSchema", () => {
 
   it("accepts ci / reviewer / human gates", () => {
     expect(() => gateSpecSchema.parse({ kind: "ci" })).not.toThrow();
-    expect(() => gateSpecSchema.parse({ kind: "reviewer", criteria: "tests cover edge cases" })).not.toThrow();
+    expect(() =>
+      gateSpecSchema.parse({
+        kind: "reviewer",
+        criteria: "tests cover edge cases",
+      }),
+    ).not.toThrow();
     expect(() => gateSpecSchema.parse({ kind: "human" })).not.toThrow();
   });
 
