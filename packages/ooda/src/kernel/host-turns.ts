@@ -5,6 +5,7 @@ import {
   asc,
   desc,
   eq,
+  inArray,
   isNotNull,
   lt,
   lte,
@@ -27,6 +28,7 @@ import type { db as database } from "../db/client";
 import { conversationEvents, conversations } from "../db/schema/conversations";
 import { hostTurnExecutions } from "../db/schema/host";
 import {
+  agentJobs,
   contextItems,
   contextPacks,
   proposals,
@@ -54,6 +56,9 @@ import { rebuildStoredConversationProjections } from "./projections";
 import { isUniqueViolation, stableStringify } from "./serialization";
 
 type OodaDatabase = typeof database;
+type StoredConversationProjection = Awaited<
+  ReturnType<typeof rebuildStoredConversationProjections>
+>;
 type PersistedHostOutput = Pick<HostOutput, "display" | "speakable">;
 type HostProposalCommonPreview = {
   acceptanceCriteria: string[];
@@ -97,6 +102,115 @@ Return exactly one JSON object with these fields:
   - {"kind":"bob_project","name":"...","description":"...","acceptanceCriteria":["..."],"tasks":["..."],"targetRepo":"...","constraints":["..."],"nonGoals":["..."],"rationale":"...","confidence":0.0}
 Do not include destination, risk, approval, credentials, policy, or delivery instructions in a proposal. OODA derives those server-side and the user must approve the resulting private draft before any durable write.
 Do not wrap the JSON object in a Markdown code fence.`;
+
+function researchResultText(result: Record<string, unknown> | null): string | null {
+  if (!result) return null;
+  for (const key of ["response", "summary"] as const) {
+    const value = result[key];
+    if (typeof value === "string" && value.trim()) {
+      const normalized = value.trim();
+      if (normalized.length <= 4_000) return normalized;
+      // Drop the partial trailing token so a credential crossing the preview
+      // boundary cannot evade the downstream whole-token scrubber.
+      const completePrefix = normalized
+        .slice(0, 4_000)
+        .replace(/\S+$/, "")
+        .trimEnd();
+      return `${completePrefix}…`;
+    }
+  }
+  return null;
+}
+
+async function withVisibleResearchResults(
+  db: OodaDatabase,
+  conversationId: string,
+  projection: StoredConversationProjection,
+  throughSequence: bigint,
+  configuredSources: ConversationContextSource[],
+): Promise<ConversationContextSource[]> {
+  // A result is automatically recallable only when its terminal event is in
+  // the current branch projection and carries canonical source-turn lineage.
+  // The conversation predicate below is the final tenant boundary even if a
+  // forged event payload names a job from another conversation.
+  const visible = new Map<
+    string,
+    { jobId: string; eventId: string; sensitivity: "general" | "personal" }
+  >();
+  const projectedEvents = new Map(
+    projection.timeline.items.map((item) => [item.event.id, item.event]),
+  );
+  for (const item of projection.timeline.items) {
+    if (BigInt(item.event.sequence) > throughSequence) continue;
+    if (
+      item.event.type !== "agent_job_progress" ||
+      item.effectivePayload.status !== "completed" ||
+      !item.event.causationId
+    ) {
+      continue;
+    }
+    const jobId = item.effectivePayload.jobId;
+    if (typeof jobId !== "string" || !jobId) continue;
+    const sourceEvent = projectedEvents.get(item.event.causationId);
+    if (
+      !sourceEvent ||
+      (sourceEvent.type !== "user_turn" &&
+        sourceEvent.type !== "assistant_turn") ||
+      (sourceEvent.sensitivity !== "general" &&
+        sourceEvent.sensitivity !== "personal")
+    ) {
+      continue;
+    }
+    visible.set(jobId, {
+      jobId,
+      eventId: item.event.id,
+      sensitivity: sourceEvent.sensitivity,
+    });
+  }
+  const references = [...visible.values()].reverse().slice(0, 3);
+  if (references.length === 0) return configuredSources;
+
+  const rows = await db
+    .select({
+      id: agentJobs.id,
+      result: agentJobs.result,
+    })
+    .from(agentJobs)
+    .where(
+      and(
+        inArray(
+          agentJobs.id,
+          references.map(({ jobId }) => jobId),
+        ),
+        eq(agentJobs.conversationId, conversationId),
+        eq(agentJobs.class, "read_only_research"),
+        eq(agentJobs.status, "completed"),
+      ),
+    );
+  const byId = new Map(rows.map((row) => [row.id, row.result]));
+  const candidates = references.flatMap(({ jobId, eventId, sensitivity }) => {
+    const content = researchResultText(byId.get(jobId) ?? null);
+    return content
+      ? [
+          {
+            sourceType: "conversation_event" as const,
+            sourceId: eventId,
+            sensitivity,
+            content,
+          },
+        ]
+      : [];
+  });
+  if (candidates.length === 0) return configuredSources;
+
+  return [
+    {
+      id: "conversation-research-results",
+      inspect: () => Promise.resolve(candidates),
+    },
+    ...configuredSources,
+  ];
+}
 
 function persistedHostOutput(output: HostOutput): PersistedHostOutput {
   const persisted: PersistedHostOutput = { display: output.display };
@@ -374,6 +488,13 @@ export async function createHostTurn(
     input.conversationId,
     source.event.branchId,
   );
+  const contextSources = await withVisibleResearchResults(
+    db,
+    input.conversationId,
+    projection,
+    source.event.sequence,
+    options.contextSources ?? [],
+  );
   const messages: HostMessage[] = projection.timeline.items.flatMap((item) => {
     if (BigInt(item.event.sequence) > source.event.sequence) return [];
     const content = payloadText(item.effectivePayload);
@@ -400,7 +521,7 @@ export async function createHostTurn(
       conversationId: input.conversationId,
       provider: preferredProvider,
       query: payloadText(source.event.payload) ?? "",
-      sources: options.contextSources ?? [],
+      sources: contextSources,
       now,
       signal: options.signal,
     });
@@ -578,11 +699,24 @@ export async function enqueueHostTurn(
   }
 
   try {
+    const projection = await rebuildStoredConversationProjections(
+      db,
+      ownerId,
+      input.conversationId,
+      source.event.branchId,
+    );
+    const contextSources = await withVisibleResearchResults(
+      db,
+      input.conversationId,
+      projection,
+      source.event.sequence,
+      options.contextSources ?? [],
+    );
     const context = await buildHostContextPack(db, ownerId, {
       conversationId: input.conversationId,
       provider: providerId(source.conversation.hostProvider),
       query: payloadText(source.event.payload) ?? "",
-      sources: options.contextSources ?? [],
+      sources: contextSources,
       now,
       signal: options.signal,
     });

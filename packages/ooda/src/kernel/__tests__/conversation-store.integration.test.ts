@@ -873,6 +873,286 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     );
   });
 
+  it("supplies completed branch-visible research as scrubbed context to the next host turn", async () => {
+    const created = await createConversation(db!, "owner-research-followup", {
+      title: "Continue from research",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "research-followup-conversation",
+    });
+    const question = await appendConversationEvent(
+      db!,
+      "owner-research-followup",
+      {
+        conversationId: created.conversation.id,
+        branchId: created.branch.id,
+        type: "user_turn",
+        actor: { type: "user", id: "owner-research-followup" },
+        payload: { display: "Research whether this prototype is viable." },
+        sensitivity: "personal",
+        correlationId: "research-followup-proof",
+        idempotencyKey: "research-followup-question",
+        occurredAt: "2026-08-07T15:00:00.000Z",
+      },
+    );
+    const createdJob = await createAgentJob(
+      db!,
+      "owner-research-followup",
+      {
+        conversationId: created.conversation.id,
+        sourceEventId: question.event.id,
+        class: "read_only_research",
+        prompt: "Assess prototype viability.",
+        idempotencyKey: "research-followup-job",
+      },
+    );
+    const claim = await claimAgentJob(db!, {
+      runnerId: "runner-research-followup",
+      providers: ["codex"],
+      classes: ["read_only_research"],
+      leaseSeconds: 90,
+    });
+    await recordAgentJobEvent(db!, {
+      jobId: createdJob.job.id,
+      runnerId: "runner-research-followup",
+      leaseToken: claim!.leaseToken,
+      type: "completed",
+      payload: {
+        result: {
+          response: `${"The prototype is viable if the first test stays under one week. Bearer research-secret-token ".padEnd(3_998, "x")}Bearer boundary-secret-token`,
+        },
+      },
+      idempotencyKey: "research-followup-complete",
+      occurredAt: "2026-08-07T15:01:00.000Z",
+    });
+    const researchEvents = await listConversationEvents(
+      db!,
+      "owner-research-followup",
+      { conversationId: created.conversation.id, limit: 20 },
+    );
+    const completedResearchEvent = researchEvents.items.find(
+      (event) =>
+        event.type === "agent_job_progress" &&
+        event.payload.jobId === createdJob.job.id &&
+        event.payload.status === "completed",
+    );
+    if (!completedResearchEvent)
+      throw new Error("Expected completed research event fixture");
+    const foreignConversation = await createConversation(
+      db!,
+      "different-owner-research",
+      {
+        title: "Foreign research",
+        hostProvider: "grok",
+        hostProfile: "daily",
+        sensitivityCeiling: "personal",
+        ttsPolicy: "allowed",
+        idempotencyKey: "foreign-research-conversation",
+      },
+    );
+    const [foreignJob] = await db!
+      .insert(schema.agentJobs)
+      .values({
+        conversationId: foreignConversation.conversation.id,
+        class: "read_only_research",
+        status: "completed",
+        provider: "codex",
+        capabilities: ["web.read"],
+        deadlineSeconds: 900,
+        aggregateTokenBudget: 150_000,
+        correlationId: "foreign-research",
+        idempotencyKey: "foreign-research-job",
+        result: { response: "Foreign private findings must never appear." },
+        completedAt: new Date("2026-08-07T15:01:00.000Z"),
+      })
+      .returning();
+    if (!foreignJob) throw new Error("Expected foreign job fixture");
+    await appendConversationEvent(db!, "owner-research-followup", {
+      conversationId: created.conversation.id,
+      branchId: created.branch.id,
+      type: "agent_job_progress",
+      actor: { type: "system", id: "forged-test-event" },
+      payload: {
+        display: "Forged foreign research completion",
+        jobId: foreignJob.id,
+        class: "read_only_research",
+        status: "completed",
+        provider: "codex",
+      },
+      sensitivity: "personal",
+      correlationId: "forged-foreign-research",
+      causationId: question.event.id,
+      idempotencyKey: "forged-foreign-research-event",
+      occurredAt: "2026-08-07T15:01:30.000Z",
+    });
+    const sensitiveSource = await appendConversationEvent(
+      db!,
+      "owner-research-followup",
+      {
+        conversationId: created.conversation.id,
+        branchId: created.branch.id,
+        type: "user_turn",
+        actor: { type: "user", id: "owner-research-followup" },
+        payload: { display: "A sensitive source turn." },
+        sensitivity: "sensitive",
+        correlationId: "sensitive-research-source",
+        idempotencyKey: "sensitive-research-source-event",
+        occurredAt: "2026-08-07T15:01:31.000Z",
+      },
+    );
+    const [sensitivityDowngradedJob] = await db!
+      .insert(schema.agentJobs)
+      .values({
+        conversationId: created.conversation.id,
+        class: "read_only_research",
+        status: "completed",
+        provider: "codex",
+        capabilities: ["web.read"],
+        deadlineSeconds: 900,
+        aggregateTokenBudget: 150_000,
+        correlationId: "sensitivity-downgraded-research",
+        idempotencyKey: "sensitivity-downgraded-research-job",
+        result: {
+          response:
+            "Sensitivity-downgraded findings must not be recalled automatically.",
+        },
+        completedAt: new Date("2026-08-07T15:01:00.000Z"),
+      })
+      .returning();
+    if (!sensitivityDowngradedJob)
+      throw new Error("Expected sensitivity-downgraded job fixture");
+    await appendConversationEvent(db!, "owner-research-followup", {
+      conversationId: created.conversation.id,
+      branchId: created.branch.id,
+      type: "agent_job_progress",
+      actor: { type: "system", id: "sensitivity-downgrade-test-event" },
+      payload: {
+        display: "Falsely general research completion",
+        jobId: sensitivityDowngradedJob.id,
+        class: "read_only_research",
+        status: "completed",
+        provider: "codex",
+      },
+      sensitivity: "general",
+      correlationId: "sensitivity-downgraded-research",
+      causationId: sensitiveSource.event.id,
+      idempotencyKey: "sensitivity-downgraded-research-event",
+      occurredAt: "2026-08-07T15:01:32.000Z",
+    });
+    const followup = await appendConversationEvent(
+      db!,
+      "owner-research-followup",
+      {
+        conversationId: created.conversation.id,
+        branchId: created.branch.id,
+        type: "user_turn",
+        actor: { type: "user", id: "owner-research-followup" },
+        payload: { display: "What should we do with those findings?" },
+        sensitivity: "personal",
+        correlationId: "research-followup-proof",
+        idempotencyKey: "research-followup-question-two",
+        occurredAt: "2026-08-07T15:02:00.000Z",
+      },
+    );
+    const queued = await enqueueHostTurn(
+      db!,
+      "owner-research-followup",
+      {
+        conversationId: created.conversation.id,
+        userEventId: followup.event.id,
+        idempotencyKey: "research-followup-host-turn",
+      },
+      {
+        now: new Date("2026-08-07T15:02:01.000Z"),
+      },
+    );
+    const hostClaim = await claimHostTurn(
+      db!,
+      {
+        runnerId: "runner-research-host",
+        providers: ["grok"],
+        leaseSeconds: 90,
+      },
+      { now: new Date("2026-08-07T15:02:02.000Z") },
+    );
+    const receivedSystem = hostClaim!.system;
+
+    expect(receivedSystem).toContain(
+      "The prototype is viable if the first test stays under one week.",
+    );
+    expect(receivedSystem).toContain("[REDACTED CREDENTIAL]");
+    expect(receivedSystem).not.toContain("research-secret-token");
+    expect(receivedSystem).not.toContain("boundary-secret-token");
+    expect(receivedSystem).not.toContain("Foreign private findings");
+    expect(receivedSystem).not.toContain("Sensitivity-downgraded findings");
+    const items = await db!
+      .select()
+      .from(schema.contextItems)
+      .where(eq(schema.contextItems.contextPackId, queued.contextPackId!));
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: "conversation_event",
+          sourceId: completedResearchEvent.id,
+          sensitivity: "personal",
+          decision: "redacted",
+        }),
+      ]),
+    );
+
+    const sibling = await forkConversation(db!, "owner-research-followup", {
+      conversationId: created.conversation.id,
+      parentBranchId: created.branch.id,
+      forkEventId: question.event.id,
+      name: "without-later-research",
+      reason: "Prove post-fork research does not cross branch boundaries",
+      idempotencyKey: "research-followup-sibling-fork",
+    });
+    const siblingQuestion = await appendConversationEvent(
+      db!,
+      "owner-research-followup",
+      {
+        conversationId: created.conversation.id,
+        branchId: sibling.branch.id,
+        type: "user_turn",
+        actor: { type: "user", id: "owner-research-followup" },
+        payload: { display: "What do we know on this branch?" },
+        sensitivity: "personal",
+        correlationId: "research-followup-sibling-proof",
+        idempotencyKey: "research-followup-sibling-question",
+        occurredAt: "2026-08-07T15:03:00.000Z",
+      },
+    );
+    let siblingSystem = "";
+    await createHostTurn(
+      db!,
+      "owner-research-followup",
+      {
+        conversationId: created.conversation.id,
+        userEventId: siblingQuestion.event.id,
+        idempotencyKey: "research-followup-sibling-host-turn",
+      },
+      {
+        providers: [
+          {
+            id: "grok",
+            complete: ({ system }) => {
+              siblingSystem = system;
+              return Promise.resolve({
+                providerResponseId: "research-followup-sibling-response",
+                model: "grok-4.5",
+                text: '{"display":"No later findings are visible here.","speakable":"No later findings are visible here."}',
+              });
+            },
+          },
+        ],
+      },
+    );
+    expect(siblingSystem).not.toContain("The prototype is viable");
+  });
+
   it("replays identical event writes and rejects reuse with changed content", async () => {
     const created = await createConversation(db!, "owner-a", {
       title: "Replay",
