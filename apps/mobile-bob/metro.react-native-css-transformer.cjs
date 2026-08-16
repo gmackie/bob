@@ -6,20 +6,28 @@ const { compile } = require("react-native-css/compiler");
 const reactNativeCssRoot = path.dirname(
   require.resolve("react-native-css/package.json"),
 );
-const { unstable_transformerPath } = require(require.resolve(
-  "@expo/metro-config",
-  { paths: [reactNativeCssRoot] },
-));
-const postcss = require(require.resolve("postcss", {
-  paths: [path.dirname(require.resolve("@tailwindcss/postcss"))],
-}));
+const { unstable_transformerPath } = require(
+  require.resolve("@expo/metro-config", { paths: [reactNativeCssRoot] }),
+);
+const postcss = require(
+  require.resolve("postcss", {
+    paths: [path.dirname(require.resolve("@tailwindcss/postcss"))],
+  }),
+);
 
-const { getNativeInjectionCode } = require(path.join(
-  reactNativeCssRoot,
-  "dist/commonjs/metro/injection-code.js",
-));
+const { getNativeInjectionCode } = require(
+  path.join(reactNativeCssRoot, "dist/commonjs/metro/injection-code.js"),
+);
 
 const worker = require(unstable_transformerPath);
+
+const tailwindShadowDefaults = new Set([
+  "--tw-inset-shadow",
+  "--tw-inset-ring-shadow",
+  "--tw-ring-offset-shadow",
+  "--tw-ring-shadow",
+  "--tw-shadow",
+]);
 
 function normalizeTailwindForReactNativeCss(css) {
   const root = postcss.parse(css);
@@ -64,10 +72,12 @@ function normalizeTailwindForReactNativeCss(css) {
 
   // Remove :root/:host rules — custom properties are already inlined.
   root.walkRules((rule) => {
-    if (rule.selector.split(",").every((s) => {
-      const trimmed = s.trim();
-      return trimmed === ":root" || trimmed === ":host";
-    })) {
+    if (
+      rule.selector.split(",").every((s) => {
+        const trimmed = s.trim();
+        return trimmed === ":root" || trimmed === ":host";
+      })
+    ) {
       rule.remove();
       return;
     }
@@ -103,6 +113,28 @@ function normalizeTailwindForReactNativeCss(css) {
       );
     }
 
+    // Tailwind initializes these variables through @property rules. Those
+    // rules are intentionally stripped above because react-native-css cannot
+    // consume them, so fill only the variables not defined by this rule (or
+    // :root) with Tailwind's transparent no-shadow value. Leaving a local
+    // --tw-shadow intact preserves utilities such as `.shadow`.
+    if (decl.prop === "box-shadow" && decl.value.includes("var(--tw-")) {
+      const localCustomProps = new Set(
+        (decl.parent?.nodes ?? [])
+          .filter((node) => node.type === "decl" && node.prop.startsWith("--"))
+          .map((node) => node.prop),
+      );
+      decl.value = decl.value.replace(
+        /var\((--tw-[a-zA-Z0-9_-]+)\)/g,
+        (match, prop) =>
+          tailwindShadowDefaults.has(prop) &&
+          !localCustomProps.has(prop) &&
+          !customProps[prop]
+            ? "0 0 #0000"
+            : match,
+      );
+    }
+
     // Remove declarations with lab()/oklch()/oklab() colors that
     // react-native-css cannot parse.
     if (/\b(?:lab|oklch|oklab)\(/.test(decl.value)) {
@@ -129,7 +161,10 @@ function normalizeTailwindForReactNativeCss(css) {
 }
 
 async function transform(config, projectRoot, filePath, data, options) {
-  const isCss = options.type !== "asset" && /\.(s?css|sass)$/.test(filePath) && !filePath.includes(".module.");
+  const isCss =
+    options.type !== "asset" &&
+    /\.(s?css|sass)$/.test(filePath) &&
+    !filePath.includes(".module.");
   if (options.platform === "web" || !isCss) {
     return worker.transform(config, projectRoot, filePath, data, options);
   }
@@ -166,4 +201,4 @@ async function transform(config, projectRoot, filePath, data, options) {
   return transformResult;
 }
 
-module.exports = { transform };
+module.exports = { normalizeTailwindForReactNativeCss, transform };
