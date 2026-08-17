@@ -24,6 +24,7 @@ import { CapabilityRegistry } from "@gmacko/ooda/capability-registry";
 import type { ResearchTRPCSurface } from "@gmacko/ooda/buddy-tools";
 import { BobGatewayConnector } from "./bob-gateway";
 import { BobRunReporter } from "./bob-run-reporter";
+import { emitSkillfleetWorkflowEvent } from "@gmacko/ooda/skillfleet-bridge";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const POLL_INTERVAL_MS = 2_000;
@@ -85,6 +86,51 @@ function parsePromotionRequest(content: string): PromotionRequestPayload | null 
     threadId: payload.threadId,
     runnerId: payload.runnerId,
   };
+}
+
+export async function observeOodaPromotion<T>({
+  identity,
+  sessionId,
+  projectId,
+  journalPath,
+  operation,
+}: {
+  identity: string;
+  sessionId: string;
+  projectId: string | null;
+  journalPath?: string | null;
+  operation: () => Promise<T>;
+}): Promise<T> {
+  const startedAt = Date.now();
+  const record = async (result: "pass" | "fail") => {
+    try {
+      await emitSkillfleetWorkflowEvent({
+        source: "ooda",
+        identity,
+        observedAt: new Date().toISOString(),
+        sessionId,
+        projectId,
+        provenanceQuality: "direct",
+        kind: "engineering_outcome",
+        payload: {
+          outcomeType: "promotion",
+          result,
+          durationMs: Date.now() - startedAt,
+        },
+      }, { journalPath });
+    } catch {
+      // Workflow observation must never alter the promotion result.
+    }
+  };
+
+  try {
+    const result = await operation();
+    await record("pass");
+    return result;
+  } catch (error) {
+    await record("fail");
+    throw error;
+  }
 }
 
 // Phase 2: distill a "Remember this" conversation transcript into a durable
@@ -209,21 +255,26 @@ export class RunnerServer {
               correlation.threadSlug,
             );
             const { title, content } = buildOutcomeNote(outcome);
-            await promoteNote({
-              storageRoot: this.config.storageRoot,
-              threadDir,
+            await observeOodaPromotion({
+              identity: `${outcome.sessionId}:bob-outcome-promotion`,
               sessionId: outcome.sessionId,
-              kind: "action",
-              title,
-              content,
-              threadId: correlation.threadId,
-              provenance: {
-                capabilityId: "bob-run",
-                operationId: `bob-run-${outcome.sessionId}`,
-                sourceType: "agent",
-                queryOrInputRef: `bobRun:${outcome.sessionId}`,
-                canonicalSourceRef: outcome.pullRequestUrl ?? undefined,
-              },
+              projectId: correlation.threadId,
+              operation: () => promoteNote({
+                storageRoot: this.config.storageRoot,
+                threadDir,
+                sessionId: outcome.sessionId,
+                kind: "action",
+                title,
+                content,
+                threadId: correlation.threadId,
+                provenance: {
+                  capabilityId: "bob-run",
+                  operationId: `bob-run-${outcome.sessionId}`,
+                  sourceType: "agent",
+                  queryOrInputRef: `bobRun:${outcome.sessionId}`,
+                  canonicalSourceRef: outcome.pullRequestUrl ?? undefined,
+                },
+              }),
             });
           },
         },
@@ -626,20 +677,25 @@ export class RunnerServer {
       noteContent = distilled.content;
     }
 
-    const result = await promoteNote({
-      storageRoot: this.config.storageRoot,
-      threadDir,
+    const result = await observeOodaPromotion({
+      identity: params.sourceEventId ?? `${params.sessionId}:promotion:${params.kind}`,
       sessionId: params.sessionId,
-      kind: params.kind,
-      title: params.title,
-      content: noteContent,
-      threadId: params.threadId,
-      provenance: {
-        capabilityId: "chat-promote",
-        operationId: `promote-${Date.now()}`,
-        sourceType: "agent",
-        queryOrInputRef: `session:${params.sessionId}`,
-      },
+      projectId: params.threadId ?? params.threadSlug,
+      operation: () => promoteNote({
+        storageRoot: this.config.storageRoot,
+        threadDir,
+        sessionId: params.sessionId,
+        kind: params.kind,
+        title: params.title,
+        content: noteContent,
+        threadId: params.threadId,
+        provenance: {
+          capabilityId: "chat-promote",
+          operationId: `promote-${Date.now()}`,
+          sourceType: "agent",
+          queryOrInputRef: `session:${params.sessionId}`,
+        },
+      }),
     });
 
     // Push a promotion_available event so the UI knows
