@@ -19,6 +19,7 @@ import { TabletProjectPane } from "~/components/tablet/TabletProjectPane";
 import { TabletProjectsDashboardPane } from "~/components/tablet/TabletProjectsDashboardPane";
 import { TabletSettingsPane } from "~/components/tablet/TabletSettingsPane";
 import { TaskLaneTablePane } from "~/components/tablet/TaskLaneTablePane";
+import { ChatScreen } from "~/features/chat/chat-screen";
 import type {
   TabletPlanningDashboardNavigationAction,
   TabletPlanningSummaryTarget,
@@ -115,6 +116,10 @@ function MainPane({
   onShowArtifact: (content: string) => void;
   onOpenInspector: () => void;
 }) {
+  if (target.type === "ooda-chat") {
+    return <ChatScreen />;
+  }
+
   if (target.type === "planning-session") {
     const planningSession = getPlanningPaneSession(gateway.sessions, target.sessionId);
 
@@ -278,7 +283,7 @@ function TabletLayout() {
   const [selectedWorkItemView, setSelectedWorkItemView] =
     useState<MobileWorkItemEntryView>("planning");
   const [planningComposerOpen, setPlanningComposerOpen] = useState(false);
-  const [shell, setShell] = useState(() => switchShellMode("tasks"));
+  const [shell, setShell] = useState(() => switchShellMode("ooda"));
   const currentShellModeRef = useRef(shell.mode);
   const sidebarWidth = getTabletSidebarWidth(width);
 

@@ -63,6 +63,7 @@ const sessions: TabletShellSession[] = [
 describe("tablet shell model", () => {
   it("uses design-plan labels for each mode", () => {
     expect(getShellModeItems().map((item) => item.label)).toEqual([
+      "OODA",
       "Planning",
       "Tasks",
     ]);
@@ -74,11 +75,19 @@ describe("tablet shell model", () => {
       "Recent Sessions",
       "Projects",
     ]);
+    expect(getLeftRailTabs("ooda").map((tab) => tab.label)).toEqual([
+      "Conversations",
+    ]);
     expect(getRightRailTitle("tasks")).toBe("Running Now");
     expect(getRightRailTitle("planning")).toBe("Active Sessions");
   });
 
   it("switches mode to the correct default workspace target", () => {
+    expect(switchShellMode("ooda")).toEqual({
+      mode: "ooda",
+      target: { type: "ooda-chat" },
+      leftTab: "conversations",
+    });
     expect(switchShellMode("tasks")).toEqual({
       mode: "tasks",
       target: { type: "tasks-dashboard" },
@@ -89,6 +98,7 @@ describe("tablet shell model", () => {
       target: { type: "planning-dashboard" },
       leftTab: "recent-sessions",
     });
+    expect(getDefaultShellTarget("ooda")).toEqual({ type: "ooda-chat" });
     expect(getDefaultShellTarget("tasks")).toEqual({ type: "tasks-dashboard" });
     expect(getDefaultShellTarget("planning")).toEqual({ type: "planning-dashboard" });
   });
@@ -106,9 +116,10 @@ describe("tablet shell model", () => {
     })).toBe("Workspace · reconnecting");
   });
 
-  it("keeps the top-left shell header limited to the Tasks and Planning mode switch", () => {
+  it("keeps the top-left shell header limited to the OODA, Planning, and Tasks mode switch", () => {
     expect(getShellHeaderTitle()).toBeNull();
     expect(getShellModeItems().map((item) => item.key)).toEqual([
+      "ooda",
       "planning",
       "tasks",
     ]);
@@ -127,6 +138,9 @@ describe("tablet shell model", () => {
   });
 
   it("routes left rail tab selections into the main workspace without leaving the shell", () => {
+    expect(selectLeftRailTarget("ooda", "conversations")).toEqual({
+      type: "ooda-chat",
+    });
     expect(selectLeftRailTarget("tasks", "recent-outcomes")).toEqual({
       type: "tasks-dashboard",
     });
@@ -142,6 +156,11 @@ describe("tablet shell model", () => {
   });
 
   it("restores tablet shell targets from route-backed drilldowns", () => {
+    expect(getShellStateForPath("/chat")).toEqual({
+      mode: "ooda",
+      leftTab: "conversations",
+      target: { type: "ooda-chat" },
+    });
     expect(getShellStateForPath("/tasks/queue")).toEqual({
       mode: "tasks",
       leftTab: "priority-queue",
@@ -190,6 +209,7 @@ describe("tablet shell model", () => {
   });
 
   it("derives mode from selected targets", () => {
+    expect(getShellModeForTarget({ type: "ooda-chat" })).toBe("ooda");
     expect(getShellModeForTarget({ type: "work-item", workItemId: "W1" })).toBe("tasks");
     expect(getShellModeForTarget({ type: "execution-session", sessionId: "S1" })).toBe("tasks");
     expect(getShellModeForTarget({ type: "planning-session", sessionId: "S2" })).toBe("planning");
@@ -417,6 +437,7 @@ describe("tablet shell model", () => {
         projects: [{ id: "project-1" }, { id: "project-2" }],
       }),
     ).toEqual({
+      conversations: 0,
       "recent-outcomes": 1,
       "priority-queue": 1,
       "recent-sessions": 1,

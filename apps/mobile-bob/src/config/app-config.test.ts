@@ -86,16 +86,19 @@ describe("EAS build profiles", () => {
     expect(easConfig.build.production?.channel).toBe("production");
   });
 
-  it("gives the physical development build a device-reachable OODA API", () => {
+  it("gives the physical development build device-reachable service endpoints", () => {
     const easConfig = JSON.parse(
       readFileSync(resolve(__dirname, "../../eas.json"), "utf8"),
     ) as {
       build: Record<string, { env?: Record<string, string> }>;
     };
 
-    expect(easConfig.build["development:device"]?.env?.OODA_API_URL).toBe(
-      "https://ooda.blder.bot",
-    );
+    expect(easConfig.build["development:device"]?.env).toMatchObject({
+      API_URL: "https://bob.blder.bot",
+      AUTH_URL: "https://bob.blder.bot",
+      GATEWAY_PUBLIC_URL: "wss://ws.blder.bot",
+      OODA_API_URL: "https://ooda.blder.bot",
+    });
   });
 });
 

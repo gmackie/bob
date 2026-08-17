@@ -2,12 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { getAuthenticatedHomeHref } from "./navigation";
 
-describe("authenticated mobile home", () => {
-  it("opens OODA chat directly on phones", () => {
+describe("authenticated chat navigation", () => {
+  it("opens OODA chat as the authenticated home on phones and iPads", () => {
     expect(getAuthenticatedHomeHref({ isTablet: false })).toBe("/chat");
-  });
-
-  it("preserves the planning dashboard on tablets", () => {
-    expect(getAuthenticatedHomeHref({ isTablet: true })).toBe("/tasks");
+    expect(getAuthenticatedHomeHref({ isTablet: true })).toBe("/chat");
   });
 });
