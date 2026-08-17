@@ -217,8 +217,17 @@ async function appendRecord(journalPath: string, record: WorkflowRecord) {
 
 export async function emitSkillfleetWorkflowEvent(
   input: WorkflowEventInput,
-  { journalPath = process.env.SKILLFLEET_WORKFLOW_JOURNAL ?? null }: { journalPath?: string | null } = {},
+  options: {
+    journalPath?: string | null;
+    environment?: Record<string, string | undefined>;
+  } = {},
 ): Promise<{ state: "disabled" } | { state: "rejected" } | { state: "failed" } | { state: "written"; recordId: string }> {
+  const environment = options.environment ?? process.env;
+  const journalPath = Object.hasOwn(options, "journalPath")
+    ? options.journalPath ?? null
+    : input.source === "bob"
+      ? environment.SKILLFLEET_BOB_WORKFLOW_JOURNAL ?? environment.SKILLFLEET_WORKFLOW_JOURNAL ?? null
+      : environment.SKILLFLEET_OODA_WORKFLOW_JOURNAL ?? environment.SKILLFLEET_WORKFLOW_JOURNAL ?? null;
   if (journalPath === null || journalPath === "") return { state: "disabled" };
   let record: WorkflowRecord;
   try {

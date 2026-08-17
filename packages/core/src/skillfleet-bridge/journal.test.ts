@@ -62,6 +62,24 @@ describe("Skillfleet workflow journal", () => {
     expect((await lstat(journalPath)).mode & 0o777).toBe(0o600);
   });
 
+  it("routes Bob and OODA records to independent configured journals", async () => {
+    const { root } = await fixturePath();
+    const bobJournal = join(root, "private", "bob.jsonl");
+    const oodaJournal = join(root, "private", "ooda.jsonl");
+    const environment = {
+      SKILLFLEET_BOB_WORKFLOW_JOURNAL: bobJournal,
+      SKILLFLEET_OODA_WORKFLOW_JOURNAL: oodaJournal,
+    };
+
+    await expect(emitSkillfleetWorkflowEvent(input(), { environment }))
+      .resolves.toMatchObject({ state: "written" });
+    await expect(emitSkillfleetWorkflowEvent({ ...input(), source: "ooda" }, { environment }))
+      .resolves.toMatchObject({ state: "written" });
+
+    expect(JSON.parse((await readFile(bobJournal, "utf8")).trim()).source).toBe("bob");
+    expect(JSON.parse((await readFile(oodaJournal, "utf8")).trim()).source).toBe("ooda");
+  });
+
   it("rejects content-bearing fields and isolates write failures from callers", async () => {
     const { root, journalPath } = await fixturePath();
     await expect(emitSkillfleetWorkflowEvent({ ...input(), prompt: "private" } as never, { journalPath }))
