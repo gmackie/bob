@@ -65,7 +65,7 @@ export const memoriesRouter = {
     .mutation(({ ctx, input }) =>
       runKernel(() => submitMemoryFeedback(ctx.db, ctx.userId, input)),
     ),
-  createOpportunityReview: rolloutProcedure("reviews")
+  createOpportunityReview: rolloutProcedure("conversation_write")
     .meta({
       openapi: {
         method: "POST",

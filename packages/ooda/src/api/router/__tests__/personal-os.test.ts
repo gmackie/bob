@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AuthInstance } from "@gmacko/core/auth";
 
@@ -26,6 +26,10 @@ const { setPlaceholder, kernel } = vi.hoisted(() => {
       })),
       resolveContextSourceConfig: vi.fn(() => ({})),
       searchMemories: vi.fn(),
+      createOpportunityReview: vi.fn(),
+      getAttentionReview: vi.fn(),
+      submitMemoryFeedback: vi.fn(),
+      inspectMemory: vi.fn(),
       enqueueHostTurn: vi.fn(),
       claimHostTurn: vi.fn(),
       completeHostTurn: vi.fn(),
@@ -42,9 +46,14 @@ afterAll(() => {
   }
 });
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 import { conversationsRouter } from "../conversations";
 import { eventsRouter } from "../events";
 import { hostRouter } from "../host";
+import { memoriesRouter } from "../memories";
 import { edgeRouter } from "../../edge-router";
 import { handleOodaV1HttpRequest } from "../../openapi";
 import { appRouter } from "../../root";
@@ -85,11 +94,39 @@ const event = {
   idempotencyKey: "append-1",
   occurredAt,
 };
+const opportunity = {
+  problem: "Founders lose promising ideas between chat and validation.",
+  audience: "Multi-project founders",
+  currentWorkaround: "Scattered notes and manual portfolio reviews",
+  differentiation: "Conversation-native evidence and capacity gates",
+  evidence: ["Repeated personal workflow friction"],
+  strategicFit: "Extends OODA and BizPulse",
+  smallestTest: "Review five captured ideas for one week",
+  effort: "One-week experiment",
+  risks: ["Adds review overhead"],
+  killCriteria: ["No promoted idea is revisited"],
+};
+const opportunityScores = {
+  expectedValue: 0.9,
+  strategicFit: 0.9,
+  evidence: 0.8,
+  timing: 0.8,
+  crossProjectSynergy: 0.8,
+  energyInterestFit: 0.9,
+  reversibilityLearningValue: 0.9,
+  opportunityCost: 0.2,
+};
+const capacitySnapshot = {
+  activeVentureExperiments: 1,
+  majorImplementationStreams: 1,
+  dailyRecommendedActions: 0,
+};
 
 const router = t.router({
   conversations: conversationsRouter,
   events: eventsRouter,
   host: hostRouter,
+  memories: memoriesRouter,
 });
 const createCaller = t.createCallerFactory(router);
 const auth = {
@@ -252,5 +289,49 @@ describe("personal OS routers", () => {
       contextSources: [expect.objectContaining({ id: "memory" })],
       signal: expect.any(AbortSignal),
     });
+  });
+
+  it("treats opportunity review as a private conversation write", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("OODA_ROLLOUT_STAGE", "shadow");
+    vi.stubEnv("OODA_ROLLOUT_OWNER_IDS", "owner-a");
+    kernel.createOpportunityReview.mockClear();
+    kernel.createOpportunityReview.mockResolvedValue({
+      review: {
+        id: "review-1",
+        memorySeedId: "memory-1",
+        dimensionScores: opportunityScores,
+        uncertainty: 0.2,
+        overallScore: 0.81,
+        recommendation: "propose",
+        capacitySnapshot,
+        opportunity,
+        createdAt: occurredAt,
+      },
+      replayed: false,
+    });
+    const input = {
+      memorySeedId: "memory-1",
+      dimensionScores: opportunityScores,
+      uncertainty: 0.2,
+      capacitySnapshot,
+      opportunity,
+      idempotencyKey: "opportunity-review-1",
+    };
+
+    await expect(
+      caller().memories.createOpportunityReview(input),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(kernel.createOpportunityReview).not.toHaveBeenCalled();
+
+    vi.stubEnv("OODA_ROLLOUT_STAGE", "conversations");
+    await expect(
+      caller().memories.createOpportunityReview(input),
+    ).resolves.toMatchObject({ review: { recommendation: "propose" } });
+    expect(kernel.createOpportunityReview).toHaveBeenCalledWith(
+      {},
+      "owner-a",
+      input,
+    );
   });
 });
