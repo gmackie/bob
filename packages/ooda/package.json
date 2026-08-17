@@ -31,7 +31,8 @@
     "./kernel": "./src/kernel/index.ts",
     "./oracle": "./src/oracle/index.ts",
     "./contracts/v1": "./src/contracts/v1/index.ts",
-    "./integrations": "./src/integrations/index.ts"
+    "./integrations": "./src/integrations/index.ts",
+    "./skillfleet-bridge": "./src/skillfleet-bridge.ts"
   },
   "scripts": {
     "test": "vitest run",

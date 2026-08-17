@@ -1,5 +1,10 @@
 import { existsSync } from "node:fs";
 
+import {
+  digestSkillfleetResourceId,
+  emitSkillfleetWorkflowEvent,
+  normalizeSkillfleetRuntime,
+} from "@gmacko/ooda/skillfleet-bridge";
 import type { AgentAdapter, AdapterEvent, BuddyMcpServer, PromptImage } from "@gmacko/ooda/agent-adapters";
 import {
   createBuddyToolDescriptors,
@@ -53,6 +58,8 @@ export interface SessionExecutorConfig {
    * (dormant) in-process ACP dispatch backstop is wired.
    */
   mcpServer?: BuddyMcpServer;
+  /** Explicit privacy-safe workflow journal. Defaults by source-specific environment configuration. */
+  workflowJournalPath?: string | null;
 }
 
 export interface ExecuteSessionInput {
@@ -85,6 +92,7 @@ export class SessionExecutor {
   private research?: ResearchTRPCSurface;
   private capabilityRegistry?: CapabilityRegistry;
   private mcpServer?: BuddyMcpServer;
+  private workflowJournalPath?: string | null;
 
   constructor(config: SessionExecutorConfig) {
     this.adapter = config.adapter;
@@ -92,6 +100,7 @@ export class SessionExecutor {
     this.research = config.research;
     this.capabilityRegistry = config.capabilityRegistry;
     this.mcpServer = config.mcpServer;
+    this.workflowJournalPath = config.workflowJournalPath;
   }
 
   async execute(input: ExecuteSessionInput): Promise<ExecuteSessionResult> {
@@ -114,7 +123,32 @@ export class SessionExecutor {
     // adapter's `registerTools` backstop is also wired. Adapters that speak
     // neither hook ignore both (no-op). `cleanupTools` tears the session's
     // MCP exposure back down when execution finishes.
-    const cleanupTools = this.registerBuddyTools(input);
+    const { cleanup: cleanupTools, mcpToolNames } = this.registerBuddyTools(input);
+    const startedAt = Date.now();
+    const toolStartedAt = new Map<string, number>();
+    let workflowWrites = Promise.resolve();
+    const scheduleWorkflowWrite = (write: () => Promise<unknown>) => {
+      workflowWrites = workflowWrites.then(write).then(() => undefined, () => undefined);
+    };
+
+    const recordRun = async (status: "success" | "failure") => {
+      scheduleWorkflowWrite(() => emitSkillfleetWorkflowEvent({
+        source: "ooda",
+        identity: `${input.sessionId}:terminal`,
+        observedAt: new Date().toISOString(),
+        sessionId: input.sessionId,
+        projectId: input.threadSlug,
+        provenanceQuality: "direct",
+        kind: "agent_run",
+        payload: {
+          runtime: normalizeSkillfleetRuntime(this.adapter.id),
+          status,
+          durationMs: Date.now() - startedAt,
+          turnCount: 1,
+        },
+      }, { journalPath: this.workflowJournalPath }));
+      await workflowWrites;
+    };
 
     try {
       // Build command
@@ -135,11 +169,41 @@ export class SessionExecutor {
         if (event.type === "stdout") {
           fullOutput += event.data;
         }
+        if (event.type === "tool_call" && event.tool) {
+          const eventTime = Date.parse(event.timestamp);
+          toolStartedAt.set(event.tool.id, Number.isFinite(eventTime) ? eventTime : Date.now());
+        }
+        if (event.type === "tool_result" && event.tool) {
+          const eventTime = Date.parse(event.timestamp);
+          const observedTime = Number.isFinite(eventTime) ? eventTime : Date.now();
+          const toolStart = toolStartedAt.get(event.tool.id);
+          const provenanceQuality = toolStart === undefined || !Number.isFinite(eventTime)
+            ? "reconstructed" as const
+            : "direct" as const;
+          const tool = event.tool;
+          scheduleWorkflowWrite(() => emitSkillfleetWorkflowEvent({
+            source: "ooda",
+            identity: `${input.sessionId}:tool:${tool.id}:terminal`,
+            observedAt: new Date(observedTime).toISOString(),
+            sessionId: input.sessionId,
+            projectId: input.threadSlug,
+            provenanceQuality,
+            kind: "tool_invocation",
+            payload: {
+              toolKind: mcpToolNames.has(tool.name) ? "mcp" : "other",
+              resourceIdDigest: digestSkillfleetResourceId(tool.name),
+              outcome: tool.status === "failed" ? "failure" : "success",
+              durationMs: toolStart === undefined ? 0 : Math.max(0, observedTime - toolStart),
+            },
+          }, { journalPath: this.workflowJournalPath }));
+        }
         input.onEvent(event);
       };
 
       // Execute
       const result = await this.adapter.execute(command, wrappedOnEvent);
+
+      await recordRun(result.exitCode === 0 ? "success" : "failure");
 
       return {
         exitCode: result.exitCode,
@@ -147,6 +211,9 @@ export class SessionExecutor {
         rawOutput: fullOutput,
         agentResponse: extractAgentResponse(fullOutput),
       };
+    } catch (error) {
+      await recordRun("failure");
+      throw error;
     } finally {
       cleanupTools();
     }
@@ -160,8 +227,8 @@ export class SessionExecutor {
    * No-op unless a research surface is configured and the input carries a
    * threadId (the handlers need both to run).
    */
-  private registerBuddyTools(input: ExecuteSessionInput): () => void {
-    if (!this.research || !input.threadId) return () => {};
+  private registerBuddyTools(input: ExecuteSessionInput): { cleanup: () => void; mcpToolNames: Set<string> } {
+    if (!this.research || !input.threadId) return { cleanup: () => {}, mcpToolNames: new Set() };
 
     const ctx: HandlerContext = {
       threadId: input.threadId,
@@ -195,10 +262,10 @@ export class SessionExecutor {
     if (this.mcpServer && typeof this.adapter.registerMcpServers === "function") {
       const handle = this.mcpServer.registerSession(descriptors);
       this.adapter.registerMcpServers([handle.config]);
-      return () => handle.dispose();
+      return { cleanup: () => handle.dispose(), mcpToolNames: new Set(descriptors.map((tool) => tool.name)) };
     }
 
-    return () => {};
+    return { cleanup: () => {}, mcpToolNames: new Set() };
   }
 
   /**
