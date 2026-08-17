@@ -12,6 +12,7 @@
     "./provenance": "./src/provenance/index.ts",
     "./capability-registry": "./src/capability-registry/index.ts",
     "./runner-protocol": "./src/runner-protocol/index.ts",
+    "./skillfleet-bridge": "./src/skillfleet-bridge.ts",
     "./source-connectors": "./src/source-connectors/index.ts",
     "./imports": "./src/imports/index.ts",
     "./domain-packs": "./src/domain-packs/index.ts",

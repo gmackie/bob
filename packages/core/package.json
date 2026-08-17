@@ -29,6 +29,7 @@
     "./db/testing": "./src/db/__tests__/helpers.ts",
     "./storage": "./src/storage/index.ts",
     "./monitoring": "./src/monitoring/index.ts",
+    "./skillfleet-bridge": "./src/skillfleet-bridge/index.ts",
     "./analytics": "./src/analytics/index.ts",
     "./auth": "./src/auth/index.ts",
     "./auth/errors": "./src/auth/errors.ts",

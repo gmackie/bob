@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach } from "vitest";
-import { mkdtempSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
@@ -57,6 +57,27 @@ class MockAdapter implements AgentAdapter {
       exitCode: 0,
     });
 
+    return { exitCode: 0 };
+  }
+}
+
+class ToolAdapter extends MockAdapter {
+  override async execute(
+    _command: AdapterCommand,
+    onEvent: (event: AdapterEvent) => void,
+  ): Promise<{ exitCode: number }> {
+    onEvent({
+      type: "tool_call",
+      data: "private tool input",
+      timestamp: "2026-08-17T12:00:00.000Z",
+      tool: { id: "raw-tool-call", name: "papers_search", status: "started", input: { query: "private" } },
+    });
+    onEvent({
+      type: "tool_result",
+      data: "private tool output",
+      timestamp: "2026-08-17T12:00:00.025Z",
+      tool: { id: "raw-tool-call", name: "papers_search", status: "completed", output: "private" },
+    });
     return { exitCode: 0 };
   }
 }
@@ -300,5 +321,75 @@ describe("SessionExecutor", () => {
         onEvent: () => {},
       }),
     ).rejects.toThrow("Adapter crashed: out of memory");
+  });
+
+  it("journals a privacy-safe OODA run and terminal tool result", async () => {
+    const storageRoot = mkdtempSync(join(tmpdir(), "ooda-exec-"));
+    tempDirs.push(storageRoot);
+    initVaultRepo(storageRoot);
+    const journalPath = join(storageRoot, "skillfleet.jsonl");
+    const executor = new SessionExecutor({
+      adapter: new ToolAdapter(),
+      storageRoot,
+      workflowJournalPath: journalPath,
+    });
+
+    const result = await executor.execute({
+      threadSlug: "private-thread",
+      threadTitle: "Private Thread Title",
+      sessionId: "raw-session-id",
+      prompt: "private prompt",
+      toolProfileId: "research-light",
+      onEvent: () => {},
+    });
+
+    expect(result.exitCode).toBe(0);
+    const serialized = readFileSync(journalPath, "utf8");
+    const records = serialized.trim().split("\n").map((line) => JSON.parse(line));
+    expect(records).toHaveLength(2);
+    expect(records.map((record) => record.kind)).toEqual(["tool_invocation", "agent_run"]);
+    expect(records[0]).toMatchObject({
+      source: "ooda",
+      provenanceQuality: "direct",
+      payload: { toolKind: "other", outcome: "success", durationMs: 25 },
+    });
+    expect(records[1]).toMatchObject({
+      source: "ooda",
+      kind: "agent_run",
+      payload: { runtime: "other", status: "success", turnCount: 1 },
+    });
+    expect(serialized).not.toContain("raw-session-id");
+    expect(serialized).not.toContain("private-thread");
+    expect(serialized).not.toContain("private prompt");
+    expect(serialized).not.toContain("private tool");
+    expect(serialized).not.toContain("papers_search");
+  });
+
+  it("journals a failed OODA run before rethrowing adapter errors", async () => {
+    const storageRoot = mkdtempSync(join(tmpdir(), "ooda-exec-"));
+    tempDirs.push(storageRoot);
+    initVaultRepo(storageRoot);
+    const journalPath = join(storageRoot, "skillfleet.jsonl");
+    const executor = new SessionExecutor({
+      adapter: new ThrowingAdapter(),
+      storageRoot,
+      workflowJournalPath: journalPath,
+    });
+
+    await expect(executor.execute({
+      threadSlug: "failure-thread",
+      threadTitle: "Failure Thread",
+      sessionId: "failure-session",
+      prompt: "private failure prompt",
+      toolProfileId: "research-light",
+      onEvent: () => {},
+    })).rejects.toThrow("Adapter crashed: out of memory");
+
+    const record = JSON.parse(readFileSync(journalPath, "utf8").trim());
+    expect(record).toMatchObject({
+      source: "ooda",
+      kind: "agent_run",
+      payload: { runtime: "other", status: "failure", turnCount: 1 },
+    });
   });
 });
