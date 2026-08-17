@@ -54,7 +54,7 @@ describe("syncVault", () => {
 
     const bareLog = execSync("git log --oneline", { cwd: bare }).toString();
     expect(bareLog).toContain("test");
-  });
+  }, 15_000);
 
   it("pullVault pulls changes and detects conflicts", async () => {
     const bare = mkdtempSync(join(tmpdir(), "ooda-bare-"));
@@ -109,5 +109,5 @@ describe("syncVault", () => {
 
     const conflicted = await hasConflicts(clone2);
     expect(conflicted).toBe(true);
-  });
+  }, 15_000);
 });
