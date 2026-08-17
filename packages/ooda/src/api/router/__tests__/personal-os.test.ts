@@ -291,9 +291,9 @@ describe("personal OS routers", () => {
     });
   });
 
-  it("gates opportunity review at the BizPulse rollout stage", async () => {
+  it("treats opportunity review as a private conversation write", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("OODA_ROLLOUT_STAGE", "durable_work");
+    vi.stubEnv("OODA_ROLLOUT_STAGE", "shadow");
     vi.stubEnv("OODA_ROLLOUT_OWNER_IDS", "owner-a");
     kernel.createOpportunityReview.mockClear();
     kernel.createOpportunityReview.mockResolvedValue({
@@ -324,7 +324,7 @@ describe("personal OS routers", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(kernel.createOpportunityReview).not.toHaveBeenCalled();
 
-    vi.stubEnv("OODA_ROLLOUT_STAGE", "portfolio_evidence");
+    vi.stubEnv("OODA_ROLLOUT_STAGE", "conversations");
     await expect(
       caller().memories.createOpportunityReview(input),
     ).resolves.toMatchObject({ review: { recommendation: "propose" } });
