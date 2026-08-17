@@ -1052,6 +1052,18 @@ export function TabletSidebar({
       {mode === "planning" && leftTab === "projects" ? (
         <ProjectsTab onSelectProject={onSelectProject} />
       ) : null}
+      {mode === "ooda" && leftTab === "conversations" ? (
+        <View className="flex-1 px-4 py-6">
+          <Text className="text-sm font-semibold text-foreground">
+            OODA Personal OS
+          </Text>
+          <Text className="mt-2 text-sm leading-5 text-muted">
+            Continue the last conversation, start a new thought, or open the
+            conversation drawer from the chat header. Tasks and planning stay
+            available above without leaving this app.
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }

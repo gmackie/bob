@@ -23,6 +23,9 @@ import {
 
 describe("tablet navigation", () => {
   it("returns to the mode dashboard and clears detail selection", () => {
+    expect(getTabletDashboardHref("ooda", "workspace-1")).toBe(
+      "/chat?workspace=workspace-1",
+    );
     expect(getTabletDashboardHref()).toBe("/tasks");
     expect(getTabletDashboardHref("planning")).toBe("/planning");
     expect(getTabletDashboardHref("tasks", "workspace-1")).toBe(
@@ -45,8 +48,14 @@ describe("tablet navigation", () => {
     );
   });
 
-  it("exposes Planning first in the phone mode switch while defaulting to Tasks", () => {
+  it("exposes OODA first in the phone mode switch while preserving Tasks", () => {
     expect(getMobileShellModeActions("tasks", "workspace-1")).toEqual([
+      {
+        key: "ooda",
+        label: "OODA",
+        href: "/chat?workspace=workspace-1",
+        isActive: false,
+      },
       {
         key: "planning",
         label: "Planning",
@@ -60,8 +69,11 @@ describe("tablet navigation", () => {
         isActive: true,
       },
     ]);
-    expect(getMobileShellModeActions("planning")[0]?.href).toBe("/planning");
-    expect(getMobileShellModeActions("planning")[0]?.isActive).toBe(true);
+    const planningAction = getMobileShellModeActions("planning").find(
+      (action) => action.key === "planning",
+    );
+    expect(planningAction?.href).toBe("/planning");
+    expect(planningAction?.isActive).toBe(true);
   });
 
   it("exposes a workspace-scoped phone settings action outside the mode switch", () => {

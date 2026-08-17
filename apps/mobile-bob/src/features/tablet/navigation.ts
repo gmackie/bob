@@ -7,7 +7,7 @@ import type { MobileWorkItemEntryView } from "./work-item-entry";
 
 export interface MobileShellModeAction {
   key: TabletShellMode;
-  label: "Planning" | "Tasks";
+  label: "OODA" | "Planning" | "Tasks";
   href: string;
   isActive: boolean;
 }
@@ -49,6 +49,10 @@ export function getTabletDashboardHref(
   mode: TabletShellMode = "tasks",
   workspaceId?: string | null,
 ): string {
+  if (mode === "ooda") {
+    return appendWorkspaceParam("/chat", workspaceId);
+  }
+
   return appendWorkspaceParam(
     mode === "planning" ? getPlanningHref() : "/tasks",
     workspaceId,
@@ -88,6 +92,12 @@ export function getMobileShellModeActions(
   workspaceId?: string | null,
 ): MobileShellModeAction[] {
   return [
+    {
+      key: "ooda",
+      label: "OODA",
+      href: getTabletDashboardHref("ooda", workspaceId),
+      isActive: currentMode === "ooda",
+    },
     {
       key: "planning",
       label: "Planning",

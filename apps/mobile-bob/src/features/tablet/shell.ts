@@ -4,14 +4,19 @@ import { buildPriorityQueueItems  } from "./queue";
 import type {TabletQueueItem} from "./queue";
 import type { MobileWorkItemEntryView } from "./work-item-entry";
 
-export type TabletShellMode = "tasks" | "planning";
+export type TabletShellMode = "ooda" | "tasks" | "planning";
 export type TabletShellStatusFilter = "all" | "running" | "completed" | "failed";
 
 export type TasksLeftRailTab = "recent-outcomes" | "priority-queue";
 export type PlanningLeftRailTab = "recent-sessions" | "projects";
-export type TabletLeftRailTab = TasksLeftRailTab | PlanningLeftRailTab;
+export type OodaLeftRailTab = "conversations";
+export type TabletLeftRailTab =
+  | OodaLeftRailTab
+  | TasksLeftRailTab
+  | PlanningLeftRailTab;
 
 export type TabletShellTarget =
+  | { type: "ooda-chat" }
   | { type: "tasks-dashboard" }
   | { type: "planning-dashboard" }
   | { type: "projects-dashboard" }
@@ -43,7 +48,7 @@ export interface TabletShellTab {
 
 export interface TabletShellModeItem {
   key: TabletShellMode;
-  label: "Planning" | "Tasks";
+  label: "OODA" | "Planning" | "Tasks";
 }
 
 export interface TabletShellGlobalAction {
@@ -144,12 +149,17 @@ const TASK_TABS: TabletShellTab[] = [
   { key: "priority-queue", label: "Priority Queue" },
 ];
 
+const OODA_TABS: TabletShellTab[] = [
+  { key: "conversations", label: "Conversations" },
+];
+
 const PLANNING_TABS: TabletShellTab[] = [
   { key: "recent-sessions", label: "Recent Sessions" },
   { key: "projects", label: "Projects" },
 ];
 
 const MODE_ITEMS: TabletShellModeItem[] = [
+  { key: "ooda", label: "OODA" },
   { key: "planning", label: "Planning" },
   { key: "tasks", label: "Tasks" },
 ];
@@ -178,10 +188,12 @@ const COMPLETED_FILTER_STATUSES = new Set([
 const FAILED_FILTER_STATUSES = new Set(["error", "failed", "interrupted"]);
 
 export function getDefaultLeftRailTab(mode: TabletShellMode): TabletLeftRailTab {
+  if (mode === "ooda") return "conversations";
   return mode === "tasks" ? "recent-outcomes" : "recent-sessions";
 }
 
 export function getDefaultShellTarget(mode: TabletShellMode): TabletShellTarget {
+  if (mode === "ooda") return { type: "ooda-chat" };
   return mode === "tasks"
     ? { type: "tasks-dashboard" }
     : { type: "planning-dashboard" };
@@ -226,6 +238,10 @@ export function getShellStateForPath(
       leftTab: getDefaultLeftRailTab(currentMode),
       target: { type: "settings" },
     };
+  }
+
+  if (path === "/chat" || path.startsWith("/chat/")) {
+    return switchShellMode("ooda");
   }
 
   if (path === "/tasks" && lane) {
@@ -312,6 +328,7 @@ export function getShellStateForPath(
 }
 
 export function getLeftRailTabs(mode: TabletShellMode): TabletShellTab[] {
+  if (mode === "ooda") return OODA_TABS;
   return mode === "tasks" ? TASK_TABS : PLANNING_TABS;
 }
 
@@ -325,6 +342,7 @@ export function buildLeftRailTabBadges(
   const grouped = groupShellSessions(input.sessions);
 
   return {
+    conversations: 0,
     "recent-outcomes": grouped.recentOutcomes.length,
     "priority-queue": buildPriorityQueueItems(input.workItems).length,
     "recent-sessions": grouped.recentPlanning.length,
@@ -333,6 +351,7 @@ export function buildLeftRailTabBadges(
 }
 
 export function getRightRailTitle(mode: TabletShellMode): string {
+  if (mode === "ooda") return "Conversation";
   return mode === "tasks" ? "Running Now" : "Active Sessions";
 }
 
@@ -371,6 +390,7 @@ export function selectLeftRailTarget(
   mode: TabletShellMode,
   tab: TabletLeftRailTab,
 ): TabletShellTarget {
+  if (mode === "ooda") return { type: "ooda-chat" };
   if (mode === "planning" && tab === "projects") {
     return { type: "projects-dashboard" };
   }
@@ -383,6 +403,8 @@ export function getShellModeForTarget(
   currentMode: TabletShellMode = "tasks",
 ): TabletShellMode {
   switch (target.type) {
+    case "ooda-chat":
+      return "ooda";
     case "planning-dashboard":
     case "projects-dashboard":
     case "planning-session":
@@ -441,6 +463,7 @@ export function getShellSelectionIntent(
 
 export function isNativeTabletShellTarget(target: TabletShellTarget): boolean {
   switch (target.type) {
+    case "ooda-chat":
     case "tasks-dashboard":
     case "planning-dashboard":
     case "projects-dashboard":
