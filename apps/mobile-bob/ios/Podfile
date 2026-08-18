@@ -22,6 +22,7 @@ platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
 
 prepare_react_native_project!
 
+project 'BobDev.xcodeproj'
 target 'BobDev' do
   use_expo_modules!
 
