@@ -96,6 +96,9 @@ importers:
 
   .:
     devDependencies:
+      '@forgegraph/oxlint-anti-slop':
+        specifier: ^0.1.0
+        version: 0.1.0(@oxlint/plugins@1.78.0)
       '@gmacko/emulate':
         specifier: ^0.5.3
         version: 0.5.3(hono@4.12.27)
@@ -3905,6 +3908,11 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@forgegraph/oxlint-anti-slop@0.1.0':
+    resolution: {integrity: sha512-Wd/TklJZMbLNgMiv7MXvrK/6l1Yswj4/0b2MiECwxSNpKSdJhw7zzJlp8VWXmideUurmR3OIHu1tRr7NCYrRqg==}
+    peerDependencies:
+      '@oxlint/plugins': '>=1.78.0'
 
   '@gmacko/emulate@0.5.3':
     resolution: {integrity: sha512-MX0RxpQSQrSYp0ZvvjI5sc6xdPJRhW97DCj14WYU8bvnJsMfVvxLlbHbLRKeLgym3qiC6+KPp1LuLLTv0h8Rqg==}
@@ -16528,6 +16536,10 @@ snapshots:
       react-dom: 19.2.5(react@19.2.5)
 
   '@floating-ui/utils@0.2.11': {}
+
+  '@forgegraph/oxlint-anti-slop@0.1.0(@oxlint/plugins@1.78.0)':
+    dependencies:
+      '@oxlint/plugins': 1.78.0
 
   '@gmacko/emulate@0.5.3(hono@4.12.27)':
     dependencies:
