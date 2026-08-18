@@ -3,7 +3,7 @@
   "jsPlugins": [
     {
       "name": "anti-slop",
-      "specifier": "./tools/oxlint/anti-slop/index.ts"
+      "specifier": "@forgegraph/oxlint-anti-slop"
     }
   ],
   "rules": {
