@@ -38,6 +38,7 @@
     "better-auth": "catalog:",
     "expo": "~55.0.11",
     "expo-audio": "~55.0.16",
+    "expo-camera": "~55.0.22",
     "expo-clipboard": "~55.0.11",
     "expo-constants": "~55.0.11",
     "expo-dev-client": "~55.0.22",
