@@ -18,6 +18,8 @@ import { sso } from "better-auth/plugins/sso";
 import { createAuthEndpoint } from "better-auth/api";
 import { Layer, ServiceMap } from "effect";import { z } from "zod/v4";
 
+import { qrPairing } from "./qr-pairing.js";
+
 
 import {
   tenants as tenantsTable,
@@ -254,6 +256,9 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
     plugins: [
       devMagicLinkBypass(true),
       expo(),
+      // QR device pairing: web session mints a one-time code, mobile scans
+      // and claims it for a real session. See ./qr-pairing.ts.
+      qrPairing(),
       // Bring-your-own SSO: an operator registers their own OIDC/SAML IdP via
       // POST /api/auth/sso/register; users then sign in by email domain. New
       // SSO users get a personal tenant from the shared user.create hook above,

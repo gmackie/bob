@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { Platform, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { Modal, Platform, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { Stack, useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -33,7 +33,9 @@ import {
   getTabletGlobalActionPosition,
   getTabletShellPadding,
   getTabletSidebarWidth,
+  shouldCollapseTabletSidebar,
 } from "~/lib/tablet-layout";
+import { AuthGate } from "~/features/auth/auth-gate";
 import {
   getMobilePlanningFilterHref,
   getTabletDashboardHref,
@@ -286,6 +288,17 @@ function TabletLayout() {
   const [shell, setShell] = useState(() => switchShellMode("ooda"));
   const currentShellModeRef = useRef(shell.mode);
   const sidebarWidth = getTabletSidebarWidth(width);
+  // Portrait iPad / Split View / Slide Over: the persistent sidebar doesn't
+  // fit, so it collapses into a drawer behind a menu button.
+  const collapseSidebar = shouldCollapseTabletSidebar(width);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  // Render-time state adjustment (not an effect): rotating back to a wide
+  // layout closes the drawer so it doesn't pop open on the next rotation.
+  const [prevCollapseSidebar, setPrevCollapseSidebar] = useState(collapseSidebar);
+  if (prevCollapseSidebar !== collapseSidebar) {
+    setPrevCollapseSidebar(collapseSidebar);
+    if (!collapseSidebar && drawerOpen) setDrawerOpen(false);
+  }
 
   const fileReferences = useMemo(
     () => extractFileReferences(gateway.selectedSessionEvents),
@@ -321,6 +334,15 @@ function TabletLayout() {
   const handleSelectFile = useCallback((path: string) => {
     setSelectedFilePath((prev) => (prev === path ? null : path));
   }, []);
+
+  // Drawer-mode handler wrapper: any sidebar action should close the drawer
+  // so the main pane it just changed becomes visible.
+  function closeDrawerThen<A extends unknown[]>(fn: (...args: A) => void) {
+    return (...args: A) => {
+      setDrawerOpen(false);
+      fn(...args);
+    };
+  }
 
   const clearDetailState = useCallback(() => {
     gateway.selectSession(null);
@@ -550,31 +572,33 @@ function TabletLayout() {
       }}
     >
       <View className="flex-1 flex-row">
-        <View
-          testID="tablet-sidebar"
-          style={{
-            width: sidebarWidth,
-            borderRightWidth: 1,
-            borderRightColor: colors.border,
-          }}
-        >
-          <TabletSidebar
-            mode={shell.mode}
-            leftTab={shell.leftTab}
-            sessions={gateway.sessions}
-            connectionState={gateway.connectionState}
-            selectedSessionId={gateway.selectedSessionId}
-            selectedWorkItemId={gateway.selectedWorkItemId}
-            onModeChange={handleModeChange}
-            onLeftTabChange={handleLeftTabChange}
-            onSelectSession={handleSelectSession}
-            onSelectWorkItem={handleSelectWorkItem}
-            onOpenPlanningSession={handleOpenPlanningSession}
-            onSelectProject={handleSelectProject}
-            onOpenSession={handleOpenSession}
-            onRefresh={gateway.refresh}
-          />
-        </View>
+        {!collapseSidebar ? (
+          <View
+            testID="tablet-sidebar"
+            style={{
+              width: sidebarWidth,
+              borderRightWidth: 1,
+              borderRightColor: colors.border,
+            }}
+          >
+            <TabletSidebar
+              mode={shell.mode}
+              leftTab={shell.leftTab}
+              sessions={gateway.sessions}
+              connectionState={gateway.connectionState}
+              selectedSessionId={gateway.selectedSessionId}
+              selectedWorkItemId={gateway.selectedWorkItemId}
+              onModeChange={handleModeChange}
+              onLeftTabChange={handleLeftTabChange}
+              onSelectSession={handleSelectSession}
+              onSelectWorkItem={handleSelectWorkItem}
+              onOpenPlanningSession={handleOpenPlanningSession}
+              onSelectProject={handleSelectProject}
+              onOpenSession={handleOpenSession}
+              onRefresh={gateway.refresh}
+            />
+          </View>
+        ) : null}
         <View testID="tablet-main" className="flex-1" style={{ minWidth: 0 }}>
           <View className="flex-1" style={{ minWidth: 0 }}>
             <MainPane
@@ -637,6 +661,70 @@ function TabletLayout() {
           </Pressable>
         ))}
       </View>
+
+      {collapseSidebar ? (
+        <Pressable
+          testID="tablet-menu-button"
+          onPress={() => setDrawerOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Open navigation menu"
+          className="absolute rounded-md px-3 py-1.5 active:opacity-70"
+          style={{
+            zIndex: 20,
+            top: globalActionPosition.top,
+            left: shellPadding.left + 16,
+            backgroundColor: colors.secondary,
+            minHeight: 36,
+            justifyContent: "center",
+          }}
+        >
+          <Text className="text-base font-semibold text-foreground">☰</Text>
+        </Pressable>
+      ) : null}
+
+      {collapseSidebar ? (
+        <Modal
+          visible={drawerOpen}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setDrawerOpen(false)}
+        >
+          <View
+            testID="tablet-sidebar-drawer"
+            className="flex-1"
+            style={{ backgroundColor: colors.background }}
+          >
+            <View className="flex-row justify-end px-4 pt-4">
+              <Pressable
+                onPress={() => setDrawerOpen(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close navigation menu"
+                className="active:opacity-70"
+              >
+                <Text className="text-base" style={{ color: colors.muted }}>
+                  Close
+                </Text>
+              </Pressable>
+            </View>
+            <TabletSidebar
+              mode={shell.mode}
+              leftTab={shell.leftTab}
+              sessions={gateway.sessions}
+              connectionState={gateway.connectionState}
+              selectedSessionId={gateway.selectedSessionId}
+              selectedWorkItemId={gateway.selectedWorkItemId}
+              onModeChange={closeDrawerThen(handleModeChange)}
+              onLeftTabChange={closeDrawerThen(handleLeftTabChange)}
+              onSelectSession={closeDrawerThen(handleSelectSession)}
+              onSelectWorkItem={closeDrawerThen(handleSelectWorkItem)}
+              onOpenPlanningSession={closeDrawerThen(handleOpenPlanningSession)}
+              onSelectProject={closeDrawerThen(handleSelectProject)}
+              onOpenSession={closeDrawerThen(handleOpenSession)}
+              onRefresh={gateway.refresh}
+            />
+          </View>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -645,7 +733,9 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <Providers>
-        {isTablet ? <TabletLayout /> : <PhoneLayout />}
+        <AuthGate>
+          {isTablet ? <TabletLayout /> : <PhoneLayout />}
+        </AuthGate>
         <StatusBar style="light" />
       </Providers>
     </QueryClientProvider>

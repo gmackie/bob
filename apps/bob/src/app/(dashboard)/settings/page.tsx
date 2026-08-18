@@ -10,6 +10,7 @@ import { ConfigFilesSection } from "./_components/config-files";
 import { DeviceHeartbeatsSection } from "./_components/device-heartbeats";
 import { GitProvidersSection } from "./_components/git-providers";
 import { IntegrationsSection } from "./_components/integrations";
+import { LinkDeviceSection } from "./_components/link-device";
 import { PreferencesSection } from "./_components/preferences";
 import { PersonasSection } from "./_components/personas";
 import { WebhooksSection } from "./_components/webhooks";
@@ -58,6 +59,9 @@ export default function SettingsPage() {
         </CollapsibleSection>
         <CollapsibleSection title="Devices" sectionId="devices" defaultOpen forceOpen={openSection === "devices"}>
           <DeviceHeartbeatsSection />
+        </CollapsibleSection>
+        <CollapsibleSection title="Link a Device" sectionId="link-device" defaultOpen={false} forceOpen={openSection === "link-device"}>
+          <LinkDeviceSection />
         </CollapsibleSection>
         <CollapsibleSection title="Cookie Jar" sectionId="cookie-jar" defaultOpen={false} forceOpen={openSection === "cookie-jar"}>
           <CookieJar />

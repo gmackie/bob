@@ -90,6 +90,13 @@ module.exports = ({ config }) => {
     "expo-secure-store",
     "expo-web-browser",
     [
+      "expo-camera",
+      {
+        cameraPermission:
+          "Allow Bob to use the camera to scan the sign-in QR code from Bob web.",
+      },
+    ],
+    [
       "expo-speech-recognition",
       {
         microphonePermission:

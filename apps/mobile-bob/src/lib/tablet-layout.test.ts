@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  shouldCollapseTabletSidebar,
   getTabletGlobalActionPosition,
   getTabletShellPadding,
   getTabletSidebarWidth,
@@ -42,5 +43,23 @@ describe("tablet layout", () => {
       top: 36,
       right: 24,
     });
+  });
+});
+
+describe("sidebar collapse", () => {
+  it("keeps the persistent sidebar in landscape iPad widths", () => {
+    expect(shouldCollapseTabletSidebar(1024)).toBe(false);
+    expect(shouldCollapseTabletSidebar(1366)).toBe(false);
+  });
+
+  it("collapses the sidebar in portrait iPad widths", () => {
+    // iPad Air 4 portrait is 820pt; iPad mini portrait is 744pt.
+    expect(shouldCollapseTabletSidebar(820)).toBe(true);
+    expect(shouldCollapseTabletSidebar(744)).toBe(true);
+  });
+
+  it("collapses the sidebar in Split View / Slide Over widths", () => {
+    expect(shouldCollapseTabletSidebar(320)).toBe(true);
+    expect(shouldCollapseTabletSidebar(507)).toBe(true);
   });
 });
