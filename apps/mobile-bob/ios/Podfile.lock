@@ -225,6 +225,10 @@ PODS:
     - ExpoModulesCore
   - ExpoCamera (55.0.22):
     - ExpoModulesCore
+  - ExpoCameraBarcodeScanning (55.0.22):
+    - ExpoCamera
+    - ZXingObjC/OneD
+    - ZXingObjC/PDF417
   - ExpoClipboard (55.0.13):
     - ExpoModulesCore
   - ExpoCrypto (55.0.14):
@@ -3319,6 +3323,14 @@ PODS:
   - Sentry/Core (9.11.0)
   - SocketRocket (0.7.1)
   - Yoga (0.0.0)
+  - ZXingObjC (3.6.9):
+    - ZXingObjC/All (= 3.6.9)
+  - ZXingObjC/All (3.6.9)
+  - ZXingObjC/Core (3.6.9)
+  - ZXingObjC/OneD (3.6.9):
+    - ZXingObjC/Core
+  - ZXingObjC/PDF417 (3.6.9):
+    - ZXingObjC/Core
 
 DEPENDENCIES:
   - "boost (from `../../../node_modules/.pnpm/react-native@0.83.9_@babel+core@7.29.0_@react-native+metro-config@0.85.2_@babel+core@7._58f6339c4a67edd1a96846c132a05430/node_modules/react-native/third-party-podspecs/boost.podspec`)"
@@ -3336,6 +3348,7 @@ DEPENDENCIES:
   - "ExpoAsset (from `../../../node_modules/.pnpm/expo-asset@55.0.15_expo@55.0.15_react-native@0.83.9_@babel+core@7.29.0_@react-native+me_8193760f5e31473b5404df8af437b884/node_modules/expo-asset/ios`)"
   - "ExpoAudio (from `../../../node_modules/.pnpm/expo-audio@55.0.16_expo-asset@55.0.15_expo@55.0.15_react-native@0.83.9_@babel+core@7.29_a3acc43fe4c778f852a6682212106119/node_modules/expo-audio/ios`)"
   - "ExpoCamera (from `../../../node_modules/.pnpm/expo-camera@55.0.22_@types+emscripten@1.41.5_expo@55.0.15_react-native@0.83.9_@babel+co_ab57b9c3c3a5230ac55d28bbf9b00866/node_modules/expo-camera/ios`)"
+  - ExpoCameraBarcodeScanning (from `../node_modules/expo-camera/ios`)
   - "ExpoClipboard (from `../../../node_modules/.pnpm/expo-clipboard@55.0.13_expo@55.0.15_react-native@0.83.9_@babel+core@7.29.0_@react-nativ_a091de17290b636a7e149e93dc730175/node_modules/expo-clipboard/ios`)"
   - "ExpoCrypto (from `../../../node_modules/.pnpm/expo-crypto@55.0.14_expo@55.0.15/node_modules/expo-crypto/ios`)"
   - "ExpoDevice (from `../../../node_modules/.pnpm/expo-device@55.0.15_expo@55.0.15/node_modules/expo-device/ios`)"
@@ -3447,6 +3460,7 @@ DEPENDENCIES:
   - "RNWorklets (from `../../../node_modules/.pnpm/react-native-worklets@0.8.1_@babel+core@7.29.0_@react-native+metro-config@0.85.2_@babel_a219e8aeeb51e5bb4a9708c57e0d874f/node_modules/react-native-worklets`)"
   - SocketRocket (~> 0.7.1)
   - "Yoga (from `../../../node_modules/.pnpm/react-native@0.83.9_@babel+core@7.29.0_@react-native+metro-config@0.85.2_@babel+core@7._58f6339c4a67edd1a96846c132a05430/node_modules/react-native/ReactCommon/yoga`)"
+  - ZXingObjC
 
 SPEC REPOS:
   trunk:
@@ -3460,6 +3474,7 @@ SPEC REPOS:
     - SDWebImageWebPCoder
     - Sentry
     - SocketRocket
+    - ZXingObjC
 
 EXTERNAL SOURCES:
   boost:
@@ -3492,6 +3507,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/expo-audio@55.0.16_expo-asset@55.0.15_expo@55.0.15_react-native@0.83.9_@babel+core@7.29_a3acc43fe4c778f852a6682212106119/node_modules/expo-audio/ios"
   ExpoCamera:
     :path: "../../../node_modules/.pnpm/expo-camera@55.0.22_@types+emscripten@1.41.5_expo@55.0.15_react-native@0.83.9_@babel+co_ab57b9c3c3a5230ac55d28bbf9b00866/node_modules/expo-camera/ios"
+  ExpoCameraBarcodeScanning:
+    :path: "../node_modules/expo-camera/ios"
   ExpoClipboard:
     :path: "../../../node_modules/.pnpm/expo-clipboard@55.0.13_expo@55.0.15_react-native@0.83.9_@babel+core@7.29.0_@react-nativ_a091de17290b636a7e149e93dc730175/node_modules/expo-clipboard/ios"
   ExpoCrypto:
@@ -3728,6 +3745,7 @@ SPEC CHECKSUMS:
   ExpoAsset: dc4f25f84886120f82b23233bba563ea7afa88f5
   ExpoAudio: 3cba181b50f72690b651914c5abe8d72ab9a6321
   ExpoCamera: f357b3d607bf8b31bf1b9e78ce9467d5ae5926f4
+  ExpoCameraBarcodeScanning: 4fbbd257833da0fcc60983c532d078586aa24ba6
   ExpoClipboard: 5d1b0cd2686406f21e616f2d9b3431259dee2e6a
   ExpoCrypto: 9fd0b78215cffa1aa20de026d452242401aa37dc
   ExpoDevice: 3a4a361d685333e4139da5d56bb2740c86132beb
@@ -3847,7 +3865,8 @@ SPEC CHECKSUMS:
   Sentry: 7561357fd868b329d1aab8152449733b2191ed6c
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   Yoga: e6489bbfdab9b98f8d51993484d6bd40216b7834
+  ZXingObjC: 8898711ab495761b2dbbdec76d90164a6d7e14c5
 
-PODFILE CHECKSUM: 9304e60fc106abe966d14883aec0e5ad2eae18ff
+PODFILE CHECKSUM: ab9512277ca093d9d311d1d7ec283b2560094c93
 
 COCOAPODS: 1.16.2

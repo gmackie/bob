@@ -85,5 +85,14 @@
     "typescript": "catalog:",
     "vitest": "^4.0.0"
   },
-  "prettier": "@bob/prettier-config"
+  "prettier": "@bob/prettier-config",
+  "expo": {
+    "autolinking": {
+      "ios": {
+        "buildFromSource": [
+          "expo-camera"
+        ]
+      }
+    }
+  }
 }

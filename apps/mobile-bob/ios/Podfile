@@ -26,6 +26,12 @@ project 'BobDev.xcodeproj'
 target 'BobDev' do
   use_expo_modules!
 
+  # SDK 55 bug (expo/expo#44491): the barcode provider ships as a separate
+  # podspec that autolinking misses, and BarcodeScanner.swift refuses to start
+  # ANY scanning (even native AVFoundation QR) when it isn't linked.
+  pod 'ExpoCameraBarcodeScanning', :path => '../node_modules/expo-camera/ios'
+  pod 'ZXingObjC', :modular_headers => true
+
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
   else
