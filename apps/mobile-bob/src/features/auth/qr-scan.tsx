@@ -131,6 +131,10 @@ export function QrScanModal({ visible, onClose, onClaimed }: QrScanModalProps) {
               <CameraView
                 style={{ flex: 1 }}
                 facing="back"
+                // expo-camera's iOS autofocus default is OFF — without this the
+                // camera never focuses on a QR shown on a screen and the
+                // scanner silently never fires.
+                autofocus="on"
                 barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
                 onBarcodeScanned={
                   state.phase === "scanning" ? handleBarcode : undefined

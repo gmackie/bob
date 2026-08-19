@@ -112,7 +112,7 @@ export function LinkDeviceSection() {
       {status === "pending" && qrPayload && (
         <div className="flex flex-col items-start gap-4">
           <div className="rounded-xl border border-border bg-white p-4">
-            <QRCode value={qrPayload} size={220} />
+            <QRCode value={qrPayload} size={300} />
           </div>
           <div className="text-xs text-muted-foreground">
             Waiting for a device to scan…
