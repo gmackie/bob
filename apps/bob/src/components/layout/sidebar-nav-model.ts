@@ -39,9 +39,9 @@ export interface SidebarTabItem {
 }
 
 export interface SidebarUtilityItem {
-  key: "onboarding" | "pull-requests" | "nodes";
-  label: "Onboarding" | "Pull Requests" | "Nodes";
-  href: "/onboarding" | "/pull-requests" | "/nodes";
+  key: "onboarding" | "pull-requests" | "nodes" | "settings";
+  label: "Onboarding" | "Pull Requests" | "Nodes" | "Settings";
+  href: "/onboarding" | "/pull-requests" | "/nodes" | "/settings";
 }
 
 export interface SidebarProjectSummary {
@@ -154,6 +154,7 @@ const UTILITY_ITEMS: SidebarUtilityItem[] = [
   { key: "onboarding", label: "Onboarding", href: "/onboarding" },
   { key: "pull-requests", label: "Pull Requests", href: "/pull-requests" },
   { key: "nodes", label: "Nodes", href: "/nodes" },
+  { key: "settings", label: "Settings", href: "/settings" },
 ];
 
 const WORK_ITEM_OUTCOME_STATUSES = new Set([

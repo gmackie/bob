@@ -43,6 +43,9 @@ export function LinkDeviceSection() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
+        // vinext eagerly JSON-parses POST bodies; an empty body with a JSON
+        // content type crashes the route handler with a 500.
+        body: JSON.stringify({}),
       });
       if (!res.ok) throw new Error(`create failed: ${res.status}`);
       const data = (await res.json()) as CreateResponse;
@@ -146,7 +149,8 @@ export function LinkDeviceSection() {
       {status === "error" && (
         <div className="space-y-3">
           <div className="text-sm text-muted-foreground">
-            Could not create a pairing code. Are you signed in?
+            Could not create a pairing code. Try again, and if it keeps
+            failing check that your session hasn't expired.
           </div>
           <Button onClick={() => void generateCode()}>Try again</Button>
         </div>

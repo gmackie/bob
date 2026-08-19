@@ -63,6 +63,7 @@ describe("sidebar nav model", () => {
       "Onboarding",
       "Pull Requests",
       "Nodes",
+      "Settings",
     ]);
   });
 
