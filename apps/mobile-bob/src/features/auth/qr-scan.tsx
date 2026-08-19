@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 
 import { Button } from "~/components/ui";
@@ -35,6 +35,11 @@ const POLL_TIMEOUT_MS = 10 * 60 * 1000;
 export function QrPairingScreen({ onClose, onClaimed }: QrPairingScreenProps) {
   const [permission, requestPermission] = useCameraPermissions();
   const [state, setState] = useState<PairingState>({ phase: "scanning" });
+  // A docked/propped iPad can't point its rear camera at a monitor — the
+  // front camera is the natural QR scanner there. Phones default to back.
+  const [facing, setFacing] = useState<"front" | "back">(
+    Platform.OS === "ios" && Platform.isPad ? "front" : "back",
+  );
   // Camera fires onBarcodeScanned repeatedly; only handle the first hit.
   const handledRef = useRef(false);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -233,17 +238,29 @@ export function QrPairingScreen({ onClose, onClaimed }: QrPairingScreenProps) {
               </Text>
               <CameraView
                 style={{ flex: 1 }}
-                facing="back"
+                facing={facing}
                 autofocus="on"
                 barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
                 onBarcodeScanned={
                   state.phase === "scanning" ? handleBarcode : undefined
                 }
               />
-              <View className="items-center py-4">
+              <View className="flex-row items-center justify-center gap-8 py-4">
+                <Pressable
+                  onPress={() =>
+                    setFacing((f) => (f === "back" ? "front" : "back"))
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel="Flip camera"
+                  className="active:opacity-70"
+                >
+                  <Text className="text-muted text-sm underline">
+                    Flip camera ({facing === "back" ? "rear" : "front"})
+                  </Text>
+                </Pressable>
                 <Pressable onPress={startCodeFlow} className="active:opacity-70">
                   <Text className="text-muted text-sm underline">
-                    Can't scan? Enter a code on the web instead
+                    Use a code instead
                   </Text>
                 </Pressable>
               </View>
