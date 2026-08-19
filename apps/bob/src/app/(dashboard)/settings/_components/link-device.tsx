@@ -155,6 +155,80 @@ export function LinkDeviceSection() {
           <Button onClick={() => void generateCode()}>Try again</Button>
         </div>
       )}
+
+      <ApproveDeviceCode />
+    </div>
+  );
+}
+
+type ApproveStatus = "idle" | "approving" | "approved" | "error";
+
+/**
+ * Fallback path: the mobile app shows a typeable ABCD-EFGH code, the user
+ * enters it here, and the app polls /qr-pairing/poll until this approval
+ * lands. Mirrors ForgeGraph's device-code approval page.
+ */
+function ApproveDeviceCode() {
+  const [userCode, setUserCode] = useState("");
+  const [status, setStatus] = useState<ApproveStatus>("idle");
+
+  const approve = useCallback(async () => {
+    setStatus("approving");
+    try {
+      const res = await fetch("/api/auth/qr-pairing/approve", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userCode }),
+      });
+      if (!res.ok) throw new Error(`approve failed: ${res.status}`);
+      setStatus("approved");
+      setUserCode("");
+    } catch {
+      setStatus("error");
+    }
+  }, [userCode]);
+
+  return (
+    <div className="space-y-3 border-t border-border pt-4">
+      <p className="text-sm leading-6 text-muted-foreground">
+        Camera not cooperating? On the app, tap{" "}
+        <span className="text-foreground">
+          Can&apos;t scan? Enter a code on the web instead
+        </span>{" "}
+        and type the code it shows here:
+      </p>
+      <div className="flex items-center gap-2">
+        <input
+          value={userCode}
+          onChange={(e) => {
+            setUserCode(e.target.value.toUpperCase());
+            if (status !== "idle") setStatus("idle");
+          }}
+          placeholder="ABCD-EFGH"
+          autoCapitalize="characters"
+          autoComplete="off"
+          spellCheck={false}
+          className="w-40 rounded-md border border-border bg-background px-3 py-2 font-mono text-sm uppercase tracking-widest text-foreground placeholder:text-muted-foreground"
+        />
+        <Button
+          onClick={() => void approve()}
+          disabled={userCode.replace(/[^A-Za-z2-9]/g, "").length < 8 ||
+            status === "approving"}
+        >
+          {status === "approving" ? "Approving…" : "Approve device"}
+        </Button>
+      </div>
+      {status === "approved" && (
+        <div className="text-sm font-medium text-foreground">
+          Device approved ✓ — it signs in within a few seconds.
+        </div>
+      )}
+      {status === "error" && (
+        <div className="text-sm text-muted-foreground">
+          That code is invalid or expired. Get a fresh one on the device.
+        </div>
+      )}
     </div>
   );
 }

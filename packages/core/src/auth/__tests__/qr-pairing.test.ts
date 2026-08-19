@@ -174,3 +174,137 @@ describe("qr-pairing plugin", () => {
     expect(result.status).toBe("expired");
   });
 });
+
+describe("qr-pairing device-code flow (typed code + web approval)", () => {
+  let auth: AuthInstance;
+
+  beforeEach(async () => {
+    const pglite = new PGlite();
+    const db = drizzle(pglite, { schema });
+    await runMigrations(pglite);
+    auth = makeAuth(db);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("request returns a typeable user code and a device secret", async () => {
+    const result = await qrApi(auth).requestQrPairingDeviceCode({});
+
+    expect(result.userCode).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    expect(result.deviceCode.length).toBeGreaterThanOrEqual(32);
+    expect(result.interval).toBeGreaterThan(0);
+  });
+
+  it("poll reports pending before approval", async () => {
+    const { deviceCode } = await qrApi(auth).requestQrPairingDeviceCode({});
+
+    const result = await qrApi(auth).pollQrPairingDeviceCode({
+      body: { deviceCode },
+    });
+    expect(result.status).toBe("pending");
+  });
+
+  it("approve requires an authenticated session", async () => {
+    const { userCode } = await qrApi(auth).requestQrPairingDeviceCode({});
+
+    await expect(
+      qrApi(auth).approveQrPairingDeviceCode({
+        body: { userCode },
+        headers: new Headers(),
+      }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+  });
+
+  it("approve rejects an unknown code", async () => {
+    const { cookies } = await signUpAndGetCookies(auth, "dev1@example.test");
+
+    await expect(
+      qrApi(auth).approveQrPairingDeviceCode({
+        body: { userCode: "AAAA-BBBB" },
+        headers: new Headers({ cookie: cookies }),
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it("approve then poll mints a real session (case/format-insensitive code)", async () => {
+    const { cookies, userId } = await signUpAndGetCookies(
+      auth,
+      "dev2@example.test",
+    );
+    const { deviceCode, userCode } =
+      await qrApi(auth).requestQrPairingDeviceCode({});
+
+    await qrApi(auth).approveQrPairingDeviceCode({
+      // lowercase + spaces instead of the dash — normalization must handle it
+      body: { userCode: userCode.toLowerCase().replace("-", " ") },
+      headers: new Headers({ cookie: cookies }),
+    });
+
+    const { headers, response } = await qrApi(auth).pollQrPairingDeviceCode({
+      body: { deviceCode },
+      returnHeaders: true,
+    });
+
+    if (response.status !== "approved") {
+      throw new Error(`expected approved, got ${response.status}`);
+    }
+    expect(response.user.id).toBe(userId);
+    expect(response.token).toBeTruthy();
+
+    const claimedSession = await auth.api.getSession({
+      headers: new Headers({ cookie: cookieHeader(headers) }),
+    });
+    expect(claimedSession?.user.id).toBe(userId);
+  });
+
+  it("an approved device code is single-use", async () => {
+    const { cookies } = await signUpAndGetCookies(auth, "dev3@example.test");
+    const { deviceCode, userCode } =
+      await qrApi(auth).requestQrPairingDeviceCode({});
+
+    await qrApi(auth).approveQrPairingDeviceCode({
+      body: { userCode },
+      headers: new Headers({ cookie: cookies }),
+    });
+    const first = await qrApi(auth).pollQrPairingDeviceCode({
+      body: { deviceCode },
+    });
+    expect(first.status).toBe("approved");
+
+    const second = await qrApi(auth).pollQrPairingDeviceCode({
+      body: { deviceCode },
+    });
+    expect(second.status).toBe("expired");
+  });
+
+  it("a user code cannot be approved twice", async () => {
+    const { cookies } = await signUpAndGetCookies(auth, "dev4@example.test");
+    const { userCode } = await qrApi(auth).requestQrPairingDeviceCode({});
+
+    await qrApi(auth).approveQrPairingDeviceCode({
+      body: { userCode },
+      headers: new Headers({ cookie: cookies }),
+    });
+
+    await expect(
+      qrApi(auth).approveQrPairingDeviceCode({
+        body: { userCode },
+        headers: new Headers({ cookie: cookies }),
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it("poll reports expired after the device window lapses", async () => {
+    const { deviceCode } = await qrApi(auth).requestQrPairingDeviceCode({});
+
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 11 * 60 * 1000);
+
+    const result = await qrApi(auth).pollQrPairingDeviceCode({
+      body: { deviceCode },
+    });
+    expect(result.status).toBe("expired");
+  });
+});

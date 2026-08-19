@@ -9,7 +9,7 @@ import {
   dismissExistingAuthBrowser,
   getMobileOAuthCallbackPath,
 } from "~/utils/oauth";
-import { QrScanModal } from "./qr-scan";
+import { QrPairingScreen } from "./qr-scan";
 
 export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -112,6 +112,17 @@ export function SignInScreen() {
     refetch();
   }, [refetch]);
 
+  // Rendered in place of the sign-in screen (NOT a react-native Modal —
+  // CameraView barcode events silently never fire inside a Modal on iOS).
+  if (scannerVisible) {
+    return (
+      <QrPairingScreen
+        onClose={() => setScannerVisible(false)}
+        onClaimed={handleQrClaimed}
+      />
+    );
+  }
+
   return (
     <Screen className="pt-16 pb-10">
       <View className="flex-1">
@@ -209,11 +220,6 @@ export function SignInScreen() {
         </Text>
       </View>
 
-      <QrScanModal
-        visible={scannerVisible}
-        onClose={() => setScannerVisible(false)}
-        onClaimed={handleQrClaimed}
-      />
     </Screen>
   );
 }
