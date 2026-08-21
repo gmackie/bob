@@ -100,6 +100,10 @@ export default Sentry.withSentry(
       // other drivers — no redeploy needed to disable.
       const advanceChecklistOn =
         String(runtimeEnv.BOB_ADVANCE_CHECKLIST_ENABLED ?? "") === "true";
+      // Deploy-stage tracker: reads Forgejo Actions + ForgeGraph deployment
+      // evidence for each merge and writes it back to the card/work item.
+      const deployTrackingOn =
+        String(runtimeEnv.BOB_DEPLOY_TRACKING_ENABLED ?? "") === "true";
       // Keep the Linear backlog fresh server-side (default on) — the sync was
       // webhook-only, so new Linear tasks stopped reaching Bob when the webhook
       // went quiet. This pull backfills + maintains. Gated to ~every 15 min to
@@ -111,7 +115,7 @@ export default Sentry.withSentry(
           ? (_event as any).scheduledTime
           : Date.now();
       const syncLinearDue = Math.floor(scheduledTime / 60_000) % 15 === 0;
-      if (!autoDrainOn && !autoMergeOn && !syncLinearOn && !advanceChecklistOn) {
+      if (!autoDrainOn && !autoMergeOn && !syncLinearOn && !advanceChecklistOn && !deployTrackingOn) {
         return;
       }
       const concurrency = Number(runtimeEnv.BOB_AUTO_DRAIN_CONCURRENCY ?? 4);
@@ -451,6 +455,36 @@ export default Sentry.withSentry(
               scope.setContext("failure", buildFailurePayload(failure));
               Sentry.captureException(failure.error);
             });
+          }
+        }
+
+        // 3. Deploy stage: after merges, read deploy evidence (Actions run on
+        // the merge SHA / ForgeGraph deployment by commitSha) and write it back
+        // to the tracker card + work item. Best-effort; never blocks the loop.
+        if (deployTrackingOn) {
+          try {
+            const { trackDeployments } = await import(
+              "@bob/api/handlers/trackDeployments"
+            );
+            const r = await trackDeployments({
+              forgejoToken: runtimeEnv.BOB_FORGEJO_TOKEN as string | undefined,
+              forgejoInstanceUrl:
+                (runtimeEnv.BOB_FORGEJO_INSTANCE_URL as string | undefined) ??
+                "https://git.forgegraf.com",
+              fgApiToken: (runtimeEnv as any).FG_API_TOKEN as string | undefined,
+              fgApiUrl: (runtimeEnv as any).FG_API_URL as string | undefined,
+              maxPerRun: Number(runtimeEnv.BOB_DEPLOY_TRACKING_MAX_PER_RUN ?? 20),
+            });
+            if (r.scanned > 0) {
+              console.log(
+                `[deploy-track] scanned=${r.scanned} finalized=${r.finalized} pending=${r.pending}` +
+                  (r.items.length
+                    ? ` items=${r.items.map((i) => `${i.pr}:${i.outcome}${i.detail ? `(${i.detail})` : ""}`).join(", ")}`
+                    : ""),
+              );
+            }
+          } catch (error) {
+            console.error("[deploy-track] failed:", error);
           }
         }
       });

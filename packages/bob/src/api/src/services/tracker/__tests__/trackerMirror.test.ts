@@ -32,8 +32,12 @@ describe("pickTrackerState", () => {
     expect(pickTrackerState(STATES, { kind: "pr_closed", prUrl: "u" })).toBe("s-backlog");
     expect(pickTrackerState(STATES, { kind: "requeued", reason: "r", attempt: 2 })).toBe("s-todo");
   });
-  it("blocked → stays where it is (comment only)", () => {
+  it("blocked / deployed / deploy_failed → stays where it is (comment only)", () => {
     expect(pickTrackerState(STATES, { kind: "blocked", reason: "x" })).toBeNull();
+    expect(pickTrackerState(STATES, { kind: "deployed", summary: "s" })).toBeNull();
+    expect(pickTrackerState(STATES, { kind: "deploy_failed", summary: "s" })).toBeNull();
+    expect(bobStatusAfter("done", { kind: "deployed", summary: "s" })).toBeNull();
+    expect(bobStatusAfter("done", { kind: "deploy_failed", summary: "s" })).toBeNull();
   });
   it("falls back to the first state of the right type when names differ", () => {
     const odd = [
@@ -70,6 +74,8 @@ describe("commentFor", () => {
     { kind: "pr_closed", prUrl: "https://git/pr/1" },
     { kind: "requeued", reason: "runner died", attempt: 2 },
     { kind: "blocked", reason: "3 failed attempts" },
+    { kind: "deployed", summary: "production (ForgeGraph) · Deploy habit-app (Actions)" },
+    { kind: "deploy_failed", summary: "staging: health check" },
   ];
   it("always produces a non-empty, single-purpose comment that links the PR when there is one", () => {
     for (const ev of cases) {

@@ -23,7 +23,9 @@ export type MirrorEvent =
   | { kind: "merged"; prUrl: string }
   | { kind: "pr_closed"; prUrl: string }
   | { kind: "requeued"; reason: string; attempt: number }
-  | { kind: "blocked"; reason: string };
+  | { kind: "blocked"; reason: string }
+  | { kind: "deployed"; summary: string }
+  | { kind: "deploy_failed"; summary: string };
 
 export interface TrackerState {
   id: string;
@@ -64,6 +66,9 @@ export function pickTrackerState(
     case "requeued":
       return byType("unstarted", /todo|ready/i);
     case "blocked":
+    case "deployed":
+    case "deploy_failed":
+      // Evidence-only: the card already sits in Done after the merge.
       return null;
   }
 }
@@ -100,6 +105,10 @@ export function commentFor(event: MirrorEvent): string {
       return `🔁 Bob's run did not finish (${event.reason}). Re-queued for attempt ${event.attempt + 1}.`;
     case "blocked":
       return `⛔ Bob could not complete this: ${event.reason}\nNeeds a human look.`;
+    case "deployed":
+      return `🚀 Deployed: ${event.summary}`;
+    case "deploy_failed":
+      return `💥 Deploy FAILED after merge: ${event.summary}\nThe change is on the default branch but is not (fully) live — needs a human look.`;
   }
 }
 

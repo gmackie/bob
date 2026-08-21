@@ -74,6 +74,12 @@
     // Reviewer agent (default in code is codex; see codex note above).
     "BOB_AUTO_MERGE_REVIEW_AGENT": "codex",
     "BOB_AUTO_REPAIR_MAX_PER_RUN": "3",
-    "BOB_AUTO_REPAIR_MAX_ATTEMPTS_PER_PR": "3"
+    "BOB_AUTO_REPAIR_MAX_ATTEMPTS_PER_PR": "3",
+    // Deploy-stage tracker (2026-08-23): after a merge, read the repo's
+    // deploy evidence (Forgejo Actions deploy run on the merge SHA and/or a
+    // ForgeGraph deployment by commitSha) and post 🚀/💥 to the card + a
+    // deployment artifact on the work item. Needs BOB_FORGEJO_TOKEN; uses the
+    // FG_API_TOKEN secret when present. Same on/off lever as the other drivers.
+    "BOB_DEPLOY_TRACKING_ENABLED": "true"
   }
 }
