@@ -3,6 +3,12 @@ import { createHmac } from "node:crypto";
 import type { HermesUsageEvent } from "@bob/db";
 
 import {
+  buildHermesMorningBrief,
+  type HermesBriefSnapshot,
+  type HermesBriefSource,
+  type HermesEveningClose,
+} from "./hermes-briefing";
+import {
   createHermesOperatorService,
   createHermesUsageJournalRecord,
   createOodaHermesCaptureClient,
@@ -17,10 +23,23 @@ export interface HermesOperatorRuntimeConfig {
   branchId: string;
   digestSecret: string;
   fetch?: typeof fetch;
+  now?: () => Date;
 }
 
 interface HermesOperatorRuntimeDependencies {
   usage: { record(event: HermesUsageEvent): Promise<void> };
+  statusReader?: {
+    read(query: string): Promise<{
+      summary: string;
+      canonicalRef: { kind: string; id: string; href?: string };
+      observedAt: string;
+      coverage: "complete" | "partial" | "unknown";
+    }>;
+  };
+  closeReader?: { read(): Promise<HermesEveningClose> };
+  briefingSources?: Partial<
+    Record<HermesBriefSource, { read(): Promise<HermesBriefSnapshot> }>
+  >;
 }
 
 function required(value: string, name: string): string {
@@ -45,6 +64,7 @@ export function createHermesOperatorRuntime(
     id: required(config.conversationId, "conversationId"),
     branchId: required(config.branchId, "branchId"),
   };
+  const briefingReaders = Object.values(dependencies.briefingSources ?? {});
 
   return {
     authorize(auth: HermesOperatorRouteAuth): boolean {
@@ -55,6 +75,30 @@ export function createHermesOperatorRuntime(
       return createHermesOperatorService({
         ooda,
         conversation,
+        now: config.now,
+        status: dependencies.statusReader,
+        ...(briefingReaders.length > 0 || dependencies.closeReader
+          ? {
+              briefing: {
+                ...(briefingReaders.length > 0
+                  ? {
+                      async today() {
+                        const snapshots = await Promise.all(
+                          briefingReaders.map((reader) => reader.read()),
+                        );
+                        return buildHermesMorningBrief(
+                          snapshots,
+                          config.now?.() ?? new Date(),
+                        );
+                      },
+                    }
+                  : {}),
+                ...(dependencies.closeReader
+                  ? { close: () => dependencies.closeReader!.read() }
+                  : {}),
+              },
+            }
+          : {}),
         digestRequestId: (requestId) =>
           digest("request", `${auth.userId}\0${requestId}`),
         usage: {

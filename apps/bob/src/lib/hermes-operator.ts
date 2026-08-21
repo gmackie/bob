@@ -156,8 +156,8 @@ interface HermesOperatorDependencies {
   digestRequestId(requestId: string): string;
   now?: () => Date;
   briefing?: {
-    today(): Promise<HermesDailyBrief>;
-    close(): Promise<HermesEveningClose>;
+    today?(): Promise<HermesDailyBrief>;
+    close?(): Promise<HermesEveningClose>;
   };
   status?: {
     read(query: string): Promise<{
@@ -208,8 +208,8 @@ export function createHermesOperatorService(
       } as const;
 
       const supported = intent.intent === "capture"
-        || (intent.intent === "today" && dependencies.briefing)
-        || (intent.intent === "close" && dependencies.briefing)
+        || (intent.intent === "today" && dependencies.briefing?.today)
+        || (intent.intent === "close" && dependencies.briefing?.close)
         || (intent.intent === "status" && dependencies.status);
       if (!supported) {
         await dependencies.usage.record({
@@ -250,7 +250,7 @@ export function createHermesOperatorService(
             },
           };
         } else if (intent.intent === "today") {
-          const brief = await dependencies.briefing!.today();
+          const brief = await dependencies.briefing!.today!();
           const coverage = brief.gaps.length === 0 ? "complete" : "partial";
           completed = {
             outcome: "success",
@@ -284,10 +284,11 @@ export function createHermesOperatorService(
             },
           };
         } else {
-          const close = await dependencies.briefing!.close();
+          const close = await dependencies.briefing!.close!();
+          const coverage = close.gaps.length === 0 ? "complete" : "partial";
           completed = {
             outcome: "success",
-            evidence: "complete",
+            evidence: coverage,
             response: {
               schemaVersion: 1 as const,
               intent: "close.summary" as const,
@@ -295,7 +296,7 @@ export function createHermesOperatorService(
               summary: "Evening close assembled from canonical evidence and proposals.",
               owner: policy.owner,
               canonicalRef: { kind: "briefing", id: `evening:${close.generatedAt.slice(0, 10)}` },
-              freshness: { observedAt: close.generatedAt, coverage: "complete" as const },
+              freshness: { observedAt: close.generatedAt, coverage },
               approval: { required: false as const },
               data: close,
             },

@@ -80,6 +80,7 @@ describe("Hermes operator service", () => {
           kind: "evening" as const,
           generatedAt: "2026-08-21T22:00:00Z",
           sections: { completed: [], blocked: [], waiting: [], captured: [], tomorrow: [] },
+          gaps: ["forgegraph reported partial coverage"],
         })),
       },
       status: {
@@ -106,11 +107,11 @@ describe("Hermes operator service", () => {
       payload: { query: "Where is the release?" },
     })).resolves.toMatchObject({ intent: "status.result", owner: "bob", freshness: { coverage: "partial" } });
     await expect(service.handle({ ...base, requestId: "close-1", intent: "close", payload: {} }))
-      .resolves.toMatchObject({ intent: "close.summary", owner: "ooda", freshness: { coverage: "complete" } });
+      .resolves.toMatchObject({ intent: "close.summary", owner: "ooda", freshness: { coverage: "partial" } });
 
     expect(record).toHaveBeenCalledTimes(3);
     expect(record.mock.calls.map(([value]) => value.intent)).toEqual(["today", "status", "close"]);
-    expect(record.mock.calls.map(([value]) => value.evidence)).toEqual(["partial", "partial", "complete"]);
+    expect(record.mock.calls.map(([value]) => value.evidence)).toEqual(["partial", "partial", "partial"]);
   });
 
   it("serializes the normalized usage record for Skillfleet's replay-safe journal collector", async () => {

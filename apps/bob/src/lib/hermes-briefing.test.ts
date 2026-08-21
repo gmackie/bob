@@ -87,9 +87,11 @@ describe("Hermes daily briefing", () => {
         ],
       },
       new Date("2026-08-21T22:00:00Z"),
+      ["forgegraph reported partial coverage"],
     );
 
     expect(close.kind).toBe("evening");
+    expect(close.gaps).toEqual(["forgegraph reported partial coverage"]);
     expect(close.sections.tomorrow[0]).toMatchObject({ proposed: true });
     expect(close.sections.completed[0]).toMatchObject({ proposed: false });
     expect(() =>

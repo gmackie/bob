@@ -109,6 +109,7 @@ export interface HermesEveningClose {
   schemaVersion: 1;
   kind: "evening";
   generatedAt: string;
+  gaps: string[];
   sections: Record<keyof HermesEveningCloseInput, HermesCloseItem[]>;
 }
 
@@ -125,11 +126,13 @@ function closeItem(item: HermesBriefItem, proposed: boolean): HermesCloseItem {
 export function buildHermesEveningClose(
   input: HermesEveningCloseInput,
   now: Date = new Date(),
+  gaps: readonly string[] = [],
 ): HermesEveningClose {
   return {
     schemaVersion: 1,
     kind: "evening",
     generatedAt: now.toISOString(),
+    gaps: [...gaps],
     sections: {
       completed: input.completed.map((item) => closeItem(item, false)),
       blocked: input.blocked.map((item) => closeItem(item, false)),
