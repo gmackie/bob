@@ -12,7 +12,12 @@ from urllib.request import Request, urlopen
 def _session_env() -> dict[str, str]:
     from gateway.session_context import get_session_env
 
-    return get_session_env()
+    names = (
+        "HERMES_SESSION_PLATFORM",
+        "HERMES_SESSION_CHAT_ID",
+        "HERMES_SESSION_MESSAGE_ID",
+    )
+    return {name: get_session_env(name, "") for name in names}
 
 
 def _utc_now() -> str:

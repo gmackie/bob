@@ -1,7 +1,9 @@
 import importlib.util
 import json
+import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from types import ModuleType
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -51,6 +53,34 @@ class FakeHttpResponse:
 
 
 class HermesOperatorPluginTests(unittest.TestCase):
+    def test_reads_each_gateway_session_context_value_by_name(self):
+        plugin = load_plugin()
+        gateway_module = ModuleType("gateway")
+        session_context_module = ModuleType("gateway.session_context")
+        requested = []
+
+        def get_session_env(name, default=""):
+            requested.append((name, default))
+            return f"value:{name}"
+
+        session_context_module.get_session_env = get_session_env
+        with patch.dict(sys.modules, {
+            "gateway": gateway_module,
+            "gateway.session_context": session_context_module,
+        }):
+            session = plugin._session_env()
+
+        self.assertEqual(session, {
+            "HERMES_SESSION_PLATFORM": "value:HERMES_SESSION_PLATFORM",
+            "HERMES_SESSION_CHAT_ID": "value:HERMES_SESSION_CHAT_ID",
+            "HERMES_SESSION_MESSAGE_ID": "value:HERMES_SESSION_MESSAGE_ID",
+        })
+        self.assertEqual(requested, [
+            ("HERMES_SESSION_PLATFORM", ""),
+            ("HERMES_SESSION_CHAT_ID", ""),
+            ("HERMES_SESSION_MESSAGE_ID", ""),
+        ])
+
     def test_registers_native_capture_command(self):
         plugin = load_plugin()
         context = FakePluginContext()
