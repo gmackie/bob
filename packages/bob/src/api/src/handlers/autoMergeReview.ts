@@ -165,17 +165,64 @@ export function isAuthError(err: unknown): boolean {
   );
 }
 
-/** Is a review session already in flight for this PR? (suppresses re-dispatch) */
+// Session statuses that mean an agent is (or may still be) working.
+const LIVE_SESSION_STATUSES = [
+  "pending",
+  "provisioning",
+  "starting",
+  "running",
+  "blocked",
+  "stopping",
+  "host_unknown",
+];
+
+/**
+ * Is a review session already in flight for this PR? (suppresses re-dispatch)
+ *
+ * Keyed on the run's SESSION being live, not on task_runs.status alone: a
+ * session that was reaped, errored during startup, or was released by hand
+ * never closes its task_run, and 41 such zombie runs (some from July) had
+ * every open PR reporting "review in flight" forever on 2026-08-21. The
+ * zombie run is closed here so the counters stop lying too.
+ */
 async function hasActiveReview(pullRequestId: string): Promise<boolean> {
-  const existing = await db.query.taskRuns.findFirst({
-    where: and(
-      eq(taskRuns.pullRequestId, pullRequestId),
-      eq(taskRuns.runPhase, "review"),
-      inArray(taskRuns.status, ACTIVE_RUN_STATUSES),
-    ),
-    columns: { id: true },
-  });
-  return !!existing;
+  return hasLiveRun(pullRequestId, "review");
+}
+
+async function hasLiveRun(pullRequestId: string, phase: "review" | "repair"): Promise<boolean> {
+  const rows = await db
+    .select({
+      runId: taskRuns.id,
+      runStatus: taskRuns.status,
+      sessionStatus: chatConversations.status,
+    })
+    .from(taskRuns)
+    .leftJoin(chatConversations, eq(chatConversations.id, taskRuns.sessionId))
+    .where(
+      and(
+        eq(taskRuns.pullRequestId, pullRequestId),
+        eq(taskRuns.runPhase, phase),
+        inArray(taskRuns.status, ACTIVE_RUN_STATUSES),
+      ),
+    );
+  let live = false;
+  for (const r of rows) {
+    if (r.sessionStatus && LIVE_SESSION_STATUSES.includes(r.sessionStatus)) {
+      live = true;
+      continue;
+    }
+    // Zombie: run says active, session is terminal (or gone). Close it.
+    await db
+      .update(taskRuns)
+      .set({
+        status: "failed",
+        completedAt: new Date().toISOString(),
+        blockedReason: `closed by auto-merge: session ${r.sessionStatus ?? "missing"} while run was ${r.runStatus}`,
+      })
+      .where(eq(taskRuns.id, r.runId))
+      .catch(() => undefined);
+  }
+  return live;
 }
 
 interface RepairState {
@@ -208,7 +255,7 @@ async function getRepairState(
   });
   const head8 = headSha.slice(0, 8);
   return {
-    active: runs.some((r) => ACTIVE_RUN_STATUSES.includes(r.status)),
+    active: await hasLiveRun(pullRequestId, "repair"),
     doneAtHead: runs.some((r) =>
       r.planningItemIdentifier.endsWith(`@${head8}`),
     ),

@@ -31,7 +31,7 @@
 
 import { and, eq, inArray, or, sql } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, workItems } from "@bob/db/schema";
+import { chatConversations, taskRuns, workItems } from "@bob/db/schema";
 import { mirrorWorkItemEvent } from "../services/tracker/trackerMirror.js";
 
 // Active statuses that hold an autoDrain slot, EXCEPT `blocked` — which is
@@ -132,6 +132,26 @@ export async function reapStuckSessions(
       agentType: chatConversations.agentType,
       workItemId: chatConversations.workItemId,
     });
+
+  // Close the task_runs those sessions were executing. Left active, they keep
+  // auto-merge's in-flight guards (review/repair) and the "what's running"
+  // counters lying long after the agent is gone.
+  if (reaped.length) {
+    await db
+      .update(taskRuns)
+      .set({
+        status: "failed",
+        completedAt: new Date().toISOString(),
+        blockedReason: "closed by stuck-session reaper",
+      })
+      .where(
+        and(
+          inArray(taskRuns.sessionId, reaped.map((s) => s.id)),
+          inArray(taskRuns.status, ["starting", "running", "blocked"]),
+        ),
+      )
+      .catch((err) => console.error("[session-reap] closing task_runs failed:", err));
+  }
 
   // Release the work item the dead session was holding. Before this, a reaped
   // session left its item in in_progress forever (auto-drain only re-picks
