@@ -40,12 +40,13 @@ export function pickTrackerState(
 ): string | null {
   const byType = (type: string, preferName?: RegExp) => {
     const ofType = states.filter((s) => s.type === type);
-    if (!ofType.length) return null;
+    const first = ofType[0];
+    if (!first) return null;
     if (preferName) {
       const named = ofType.find((s) => preferName.test(s.name));
       if (named) return named.id;
     }
-    return ofType[0]!.id;
+    return first.id;
   };
   switch (event.kind) {
     case "claimed":
@@ -133,7 +134,7 @@ export async function mirrorWorkItemEvent(
 
   const next = bobStatusAfter(item.status, event);
   if (next) {
-    const meta = { ...(item.sourceMetadata ?? {}) } as Record<string, unknown>;
+    const meta = { ...item.sourceMetadata } as Record<string, unknown>;
     if (event.kind === "requeued") meta.attempts = event.attempt;
     if (event.kind === "blocked") meta.blockedReason = event.reason;
     await db
@@ -183,6 +184,10 @@ export async function mirrorWorkItemEvent(
       `[tracker-mirror] ${event.kind} for ${item.externalId} failed:`,
       err instanceof Error ? err.message : err,
     );
-    return { mirrored: false, bobStatus: next, reason: `tracker error: ${(err as Error)?.message ?? err}` };
+    return {
+      mirrored: false,
+      bobStatus: next,
+      reason: `tracker error: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 }

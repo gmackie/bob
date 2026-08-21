@@ -648,7 +648,7 @@ async function announcePrOpenedOnce(pr: PrRow): Promise<void> {
       where: eq(workItems.id, workItemId),
       columns: { sourceMetadata: true },
     });
-    const meta = (item?.sourceMetadata ?? {}) as Record<string, unknown>;
+    const meta = item?.sourceMetadata ?? {};
     const announced = Array.isArray(meta.announcedPrs) ? (meta.announcedPrs as string[]) : [];
     if (announced.includes(pr.url)) return;
     // Mark first so a tracker hiccup can't cause a comment storm.

@@ -219,6 +219,8 @@ function MainPane({
     );
   }
 
+  // Keep the runtime fallback below even though TabletShellTarget is exhaustive.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (target.type === "settings") {
     return <TabletSettingsPane onOpenProvider={onOpenProvider} />;
   }
