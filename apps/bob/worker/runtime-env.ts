@@ -17,6 +17,24 @@ interface RuntimeEnv {
   POSTHOG_KEY?: unknown;
   POSTHOG_HOST?: unknown;
   BOB_TENANT_ID?: unknown;
+  SKILLFLEET_NOTIFICATION_SECRET?: unknown;
+  HERMES_ORIGIN_TOKEN?: unknown;
+  HERMES_ORIGIN_URL?: unknown;
+  [key: string]: unknown;
+}
+
+export function applyRuntimeServiceEnv(
+  env: RuntimeEnv | undefined,
+  target: Record<string, string | undefined> = process.env,
+): void {
+  for (const key of [
+    "SKILLFLEET_NOTIFICATION_SECRET",
+    "HERMES_ORIGIN_TOKEN",
+    "HERMES_ORIGIN_URL",
+  ] as const) {
+    const value = getEnvString(env?.[key]);
+    if (value) target[key] = value;
+  }
 }
 
 function getEnvString(value: unknown): string | undefined {

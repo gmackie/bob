@@ -15,9 +15,14 @@ import {
 import type { ImageConfig } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 import { runWithDb } from "../src/lib/db-client-lazy";
+import {
+  isAllowedHermesServiceRequest,
+  verifyOriginAuthorization,
+} from "../src/lib/hermes-notifications";
 import { wrapFetch } from "./lib/otel";
 import {
   applyRuntimeAuthEnv,
+  applyRuntimeServiceEnv,
   getHyperdriveConnectionString,
   getSentryOptions,
 } from "./runtime-env";
@@ -37,6 +42,9 @@ interface Env {
   HYPERDRIVE: { connectionString: string };
   GATEWAY_URL?: string;
   NUDGE_SHARED_SECRET?: string;
+  SKILLFLEET_NOTIFICATION_SECRET?: string;
+  HERMES_ORIGIN_TOKEN?: string;
+  HERMES_ORIGIN_URL?: string;
   [key: string]: unknown;
 }
 
@@ -360,6 +368,32 @@ export default Sentry.withSentry(
         const url = new URL(request.url);
         const runtimeEnv = (rawEnv ?? {}) as Env;
         applyRuntimeAuthEnv(runtimeEnv);
+        applyRuntimeServiceEnv(runtimeEnv);
+
+        // nginx uses this no-body subrequest to authorize Bob's server-to-server
+        // Hermes API calls. It grants no browser session and performs no proxying.
+        if (url.pathname === "/api/internal/hermes-origin-auth") {
+          const serviceAuthorized = verifyOriginAuthorization(
+            request.headers.get("authorization"),
+            runtimeEnv.HERMES_ORIGIN_TOKEN ?? process.env.HERMES_ORIGIN_TOKEN ?? "",
+          ) && isAllowedHermesServiceRequest(
+            request.headers.get("x-hermes-auth-method"),
+            request.headers.get("x-hermes-auth-uri"),
+          );
+          if (serviceAuthorized) return new Response(null, { status: 204 });
+
+          const { connectionString, isHyperdrive } =
+            getHyperdriveConnectionString(runtimeEnv);
+          const session = await runWithDb(
+            connectionString,
+            isHyperdrive,
+            async () => {
+              const { auth } = await import("../src/auth/server");
+              return auth.api.getSession({ headers: request.headers });
+            },
+          );
+          return new Response(null, { status: session ? 204 : 401 });
+        }
 
         // WebSocket proxy to gateway — forward upgrade to origin
         if (
