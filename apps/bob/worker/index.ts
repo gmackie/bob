@@ -285,7 +285,13 @@ export default Sentry.withSentry(
             "@bob/api/handlers/autoDrain"
           );
           try {
-          const result = await autoDrainBacklog({ concurrency, dailyCap });
+          // Optional agent allow-list (comma-separated) so an agent with broken
+          // credentials can be pulled from rotation with a var change.
+          const agentsVar = String(runtimeEnv.BOB_AUTO_DRAIN_AGENTS ?? "").trim();
+          const agents = agentsVar
+            ? agentsVar.split(",").map((a) => a.trim()).filter(Boolean)
+            : undefined;
+          const result = await autoDrainBacklog({ concurrency, dailyCap, agents });
           console.log(
             `[auto-drain] dispatched=${result.dispatched} running=${result.running} today=${result.dispatchedToday}` +
               (result.reason ? ` reason="${result.reason}"` : "") +
