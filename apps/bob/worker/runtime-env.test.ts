@@ -34,7 +34,9 @@ describe("worker runtime env helpers", () => {
       {
         SKILLFLEET_NOTIFICATION_SECRET: "ingress-secret",
         HERMES_ORIGIN_TOKEN: "origin-secret",
+        HERMES_PROXY_ORIGIN_TOKEN: "proxy-origin-secret",
         HERMES_ORIGIN_URL: "https://claude.example.com",
+        HERMES_OPERATOR_USER_IDS: "operator-1,operator-2",
         IGNORED: "not-copied",
       },
       target,
@@ -42,7 +44,9 @@ describe("worker runtime env helpers", () => {
     expect(target).toEqual({
       SKILLFLEET_NOTIFICATION_SECRET: "ingress-secret",
       HERMES_ORIGIN_TOKEN: "origin-secret",
+      HERMES_PROXY_ORIGIN_TOKEN: "proxy-origin-secret",
       HERMES_ORIGIN_URL: "https://claude.example.com",
+      HERMES_OPERATOR_USER_IDS: "operator-1,operator-2",
     });
   });
 

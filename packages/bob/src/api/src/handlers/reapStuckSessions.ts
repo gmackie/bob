@@ -145,10 +145,10 @@ export async function reapStuckSessions(
         where: eq(workItems.id, s.workItemId),
         columns: { status: true, sourceMetadata: true },
       });
-      if (!item || item.status !== "in_progress") continue;
-      const prior = Number((item.sourceMetadata as Record<string, unknown>)?.attempts ?? 0);
+      if (item?.status !== "in_progress") continue;
+      const prior = Number(item.sourceMetadata.attempts ?? 0);
       const attempt = prior + 1;
-      const reason = `session ${s.id.slice(0, 8)} (${s.agentType ?? "?"}) reaped as stuck`;
+      const reason = `session ${s.id.slice(0, 8)} (${s.agentType}) reaped as stuck`;
       await mirrorWorkItemEvent(
         db,
         s.workItemId,

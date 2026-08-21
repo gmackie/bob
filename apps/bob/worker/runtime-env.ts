@@ -6,7 +6,6 @@ import {
 interface HyperdriveBinding {
   connectionString: string;
 }
-
 interface RuntimeEnv {
   BOB_AUTH_BYPASS?: unknown;
   BOB_AUTH_BYPASS_TOKEN?: unknown;
@@ -19,7 +18,9 @@ interface RuntimeEnv {
   BOB_TENANT_ID?: unknown;
   SKILLFLEET_NOTIFICATION_SECRET?: unknown;
   HERMES_ORIGIN_TOKEN?: unknown;
+  HERMES_PROXY_ORIGIN_TOKEN?: unknown;
   HERMES_ORIGIN_URL?: unknown;
+  HERMES_OPERATOR_USER_IDS?: unknown;
   [key: string]: unknown;
 }
 
@@ -30,7 +31,9 @@ export function applyRuntimeServiceEnv(
   for (const key of [
     "SKILLFLEET_NOTIFICATION_SECRET",
     "HERMES_ORIGIN_TOKEN",
+    "HERMES_PROXY_ORIGIN_TOKEN",
     "HERMES_ORIGIN_URL",
+    "HERMES_OPERATOR_USER_IDS",
   ] as const) {
     const value = getEnvString(env?.[key]);
     if (value) target[key] = value;

@@ -4,8 +4,8 @@ import {
   bobStatusAfter,
   commentFor,
   pickTrackerState,
-  type MirrorEvent,
 } from "../trackerMirror";
+import type { MirrorEvent } from "../trackerMirror";
 
 const STATES = [
   { id: "s-backlog", name: "Backlog", type: "backlog" },
