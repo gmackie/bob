@@ -29,10 +29,25 @@ import { useVaultBrowser } from "./hooks/use-vault-browser";
 import { buildJobCancellation } from "./job-inspector-model";
 import { buildMemorySearchInput } from "./memory-search-model";
 import { buildProposalDecision } from "./proposal-inspector-model";
+import { colors } from "~/lib/colors";
 
+/** Phone entry point — owns its own conversation state. */
 export function ChatScreen() {
-  const { data: session, isPending } = authClient.useSession();
   const chat = useOodaConversation();
+  return <ChatScreenView chat={chat} />;
+}
+
+interface ChatScreenViewProps {
+  chat: ReturnType<typeof useOodaConversation>;
+  /**
+   * Tablet split view: the sidebar owns navigation + conversation history,
+   * so hide the phone-style Back / History chrome.
+   */
+  embedded?: boolean;
+}
+
+export function ChatScreenView({ chat, embedded = false }: ChatScreenViewProps) {
+  const { data: session, isPending } = authClient.useSession();
   const tts = useOodaTts(chat.requestTtsSource);
   const vault = useVaultBrowser();
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -455,12 +470,15 @@ export function ChatScreen() {
   return (
     <Screen className="pt-4">
       <View className="mb-4 flex-row items-center justify-between gap-3">
-        <Pressable onPress={() => router.back()} className="active:opacity-70">
-          <Text className="text-muted text-base font-semibold">Back</Text>
-        </Pressable>
+        {!embedded ? (
+          <Pressable onPress={() => router.back()} className="active:opacity-70">
+            <Text className="text-muted text-base font-semibold">Back</Text>
+          </Pressable>
+        ) : null}
         <Pressable
-          onPress={() => setDrawerVisible(true)}
-          className="min-w-0 flex-1 items-center active:opacity-70"
+          onPress={() => (embedded ? undefined : setDrawerVisible(true))}
+          disabled={embedded}
+          className={`min-w-0 flex-1 ${embedded ? "items-start" : "items-center"} active:opacity-70`}
         >
           <Text
             className="text-foreground text-lg font-semibold"
@@ -474,56 +492,80 @@ export function ChatScreen() {
             </Text>
           ) : null}
         </Pressable>
-        <Pressable
-          onPress={() => setDrawerVisible(true)}
-          className="active:opacity-70"
-        >
-          <Text className="text-accent text-sm font-semibold">History</Text>
-        </Pressable>
+        {!embedded ? (
+          <Pressable
+            onPress={() => setDrawerVisible(true)}
+            className="active:opacity-70"
+          >
+            <Text className="text-accent text-sm font-semibold">History</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <Pressable
         onPress={() => setDrawerVisible(true)}
         className="bg-card mb-3 flex-row items-center justify-between rounded-xl px-3 py-2 active:opacity-80"
       >
-        <View className="flex-row items-center gap-2">
+        <View className="flex-row items-center gap-2" style={{ flexShrink: 0 }}>
           <View className={`h-2.5 w-2.5 rounded-full ${statusColor}`} />
-          <Text className="text-muted text-xs font-semibold">
-            {chat.status}
+          <Text
+            className="text-xs font-semibold"
+            style={{ color: chat.status === "error" ? colors.danger : colors.muted }}
+          >
+            {chat.status === "error" ? "Connection problem" : chat.status}
           </Text>
         </View>
         <Text
-          className="text-muted2 ml-3 flex-1 text-right text-xs"
+          className="ml-3 flex-1 text-xs"
+          style={{ color: chat.status === "error" ? colors.foreground : colors.muted2, minWidth: 0 }}
           numberOfLines={1}
         >
           {chat.statusText}
         </Text>
+        {chat.status === "error" ? (
+          <Pressable
+            onPress={(event) => {
+              event.stopPropagation();
+              void chat.refreshConversations();
+            }}
+            accessibilityRole="button"
+            className="ml-3 rounded-md px-2.5 py-1 active:opacity-70"
+            style={{ backgroundColor: colors.danger }}
+          >
+            <Text className="text-xs font-semibold" style={{ color: colors.white }}>
+              Retry
+            </Text>
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={(event) => {
             event.stopPropagation();
             setVaultVisible(true);
           }}
-          className="ml-3 active:opacity-70"
+          accessibilityRole="button"
+          className="ml-3 px-1 py-1 active:opacity-70"
         >
-          <Text className="text-accent text-xs font-semibold">Vault</Text>
+          <Text className="text-xs font-semibold" style={{ color: colors.accent }}>Vault</Text>
         </Pressable>
         <Pressable
           onPress={(event) => {
             event.stopPropagation();
             openMemorySearch();
           }}
-          className="ml-3 active:opacity-70"
+          accessibilityRole="button"
+          className="ml-3 px-1 py-1 active:opacity-70"
         >
-          <Text className="text-accent text-xs font-semibold">Memory</Text>
+          <Text className="text-xs font-semibold" style={{ color: colors.accent }}>Memory</Text>
         </Pressable>
         <Pressable
           onPress={(event) => {
             event.stopPropagation();
             openContextInspector();
           }}
-          className="ml-3 active:opacity-70"
+          accessibilityRole="button"
+          className="ml-3 px-1 py-1 active:opacity-70"
         >
-          <Text className="text-accent text-xs font-semibold">Context</Text>
+          <Text className="text-xs font-semibold" style={{ color: colors.accent }}>Context</Text>
         </Pressable>
       </Pressable>
 

@@ -26,6 +26,7 @@ import {
   buildTaskLaneSummaries,
   getTaskDashboardHeaderModel,
   getTaskDashboardLayout,
+  getProviderCardBasis,
   formatProviderRunTitle,
   filterTaskLaneWorkItems,
   filterProviderRuns,
@@ -286,27 +287,33 @@ describe("tablet task dashboard model", () => {
     expect(lanes.find((lane) => lane.key === "needs-attention")?.tone).toBe("danger");
   });
 
-  it("keeps tablet landscape operation boxes in one row", () => {
-    expect(getTaskDashboardLayout(1133)).toMatchObject({
+  it("keeps the live rail beside the main column only when four provider cards still fit", () => {
+    // 13" iPad landscape (1366pt): rail + 4 x 180pt cards fit.
+    expect(getTaskDashboardLayout(1366)).toMatchObject({
       showRightRail: true,
       liveRailPresentation: "rail",
-      laneWrap: "nowrap",
-      laneCardMinWidth: 0,
-      providerFooterDirection: "column",
-      providerWrap: "nowrap",
-      providerCardMinWidth: 0,
+      providerWrap: "wrap",
+      providerCardMinWidth: 180,
+    });
+    // 13" iPad portrait (1032pt): rail would crush the cards to ~70pt and
+    // wrap words mid-word, so the rail becomes a sheet and cards wrap.
+    expect(getTaskDashboardLayout(1032)).toMatchObject({
+      showRightRail: false,
+      liveRailPresentation: "sheet",
+      providerWrap: "wrap",
+      providerCardMinWidth: 180,
     });
   });
 
-  it("presents the live rail as a sheet control on phone widths", () => {
+  it("always enforces readable card minimums, including phone widths", () => {
     expect(getTaskDashboardLayout(390)).toMatchObject({
       showRightRail: false,
       liveRailPresentation: "sheet",
       laneWrap: "wrap",
       laneCardMinWidth: 132,
-      providerFooterDirection: "row",
+      providerFooterDirection: "column",
       providerWrap: "wrap",
-      providerCardMinWidth: 150,
+      providerCardMinWidth: 180,
     });
   });
 
@@ -1351,5 +1358,34 @@ describe("tablet task dashboard model", () => {
         valueLabel: "100 tokens",
       }),
     ]);
+  });
+});
+
+describe("getProviderCardBasis", () => {
+  it("leaves cards fluid when they all fit comfortably on one row", () => {
+    // 13" landscape main column (~1030pt): 4 x 220 + gaps = 916 fits.
+    expect(
+      getProviderCardBasis({ rowWidth: 1030, cardCount: 4, minWidth: 180, gap: 12 }),
+    ).toBeUndefined();
+  });
+
+  it("prefers a 2x2 grid over four bare-minimum cards (11\" iPad portrait)", () => {
+    // 788pt row: 4 x 180 technically fits, but every label would ellipsize.
+    expect(
+      getProviderCardBasis({ rowWidth: 788, cardCount: 4, minWidth: 180, gap: 12 }),
+    ).toBe(387);
+  });
+
+  it("falls back to a 2-per-row grid so a 4th card never orphans full-width", () => {
+    // 700pt main column on a 13" iPad in portrait: 4 x 180 + gaps = 756 > 700.
+    expect(
+      getProviderCardBasis({ rowWidth: 700, cardCount: 4, minWidth: 180, gap: 12 }),
+    ).toBe(343);
+  });
+
+  it("returns undefined before the row is measured", () => {
+    expect(
+      getProviderCardBasis({ rowWidth: 0, cardCount: 4, minWidth: 180, gap: 12 }),
+    ).toBeUndefined();
   });
 });

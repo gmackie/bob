@@ -7,6 +7,7 @@ import type { GatewaySession } from "~/hooks/use-gateway";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { trpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
+import { EmptyState } from "~/components/ui";
 import {
   buildRunningNowEntries,
   extractProviderCapacitySnapshotsFromRuns,
@@ -15,6 +16,7 @@ import {
   buildTaskLaneSummaries,
   getProviderCapacityStatusLine,
   getProviderCapacityAccessibilityLabel,
+  getProviderCardBasis,
   getRecentlyCompletedRowModel,
   getTaskDashboardHeaderModel,
   getTaskDashboardLayout,
@@ -54,11 +56,14 @@ function ProviderCard({
   onOpenProvider,
   footerDirection,
   minWidth,
+  basis,
 }: {
   card: ProviderCapacityCard;
   onOpenProvider?: (provider: ProviderKey) => void;
   footerDirection: "row" | "column";
   minWidth: number;
+  /** Explicit flex basis (px) when the row is laid out as a fixed grid. */
+  basis?: number;
 }) {
   const accent = toneColor(card.tone);
 
@@ -67,8 +72,28 @@ function ProviderCard({
       onPress={() => onOpenProvider?.(card.provider)}
       accessibilityRole="button"
       accessibilityLabel={getProviderCapacityAccessibilityLabel(card)}
-      className="flex-1 rounded-lg border p-4 active:opacity-80"
-      style={{ borderColor: colors.border, backgroundColor: colors.card, minWidth }}
+      className="rounded-lg border p-4 active:opacity-80"
+      style={
+        basis
+          ? {
+              // Fixed grid: hard width so Yoga can't pack a third card onto
+              // the row and strand the fourth full-width.
+              borderColor: colors.border,
+              backgroundColor: colors.card,
+              width: basis,
+              flexGrow: 0,
+              flexShrink: 0,
+            }
+          : {
+              borderColor: colors.border,
+              backgroundColor: colors.card,
+              minWidth,
+              flexGrow: 1,
+              flexShrink: 1,
+              flexBasis: minWidth,
+              maxWidth: 320,
+            }
+      }
     >
       <View className="flex-row items-center justify-between">
         <Text className="text-base font-semibold text-foreground">{card.label}</Text>
@@ -93,9 +118,24 @@ function ProviderCard({
 
           return (
             <View key={limit.label}>
-              <View className="mb-1 flex-row items-center justify-between">
-                <Text className="text-xs font-medium text-muted">{limit.label}</Text>
-                <Text className="text-xs font-semibold text-foreground">
+              <View className="mb-1 flex-row items-center justify-between gap-2">
+                <Text
+                  className="flex-1 text-xs font-medium text-muted"
+                  numberOfLines={1}
+                  style={{ minWidth: 0 }}
+                >
+                  {limit.label}
+                </Text>
+                <Text
+                  className="text-xs font-semibold"
+                  style={{
+                    color: limit.remainingPercent === null && !limit.valueLabel
+                      ? colors.muted2
+                      : colors.foreground,
+                    flexShrink: 0,
+                  }}
+                  numberOfLines={1}
+                >
                   {valueLabel}
                 </Text>
               </View>
@@ -119,7 +159,7 @@ function ProviderCard({
         className={footerDirection === "row" ? "mt-4 flex-row items-center justify-between gap-2" : "mt-4 gap-1"}
       >
         <Text className="text-xs text-muted" numberOfLines={1}>
-          {card.activeCount} active · {card.queuedOrStartingCount} queued/starting
+          {card.activeCount} active · {card.queuedOrStartingCount} queued
         </Text>
         <Text className="text-xs font-medium" style={{ color: accent }} numberOfLines={1}>
           {getProviderCapacityStatusLine(card)}
@@ -223,9 +263,11 @@ function RunningNowRail({
         </Text>
       </View>
       {entries.length === 0 ? (
-        <Text className="text-sm text-muted">
-          No execution sessions are currently in progress.
-        </Text>
+        <EmptyState
+          variant="plain"
+          title="Nothing running"
+          hint="Agent sessions appear here the moment they start."
+        />
       ) : (
         <View className="gap-2">
           {entries.map((entry) => (
@@ -336,6 +378,7 @@ export function TasksDashboard({
     [workItems],
   );
   const dashboardLayout = getTaskDashboardLayout(width);
+  const [providerRowWidth, setProviderRowWidth] = useState(0);
   const showRightRail = dashboardLayout.showRightRail;
   const [liveRailOpen, setLiveRailOpen] = useState(false);
   const showLiveRailSheet = dashboardLayout.liveRailPresentation === "sheet";
@@ -457,7 +500,10 @@ export function TasksDashboard({
               </View>
             ) : null}
 
-            <View className={dashboardLayout.providerWrap === "wrap" ? "flex-row flex-wrap gap-3" : "flex-row gap-3"}>
+            <View
+              className="flex-row flex-wrap gap-3"
+              onLayout={(event) => setProviderRowWidth(event.nativeEvent.layout.width)}
+            >
               {providerCards.map((card) => (
                 <ProviderCard
                   key={card.provider}
@@ -465,6 +511,12 @@ export function TasksDashboard({
                   onOpenProvider={onOpenProvider}
                   footerDirection={dashboardLayout.providerFooterDirection}
                   minWidth={dashboardLayout.providerCardMinWidth}
+                  basis={getProviderCardBasis({
+                    rowWidth: providerRowWidth,
+                    cardCount: providerCards.length,
+                    minWidth: dashboardLayout.providerCardMinWidth,
+                    gap: 12,
+                  })}
                 />
               ))}
             </View>
@@ -503,14 +555,10 @@ export function TasksDashboard({
                 </Text>
               </View>
               {recentlyCompleted.length === 0 ? (
-                <View
-                  className="rounded-lg border p-4"
-                  style={{ borderColor: colors.border, backgroundColor: colors.card }}
-                >
-                  <Text className="text-sm text-muted">
-                    No recently completed work yet.
-                  </Text>
-                </View>
+                <EmptyState
+                  title="No completed work yet"
+                  hint="Finished tasks land here for a quick review."
+                />
               ) : (
                 <View className="gap-2">
                   {recentlyCompleted.map((item) => (

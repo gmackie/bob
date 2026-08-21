@@ -7,6 +7,8 @@ import type { ConnectionState } from "@bob/ws";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { trpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
+import { OodaConversationsTab } from "./OodaConversationsTab";
+import { EmptyState } from "~/components/ui";
 import { hapticLight, hapticSelection } from "~/lib/haptics";
 import {
   buildExecutionQueue,
@@ -320,11 +322,15 @@ function AgentsTab({
         }
       >
         {rows.length === 0 ? (
-          <View className="items-center justify-center px-4 py-12">
-            <Text className="text-sm text-muted">
-              {connectionState === "connected" ? "No agent sessions" : "Connecting..."}
-            </Text>
-          </View>
+          <EmptyState
+            variant="plain"
+            title={connectionState === "connected" ? "No planning sessions" : "Connecting…"}
+            hint={
+              connectionState === "connected"
+                ? "Start planning from the dashboard to see sessions here."
+                : "Waiting for the workspace gateway."
+            }
+          />
         ) : (
           <>
             <View>
@@ -786,9 +792,11 @@ function RecentOutcomeItemsTab({
   return (
     <ScrollView className="flex-1">
       {rows.length === 0 ? (
-        <View className="items-center justify-center px-4 py-12">
-          <Text className="text-sm text-muted">No recent outcomes</Text>
-        </View>
+        <EmptyState
+          variant="plain"
+          title="No recent outcomes"
+          hint="Finished and reviewed work shows up here."
+        />
       ) : (
         <View>
           <Text className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-muted">Recent Outcomes</Text>
@@ -934,6 +942,7 @@ export interface TabletSidebarProps {
   onSelectProject?: (id: string) => void;
   onOpenSession?: (id: string) => void;
   onRefresh?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export function TabletSidebar({
@@ -951,6 +960,7 @@ export function TabletSidebar({
   onSelectProject,
   onOpenSession,
   onRefresh,
+  onOpenSettings,
 }: TabletSidebarProps) {
   const { workspace: primaryWorkspace } = useSelectedWorkspace();
   const workItemsQuery = useQuery(
@@ -1053,15 +1063,25 @@ export function TabletSidebar({
         <ProjectsTab onSelectProject={onSelectProject} />
       ) : null}
       {mode === "ooda" && leftTab === "conversations" ? (
-        <View className="flex-1 px-4 py-6">
-          <Text className="text-sm font-semibold text-foreground">
-            OODA Personal OS
-          </Text>
-          <Text className="mt-2 text-sm leading-5 text-muted">
-            Continue the last conversation, start a new thought, or open the
-            conversation drawer from the chat header. Tasks and planning stay
-            available above without leaving this app.
-          </Text>
+        <OodaConversationsTab />
+      ) : null}
+
+      {onOpenSettings ? (
+        <View style={{ borderTopWidth: 1, borderTopColor: colors.border }}>
+          <Pressable
+            testID="tablet-sidebar-settings"
+            onPress={onOpenSettings}
+            accessibilityRole="button"
+            accessibilityLabel="Open settings"
+            className="flex-row items-center justify-between px-4 py-3 active:opacity-70"
+          >
+            <Text className="text-sm font-medium" style={{ color: colors.secondaryForeground }}>
+              Settings
+            </Text>
+            <Text className="text-xs" style={{ color: colors.muted }} numberOfLines={1}>
+              {primaryWorkspace?.name ?? "Workspace"}
+            </Text>
+          </Pressable>
         </View>
       ) : null}
     </View>

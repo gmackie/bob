@@ -6,6 +6,7 @@ import { useLocalSearchParams } from "expo-router";
 import type { GatewaySession } from "~/hooks/use-gateway";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { colors } from "~/lib/colors";
+import { EmptyState } from "~/components/ui";
 import {
   getMobileShellGlobalActions,
   getMobileShellModeActions,
@@ -366,21 +367,30 @@ export function TabletPlanningDashboard({
                   </Text>
                 </Pressable>
               ))}
-              <Pressable
-                onPress={() => setLiveRailOpen((open) => !open)}
-                accessibilityRole="button"
-                accessibilityLabel={liveRailOpen ? "Hide active sessions" : "Show active sessions"}
-                className="rounded-md border px-3 py-2 active:opacity-80"
-                style={{
-                  borderColor: colors.border,
-                  backgroundColor: liveRailOpen ? colors.secondary : colors.card,
-                }}
-              >
-                <Text className="text-xs font-semibold text-foreground">
-                  Active Sessions {model.activeSessions.length}
-                </Text>
-              </Pressable>
             </View>
+          ) : null}
+
+          {liveRailPresentation === "sheet" ? (
+            <Pressable
+              onPress={() => setLiveRailOpen((open) => !open)}
+              accessibilityRole="button"
+              accessibilityLabel={liveRailOpen ? "Hide active sessions" : "Show active sessions"}
+              className="mt-4 flex-row items-center justify-between rounded-lg border px-4 py-3 active:opacity-80"
+              style={{
+                borderColor: colors.border,
+                backgroundColor: liveRailOpen ? colors.secondary : colors.card,
+              }}
+            >
+              <Text className="text-sm font-medium text-foreground">Active sessions</Text>
+              <View className="flex-row items-center gap-3">
+                <Text className="text-sm font-semibold" style={{ color: model.activeSessions.length > 0 ? colors.primary : colors.muted }}>
+                  {model.activeSessions.length}
+                </Text>
+                <Text className="text-xs" style={{ color: colors.muted }}>
+                  {liveRailOpen ? "Hide" : "Show"}
+                </Text>
+              </View>
+            </Pressable>
           ) : null}
 
           {liveRailPresentation === "sheet" && liveRailOpen ? (
@@ -403,11 +413,15 @@ export function TabletPlanningDashboard({
                 style={{
                   borderColor: colors.border,
                   backgroundColor: colors.card,
-                  minWidth: 148,
+                  // Equal-width tiles that wrap as a grid: flexBasis keeps
+                  // every tile the same size so an odd count never leaves a
+                  // lone full-width orphan on the last row.
+                  flexBasis: 148,
                   flexGrow: 1,
+                  maxWidth: 260,
                 }}
               >
-                <Text className="text-xs uppercase text-muted" numberOfLines={1}>
+                <Text className="text-xs uppercase text-muted" numberOfLines={2}>
                   {card.title}
                 </Text>
                 <Text
@@ -426,14 +440,14 @@ export function TabletPlanningDashboard({
               {sessionFilter ? ` · ${formatPlanningSessionFilterLabel(sessionFilter)}` : ""}
             </Text>
             {visibleRecentSessionRows.length === 0 ? (
-              <View
-                className="rounded-lg border p-4"
-                style={{ borderColor: colors.border, backgroundColor: colors.card }}
-              >
-                <Text className="text-sm text-muted">
-                  {sessionFilter ? "No planning sessions match this filter." : "No completed planning sessions yet."}
-                </Text>
-              </View>
+              <EmptyState
+                title={sessionFilter ? "No sessions match this filter" : "No planning sessions yet"}
+                hint={
+                  sessionFilter
+                    ? "Try another status, or clear the filter."
+                    : "Start one above — completed plans collect here."
+                }
+              />
             ) : (
               <View className="gap-2">
                 {visibleRecentSessionRows.map((row) => (
@@ -492,9 +506,11 @@ function PlanningActiveSessionsRail({
         </Text>
       </View>
       {rows.length === 0 ? (
-        <Text className="text-sm text-muted">
-          No planning sessions are currently running.
-        </Text>
+        <EmptyState
+          variant="plain"
+          title="No active planning"
+          hint="Live planning sessions show up here while they run."
+        />
       ) : (
         <View className="gap-2">
           {rows.map((row) => (

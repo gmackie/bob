@@ -19,7 +19,11 @@ import { TabletProjectPane } from "~/components/tablet/TabletProjectPane";
 import { TabletProjectsDashboardPane } from "~/components/tablet/TabletProjectsDashboardPane";
 import { TabletSettingsPane } from "~/components/tablet/TabletSettingsPane";
 import { TaskLaneTablePane } from "~/components/tablet/TaskLaneTablePane";
-import { ChatScreen } from "~/features/chat/chat-screen";
+import { ChatScreenView } from "~/features/chat/chat-screen";
+import {
+  OodaConversationProvider,
+  useOodaConversationContext,
+} from "~/features/chat/ooda-conversation-context";
 import type {
   TabletPlanningDashboardNavigationAction,
   TabletPlanningSummaryTarget,
@@ -30,7 +34,6 @@ import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { useTabletShortcuts } from "~/hooks/use-keyboard-shortcuts";
 import { extractFileReferences } from "~/lib/file-references";
 import {
-  getTabletGlobalActionPosition,
   getTabletShellPadding,
   getTabletSidebarWidth,
   shouldCollapseTabletSidebar,
@@ -54,7 +57,6 @@ import {
   getExecutionSessionShellState,
   getShellSelectionIntent,
   getShellStateForPath,
-  getShellGlobalActions,
   selectLeftRailTarget,
   switchShellMode,
 } from "~/features/tablet/shell";
@@ -83,6 +85,25 @@ function firstRouteParam(value: string | string[] | undefined): string | undefin
 
 function PhoneLayout() {
   return <Stack screenOptions={stackScreenOptions} />;
+}
+
+function OodaChatPane() {
+  const chat = useOodaConversationContext();
+  if (!chat) return null;
+  return <ChatScreenView chat={chat} embedded />;
+}
+
+function getShellModeLabel(mode: TabletShellMode): string {
+  switch (mode) {
+    case "ooda":
+      return "OODA";
+    case "planning":
+      return "Planning";
+    case "tasks":
+      return "Tasks";
+    default:
+      return "Bob";
+  }
 }
 
 function MainPane({
@@ -119,7 +140,7 @@ function MainPane({
   onOpenInspector: () => void;
 }) {
   if (target.type === "ooda-chat") {
-    return <ChatScreen />;
+    return <OodaChatPane />;
   }
 
   if (target.type === "planning-session") {
@@ -219,55 +240,10 @@ function MainPane({
     );
   }
 
-  // Keep the runtime fallback below even though TabletShellTarget is exhaustive.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  if (target.type === "settings") {
-    return <TabletSettingsPane onOpenProvider={onOpenProvider} />;
-  }
-
-  if (gateway.activePlanningSessionId && gateway.selectedSessionId) {
-    const planningSession = getPlanningPaneSession(
-      gateway.sessions,
-      gateway.activePlanningSessionId,
-    );
-
-    return (
-      <PlanningPane
-        sessionId={planningSession.sessionId}
-        sessionStatus={planningSession.status}
-        sessionType={planningSession.sessionType}
-        workItemTitle={planningSession.title}
-        events={gateway.selectedSessionEvents}
-        onSendInput={gateway.sendInput}
-        onStopSession={gateway.stopSession}
-        onShowArtifact={onShowArtifact}
-      />
-    );
-  }
-
-  if (gateway.selectedSessionId) {
-    return (
-      <AgentThreadView
-        sessionId={gateway.selectedSessionId}
-        events={gateway.selectedSessionEvents}
-        onSendInput={gateway.sendInput}
-        onStopSession={gateway.stopSession}
-      />
-    );
-  }
-
-  if (gateway.selectedWorkItemId) {
-    return (
-      <WorkItemPane
-        workItemId={gateway.selectedWorkItemId}
-        entryView={selectedWorkItemView}
-        onOpenSession={onOpenSession}
-        onOpenInspector={onOpenInspector}
-      />
-    );
-  }
-
-  return <Stack screenOptions={stackScreenOptions} />;
+  // Every TabletShellTarget variant is handled explicitly above, so TS has
+  // narrowed `target` to the settings variant here — no fallthrough to the
+  // gateway-state heuristics below for a typed target.
+  return <TabletSettingsPane onOpenProvider={onOpenProvider} />;
 }
 
 function TabletLayout() {
@@ -300,7 +276,7 @@ function TabletLayout() {
       routeParams.workItemId,
     ],
   );
-  const { selectedWorkspaceId, workspace } = useSelectedWorkspace();
+  const { selectedWorkspaceId } = useSelectedWorkspace();
   const { width } = useWindowDimensions();
   const safeAreaInsets = useSafeAreaInsets();
   const [inspectorVisible, setInspectorVisible] = useState(false);
@@ -331,14 +307,6 @@ function TabletLayout() {
   const shellPadding = useMemo(
     () => getTabletShellPadding(safeAreaInsets),
     [safeAreaInsets],
-  );
-  const globalActionPosition = useMemo(
-    () => getTabletGlobalActionPosition(safeAreaInsets),
-    [safeAreaInsets],
-  );
-  const globalActions = useMemo(
-    () => getShellGlobalActions(workspace?.name),
-    [workspace?.name],
   );
   const { openPlanningSession, selectSession, selectWorkItem } = gateway;
 
@@ -584,6 +552,7 @@ function TabletLayout() {
   });
 
   return (
+    <OodaConversationProvider>
     <View
       testID="tablet-shell"
       className="flex-1"
@@ -620,10 +589,48 @@ function TabletLayout() {
               onSelectProject={handleSelectProject}
               onOpenSession={handleOpenSession}
               onRefresh={gateway.refresh}
+              onOpenSettings={handleOpenSettings}
             />
           </View>
         ) : null}
         <View testID="tablet-main" className="flex-1" style={{ minWidth: 0 }}>
+          {collapseSidebar ? (
+            <View
+              testID="tablet-compact-bar"
+              className="flex-row items-center justify-between px-3"
+              style={{
+                height: 48,
+                borderBottomWidth: 1,
+                borderBottomColor: colors.border,
+                backgroundColor: colors.background,
+              }}
+            >
+              <Pressable
+                testID="tablet-menu-button"
+                onPress={() => setDrawerOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Open navigation menu"
+                className="flex-row items-center gap-2 rounded-md px-2.5 py-1.5 active:opacity-70"
+                style={{ minHeight: 36, justifyContent: "center" }}
+              >
+                <Text className="text-base font-semibold text-foreground">☰</Text>
+                <Text className="text-sm font-semibold text-foreground">
+                  {getShellModeLabel(shell.mode)}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={handleOpenSettings}
+                accessibilityRole="button"
+                accessibilityLabel="Open settings"
+                className="rounded-md px-2.5 py-1.5 active:opacity-70"
+                style={{ minHeight: 36, justifyContent: "center" }}
+              >
+                <Text className="text-sm font-medium" style={{ color: colors.muted }}>
+                  Settings
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
           <View className="flex-1" style={{ minWidth: 0 }}>
             <MainPane
               gateway={gateway}
@@ -654,57 +661,6 @@ function TabletLayout() {
           </View>
         </View>
       </View>
-
-      <View
-        className="absolute flex-row gap-2"
-        style={{
-          zIndex: 20,
-          top: globalActionPosition.top,
-          right: globalActionPosition.right,
-        }}
-      >
-        {globalActions.map((action) => (
-          <Pressable
-            key={action.key}
-            onPress={handleOpenSettings}
-            accessibilityRole="button"
-            accessibilityLabel={`Open settings for ${action.detailLabel}`}
-            className="rounded-md px-3 py-1.5 active:opacity-70"
-            style={{
-              backgroundColor: colors.secondary,
-              minHeight: 36,
-              justifyContent: "center",
-            }}
-          >
-            <Text className="text-xs font-semibold text-foreground">
-              {action.label}
-            </Text>
-            <Text className="text-[10px] font-medium text-muted" numberOfLines={1}>
-              {action.detailLabel}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {collapseSidebar ? (
-        <Pressable
-          testID="tablet-menu-button"
-          onPress={() => setDrawerOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Open navigation menu"
-          className="absolute rounded-md px-3 py-1.5 active:opacity-70"
-          style={{
-            zIndex: 20,
-            top: globalActionPosition.top,
-            left: shellPadding.left + 16,
-            backgroundColor: colors.secondary,
-            minHeight: 36,
-            justifyContent: "center",
-          }}
-        >
-          <Text className="text-base font-semibold text-foreground">☰</Text>
-        </Pressable>
-      ) : null}
 
       {collapseSidebar ? (
         <Modal
@@ -745,11 +701,13 @@ function TabletLayout() {
               onSelectProject={closeDrawerThen(handleSelectProject)}
               onOpenSession={closeDrawerThen(handleOpenSession)}
               onRefresh={gateway.refresh}
+              onOpenSettings={closeDrawerThen(handleOpenSettings)}
             />
           </View>
         </Modal>
       ) : null}
     </View>
+    </OodaConversationProvider>
   );
 }
 

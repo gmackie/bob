@@ -763,18 +763,55 @@ export function buildTaskLaneSummaries(
   ];
 }
 
+/**
+ * Provider cards need ~180pt to keep "Provider allowance / Unavailable" on
+ * one line and the footer readable. Below that, words break mid-word, so we
+ * always enforce a minimum and let cards wrap to a second row instead.
+ */
+export const PROVIDER_CARD_MIN_WIDTH = 180;
+export const LANE_CARD_MIN_WIDTH = 132;
+
 export function getTaskDashboardLayout(screenWidth: number): TaskDashboardLayout {
-  const showRightRail = screenWidth >= 980;
+  // The right rail (Running now) costs 280pt + gutters; only keep it beside
+  // the main column when 4 provider cards still fit at their minimum width.
+  const showRightRail = screenWidth >= 1180;
 
   return {
     showRightRail,
     liveRailPresentation: showRightRail ? "rail" : "sheet",
-    laneWrap: showRightRail ? "nowrap" : "wrap",
-    laneCardMinWidth: showRightRail ? 0 : 132,
-    providerFooterDirection: showRightRail ? "column" : "row",
-    providerWrap: showRightRail ? "nowrap" : "wrap",
-    providerCardMinWidth: showRightRail ? 0 : 150,
+    laneWrap: "wrap",
+    laneCardMinWidth: LANE_CARD_MIN_WIDTH,
+    providerFooterDirection: "column",
+    providerWrap: "wrap",
+    providerCardMinWidth: PROVIDER_CARD_MIN_WIDTH,
   };
+}
+
+/**
+ * Provider cards: one row when they all fit at minWidth, otherwise a balanced
+ * grid (2 per row) so an odd remainder never stretches into a full-width
+ * orphan. Returns undefined until the row has been measured.
+ */
+/** Width at which labels like "Provider allowance · Unavailable" stop ellipsizing. */
+export const PROVIDER_CARD_COMFORTABLE_WIDTH = 220;
+
+export function getProviderCardBasis(input: {
+  rowWidth: number;
+  cardCount: number;
+  minWidth: number;
+  gap: number;
+  comfortableWidth?: number;
+}): number | undefined {
+  const { rowWidth, cardCount, minWidth, gap } = input;
+  const comfortableWidth = input.comfortableWidth ?? PROVIDER_CARD_COMFORTABLE_WIDTH;
+  if (rowWidth <= 0 || cardCount <= 0) return undefined;
+  // Only keep a single row when every card gets a comfortable width;
+  // squeezing them to the bare minimum ellipsizes every label.
+  const fitsOneRow = cardCount * comfortableWidth + (cardCount - 1) * gap <= rowWidth;
+  if (fitsOneRow) return undefined;
+  const perRow = Math.max(1, Math.min(2, Math.floor((rowWidth + gap) / (minWidth + gap))));
+  // -1 guards against sub-pixel rounding pushing the last column to a new line.
+  return Math.floor((rowWidth - gap * (perRow - 1)) / perRow) - 1;
 }
 
 export function getProviderCapacityAccessibilityLabel(card: ProviderCapacityCard): string {

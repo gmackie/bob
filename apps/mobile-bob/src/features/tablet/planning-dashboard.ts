@@ -78,7 +78,10 @@ export type TabletPlanningSummaryTarget =
   | { type: "projects-dashboard"; filter: "setup-issues" | "stale-sync" | "healthy" };
 
 const AWAITING_INPUT_STATUSES = new Set(["awaiting-input", "awaiting_input"]);
-const INLINE_ACTIVE_RAIL_MIN_WIDTH = 980;
+// Matches the Tasks dashboard: the 280pt rail only sits beside the main
+// column when the summary tiles still get a readable width. 13" portrait
+// (1032pt) falls below this on purpose — the rail becomes a sheet there.
+const INLINE_ACTIVE_RAIL_MIN_WIDTH = 1180;
 
 export function shouldShowPlanningActiveRailInline(width: number): boolean {
   return width >= INLINE_ACTIVE_RAIL_MIN_WIDTH;

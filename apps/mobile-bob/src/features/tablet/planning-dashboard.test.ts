@@ -229,11 +229,13 @@ describe("tablet planning dashboard model", () => {
     ).toBeNull();
   });
 
-  it("moves active planning sessions out of the inline right rail on phone widths", () => {
+  it("keeps the active-sessions rail inline only on wide landscape layouts", () => {
     expect(shouldShowPlanningActiveRailInline(390)).toBe(false);
-    expect(shouldShowPlanningActiveRailInline(980)).toBe(true);
+    // 13" iPad portrait: the rail would starve the summary tiles.
+    expect(shouldShowPlanningActiveRailInline(1032)).toBe(false);
+    expect(shouldShowPlanningActiveRailInline(1366)).toBe(true);
     expect(getPlanningLiveRailPresentation(390)).toBe("sheet");
-    expect(getPlanningLiveRailPresentation(980)).toBe("rail");
+    expect(getPlanningLiveRailPresentation(1366)).toBe("rail");
   });
 
   it("filters planning sessions for summary-card drilldowns", () => {
