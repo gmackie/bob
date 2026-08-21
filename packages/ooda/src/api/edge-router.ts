@@ -19,6 +19,7 @@ import { conversationsRouter } from "./router/conversations";
 import { contextRouter } from "./router/context";
 import { eventsRouter } from "./router/events";
 import { hostRouter } from "./router/host";
+import { hermesRouter } from "./router/hermes";
 import { jobsRouter } from "./router/jobs";
 import { integrationsRouter } from "./router/integrations";
 import { memoriesRouter } from "./router/memories";
@@ -31,6 +32,7 @@ const edgeRouterRecord = {
   context: contextRouter,
   events: eventsRouter,
   host: hostRouter,
+  hermes: hermesRouter,
   jobs: jobsRouter,
   integrations: integrationsRouter,
   memories: memoriesRouter,

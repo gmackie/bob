@@ -52,6 +52,7 @@ afterEach(() => {
 
 import { conversationsRouter } from "../conversations";
 import { eventsRouter } from "../events";
+import { hermesRouter } from "../hermes";
 import { hostRouter } from "../host";
 import { memoriesRouter } from "../memories";
 import { edgeRouter } from "../../edge-router";
@@ -125,6 +126,7 @@ const capacitySnapshot = {
 const router = t.router({
   conversations: conversationsRouter,
   events: eventsRouter,
+  hermes: hermesRouter,
   host: hostRouter,
   memories: memoriesRouter,
 });
@@ -158,6 +160,7 @@ describe("personal OS routers", () => {
       "host.claim",
       "host.complete",
       "host.fail",
+      "hermes.capture",
       "memories.createOpportunityReview",
       "memories.feedback",
       "memories.getOpportunityReview",
@@ -264,6 +267,33 @@ describe("personal OS routers", () => {
         limit: 100,
       }),
     ).resolves.toEqual({ items: [event], pageInfo: { hasMore: false } });
+  });
+
+  it("captures Hermes text as an owner-scoped replay-safe event", async () => {
+    kernel.appendConversationEvent.mockResolvedValue({ event, replayed: true });
+
+    await expect(
+      caller().hermes.capture({
+        schemaVersion: 1,
+        requestId: "telegram:4512:9918",
+        conversationId: "conversation-1",
+        branchId: "branch-1",
+        text: "Hello",
+        occurredAt,
+      }),
+    ).resolves.toMatchObject({
+      requestId: "telegram:4512:9918",
+      replayed: true,
+      canonicalRef: { kind: "conversation_event", id: "event-1" },
+    });
+    expect(kernel.appendConversationEvent).toHaveBeenCalledWith(
+      {},
+      "owner-a",
+      expect.objectContaining({
+        idempotencyKey: "telegram:4512:9918",
+        actor: { type: "user" },
+      }),
+    );
   });
 
   it("adds relevant durable memory to queued host-turn context", async () => {
