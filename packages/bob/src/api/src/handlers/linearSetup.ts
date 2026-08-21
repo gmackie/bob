@@ -20,6 +20,7 @@ import {
   isOpenLinearState,
   mapLinearStatusToBob,
 } from "../services/linear/ensureLinearProject.js";
+import { agentOverrideFromLabels } from "../services/linear/agentLabel.js";
 import { reconcileImportedStatus } from "../services/linear/reconcileStatus.js";
 
 import type { HandlerContext } from "./context.js";
@@ -194,6 +195,18 @@ export async function syncLinearProjects(
   let issuesUpdated = 0;
   let issuesTruncated = false;
 
+  // One label lookup per pass: issues carry labelIds, and an `agent:<name>`
+  // label pins the agent auto-drain uses for that card (see agentLabel.ts).
+  const labelNameById = new Map<string, string>();
+  try {
+    const labels = await client.issueLabels({ first: 250 });
+    for (const l of labels.nodes) labelNameById.set(l.id, l.name);
+  } catch (err) {
+    console.warn("[linear-sync] label lookup failed; agent overrides skipped this pass:", err);
+  }
+  const overrideFor = (issue: { labelIds?: string[] }) =>
+    agentOverrideFromLabels((issue.labelIds ?? []).map((id) => labelNameById.get(id) ?? ""));
+
   const projectResult = await client.projects({ first: PROJECT_PAGE });
   const linearProjects = projectResult.nodes;
   const projectsTruncated = projectResult.pageInfo.hasNextPage;
@@ -233,20 +246,35 @@ export async function syncLinearProjects(
             ),
             eq(workItems.externalProvider, "linear"),
           ),
-          columns: { id: true, status: true },
+          columns: { id: true, status: true, agentTypeOverride: true, sourceMetadata: true },
         });
+        const labelOverride = overrideFor(issue);
 
         if (existing) {
           // Already imported: mirror the tracker's queue/closure state so a
           // card promoted Backlog→Todo (or closed) in Kanbanger reaches Bob.
           // The sync was insert-only before this, which left the tracker full
           // of Todo while Bob's dispatchable queue sat empty.
+          const patch: Partial<typeof workItems.$inferInsert> = {};
           const next = reconcileImportedStatus(existing.status, stateType);
-          if (next) {
-            await ctx.db
-              .update(workItems)
-              .set({ status: next })
-              .where(eq(workItems.id, existing.id));
+          if (next) patch.status = next;
+
+          // Keep the label-driven agent override in sync. Only overrides Bob
+          // set FROM a label are cleared when the label goes away — a manual
+          // override set in Bob's UI is left alone.
+          const meta = { ...existing.sourceMetadata } as Record<string, unknown>;
+          const fromLabel = meta.agentOverrideSource === "label";
+          if (labelOverride && existing.agentTypeOverride !== labelOverride) {
+            patch.agentTypeOverride = labelOverride;
+            patch.sourceMetadata = { ...meta, agentOverrideSource: "label" };
+          } else if (!labelOverride && fromLabel && existing.agentTypeOverride) {
+            patch.agentTypeOverride = null;
+            const { agentOverrideSource: _dropped, ...rest } = meta;
+            patch.sourceMetadata = rest;
+          }
+
+          if (Object.keys(patch).length) {
+            await ctx.db.update(workItems).set(patch).where(eq(workItems.id, existing.id));
             issuesUpdated++;
           }
           continue;
@@ -265,6 +293,9 @@ export async function syncLinearProjects(
           externalId: issue.id,
           externalProvider: "linear",
           externalUrl: issue.url,
+          ...(labelOverride
+            ? { agentTypeOverride: labelOverride, sourceMetadata: { agentOverrideSource: "label" } }
+            : {}),
         });
         issuesImported++;
       }
