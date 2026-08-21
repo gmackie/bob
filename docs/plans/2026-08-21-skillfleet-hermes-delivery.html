@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Skillfleet to Hermes Delivery Plane</title>
+  <style>
+    :root{--ink:#17211b;--muted:#58665d;--paper:#f7f4ec;--card:#fffdf7;--line:#d9d3c5;--accent:#2f6d4f;--warn:#a55c2b;--code:#122018}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.wrap{max-width:1080px;margin:auto;padding:56px 28px 96px}h1{font:700 clamp(2.3rem,6vw,4.8rem)/.98 ui-serif,Georgia,serif;letter-spacing:-.04em;margin:.2em 0}.eyebrow{color:var(--accent);font-weight:800;text-transform:uppercase;letter-spacing:.13em;font-size:.77rem}.lede{font-size:1.25rem;max-width:760px;color:var(--muted)}h2{margin-top:48px;font-size:1.7rem}h3{margin-top:28px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px}.tag{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:4px 10px;margin:2px;font-size:.8rem}.good{color:var(--accent)}.warn{color:var(--warn)}pre{white-space:pre-wrap;background:var(--code);color:#e8f2eb;border-radius:16px;padding:20px;overflow:auto}table{width:100%;border-collapse:collapse;background:var(--card)}th,td{text-align:left;vertical-align:top;padding:12px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-size:.8rem;text-transform:uppercase;letter-spacing:.08em}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em}.status{border-left:5px solid var(--accent)}ul,ol{padding-left:1.3rem}li{margin:.45rem 0}.small{color:var(--muted);font-size:.9rem}
+  </style>
+</head>
+<body><main class="wrap">
+  <div class="eyebrow">Cross-repository implementation plan · 21 August 2026</div>
+  <h1>One notification plane:<br>Skillfleet → Bob → Hermes</h1>
+  <p class="lede">Replace Skillfleet’s parallel Bob and direct-Telegram adapters with one signed envelope. Bob authenticates and deduplicates it; Hermes owns scheduling, model execution, and Telegram delivery.</p>
+
+  <section class="grid">
+    <article class="card status"><h3>Outcome</h3><p>Fleet insights and urgent alerts arrive through the already-operated Hermes bot without copying Telegram credentials across machines.</p></article>
+    <article class="card"><h3>Proof boundary</h3><p>Unit contracts, replay tests, Bob↔Hermes origin canary, and one non-sensitive Telegram canary are reported separately.</p></article>
+    <article class="card"><h3>Scope</h3><p>Backend delivery only. No Hermes console port, no notification UI, and no new agent daemon.</p></article>
+  </section>
+
+  <h2>What already exists</h2>
+  <div class="grid">
+    <article class="card"><h3>Skillfleet</h3><p>A privacy-safe notification schema, record links, and generic transport request builders already exist. Run a five-minute urgent scan and a distinct daily digest trigger so an early snapshot cannot stale the digest; replace channel-specific credentials.</p></article>
+    <article class="card"><h3>Bob</h3><p>The production Worker, webhook delivery ledger, Hyperdrive database access, and HMAC verification patterns already exist. Extend those boundaries rather than creating a new service.</p></article>
+    <article class="card"><h3>Hermes</h3><p>The dashboard API, rotating session token, one-shot cron jobs, Telegram home target, gateway, and canary timers are live. Hermes remains the sole Telegram credential owner.</p></article>
+  </div>
+
+  <h2>Architecture</h2>
+  <pre>Skillfleet collector / cloud scheduler
+        │  signed canonical JSON
+        │  idempotency key + timestamp + HMAC-SHA256
+        ▼
+Bob Worker  POST /api/v1/hermes/notifications
+        ├── reject stale / malformed / bad-signature input
+        ├── claim webhook ledger row (unique provider + delivery id)
+        ├── reject same key with different payload
+        └── forward with a separate origin service credential
+                    │
+                    ▼
+Bob-authenticated nginx ingress
+        ├── dashboard traffic: existing Bob session auth
+        └── service traffic: Bob internal origin-auth check
+                    │
+                    ▼
+Hermes dashboard API on loopback
+        ├── bootstrap rotating dashboard session token
+        ├── find deterministic one-shot job name
+        └── create only when absent; deliver=telegram
+                    │
+                    ▼
+Hermes gateway → configured Telegram home channel</pre>
+
+  <h2>Contracts and state</h2>
+  <table><thead><tr><th>Boundary</th><th>Contract</th><th>Failure behavior</th></tr></thead><tbody>
+    <tr><td>Skillfleet → Bob</td><td>Versioned JSON containing notification ID, class, schedule, categorized event fields, counts, and a durable HTTPS record link. Signature covers <code>timestamp + "." + raw body</code>.</td><td>4xx is permanent; 429/5xx is retryable. No raw paths, transcript text, prompts, or machine secrets enter the envelope.</td></tr>
+    <tr><td>Bob ledger</td><td>Unique <code>(provider, delivery_id)</code>. Stored payload is compared on re-use. States: pending, processed, failed.</td><td>Processed returns deduplicated success. Pending returns accepted. Failed or stale-pending may be reclaimed safely.</td></tr>
+    <tr><td>Bob → Hermes</td><td>Separate origin token plus Hermes’ rotating session token. Deterministic job name derived from the notification ID. One-shot ISO schedule, <code>deliver=telegram</code>.</td><td>Bob records a bounded error and returns retryable 502/503. Retry first reconciles by deterministic Hermes name.</td></tr>
+    <tr><td>Hermes output</td><td>A constrained prompt renders the categorized facts and source link; it must not invent action counts or include hidden source data.</td><td>Hermes owns model/provider retries and Telegram delivery observability.</td></tr>
+  </tbody></table>
+
+  <h2>Implementation sequence</h2>
+  <ol>
+    <li><strong>Harden Bob’s ledger.</strong> Add the missing partial unique index for non-null webhook delivery IDs and make the insert conflict-safe.</li>
+    <li><strong>Build Bob’s pure delivery module test-first.</strong> Cover canonical parsing, HMAC/timestamp validation, payload mismatch, pending/processed/failed claims, Hermes token bootstrap, reconciliation, creation, and upstream errors.</li>
+    <li><strong>Wire the Worker route and origin auth.</strong> Keep service credentials server-only and use distinct secrets for Skillfleet ingress and Hermes origin access.</li>
+    <li><strong>Extend the checked-in nginx contract.</strong> Preserve session-authenticated dashboard access and add a narrow service-only API location.</li>
+    <li><strong>Replace Skillfleet channel adapters.</strong> Emit one Hermes/Bob envelope and signed request; separate the five-minute urgent scan from the daily digest trigger; remove direct Telegram bot-token and chat-ID handling.</li>
+    <li><strong>Prove in layers.</strong> Run focused tests, typechecks, full relevant suites, database migration dry-run, origin canary, then one labeled Telegram canary.</li>
+  </ol>
+
+  <h2>Test coverage map</h2>
+  <pre>CODE PATHS                                      OPERATOR FLOWS
+[Bob ingress]
+  ├─ invalid JSON/schema → 400                    [Skillfleet send]
+  ├─ missing/stale timestamp → 401                  ├─ valid send → scheduled
+  ├─ wrong HMAC → 401                               ├─ replay → deduplicated
+  ├─ new claim → Hermes                             ├─ mutated replay → conflict
+  ├─ processed claim → deduplicated                 └─ Hermes down → retryable error
+  ├─ pending claim → accepted
+  ├─ failed/stale claim → reclaim                 [Hermes bridge] [E2E]
+  └─ same key/different payload → 409                ├─ origin auth accepted/rejected
+                                                     ├─ rotating token extracted
+[Hermes adapter]                                     ├─ existing job reconciled
+  ├─ bootstrap unavailable → 502                    └─ Telegram canary observed
+  ├─ token absent → 502
+  ├─ list unavailable → 502
+  ├─ deterministic job exists → reuse             [Prompt quality] [EVAL]
+  └─ create job → processed                          └─ output preserves facts/link
+
+[Skillfleet signer]
+  ├─ strict notification validation
+  ├─ canonical body + stable notification ID
+  ├─ timestamped HMAC headers
+  └─ no Telegram/Bob-user credentials</pre>
+  <p class="small">Target: every branch above receives a unit or route-level test; the origin and Telegram edges receive bounded live canaries. The prompt has a fixture-based factuality check plus one live canary, not an open-ended quality claim.</p>
+
+  <h2>Failure modes</h2>
+  <table><thead><tr><th>Failure</th><th>Protection</th><th>Operator signal</th></tr></thead><tbody>
+    <tr><td>Replay or retry storm</td><td>Database uniqueness, stateful claims, deterministic Hermes job name.</td><td>Deduplicated/accepted response and ledger status.</td></tr>
+    <tr><td>Worker crashes after Hermes accepts</td><td>Retry reconciles Hermes jobs before creating.</td><td>Stale pending claim becomes reclaimable; no silent drop.</td></tr>
+    <tr><td>Credential confused across boundaries</td><td>Separate ingress HMAC and origin bearer; neither reaches the browser or Skillfleet record data.</td><td>401 at the exact failed boundary.</td></tr>
+    <tr><td>Hermes dashboard token rotates</td><td>Bootstrap token for each delivery attempt; never persist it.</td><td>502 with bounded, redacted error.</td></tr>
+    <tr><td>Telegram is unconfigured</td><td>Check Hermes delivery targets before job creation.</td><td>503 explaining that the Hermes target is unavailable.</td></tr>
+    <tr><td>Prompt rewrites facts</td><td>Constrained template and factuality assertions.</td><td>Canary output compared with the sent envelope.</td></tr>
+  </tbody></table>
+
+  <h2>Deployment and rollback</h2>
+  <ol>
+    <li>Land the Bob migration and code through its normal ForgeGraph PR/CI path.</li>
+    <li>Install both Worker secrets without printing their values; deploy Bob.</li>
+    <li>Apply and validate nginx configuration, then reload; keep the prior config recoverable.</li>
+    <li>Configure Skillfleet with only the Bob endpoint and ingress HMAC secret.</li>
+    <li>Send a synthetic, non-sensitive canary and verify ledger → Hermes job/run → Telegram independently.</li>
+    <li>Rollback by disabling the Skillfleet sender, restoring nginx, and reverting Bob; existing Hermes jobs and Telegram configuration remain intact.</li>
+  </ol>
+
+  <h2>NOT in scope</h2>
+  <ul>
+    <li>Porting the stale Hermes console branch wholesale; it is hundreds of commits behind Bob master.</li>
+    <li>Replacing Hermes’ Telegram adapter or copying its Telegram token into Skillfleet.</li>
+    <li>A new notification UI, preferences model, multi-recipient routing, or generalized public webhook product.</li>
+    <li>Claiming fleet-wide delivery until each actual host is configured and observed; missing hosts remain explicit.</li>
+    <li>Embedding transcript text, raw filesystem paths, prompts, or customer evidence in notification payloads.</li>
+  </ul>
+
+  <h2>Parallelization</h2>
+  <p>Two isolated lanes can proceed after the contract is frozen: Lane A implements Bob ingress/ledger/origin bridging; Lane B updates Skillfleet signing and tests. Live integration and deployment are sequential after both lanes pass.</p>
+
+  <h2>Implementation tasks</h2>
+  <ul>
+    <li><strong>T1 · P1:</strong> Add conflict-safe webhook delivery uniqueness and migration; verify duplicate and concurrent claims.</li>
+    <li><strong>T2 · P1:</strong> Add Bob’s authenticated Hermes notification route and pure adapter tests.</li>
+    <li><strong>T3 · P1:</strong> Add narrow service-origin authentication to the Worker and nginx contract.</li>
+    <li><strong>T4 · P1:</strong> Replace Skillfleet’s Bob/Telegram adapters with one signed Bob/Hermes request.</li>
+    <li><strong>T5 · P1:</strong> Run layered canaries and preserve redacted evidence.</li>
+  </ul>
+
+  <h2>GSTACK REVIEW REPORT</h2>
+  <table><thead><tr><th>Review</th><th>Trigger</th><th>Why</th><th>Runs</th><th>Status</th><th>Findings</th></tr></thead><tbody>
+    <tr><td>CEO Review</td><td>optional</td><td>Scope &amp; strategy</td><td>0</td><td>Not required</td><td>Backend alignment within an already-approved product direction.</td></tr>
+    <tr><td>Codex Review</td><td>outside voice</td><td>Independent opinion</td><td>0</td><td>Skipped</td><td>Already running under Codex; nested pass is intentionally skipped.</td></tr>
+    <tr><td>Eng Review</td><td>plan-eng-review</td><td>Architecture &amp; tests</td><td>1</td><td class="good">Clear</td><td>Scope reduced from stale-branch port to a minimal durable slice; no critical gaps remain in the plan.</td></tr>
+    <tr><td>Design Review</td><td>optional</td><td>UI/UX</td><td>0</td><td>Not required</td><td>No UI changes.</td></tr>
+    <tr><td>DX Review</td><td>optional</td><td>Developer experience</td><td>0</td><td>Not required</td><td>Operational contracts and rollback are explicit.</td></tr>
+  </tbody></table>
+  <p><strong>Verdict:</strong> Engineering review cleared; ready to implement.</p>
+  <p>NO UNRESOLVED DECISIONS</p>
+</main></body></html>

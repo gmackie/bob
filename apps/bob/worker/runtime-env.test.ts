@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyRuntimeAuthEnv,
+  applyRuntimeServiceEnv,
   getHyperdriveConnectionString,
   getSentryOptions,
 } from "./runtime-env";
@@ -24,6 +25,24 @@ describe("worker runtime env helpers", () => {
       BOB_AUTH_BYPASS: "true",
       BOB_AUTH_BYPASS_TOKEN: "prod-secret",
       BOB_AUTH_BYPASS_USER_ID: "default-user",
+    });
+  });
+
+  it("copies notification service bindings without exposing unrelated values", () => {
+    const target: Record<string, string | undefined> = {};
+    applyRuntimeServiceEnv(
+      {
+        SKILLFLEET_NOTIFICATION_SECRET: "ingress-secret",
+        HERMES_ORIGIN_TOKEN: "origin-secret",
+        HERMES_ORIGIN_URL: "https://claude.example.com",
+        IGNORED: "not-copied",
+      },
+      target,
+    );
+    expect(target).toEqual({
+      SKILLFLEET_NOTIFICATION_SECRET: "ingress-secret",
+      HERMES_ORIGIN_TOKEN: "origin-secret",
+      HERMES_ORIGIN_URL: "https://claude.example.com",
     });
   });
 

@@ -73,19 +73,6 @@ export interface WebhookDeliveryInput {
 export async function recordWebhookDelivery(
   input: WebhookDeliveryInput,
 ): Promise<string | null> {
-  if (input.deliveryId) {
-    const existing = await db.query.webhookDeliveries.findFirst({
-      where: and(
-        eq(webhookDeliveries.provider, input.provider),
-        eq(webhookDeliveries.deliveryId, input.deliveryId),
-      ),
-    });
-
-    if (existing) {
-      return null;
-    }
-  }
-
   const [delivery] = await db
     .insert(webhookDeliveries)
     .values({
@@ -98,6 +85,7 @@ export async function recordWebhookDelivery(
       payload: input.payload,
       status: "pending",
     })
+    .onConflictDoNothing()
     .returning({ id: webhookDeliveries.id });
 
   return delivery?.id ?? null;

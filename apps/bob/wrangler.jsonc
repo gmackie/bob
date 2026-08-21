@@ -32,6 +32,7 @@
     "FRONTEND_URL": "https://bob.blder.bot",
     "GATEWAY_PUBLIC_URL": "https://ws.blder.bot",
     "GATEWAY_URL": "https://ws.blder.bot",
+    "HERMES_ORIGIN_URL": "https://claude.gmac.io",
     "NODE_ENV": "production",
     "BOB_AUTH_BYPASS": "true",
     "BOB_AUTH_BYPASS_USER_ID": "tkE66fMc4mevdYYjtq78ALErJ7QnhAge",

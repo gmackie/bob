@@ -2,7 +2,7 @@
 // Phase 7B-2 Task 16.
 
 import { relations, sql } from "drizzle-orm";
-import { index, pgTable } from "drizzle-orm/pg-core";
+import { index, pgTable, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -75,6 +75,9 @@ export const webhookDeliveries = pgTable(
   }),
   (table) => [
     index("webhook_deliveries_config_id_idx").on(table.webhookConfigId),
+    uniqueIndex("webhook_deliveries_provider_delivery_unique")
+      .on(table.provider, table.deliveryId)
+      .where(sql`${table.deliveryId} IS NOT NULL`),
   ],
 );
 
