@@ -24,9 +24,10 @@
 // service), not a runner timeout — killing it on a clock would discard a
 // legitimately-waiting session.
 
-import { and, inArray, or, sql } from "@bob/db";
+import { and, eq, inArray, or, sql } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations } from "@bob/db/schema";
+import { chatConversations, workItems } from "@bob/db/schema";
+import { mirrorWorkItemEvent } from "../services/tracker/trackerMirror.js";
 
 // Active statuses that hold an autoDrain slot, EXCEPT `blocked` (see header).
 const REAPABLE_ACTIVE_STATUSES = [
@@ -51,6 +52,8 @@ export interface ReapStuckSessionsOptions {
    * the lease grace because there's no heartbeat to lean on. Default 2 h.
    */
   hardTimeoutMs?: number;
+  /** Re-queue a released work item this many times before blocking it. */
+  maxAttempts?: number;
   /** Don't write; just report what would be reaped. */
   dryRun?: boolean;
 }
@@ -113,7 +116,40 @@ export async function reapStuckSessions(
       id: chatConversations.id,
       status: chatConversations.status,
       agentType: chatConversations.agentType,
+      workItemId: chatConversations.workItemId,
     });
 
-  return { reaped: reaped.length, sessions: reaped, dryRun: false };
+  // Release the work item the dead session was holding. Before this, a reaped
+  // session left its item in in_progress forever (auto-drain only re-picks
+  // ready/todo), so every runner death permanently leaked a card — 29 such
+  // orphans by 2026-08-20. Re-queue up to MAX_ATTEMPTS, then block for a human.
+  const maxAttempts = opts.maxAttempts ?? 3;
+  for (const s of reaped) {
+    if (!s.workItemId) continue;
+    try {
+      const item = await db.query.workItems.findFirst({
+        where: eq(workItems.id, s.workItemId),
+        columns: { status: true, sourceMetadata: true },
+      });
+      if (!item || item.status !== "in_progress") continue;
+      const prior = Number((item.sourceMetadata as Record<string, unknown>)?.attempts ?? 0);
+      const attempt = prior + 1;
+      const reason = `session ${s.id.slice(0, 8)} (${s.agentType ?? "?"}) reaped as stuck`;
+      await mirrorWorkItemEvent(
+        db,
+        s.workItemId,
+        attempt >= maxAttempts
+          ? { kind: "blocked", reason: `${attempt} runs died without finishing; last: ${reason}` }
+          : { kind: "requeued", reason, attempt },
+      );
+    } catch (err) {
+      console.error(`[session-reap] release of work item ${s.workItemId} failed:`, err);
+    }
+  }
+
+  return {
+    reaped: reaped.length,
+    sessions: reaped.map(({ id, status, agentType }) => ({ id, status, agentType })),
+    dryRun: false,
+  };
 }

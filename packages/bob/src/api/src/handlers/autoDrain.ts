@@ -20,6 +20,7 @@ import {
 
 import { formatWorkItemIdentifier } from "./workItems";
 import { pickAcrossProjects } from "./autoDrain-pick";
+import { mirrorWorkItemEvent } from "../services/tracker/trackerMirror.js";
 
 // Sessions actively holding a runner execution slot. Mirrors the runner's own
 // busy check (its activeSessions map) — NOT "idle", which means the agent
@@ -202,6 +203,11 @@ export async function autoDrainBacklog(
         { agentType },
       );
       dispatchedItems.push({ id: wi.id, identifier, agentType });
+      // Mirror the claim to the tracker (Kanbanger card → In Progress +
+      // comment). Best-effort; the mirror never blocks dispatch.
+      await mirrorWorkItemEvent(db, wi.id, { kind: "claimed", agentType }).catch(
+        () => undefined,
+      );
     } catch (err) {
       // Roll the item back to ready so the next tick retries it.
       await db
