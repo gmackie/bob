@@ -121,6 +121,19 @@ export const OBSERVABILITY_ALERTS: readonly ObservabilityAlertDefinition[] = [
       "Check runner_leases.last_heartbeat_at for stale/restarted runners, and the hetzner-bob/vanuc ooda-runner services. The reaped sessions are tagged last_error.code='reaped_stuck_session'; group them by workspace/agent_type to find which runner failed. See [[bob-runner-dispatch-ops]] and the 2026-07-29 token-outage ops note.",
   },
   {
+    id: "auto-drain-starved",
+    name: "Autonomous dispatch starved (work waiting, slots free, nothing running)",
+    service: "bob-worker",
+    surface: "job",
+    severity: "high",
+    description:
+      "Dispatchable work items exist, the daily cap has headroom and runner slots are free, yet no execute run has started for over the window (default 2h). The cron counters look healthy in this state; every 2026-08-21 outage (read-only worktree volume, revoked git token, permission-parked agents, sessions stuck pending) presented exactly like this.",
+    sentryTag: "surface:job",
+    posthogEvent: "critical_job_failure",
+    runbook:
+      "Check the newest chat_conversations rows: are sessions being created at all (worker/auto-drain) and are they being claimed (ws-gateway daemonCount, ooda-runner on hetzner-bob)? Look at last_error on the most recent error/failed sessions — EROFS, 401 on git push, and 'blocked' with no awaiting-input question are the known shapes. See [[bob-sdlc-kanbanger-loop]].",
+  },
+  {
     id: "linear-sync-stale",
     name: "Tracker (Linear/Kanbanger) sync stale — queue not being fed",
     service: "bob-worker",

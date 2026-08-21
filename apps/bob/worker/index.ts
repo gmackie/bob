@@ -357,6 +357,45 @@ export default Sentry.withSentry(
         }
         }
 
+        // 1a'. Starvation probe: work waiting + slots free + cap headroom but no
+        // execute run for >2h means the loop is broken somewhere downstream of
+        // the counters (worktree, git auth, agent permission, claim path).
+        if (autoDrainOn && String(runtimeEnv.BOB_STARVATION_ALERT_ENABLED ?? "true") !== "false") {
+          try {
+            const { checkStarvation } = await import("@bob/api/handlers/checkStarvation");
+            const s = await checkStarvation({
+              windowMs: Number(runtimeEnv.BOB_STARVATION_WINDOW_MS ?? 2 * 60 * 60 * 1000),
+              fallbackConcurrency: concurrency,
+              fallbackDailyCap: dailyCap,
+            });
+            if (s.starved) {
+              const { buildFailurePayload, getFailureSentryTags } = await import(
+                "@bob/observability/failures"
+              );
+              const failure = {
+                surface: "job" as const,
+                operation: "auto_drain_backlog",
+                error: new Error(
+                  `dispatch starved: ${s.dispatchable} dispatchable, ${s.activeSessions}/${s.concurrency} slots busy, ${s.executeToday}/${s.dailyCap} cap used, last execute run ${s.minutesSinceLastExecute ?? "never today"} min ago`,
+                ),
+                alertId: "auto-drain-starved",
+                tenant: runtimeEnv.BOB_TENANT_ID
+                  ? { tenantId: String(runtimeEnv.BOB_TENANT_ID) }
+                  : undefined,
+              };
+              console.error("[auto-drain] STARVED", buildFailurePayload(failure));
+              Sentry.withScope((scope) => {
+                scope.setLevel("error");
+                scope.setTags(getFailureSentryTags(failure));
+                scope.setContext("failure", buildFailurePayload(failure));
+                Sentry.captureException(failure.error);
+              });
+            }
+          } catch (err) {
+            console.error("[auto-drain] starvation probe failed:", err);
+          }
+        }
+
         // 1b. Walk active plan checklists one gated item at a time (dark by
         // default). Independent of auto-drain; safe no-op when no plan is active.
         if (advanceChecklistOn) {

@@ -33,60 +33,6 @@ vi.mock("@bob/db", () => ({
 }));
 
 describe("awaiting-input expiry cron", () => {
-  describe("findExpiredAwaitingInputSessions", () => {
-    it("should return correct session structure", () => {
-      const mockDbResult = {
-        rows: [
-          {
-            id: "session-1",
-            user_id: "user-1",
-            awaiting_input_default: "proceed with default",
-            kanbanger_task_id: "task-1",
-          },
-          {
-            id: "session-2",
-            user_id: "user-2",
-            awaiting_input_default: "skip this step",
-            kanbanger_task_id: null,
-          },
-        ],
-      };
-
-      const sessions = mockDbResult.rows.map(
-        (row: {
-          id: string;
-          user_id: string;
-          awaiting_input_default: string | null;
-          kanbanger_task_id: string | null;
-        }) => ({
-          id: row.id,
-          userId: row.user_id,
-          awaitingInputDefault:
-            row.awaiting_input_default ?? "proceed with default",
-          planningTaskId: row.kanbanger_task_id,
-        }),
-      );
-
-      expect(sessions).toHaveLength(2);
-      const [first, second] = sessions;
-      expect(first?.id).toBe("session-1");
-      expect(first?.userId).toBe("user-1");
-      expect(first?.awaitingInputDefault).toBe("proceed with default");
-      expect(first?.planningTaskId).toBe("task-1");
-      expect(second?.planningTaskId).toBeNull();
-    });
-
-    it("should handle empty result set", () => {
-      const mockDbResult = { rows: [] };
-      const sessions = mockDbResult.rows.map((row) => ({
-        id: (row as { id: string }).id,
-        userId: (row as { user_id: string }).user_id,
-      }));
-
-      expect(sessions).toHaveLength(0);
-    });
-  });
-
   describe("resolveWithTimeout", () => {
     it("should build correct timeout resolution JSON", () => {
       const session = {

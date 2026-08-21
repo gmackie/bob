@@ -81,6 +81,7 @@ function mapLinearStatusToBob(stateType: string): string {
       return "in_progress";
     case "completed":
       return "done";
+    case "canceled": // Linear/Kanbanger spell the state type with one L
     case "cancelled":
       return "cancelled";
     default:

@@ -1,4 +1,4 @@
-import { and, eq, sql } from "@bob/db";
+import { and, eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
   chatConversations,
@@ -36,21 +36,6 @@ const VALID_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
   completed: [],
 };
 
-function readExecuteRows<T>(result: unknown): T[] {
-  if (Array.isArray(result)) {
-    return result as T[];
-  }
-
-  if (
-    result &&
-    typeof result === "object" &&
-    Array.isArray((result as { rows?: unknown }).rows)
-  ) {
-    return (result as { rows: T[] }).rows;
-  }
-
-  return [];
-}
 
 function isValidTransition(from: WorkflowStatus, to: WorkflowStatus): boolean {
   return VALID_TRANSITIONS[from].includes(to);
@@ -505,53 +490,12 @@ export async function completeTask(
   });
 }
 
-/**
- * UNUSED — and it is NOT the safety net it looks like. Nothing in production
- * calls this: no cron, no gateway sweep, no handler. `requestInput` writes
- * `awaitingInputExpiresAt`, but no code ever acts on an elapsed one, so a
- * session that reached `awaiting_input` would wait forever with its
- * `awaitingInputDefault` never applied.
- *
- * In practice nothing reaches that state at all — every conversation in
- * production sits at workflowStatus "started"; the value has never been
- * anything else, and no client calls `session.requestInput`.
- *
- * The LIVE human-wait is a different axis entirely: `chatConversations.status`
- * = "blocked" (the permission-mode tool gate), expired by the gateway's
- * sweepAbandonedApprovals. Do not read this function, the
- * `[workflowStatus, awaitingInputExpiresAt]` index, or its tests as covering
- * that path — they never have. Wire this up or delete it; leaving it looking
- * load-bearing is how the blocked path went two days without a TTL.
- */
-export async function findExpiredAwaitingInputSessions(): Promise<
-  {
-    id: string;
-    userId: string;
-    awaitingInputDefault: string;
-    planningTaskId: string | null;
-  }[]
-> {
-  const result = await db.execute(sql`
-    SELECT id, user_id, awaiting_input_default,
-           kanbanger_task_id AS planning_task_id
-    FROM chat_conversations
-    WHERE workflow_status = 'awaiting_input'
-      AND awaiting_input_expires_at <= NOW()
-      AND awaiting_input_resolved_at IS NULL
-  `);
-
-  return readExecuteRows<{
-    id: string;
-    user_id: string;
-    awaiting_input_default: string | null;
-    planning_task_id: string | null;
-  }>(result).map((row) => ({
-    id: row.id,
-    userId: row.user_id,
-    awaitingInputDefault: row.awaiting_input_default ?? "proceed with default",
-    planningTaskId: row.planning_task_id,
-  }));
-}
+// NOTE: the former `findExpiredAwaitingInputSessions` (workflowStatus
+// 'awaiting_input' TTL) was deleted 2026-08-23. It was never called from any
+// cron/gateway/handler and the workflowStatus axis has never left "started"
+// in production. The live human-wait is `chatConversations.status = 'blocked'`,
+// expired by the gateway's sweepAbandonedApprovals and, for answerless blocks,
+// by handlers/reapStuckSessions.
 
 export async function getSessionWorkflowState(
   userId: string,

@@ -18,7 +18,7 @@
 //     see; marked final quietly ("done = merged" for that repo).
 // Everything is best-effort and idempotent via work_items.source_metadata.
 
-import { and, desc, eq, gt, isNotNull, sql } from "@bob/db";
+import { and, desc, eq, gt, isNotNull } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
   chatConversations,
@@ -28,11 +28,12 @@ import {
 } from "@bob/db/schema";
 
 import {
-  summarizeDeployEvidence,
-  type ActionRunEvidence,
-  type DeploySummary,
-  type FgDeploymentEvidence,
+  summarizeDeployEvidence
+  
+  
+  
 } from "../services/deploy/deployEvidence.js";
+import type {ActionRunEvidence, DeploySummary, FgDeploymentEvidence} from "../services/deploy/deployEvidence.js";
 import { mirrorWorkItemEvent } from "../services/tracker/trackerMirror.js";
 
 const DEPLOY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -103,7 +104,7 @@ export async function trackDeployments(
       columns: { id: true, sourceMetadata: true },
     });
     if (!item) continue;
-    const meta = { ...(item.sourceMetadata ?? {}) } as Record<string, unknown>;
+    const meta = { ...item.sourceMetadata } as Record<string, unknown>;
     const tracking = (meta.deployTracking ?? {}) as DeployTracking;
     if (tracking.final) continue;
     result.scanned++;
@@ -172,7 +173,7 @@ export async function trackDeployments(
       result.items.push({
         pr: label,
         outcome: "error",
-        detail: (err as Error)?.message?.slice(0, 160),
+        detail: err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160),
       });
       console.error(`[deploy-track] ${label} failed:`, err);
     }
@@ -256,7 +257,7 @@ async function resolveFgAppSlug(
     );
     if (!file.content) return null;
     const text = atob(file.content.replace(/\n/g, ""));
-    const m = text.match(/^\s*app:\s*["']?([A-Za-z0-9._-]+)["']?\s*$/m);
+    const m = /^\s*app:\s*["']?([A-Za-z0-9._-]+)["']?\s*$/m.exec(text);
     return m?.[1] ?? null;
   } catch {
     return null;
