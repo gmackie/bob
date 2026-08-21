@@ -1171,7 +1171,7 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       sensitivity: "personal" as const,
       correlationId: "replay-proof",
       idempotencyKey: "append-replay-1",
-      occurredAt: "2026-08-05T18:00:00.000Z",
+      occurredAt: "2026-08-05T18:00:00Z",
     };
 
     const first = await appendConversationEvent(db!, "owner-a", input);

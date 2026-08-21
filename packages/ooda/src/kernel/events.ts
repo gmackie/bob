@@ -40,7 +40,10 @@ async function assertOwnedConversation(
 }
 
 function eventInputFingerprint(input: AppendConversationEventInputV1): string {
-  return stableStringify(input);
+  return stableStringify({
+    ...input,
+    occurredAt: new Date(input.occurredAt).toISOString(),
+  });
 }
 
 function storedEventFingerprint(row: typeof conversationEvents.$inferSelect): string {
