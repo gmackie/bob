@@ -61,7 +61,7 @@ class HermesOperatorPluginTests(unittest.TestCase):
     def test_manifest_declares_predispatch_hook(self):
         manifest = PLUGIN_MANIFEST_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("hooks:\n  - pre_gateway_dispatch\n", manifest)
+        self.assertIn("provides_hooks:\n  - pre_gateway_dispatch\n", manifest)
 
     def test_reads_each_gateway_session_context_value_by_name(self):
         plugin = load_plugin()

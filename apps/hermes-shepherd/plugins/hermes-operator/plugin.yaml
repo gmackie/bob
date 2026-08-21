@@ -3,7 +3,7 @@ version: 1.0.0
 description: Native Hermes commands for the Bob and OODA operator plane.
 author: GMACKO
 kind: standalone
-hooks:
+provides_hooks:
   - pre_gateway_dispatch
 requires_env:
   - name: HERMES_BOB_OPERATOR_URL
