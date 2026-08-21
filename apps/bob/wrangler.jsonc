@@ -40,10 +40,10 @@
     "BOB_AUTO_DRAIN_ENABLED": "true",
     "BOB_AUTO_DRAIN_CONCURRENCY": "4",
     "BOB_AUTO_DRAIN_DAILY_CAP": "40",
-    // Dispatch rotation. claude pulled 2026-08-21 11:30 UTC: its weekly
-    // subscription limit is exhausted ("resets Aug 23, 3pm UTC") — every claude
-    // session exits 1 immediately. Restore claude after 2026-08-23 15:00 UTC.
-    "BOB_AUTO_DRAIN_AGENTS": "codex,grok,cursor",
+    // Dispatch rotation. claude restored 2026-08-23 after its weekly limit
+    // reset. Review/repair stay on codex so a second provider carries that
+    // load (and the reviewer is never the author's own model).
+    "BOB_AUTO_DRAIN_AGENTS": "claude,codex,grok,cursor",
     // Autonomous PR reviewer + auto-merge (see worker/index.ts scheduled →
     // handlers/autoMergeReview). Reviews open PRs with Claude and merges those
     // that are CI-green + AI-approved + conflict-free. Needs the ANTHROPIC_API_KEY
