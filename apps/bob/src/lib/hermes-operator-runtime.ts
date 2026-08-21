@@ -24,6 +24,7 @@ export interface HermesOperatorRuntimeConfig {
   digestSecret: string;
   fetch?: typeof fetch;
   now?: () => Date;
+  briefingTimeoutMs?: number;
 }
 
 interface HermesOperatorRuntimeDependencies {
@@ -65,6 +66,26 @@ export function createHermesOperatorRuntime(
     branchId: required(config.branchId, "branchId"),
   };
   const briefingReaders = Object.values(dependencies.briefingSources ?? {});
+  const briefingTimeoutMs = config.briefingTimeoutMs ?? 8_000;
+  if (!Number.isSafeInteger(briefingTimeoutMs) || briefingTimeoutMs < 1) {
+    throw new Error("briefingTimeoutMs must be a positive integer");
+  }
+
+  async function readBriefingSource(reader: {
+    read(): Promise<HermesBriefSnapshot>;
+  }): Promise<HermesBriefSnapshot | null> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        Promise.resolve().then(() => reader.read()).catch(() => null),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), briefingTimeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
 
   return {
     authorize(auth: HermesOperatorRouteAuth): boolean {
@@ -83,8 +104,11 @@ export function createHermesOperatorRuntime(
                 ...(briefingReaders.length > 0
                   ? {
                       async today() {
-                        const snapshots = await Promise.all(
-                          briefingReaders.map((reader) => reader.read()),
+                        const settled = await Promise.all(
+                          briefingReaders.map(readBriefingSource),
+                        );
+                        const snapshots = settled.filter(
+                          (snapshot): snapshot is HermesBriefSnapshot => snapshot !== null,
                         );
                         return buildHermesMorningBrief(
                           snapshots,

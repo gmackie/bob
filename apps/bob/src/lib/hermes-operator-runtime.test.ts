@@ -136,6 +136,71 @@ describe("Hermes operator runtime", () => {
     });
   });
 
+  it("returns a partial brief when one source never settles", async () => {
+    const runtime = createHermesOperatorRuntime(
+      {
+        ownerUserId: "user-1",
+        oodaOrigin: "https://ooda.example.com",
+        oodaApiKey: "ooda-secret",
+        conversationId: "conversation-1",
+        branchId: "branch-1",
+        digestSecret: "digest-secret",
+        briefingTimeoutMs: 10,
+      },
+      {
+        usage: { record: async () => undefined },
+        briefingSources: {
+          ooda: { read: () => new Promise(() => undefined) },
+          bob: {
+            read: async () => ({
+              source: "bob",
+              observedAt: "2026-08-21T14:00:00.000Z",
+              coverage: "complete",
+              total: 0,
+              items: [],
+            }),
+          },
+        },
+      },
+    );
+
+    const outcome = await Promise.race([
+      runtime.createService({
+        keyId: "key-1",
+        userId: "user-1",
+        permissions: ["read"],
+      }).handle({
+        schemaVersion: 1,
+        requestId: "telegram:today:timeout",
+        intent: "today",
+        channel: "telegram",
+        occurredAt: "2026-08-21T14:00:00Z",
+        payload: {},
+      }).then((value) => ({ kind: "result" as const, value })),
+      new Promise<{ kind: "test-timeout" }>((resolve) =>
+        setTimeout(() => resolve({ kind: "test-timeout" }), 100)),
+    ]);
+
+    expect(outcome.kind).toBe("result");
+    if (outcome.kind === "result") {
+      expect(outcome.value).toMatchObject({
+        intent: "today.brief",
+        freshness: { coverage: "partial" },
+      });
+      expect(outcome.value).toHaveProperty(
+        "data.sections",
+        expect.arrayContaining([
+          expect.objectContaining({ source: "ooda", coverage: "unknown" }),
+          expect.objectContaining({ source: "bob", coverage: "complete" }),
+        ]),
+      );
+      expect(outcome.value).toHaveProperty(
+        "data.gaps",
+        expect.arrayContaining(["ooda did not report"]),
+      );
+    }
+  });
+
   it("routes status through the canonical Bob status reader", async () => {
     const runtime = createHermesOperatorRuntime(
       {
