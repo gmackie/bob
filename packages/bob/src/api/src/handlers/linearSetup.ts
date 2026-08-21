@@ -20,6 +20,7 @@ import {
   isOpenLinearState,
   mapLinearStatusToBob,
 } from "../services/linear/ensureLinearProject.js";
+import { reconcileImportedStatus } from "../services/linear/reconcileStatus.js";
 
 import type { HandlerContext } from "./context.js";
 
@@ -190,6 +191,7 @@ export async function syncLinearProjects(
   let projectsCreated = 0;
   let projectsExisting = 0;
   let issuesImported = 0;
+  let issuesUpdated = 0;
   let issuesTruncated = false;
 
   const projectResult = await client.projects({ first: PROJECT_PAGE });
@@ -215,7 +217,6 @@ export async function syncLinearProjects(
       for (const issue of issuesConn.nodes) {
         const state = await issue.state;
         const stateType = state?.type ?? "backlog";
-        if (!isOpenLinearState(stateType)) continue;
 
         // Match BOTH external-id formats. Older rows were keyed by the Linear
         // identifier ("GMA-5"); this importer keys by the issue UUID. Checking
@@ -232,9 +233,26 @@ export async function syncLinearProjects(
             ),
             eq(workItems.externalProvider, "linear"),
           ),
-          columns: { id: true },
+          columns: { id: true, status: true },
         });
-        if (existing) continue;
+
+        if (existing) {
+          // Already imported: mirror the tracker's queue/closure state so a
+          // card promoted Backlog→Todo (or closed) in Kanbanger reaches Bob.
+          // The sync was insert-only before this, which left the tracker full
+          // of Todo while Bob's dispatchable queue sat empty.
+          const next = reconcileImportedStatus(existing.status, stateType);
+          if (next) {
+            await ctx.db
+              .update(workItems)
+              .set({ status: next })
+              .where(eq(workItems.id, existing.id));
+            issuesUpdated++;
+          }
+          continue;
+        }
+
+        if (!isOpenLinearState(stateType)) continue;
 
         await ctx.db.insert(workItems).values({
           ownerUserId: owner.userId,
@@ -260,7 +278,7 @@ export async function syncLinearProjects(
 
   // Record sync-health on the integration so it's visible in-app, not just in
   // cron console logs.
-  const syncResult = `${projectsCreated} created · ${projectsExisting} existing · ${issuesImported} issues`;
+  const syncResult = `${projectsCreated} created · ${projectsExisting} existing · ${issuesImported} issues imported · ${issuesUpdated} updated`;
   await ctx.db
     .update(workspaceIntegrations)
     .set({
@@ -278,6 +296,7 @@ export async function syncLinearProjects(
     projectsCreated,
     projectsExisting,
     issuesImported,
+    issuesUpdated,
     projectsTruncated,
     issuesTruncated,
   };
