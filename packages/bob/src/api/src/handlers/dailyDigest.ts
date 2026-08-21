@@ -2,13 +2,13 @@
 //
 // Once per UTC day (first cron tick at/after BOB_DIGEST_HOUR_UTC) collect the
 // last 24h of loop metrics and post them where a human will see them:
-//   1. a comment on the pinned "📊 Bob daily digest" Kanbanger issue — created
-//      on first run (bob-managed label so the webhook importer skips it; the
-//      pull sync will still mirror it as a backlog item, which is how we find
-//      it again and where we keep `lastDigestDate`), and
+//   1. a comment on the pinned "📊 Bob daily digest" tracker issue — found by
+//      title via the tracker API and created (project-less, so the importer
+//      never turns it into work) on first run, and
 //   2. a Bob in-app notification for the workspace owner.
-// Idempotent per day via work_items.source_metadata.digest.lastDate on the
-// pinned issue's mirror row. Best-effort; never throws into the cron.
+// "Already posted today" is derived from the pinned issue's own comments (the
+// newest digest comment's date), so no Bob-side state is needed and a retry
+// can never double-post. Best-effort; never throws into the cron.
 
 import { and, eq, gt, inArray, sql } from "@bob/db";
 import { db } from "@bob/db/client";
@@ -24,16 +24,27 @@ import {
 } from "@bob/db/schema";
 import { LinearClient } from "@linear/sdk";
 
-import { digestNotes, renderDigest  } from "../services/digest/renderDigest.js";
-import type {DigestMetrics} from "../services/digest/renderDigest.js";
+import type { DigestMetrics } from "../services/digest/renderDigest.js";
+import { digestNotes, renderDigest } from "../services/digest/renderDigest.js";
 
-const PINNED_TITLE = "📊 Bob daily digest";
+export const PINNED_TITLE = "📊 Bob daily digest";
+const DIGEST_DATE = /daily digest — (\d{4}-\d{2}-\d{2})/;
 
 export interface DailyDigestResult {
   posted: boolean;
   reason?: string;
   date?: string;
   text?: string;
+}
+
+/** Newest digest date already posted on the pinned issue (from its comments). */
+export function lastPostedDate(commentBodies: readonly string[]): string | null {
+  let last: string | null = null;
+  for (const body of commentBodies) {
+    const m = DIGEST_DATE.exec(body);
+    if (m?.[1] && (!last || m[1] > last)) last = m[1];
+  }
+  return last;
 }
 
 export async function dailyDigest(opts: {
@@ -52,53 +63,35 @@ export async function dailyDigest(opts: {
   });
   if (!integ?.apiKey) return { posted: false, reason: "no tracker integration" };
 
-  // Pinned issue's mirror row (imported by the pull sync) holds the state.
-  const pinned = await db.query.workItems.findFirst({
-    where: and(
-      eq(workItems.externalProvider, "linear"),
-      eq(workItems.title, PINNED_TITLE),
-    ),
-    columns: { id: true, externalId: true, sourceMetadata: true },
-  });
-
   const client = new LinearClient({
     apiKey: integ.apiKey,
     ...(integ.linearApiUrl ? { apiUrl: integ.linearApiUrl } : {}),
   });
 
+  // Locate (or create) the pinned issue by exact title.
+  const found = await client.issues({ first: 5, filter: { title: { eq: PINNED_TITLE } } });
+  let pinned = found.nodes[0];
   if (!pinned) {
-    // Bootstrap: create the pinned issue; the next pull sync mirrors it and the
-    // following digest tick will post to it.
-    if (!opts.force) {
-      const team = integ.linearTeamId;
-      if (!team) return { posted: false, reason: "no team id to create pinned issue" };
-      await client.createIssue({
-        teamId: team,
-        title: PINNED_TITLE,
-        description:
-          "Bob posts a daily summary of the autonomous loop here as comments. Keep this card in Backlog; Bob never works it.",
-      });
-      return { posted: false, reason: "created pinned digest issue; will post after next sync" };
-    }
-    return { posted: false, reason: "pinned issue not mirrored yet" };
+    const team = integ.linearTeamId;
+    if (!team) return { posted: false, reason: "no team id to create pinned issue" };
+    const created = await client.createIssue({
+      teamId: team,
+      title: PINNED_TITLE,
+      description:
+        "Bob posts a daily summary of the autonomous loop here as comments. Keep this card in Backlog; Bob never works it.",
+    });
+    pinned = await created.issue;
+    if (!pinned) return { posted: false, reason: "failed to create pinned issue" };
   }
 
-  const meta = { ...pinned.sourceMetadata } as Record<string, unknown>;
-  const digestMeta = (meta.digest ?? {}) as { lastDate?: string };
-  if (!opts.force && digestMeta.lastDate === today) return { posted: false, reason: "already posted today", date: today };
+  const comments = await pinned.comments({ first: 100 });
+  const already = lastPostedDate(comments.nodes.map((c) => c.body));
+  if (!opts.force && already === today) return { posted: false, reason: "already posted today", date: today };
 
   const metrics = await collectMetrics(today, opts.dailyCap ?? 40);
   const text = renderDigest(metrics);
 
-  // Mark first so a tracker hiccup can't double-post tomorrow's tick.
-  await db
-    .update(workItems)
-    .set({ sourceMetadata: { ...meta, digest: { lastDate: today } } })
-    .where(eq(workItems.id, pinned.id));
-
-  if (pinned.externalId) {
-    await client.createComment({ issueId: pinned.externalId, body: text });
-  }
+  await client.createComment({ issueId: pinned.id, body: text });
 
   // In-app notification for the workspace owner.
   const owner = await db.query.workspaceMembers.findFirst({
@@ -112,7 +105,7 @@ export async function dailyDigest(opts: {
       type: "batch_completed",
       title: `Bob daily digest — ${today}`,
       body: text.slice(0, 2000),
-      url: `/work-items/${pinned.id}`,
+      url: pinned.url,
     });
   }
 

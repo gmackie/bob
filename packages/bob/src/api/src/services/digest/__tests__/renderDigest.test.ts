@@ -52,3 +52,17 @@ describe("digestNotes", () => {
     expect(digestNotes({ ...base, prsMerged: 0, reviewsRun: 0 }).join("\n")).toMatch(/no reviews ran/);
   });
 });
+
+describe("lastPostedDate", () => {
+  it("finds the newest digest date among comment bodies", async () => {
+    const { lastPostedDate } = await import("../../../handlers/dailyDigest");
+    expect(lastPostedDate([])).toBeNull();
+    expect(
+      lastPostedDate([
+        "📊 **Bob daily digest — 2026-08-22** (last 24h)\n…",
+        "unrelated",
+        "📊 **Bob daily digest — 2026-08-23** (last 24h)\n…",
+      ]),
+    ).toBe("2026-08-23");
+  });
+});
