@@ -694,7 +694,7 @@ describe("Relay", () => {
       browserWs.receive({ type: "subscribe_workspace", workspaceId: "ws-1" });
       await new Promise((r) => setImmediate(r));
 
-      relay.nudgeSession({
+      await relay.nudgeSession({
         sessionId: "sess-99",
         workspaceId: "ws-1",
         workingDirectory: "/tmp/work",
@@ -723,7 +723,7 @@ describe("Relay", () => {
       });
       await new Promise((r) => setImmediate(r));
 
-      relay.nudgeSession({
+      await relay.nudgeSession({
         sessionId: "sess-99",
         workspaceId: "ws-1",
         workingDirectory: "/tmp/work",
