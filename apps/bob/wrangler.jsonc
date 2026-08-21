@@ -40,9 +40,10 @@
     "BOB_AUTO_DRAIN_ENABLED": "true",
     "BOB_AUTO_DRAIN_CONCURRENCY": "4",
     "BOB_AUTO_DRAIN_DAILY_CAP": "40",
-    // Dispatch rotation. codex re-authed 2026-08-21 (auth.json refreshed on
-    // hetzner-bob, CODEX-OK smoke test) and restored to the rotation.
-    "BOB_AUTO_DRAIN_AGENTS": "claude,codex,grok,cursor",
+    // Dispatch rotation. claude pulled 2026-08-21 11:30 UTC: its weekly
+    // subscription limit is exhausted ("resets Aug 23, 3pm UTC") — every claude
+    // session exits 1 immediately. Restore claude after 2026-08-23 15:00 UTC.
+    "BOB_AUTO_DRAIN_AGENTS": "codex,grok,cursor",
     // Autonomous PR reviewer + auto-merge (see worker/index.ts scheduled →
     // handlers/autoMergeReview). Reviews open PRs with Claude and merges those
     // that are CI-green + AI-approved + conflict-free. Needs the ANTHROPIC_API_KEY
@@ -69,9 +70,9 @@
     // per PR, one attempt per head SHA, a per-PR attempt cap, and a per-run
     // budget. Conservative budgets — repair mutates PR branches.
     "BOB_AUTO_REPAIR_ENABLED": "true",
-    "BOB_AUTO_REPAIR_AGENT": "claude",
+    "BOB_AUTO_REPAIR_AGENT": "codex",
     // Reviewer agent (default in code is codex; see codex note above).
-    "BOB_AUTO_MERGE_REVIEW_AGENT": "claude",
+    "BOB_AUTO_MERGE_REVIEW_AGENT": "codex",
     "BOB_AUTO_REPAIR_MAX_PER_RUN": "3",
     "BOB_AUTO_REPAIR_MAX_ATTEMPTS_PER_PR": "3"
   }
