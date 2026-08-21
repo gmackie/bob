@@ -161,7 +161,7 @@ export function LinkDeviceSection() {
   );
 }
 
-type ApproveStatus = "idle" | "approving" | "approved" | "error";
+type ApproveStatus = "idle" | "approving" | "approved" | "error" | "unauthenticated";
 
 /**
  * Fallback path: the mobile app shows a typeable ABCD-EFGH code, the user
@@ -181,6 +181,10 @@ function ApproveDeviceCode() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userCode }),
       });
+      if (res.status === 401) {
+        setStatus("unauthenticated");
+        return;
+      }
       if (!res.ok) throw new Error(`approve failed: ${res.status}`);
       setStatus("approved");
       setUserCode("");
@@ -227,6 +231,15 @@ function ApproveDeviceCode() {
       {status === "error" && (
         <div className="text-sm text-muted-foreground">
           That code is invalid or expired. Get a fresh one on the device.
+        </div>
+      )}
+      {status === "unauthenticated" && (
+        <div className="text-sm text-destructive">
+          Your web session has expired.{" "}
+          <a href="/login" className="underline">
+            Sign in again
+          </a>{" "}
+          and then approve the code.
         </div>
       )}
     </div>

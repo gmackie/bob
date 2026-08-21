@@ -25,8 +25,13 @@ const USER_CODE_PREFIX = "qr-pairing-user";
 const DEFAULT_TTL_MS = 2 * 60 * 1000;
 /** How long the "claimed" marker sticks around for the web poller. */
 const CLAIMED_MARKER_TTL_MS = 5 * 60 * 1000;
-/** Device-code (typed ABCD-EFGH) flow lives longer — the user has to walk to a browser. */
-const DEVICE_TTL_MS = 10 * 60 * 1000;
+/**
+ * Device-code (typed ABCD-EFGH) flow lives longer — the user has to walk to
+ * a browser, and in practice that hand-off routinely exceeds 10 minutes.
+ * 30 minutes is still safe: 30^8 code space, approve is rate-limited, and
+ * approval requires an already-authenticated web session.
+ */
+const DEVICE_TTL_MS = 30 * 60 * 1000;
 
 /** Crockford-style alphabet: no I/L/O/U/0/1 so codes are unambiguous to type. */
 const USER_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ23456789";

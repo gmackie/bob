@@ -296,11 +296,19 @@ describe("qr-pairing device-code flow (typed code + web approval)", () => {
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
+  it("a typed code is still valid after 20 minutes (slow hand-offs)", async () => {
+    const { deviceCode } = await qrApi(auth).requestQrPairingDeviceCode({});
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 20 * 60 * 1000);
+    const result = await qrApi(auth).pollQrPairingDeviceCode({ body: { deviceCode } });
+    expect(result.status).toBe("pending");
+  });
+
   it("poll reports expired after the device window lapses", async () => {
     const { deviceCode } = await qrApi(auth).requestQrPairingDeviceCode({});
 
     vi.useFakeTimers();
-    vi.setSystemTime(Date.now() + 11 * 60 * 1000);
+    vi.setSystemTime(Date.now() + 31 * 60 * 1000);
 
     const result = await qrApi(auth).pollQrPairingDeviceCode({
       body: { deviceCode },
