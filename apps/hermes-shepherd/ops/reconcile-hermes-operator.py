@@ -65,10 +65,16 @@ def reconcile_daily_jobs(
         canonical_id = canonical.get("id")
         if not isinstance(canonical_id, str):
             raise ValueError("Hermes job is missing an ID")
-        if paused(canonical) or matches(canonical, definition):
+        if matches(canonical, definition):
             existing += 1
         else:
-            update_job(canonical_id, {**definition, "enabled": True})
+            # Repair declarative drift even while an operator has paused a job.
+            # Omitting lifecycle fields lets Hermes retain the emergency pause;
+            # active jobs are explicitly re-enabled to repair accidental drift.
+            updates = dict(definition)
+            if not paused(canonical):
+                updates["enabled"] = True
+            update_job(canonical_id, updates)
             updated += 1
         for duplicate in duplicates:
             duplicate_id = duplicate.get("id")

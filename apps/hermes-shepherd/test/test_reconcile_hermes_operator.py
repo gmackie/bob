@@ -102,8 +102,10 @@ class HermesOperatorReconciliationTests(unittest.TestCase):
             lambda _: None,
         )
 
-        self.assertEqual(updated, [])
-        self.assertEqual(result, {"created": 1, "existing": 1, "updated": 0, "removed": 0})
+        self.assertEqual(updated, [("paused", reconciler.DAILY_JOBS[0])])
+        self.assertNotIn("enabled", updated[0][1])
+        self.assertNotIn("state", updated[0][1])
+        self.assertEqual(result, {"created": 1, "existing": 0, "updated": 1, "removed": 0})
 
     def test_job_entrypoint_maps_fixed_filename_to_operator_intent(self):
         runner = load_job_runner()
