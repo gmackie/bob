@@ -1,7 +1,8 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { makePgliteDb  } from "./client-pglite.js";
-import type {PgliteDbHandle} from "./client-pglite.js";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import type { PgliteDbHandle } from "./client-pglite.js";
+import { makePgliteDb } from "./client-pglite.js";
 
 describe("client-pglite", () => {
   let handle: PgliteDbHandle;
@@ -20,7 +21,9 @@ describe("client-pglite", () => {
   });
 
   it("creates a table and round-trips a row", async () => {
-    await handle.db.execute(sql`create table t (id serial primary key, name text)`);
+    await handle.db.execute(
+      sql`create table t (id serial primary key, name text)`,
+    );
     await handle.db.execute(sql`insert into t (name) values ('hello')`);
     const result = await handle.db.execute(sql`select name from t`);
     expect(result.rows[0]).toMatchObject({ name: "hello" });
@@ -42,6 +45,7 @@ describe("client-pglite", () => {
         "tenants",
         "api_keys", // packages/bob/src/auth/src/schema.ts (Bob-owned)
         "users", // gmacko auth table (aliased as `user` in @bob/auth/schema)
+        "hermes_approval_consumptions",
       ];
       for (const t of tables) {
         const result = await h.db.execute(

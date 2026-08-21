@@ -5,7 +5,11 @@ export {
 } from "./errors.js";
 
 export { mapTrpcError } from "./bridge.js";
-export type { NotFoundContext, MessageContext, TrpcErrorCode } from "./bridge.js";
+export type {
+  NotFoundContext,
+  MessageContext,
+  TrpcErrorCode,
+} from "./bridge.js";
 
 // --- Hermes operator protocol ---
 
@@ -42,15 +46,30 @@ export type {
 } from "./hermes-policy.js";
 
 export {
+  HermesActionEnvelopeSchema,
   HermesApprovalSchema,
   HermesActionScopeSchema,
+  HermesCanonicalEvidenceSchema,
+  HermesExecutionEnvelopeSchema,
+  HermesExecutionReceiptSchema,
+  HermesInspectionEnvelopeSchema,
+  HermesProposalEnvelopeSchema,
   assertHermesApproval,
+  assertHermesExecutionEnvelope,
+  assertHermesExecutionReceipt,
   digestHermesActionScope,
+  parseHermesActionEnvelope,
 } from "./schemas/hermes-action.js";
 export type {
+  HermesActionEnvelope,
   HermesActionScope,
   HermesApproval,
   HermesApprovalCheck,
+  HermesCanonicalEvidence,
+  HermesExecutionEnvelope,
+  HermesExecutionReceipt,
+  HermesInspectionEnvelope,
+  HermesProposalEnvelope,
 } from "./schemas/hermes-action.js";
 
 // --- RpcGroups ---

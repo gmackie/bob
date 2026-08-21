@@ -17,3 +17,8 @@ export {
   sql,
 } from "drizzle-orm";
 export { alias } from "drizzle-orm/pg-core";
+export {
+  HermesApprovalAlreadyConsumedError,
+  createHermesApprovalLedger,
+} from "./hermes-approval-store.js";
+export type { HermesApprovalConsumption } from "./hermes-approval-store.js";
