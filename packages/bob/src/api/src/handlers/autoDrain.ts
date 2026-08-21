@@ -106,10 +106,18 @@ export async function autoDrainBacklog(
     .where(inArray(chatConversations.status, ACTIVE_SESSION_STATUSES));
   const running = runningRows[0]?.running ?? 0;
 
+  // Count only EXECUTE runs against the daily cap. Review/repair sessions
+  // also insert task_runs (run_phase 'review'/'repair') and are already
+  // bounded by their own per-tick budgets in autoMergeReview — letting them
+  // eat the dispatch budget meant a busy review/repair morning starved new
+  // work entirely (45 "runs" by 07:40 on 2026-08-21, only 29 of them real).
   const todayRows = await db
     .select({ today: sql<number>`count(*)::int` })
     .from(taskRuns)
-    .where(sql`${taskRuns.createdAt} >= date_trunc('day', now())`);
+    .where(
+      sql`${taskRuns.createdAt} >= date_trunc('day', now())
+        and coalesce(${taskRuns.runPhase}, 'execute') = 'execute'`,
+    );
   const today = todayRows[0]?.today ?? 0;
 
   const freeSlots = Math.max(0, cfg.concurrency - running);
