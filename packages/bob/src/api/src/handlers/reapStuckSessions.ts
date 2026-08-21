@@ -19,17 +19,23 @@
 //     activity for longer than `hardTimeoutMs` (covers sessions wedged in
 //     pending/provisioning because dispatch died before a gateway claimed them).
 //
-// `blocked` is intentionally NOT reaped here: it means the run is paused on a
-// human decision, governed by `awaitingInputExpiresAt` (see awaitingInputExpiry
-// service), not a runner timeout — killing it on a clock would discard a
-// legitimately-waiting session.
+// `blocked` WITH a pending question is not reaped here: it means the run is
+// paused on a human decision, governed by `awaitingInputExpiresAt` (see
+// awaitingInputExpiry service), not a runner timeout — killing it on a clock
+// would discard a legitimately-waiting session. `blocked` WITHOUT a question
+// is a different animal: it's what a session becomes when its agent dies
+// mid-permission-handshake (runner restart, adapter crash) — nothing will ever
+// answer, nothing else cleans it up, and it strands its work item in
+// in_progress forever. That shape bit three times on 2026-08-21 alone, each
+// needing a manual SQL release; it is reaped on the same timeouts as the rest.
 
 import { and, eq, inArray, or, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import { chatConversations, workItems } from "@bob/db/schema";
 import { mirrorWorkItemEvent } from "../services/tracker/trackerMirror.js";
 
-// Active statuses that hold an autoDrain slot, EXCEPT `blocked` (see header).
+// Active statuses that hold an autoDrain slot, EXCEPT `blocked` — which is
+// reapable only when no awaiting-input question is pending (see header).
 const REAPABLE_ACTIVE_STATUSES = [
   "pending",
   "provisioning",
@@ -75,7 +81,15 @@ export async function reapStuckSessions(
   // A session is dead if it's in an active-but-reapable status AND either its
   // lease expired long ago, or it was never leased and has gone quiet.
   const deadPredicate = and(
-    inArray(chatConversations.status, REAPABLE_ACTIVE_STATUSES),
+    or(
+      inArray(chatConversations.status, REAPABLE_ACTIVE_STATUSES),
+      // Answerless blocked: the agent died mid-permission-handshake; no human
+      // prompt exists, so nothing will ever unblock it (see header).
+      and(
+        eq(chatConversations.status, "blocked"),
+        sql`${chatConversations.awaitingInputQuestion} is null`,
+      ),
+    ),
     or(
       sql`${chatConversations.leaseExpiresAt} is not null
         and ${chatConversations.leaseExpiresAt} < now() - make_interval(secs => ${leaseGraceSecs})`,
