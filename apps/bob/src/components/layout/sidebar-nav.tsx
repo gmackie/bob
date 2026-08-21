@@ -34,7 +34,6 @@ export interface NavItem {
   label: string;
   href: string;
 }
-
 const MODE_ICON: Record<SidebarShellMode, NavItem["icon"]> = {
   tasks: () => (
     <svg className="size-[15px]" viewBox="0 0 15 15" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -72,6 +71,12 @@ const UTILITY_ICON: Record<SidebarUtilityItem["key"], NavItem["icon"]> = {
       <circle cx="10" cy="8" r="1" />
       <path d="M5 4V2.5" stroke="currentColor" strokeWidth="1" />
       <path d="M10 4V2.5" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  ),
+  hermes: () => (
+    <svg className="size-[15px]" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M7.5 1.5v12M4.25 4.25h6.5M4.25 10.75h6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <path d="M5 4.25c0 1.35 1.1 2.45 2.45 2.45h.1A2.45 2.45 0 0 1 10 9.15v1.6M10 4.25v.6A2.45 2.45 0 0 1 7.55 7.3h-.1A2.45 2.45 0 0 0 5 9.75v1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </svg>
   ),
   settings: () => (
