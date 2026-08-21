@@ -20,13 +20,17 @@ The public contract lives in `@gmacko/bob/contracts`. Unknown fields fail closed
 
 ## Capture path
 
-1. Bob validates the versioned Hermes intent.
-2. Bob calls `POST /api/v1/hermes/capture` with an owner-scoped OODA API key.
+`POST /api/v1/hermes/operator` is the authenticated Bob ingress. It requires a Bob bearer API key, the configured owner user ID, and `write` permission for `capture` (`read` for read-only intents). Missing or invalid keys return 401, cross-owner keys return 403, malformed or excess payload fields return 400, and intentionally unwired intents return 501.
+
+1. Bob validates the versioned Hermes intent and derives the actor from the API key.
+2. Bob calls OODA `POST /api/v1/hermes/capture` with an owner-scoped OODA API key.
 3. OODA derives the owner from that key, appends one personal `user_turn`, and returns an opaque event receipt.
-4. Bob writes a categorized `hermes_usage` journal record. The record contains a keyed request digest and fixed enums, never message text.
-5. Skillfleet's existing replay-safe workflow-journal collector validates, batches, and uploads the record.
+4. Bob writes a replay-safe row to `hermes_usage_events`. The row contains HMAC request and actor digests plus database-constrained categories, never message text, identity, request ID, or raw path.
+5. A Skillfleet export/collector adapter may read this categorical ledger; that adapter is not yet presented as live.
 
 Retries reuse the original request ID. OODA returns the original event with `replayed: true`; Skillfleet records the replay outcome separately from a new successful capture.
+
+The live capture route requires `HERMES_OPERATOR_OWNER_USER_ID`, `HERMES_OODA_ORIGIN_URL`, `HERMES_OODA_API_KEY`, `HERMES_OODA_CONVERSATION_ID`, `HERMES_OODA_BRANCH_ID`, and `HERMES_USAGE_DIGEST_SECRET`. These are propagated from the Worker runtime environment. `today`, `status`, and `close` remain explicitly unavailable at the production route until their canonical source readers are connected.
 
 ## Daily delivery
 

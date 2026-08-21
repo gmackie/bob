@@ -21,6 +21,12 @@ interface RuntimeEnv {
   HERMES_PROXY_ORIGIN_TOKEN?: unknown;
   HERMES_ORIGIN_URL?: unknown;
   HERMES_OPERATOR_USER_IDS?: unknown;
+  HERMES_OPERATOR_OWNER_USER_ID?: unknown;
+  HERMES_OODA_ORIGIN_URL?: unknown;
+  HERMES_OODA_API_KEY?: unknown;
+  HERMES_OODA_CONVERSATION_ID?: unknown;
+  HERMES_OODA_BRANCH_ID?: unknown;
+  HERMES_USAGE_DIGEST_SECRET?: unknown;
   [key: string]: unknown;
 }
 
@@ -34,6 +40,12 @@ export function applyRuntimeServiceEnv(
     "HERMES_PROXY_ORIGIN_TOKEN",
     "HERMES_ORIGIN_URL",
     "HERMES_OPERATOR_USER_IDS",
+    "HERMES_OPERATOR_OWNER_USER_ID",
+    "HERMES_OODA_ORIGIN_URL",
+    "HERMES_OODA_API_KEY",
+    "HERMES_OODA_CONVERSATION_ID",
+    "HERMES_OODA_BRANCH_ID",
+    "HERMES_USAGE_DIGEST_SECRET",
   ] as const) {
     const value = getEnvString(env?.[key]);
     if (value) target[key] = value;

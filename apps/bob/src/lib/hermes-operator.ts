@@ -169,6 +169,16 @@ interface HermesOperatorDependencies {
   };
 }
 
+export class HermesIntentUnavailableError extends Error {
+  readonly intent: HermesOperatorIntent["intent"];
+
+  constructor(intent: HermesOperatorIntent["intent"]) {
+    super(`Hermes intent ${intent} is not implemented by this service`);
+    this.name = "HermesIntentUnavailableError";
+    this.intent = intent;
+  }
+}
+
 function durationBucket(durationMs: number): HermesUsageRecord["durationBucket"] {
   if (!Number.isFinite(durationMs) || durationMs < 0) return "unknown";
   if (durationMs < 1_000) return "<1s";
@@ -207,7 +217,7 @@ export function createHermesOperatorService(
           outcome: "blocked",
           evidence: "unknown",
         });
-        throw new Error(`Hermes intent ${intent.intent} is not implemented by this service`);
+        throw new HermesIntentUnavailableError(intent.intent);
       }
 
       let completed: {

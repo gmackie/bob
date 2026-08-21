@@ -37,6 +37,12 @@ describe("worker runtime env helpers", () => {
         HERMES_PROXY_ORIGIN_TOKEN: "proxy-origin-secret",
         HERMES_ORIGIN_URL: "https://claude.example.com",
         HERMES_OPERATOR_USER_IDS: "operator-1,operator-2",
+        HERMES_OPERATOR_OWNER_USER_ID: "operator-1",
+        HERMES_OODA_ORIGIN_URL: "https://ooda.example.com",
+        HERMES_OODA_API_KEY: "ooda-key",
+        HERMES_OODA_CONVERSATION_ID: "conversation-1",
+        HERMES_OODA_BRANCH_ID: "branch-1",
+        HERMES_USAGE_DIGEST_SECRET: "digest-secret",
         IGNORED: "not-copied",
       },
       target,
@@ -47,6 +53,12 @@ describe("worker runtime env helpers", () => {
       HERMES_PROXY_ORIGIN_TOKEN: "proxy-origin-secret",
       HERMES_ORIGIN_URL: "https://claude.example.com",
       HERMES_OPERATOR_USER_IDS: "operator-1,operator-2",
+      HERMES_OPERATOR_OWNER_USER_ID: "operator-1",
+      HERMES_OODA_ORIGIN_URL: "https://ooda.example.com",
+      HERMES_OODA_API_KEY: "ooda-key",
+      HERMES_OODA_CONVERSATION_ID: "conversation-1",
+      HERMES_OODA_BRANCH_ID: "branch-1",
+      HERMES_USAGE_DIGEST_SECRET: "digest-secret",
     });
   });
 
