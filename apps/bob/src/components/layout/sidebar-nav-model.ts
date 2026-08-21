@@ -31,7 +31,6 @@ export interface SidebarModeItem {
   href: "/tasks" | "/planning";
   icon: SidebarShellMode;
 }
-
 export interface SidebarTabItem {
   key: string;
   label: string;
@@ -39,9 +38,9 @@ export interface SidebarTabItem {
 }
 
 export interface SidebarUtilityItem {
-  key: "onboarding" | "pull-requests" | "nodes" | "settings";
-  label: "Onboarding" | "Pull Requests" | "Nodes" | "Settings";
-  href: "/onboarding" | "/pull-requests" | "/nodes" | "/settings";
+  key: "onboarding" | "pull-requests" | "nodes" | "hermes" | "settings";
+  label: "Onboarding" | "Pull Requests" | "Nodes" | "Hermes" | "Settings";
+  href: "/onboarding" | "/pull-requests" | "/nodes" | "/hermes-console" | "/settings";
 }
 
 export interface SidebarProjectSummary {
@@ -154,6 +153,7 @@ const UTILITY_ITEMS: SidebarUtilityItem[] = [
   { key: "onboarding", label: "Onboarding", href: "/onboarding" },
   { key: "pull-requests", label: "Pull Requests", href: "/pull-requests" },
   { key: "nodes", label: "Nodes", href: "/nodes" },
+  { key: "hermes", label: "Hermes", href: "/hermes-console" },
   { key: "settings", label: "Settings", href: "/settings" },
 ];
 

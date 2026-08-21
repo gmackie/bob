@@ -19,6 +19,21 @@ import {
   isAllowedHermesServiceRequest,
   verifyOriginAuthorization,
 } from "../src/lib/hermes-notifications";
+import {
+  createHermesBootstrapRequest,
+  createHermesNativeApiRequest,
+  createHermesProxyRequest,
+  extractHermesSessionToken,
+  fetchHermesOverview,
+  getHermesLoginRedirect,
+  isAuthorizedHermesOperator,
+  isAllowedHermesProxyServiceRequest,
+  isHermesNativeApiPath,
+  isHermesProxyPath,
+  sanitizeHermesResponse,
+  validateHermesBrowserRequest,
+  validateHermesNativeApiMutation,
+} from "../src/lib/hermes-proxy";
 import { wrapFetch } from "./lib/otel";
 import {
   applyRuntimeAuthEnv,
@@ -44,7 +59,9 @@ interface Env {
   NUDGE_SHARED_SECRET?: string;
   SKILLFLEET_NOTIFICATION_SECRET?: string;
   HERMES_ORIGIN_TOKEN?: string;
+  HERMES_PROXY_ORIGIN_TOKEN?: string;
   HERMES_ORIGIN_URL?: string;
+  HERMES_OPERATOR_USER_IDS?: string;
   [key: string]: unknown;
 }
 
@@ -454,13 +471,18 @@ export default Sentry.withSentry(
         // nginx uses this no-body subrequest to authorize Bob's server-to-server
         // Hermes API calls. It grants no browser session and performs no proxying.
         if (url.pathname === "/api/internal/hermes-origin-auth") {
-          const serviceAuthorized = verifyOriginAuthorization(
-            request.headers.get("authorization"),
+          const authorization = request.headers.get("authorization");
+          const requestedMethod = request.headers.get("x-hermes-auth-method");
+          const requestedUri = request.headers.get("x-hermes-auth-uri");
+          const notificationAuthorized = verifyOriginAuthorization(
+            authorization,
             runtimeEnv.HERMES_ORIGIN_TOKEN ?? process.env.HERMES_ORIGIN_TOKEN ?? "",
-          ) && isAllowedHermesServiceRequest(
-            request.headers.get("x-hermes-auth-method"),
-            request.headers.get("x-hermes-auth-uri"),
-          );
+          ) && isAllowedHermesServiceRequest(requestedMethod, requestedUri);
+          const proxyAuthorized = verifyOriginAuthorization(
+            authorization,
+            runtimeEnv.HERMES_PROXY_ORIGIN_TOKEN ?? process.env.HERMES_PROXY_ORIGIN_TOKEN ?? "",
+          ) && isAllowedHermesProxyServiceRequest(requestedMethod, requestedUri);
+          const serviceAuthorized = notificationAuthorized || proxyAuthorized;
           if (serviceAuthorized) return new Response(null, { status: 204 });
 
           const { connectionString, isHyperdrive } =
@@ -473,7 +495,147 @@ export default Sentry.withSentry(
               return auth.api.getSession({ headers: request.headers });
             },
           );
-          return new Response(null, { status: session ? 204 : 401 });
+          const operatorUserIds =
+            runtimeEnv.HERMES_OPERATOR_USER_IDS ??
+            process.env.HERMES_OPERATOR_USER_IDS;
+          return new Response(null, {
+            status:
+              session?.user &&
+              isAuthorizedHermesOperator(session.user.id, operatorUserIds)
+                ? 204
+                : 401,
+          });
+        }
+
+        const isHermesDashboard = isHermesProxyPath(url.pathname);
+        const isHermesNativeApi = isHermesNativeApiPath(url.pathname);
+        if (isHermesDashboard || isHermesNativeApi) {
+          const { connectionString, isHyperdrive } =
+            getHyperdriveConnectionString(runtimeEnv);
+          const session = await runWithDb(
+            connectionString,
+            isHyperdrive,
+            async () => {
+              const { auth } = await import("../src/auth/server");
+              return auth.api.getSession({ headers: request.headers });
+            },
+          );
+          if (!session?.user) {
+            const loginUrl = getHermesLoginRedirect(request);
+            return loginUrl
+              ? Response.redirect(loginUrl, 302)
+              : Response.json({ error: "unauthorized" }, { status: 401 });
+          }
+
+          const operatorUserIds =
+            runtimeEnv.HERMES_OPERATOR_USER_IDS ??
+            process.env.HERMES_OPERATOR_USER_IDS;
+          if (!isAuthorizedHermesOperator(session.user.id, operatorUserIds)) {
+            return Response.json({ error: "forbidden" }, { status: 403 });
+          }
+          const browserValidation = validateHermesBrowserRequest(request);
+          if (browserValidation) {
+            return Response.json(
+              { error: browserValidation.error },
+              { status: browserValidation.status },
+            );
+          }
+
+          const proxyToken =
+            runtimeEnv.HERMES_PROXY_ORIGIN_TOKEN ??
+            process.env.HERMES_PROXY_ORIGIN_TOKEN;
+          if (!proxyToken) {
+            return Response.json(
+              { error: "hermes_proxy_unavailable" },
+              { status: 503 },
+            );
+          }
+          const hermesOrigin =
+            runtimeEnv.HERMES_ORIGIN_URL ??
+            process.env.HERMES_ORIGIN_URL ??
+            "https://claude.gmac.io";
+
+          try {
+            if (isHermesDashboard) {
+              const upstream = await fetch(
+                createHermesProxyRequest(request, hermesOrigin, proxyToken),
+              );
+              if (
+                request.headers.get("upgrade")?.toLowerCase() === "websocket"
+              ) {
+                return upstream;
+              }
+              return sanitizeHermesResponse(
+                upstream,
+                url.origin,
+                hermesOrigin,
+              );
+            }
+
+            const validationError =
+              await validateHermesNativeApiMutation(request);
+            if (validationError) {
+              return Response.json(
+                {
+                  detail: validationError.message,
+                  field: validationError.field,
+                },
+                { status: 400 },
+              );
+            }
+            const bootstrap = await fetch(
+              createHermesBootstrapRequest(request, hermesOrigin, proxyToken),
+            );
+            if (!bootstrap.ok) {
+              return Response.json(
+                { detail: "Hermes token bootstrap unavailable" },
+                { status: 502 },
+              );
+            }
+            const sessionToken = extractHermesSessionToken(
+              await bootstrap.text(),
+            );
+            if (!sessionToken) {
+              return Response.json(
+                { detail: "Hermes session token unavailable" },
+                { status: 502 },
+              );
+            }
+
+            if (
+              url.pathname === "/api/hermes/overview" &&
+              request.method === "GET"
+            ) {
+              const overview = await fetchHermesOverview({
+                origin: hermesOrigin,
+                proxyToken,
+                sessionToken,
+              });
+              return Response.json(overview);
+            }
+            const upstream = await fetch(
+              createHermesNativeApiRequest(
+                request,
+                hermesOrigin,
+                proxyToken,
+                sessionToken,
+              ),
+            );
+            return sanitizeHermesResponse(
+              upstream,
+              url.origin,
+              hermesOrigin,
+            );
+          } catch (error) {
+            console.error(
+              "[hermes-proxy] upstream request failed",
+              error instanceof Error ? error.message : "unknown error",
+            );
+            return Response.json(
+              { detail: "Hermes proxy unavailable" },
+              { status: 502 },
+            );
+          }
         }
 
         // WebSocket proxy to gateway — forward upgrade to origin

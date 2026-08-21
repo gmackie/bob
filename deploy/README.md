@@ -36,6 +36,14 @@ reach production Postgres.
 
 Required repo secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
 
+The Hermes console proxy additionally requires the Worker secret
+`HERMES_PROXY_ORIGIN_TOKEN`. It is a dedicated high-privilege credential used
+only between the authenticated Bob Worker and the nginx `auth_request`
+boundary. Keep the existing `HERMES_ORIGIN_TOKEN` separate and narrowly scoped
+to notification delivery. `HERMES_OPERATOR_USER_IDS` is a comma-separated
+allowlist of Bob user IDs permitted to open or operate Hermes; it fails closed
+when unset.
+
 ## Configuration
 
 Canonical worker config: `apps/bob/wrangler.jsonc`

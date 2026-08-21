@@ -1,36 +1,241 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Hermes Console Redesign and Proxy Restoration</title>
-  <style>
-    :root{--bg:#0d1117;--panel:#151b23;--ink:#f4f1e8;--muted:#9da7b3;--line:#2b3440;--gold:#e6b45b;--green:#77c79a;--red:#ef8d8d;--blue:#82b8e8}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 85% 0,#272013 0,transparent 30rem),var(--bg);color:var(--ink);font:15px/1.65 Inter,ui-sans-serif,system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:56px 24px 88px}h1{font-size:clamp(2rem,5vw,3.7rem);line-height:1.03;margin:0 0 14px;max-width:800px}h2{font-size:1.35rem;margin:48px 0 16px;padding-bottom:8px;border-bottom:1px solid var(--line)}h3{font-size:1rem;margin:24px 0 8px}p{color:#d8dde4}.eyebrow{color:var(--gold);font:700 12px/1.3 ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase}.meta{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.card{background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:14px;padding:18px}.card h3{margin-top:0}.pill{display:inline-block;border:1px solid #705a2d;background:#2a2316;color:var(--gold);border-radius:99px;padding:2px 9px;font-size:12px}code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}code{color:#f4d396}pre{overflow:auto;background:#090c10;border:1px solid var(--line);border-radius:12px;padding:18px;color:#c9d1d9}table{width:100%;border-collapse:collapse;margin:12px 0 24px}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:10px 8px}th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}.ok{color:var(--green)}.risk{color:var(--red)}.info{color:var(--blue)}ul,ol{padding-left:22px}.callout{border-left:3px solid var(--gold);background:#211b11;padding:12px 16px;border-radius:0 10px 10px 0}.task{counter-increment:task}.task:before{content:"T" counter(task);display:inline-grid;place-items:center;width:30px;height:30px;border-radius:9px;background:#2a2316;color:var(--gold);font:bold 12px ui-monospace,monospace;margin-right:8px}section.tasks{counter-reset:task}.small{font-size:13px;color:var(--muted)}
-  </style>
-</head>
-<body><main>
-  <p class="eyebrow">Bob · Hermes · implementation plan</p>
-  <h1>Restore the Hermes proxy and port its console UI into current Bob</h1>
-  <p class="meta">2026-08-21 · branch <code>feat/hermes-console-redesign</code> · scope reduced from the stale branch to the exact console and proxy surfaces</p>
-  <p class="callout"><strong>Decision:</strong> <code>feat/hermes-shepherd</code> is the visual and interaction source of truth. Current Bob is the architecture source of truth. The stock dashboard proxy is required alongside the native console.</p>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Hermes Console Redesign and Proxy Restoration</title>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --panel: #151b23;
+        --ink: #f4f1e8;
+        --muted: #9da7b3;
+        --line: #2b3440;
+        --gold: #e6b45b;
+        --green: #77c79a;
+        --red: #ef8d8d;
+        --blue: #82b8e8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 85% 0, #272013 0, transparent 30rem),
+          var(--bg);
+        color: var(--ink);
+        font:
+          15px/1.65 Inter,
+          ui-sans-serif,
+          system-ui,
+          sans-serif;
+      }
+      main {
+        max-width: 1000px;
+        margin: auto;
+        padding: 56px 24px 88px;
+      }
+      h1 {
+        font-size: clamp(2rem, 5vw, 3.7rem);
+        line-height: 1.03;
+        margin: 0 0 14px;
+        max-width: 800px;
+      }
+      h2 {
+        font-size: 1.35rem;
+        margin: 48px 0 16px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--line);
+      }
+      h3 {
+        font-size: 1rem;
+        margin: 24px 0 8px;
+      }
+      p {
+        color: #d8dde4;
+      }
+      .eyebrow {
+        color: var(--gold);
+        font:
+          700 12px/1.3 ui-monospace,
+          monospace;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+      .meta {
+        color: var(--muted);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 14px;
+      }
+      .card {
+        background: color-mix(in srgb, var(--panel) 94%, transparent);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 18px;
+      }
+      .card h3 {
+        margin-top: 0;
+      }
+      .pill {
+        display: inline-block;
+        border: 1px solid #705a2d;
+        background: #2a2316;
+        color: var(--gold);
+        border-radius: 99px;
+        padding: 2px 9px;
+        font-size: 12px;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      code {
+        color: #f4d396;
+      }
+      pre {
+        overflow: auto;
+        background: #090c10;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 18px;
+        color: #c9d1d9;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0 24px;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        border-bottom: 1px solid var(--line);
+        padding: 10px 8px;
+      }
+      th {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .ok {
+        color: var(--green);
+      }
+      .risk {
+        color: var(--red);
+      }
+      .info {
+        color: var(--blue);
+      }
+      ul,
+      ol {
+        padding-left: 22px;
+      }
+      .callout {
+        border-left: 3px solid var(--gold);
+        background: #211b11;
+        padding: 12px 16px;
+        border-radius: 0 10px 10px 0;
+      }
+      .task {
+        counter-increment: task;
+      }
+      .task:before {
+        content: "T" counter(task);
+        display: inline-grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+        background: #2a2316;
+        color: var(--gold);
+        font:
+          bold 12px ui-monospace,
+          monospace;
+        margin-right: 8px;
+      }
+      section.tasks {
+        counter-reset: task;
+      }
+      .small {
+        font-size: 13px;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Bob · Hermes · implementation plan</p>
+      <h1>Restore the Hermes proxy and port its console UI into current Bob</h1>
+      <p class="meta">
+        2026-08-21 · branch <code>feat/hermes-console-redesign</code> · scope
+        reduced from the stale branch to the exact console and proxy surfaces
+      </p>
+      <p class="callout">
+        <strong>Decision:</strong> <code>feat/hermes-shepherd</code> is the
+        visual and interaction source of truth. Current Bob is the architecture
+        source of truth. The stock dashboard proxy is required alongside the
+        native console.
+      </p>
 
-  <h2>Outcome</h2>
-  <div class="grid">
-    <div class="card"><h3>Exact native console</h3><p>Recreate the stale branch’s header, health badge, three status cards, connector cards, automation controls, recent sessions, notices, errors, and stock-dashboard link.</p></div>
-    <div class="card"><h3>Full proxy surface</h3><p>Restore authenticated <code>/hermes/*</code> dashboard proxying and <code>/api/hermes/*</code> management API proxying in the Cloudflare Worker.</p></div>
-    <div class="card"><h3>Current trust boundary</h3><p>Keep Hermes bound to loopback behind nginx. Authenticate at Bob, carry the separate origin bearer server-side, and never persist connector secrets in Bob.</p></div>
-  </div>
+      <h2>Outcome</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Exact native console</h3>
+          <p>
+            Recreate the stale branch’s header, health badge, three status
+            cards, connector cards, automation controls, recent sessions,
+            notices, errors, and stock-dashboard link.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Full proxy surface</h3>
+          <p>
+            Restore authenticated <code>/hermes/*</code> dashboard proxying and
+            <code>/api/hermes/*</code> management API proxying in the Cloudflare
+            Worker.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Current trust boundary</h3>
+          <p>
+            Keep Hermes bound to loopback behind nginx. Authenticate at Bob,
+            require an explicit operator allowlist, carry a dedicated
+            <code>HERMES_PROXY_ORIGIN_TOKEN</code> server-side, and never
+            persist connector secrets in Bob.
+          </p>
+        </div>
+      </div>
 
-  <h2>What already exists</h2>
-  <ul>
-    <li>Hermes dashboard and gateway are live behind <code>claude.gmac.io/hermes/</code> and nginx <code>auth_request</code>.</li>
-    <li>Bob’s Worker already exposes <code>/api/internal/hermes-origin-auth</code>, validates Bob sessions, and accepts a timing-safe <code>HERMES_ORIGIN_TOKEN</code> for narrow service calls.</li>
-    <li>The current notification integration already bootstraps Hermes’ rotating dashboard token on the server.</li>
-    <li>The stale branch contains the approved console JSX, typed response shapes, client actions, proxy request builders, and unit-test intent.</li>
-  </ul>
+      <h2>What already exists</h2>
+      <ul>
+        <li>
+          Hermes dashboard and gateway are live behind
+          <code>claude.gmac.io/hermes/</code> and nginx
+          <code>auth_request</code>.
+        </li>
+        <li>
+          Bob’s Worker already exposes
+          <code>/api/internal/hermes-origin-auth</code>, validates Bob sessions,
+          and accepts a timing-safe <code>HERMES_ORIGIN_TOKEN</code> for narrow
+          service calls.
+        </li>
+        <li>
+          The current notification integration already bootstraps Hermes’
+          rotating dashboard token on the server.
+        </li>
+        <li>
+          The stale branch contains the approved console JSX, typed response
+          shapes, client actions, proxy request builders, and unit-test intent.
+        </li>
+      </ul>
 
-  <h2>Architecture</h2>
-  <pre><code>Bob browser
+      <h2>Architecture</h2>
+      <pre><code>Bob browser
   |
   +-- /hermes-console ------------------------------+
   |   Bob session gate                              |
@@ -39,7 +244,7 @@
   |                                                 v
   +-- /hermes/* stock dashboard --> Bob Worker proxy/auth
                                                     |
-                            server-only origin bearer + rotating token
+                    server-only proxy bearer + rotating token
                                                     |
                                                     v
                      claude.gmac.io nginx auth_request
@@ -47,64 +252,307 @@
                                                     v
                               127.0.0.1:9119 Hermes dashboard/API
 
-Secrets: browser -> Bob Worker -> Hermes .env
-         Bob database stores none; origin bearer never leaves Worker.
+Secrets: browser session -> Bob Worker auth only
+         Worker proxy bearer -> nginx auth subrequest only
+         Bob session cookie and proxy bearer are stripped before Hermes.
+         Bob database stores no connector secrets.
 </code></pre>
-  <p>The stock dashboard necessarily receives Hermes’ own short-lived dashboard token in its upstream HTML because that SPA needs it. The Bob-native console does not: its management calls terminate at the Worker, which bootstraps and attaches the rotating token server-side.</p>
+      <p>
+        The stock dashboard necessarily receives Hermes’ own short-lived
+        dashboard token in its upstream HTML because that SPA needs it. The
+        Bob-native console does not: its management calls terminate at the
+        Worker, which bootstraps and attaches the rotating token server-side.
+      </p>
 
-  <h2>Scope and boundaries</h2>
-  <div class="grid">
-    <div class="card"><h3 class="ok">In scope</h3><ul><li>Exact stale console UI/UX</li><li>Bob nav entry</li><li>Dashboard and native API proxy paths</li><li>Session authentication and safe login redirect</li><li>Origin bearer injection</li><li>Telegram input validation</li><li>Focused tests, build, browser QA, deploy proof</li></ul></div>
-    <div class="card"><h3 class="risk">Not in scope</h3><ul><li>Stale work-item contract changes</li><li>Stale pipeline/dashboard table edits</li><li>Reinstalling Hermes or replacing its systemd units</li><li>Vault sync, backups, or Telegram credential enrollment</li><li>A generic arbitrary-origin reverse proxy</li></ul></div>
-  </div>
+      <h2>Scope and boundaries</h2>
+      <div class="grid">
+        <div class="card">
+          <h3 class="ok">In scope</h3>
+          <ul>
+            <li>Exact stale console UI/UX</li>
+            <li>Bob nav entry</li>
+            <li>Dashboard and native API proxy paths</li>
+            <li>Session authentication and safe login redirect</li>
+            <li>Operator allowlist and same-origin mutation enforcement</li>
+            <li>Origin bearer injection</li>
+            <li>Telegram input validation</li>
+            <li>Focused tests, build, browser QA, deploy proof</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="risk">Not in scope</h3>
+          <ul>
+            <li>Stale work-item contract changes</li>
+            <li>Stale pipeline/dashboard table edits</li>
+            <li>Reinstalling Hermes or replacing its systemd units</li>
+            <li>Vault sync, backups, or Telegram credential enrollment</li>
+            <li>A generic arbitrary-origin reverse proxy</li>
+          </ul>
+        </div>
+      </div>
 
-  <h2>Implementation tasks</h2>
-  <section class="tasks">
-    <div class="card task"><h3>Define and test the proxy boundary</h3><p>Add focused tests first for path matching, safe URL construction, header stripping/injection, login redirects, upstream response hygiene, token extraction, allowed native actions, and malformed Telegram input.</p><p class="small">Files: <code>apps/bob/src/lib/hermes-proxy.ts</code>, its tests, <code>apps/bob/worker/index.ts</code>.</p></div>
-    <div class="card task"><h3>Restore Worker routing</h3><p>Authenticate both proxy surfaces with Bob’s actual auth runtime, validate the configured HTTPS origin, add the origin bearer only in Worker memory, bootstrap the rotating token for native API calls, and preserve safe response headers/body streaming.</p></div>
-    <div class="card task"><h3>Add the typed console model and client</h3><p>Keep console-specific types and transformations app-local. Fetch status, platforms, jobs, sessions, and providers in parallel behind one overview call. Expose only explicit mutation methods.</p></div>
-    <div class="card task"><h3>Port the stale UI exactly</h3><p>Use the current shared UI primitives and layout, preserving text, hierarchy, controls, 30-second refresh, mutation notices, and responsive card/list behavior.</p></div>
-    <div class="card task"><h3>Integrate navigation and operations contract</h3><p>Add Hermes as a utility destination without changing Bob’s two-mode shell. Extend the nginx contract only if live proxy proof reveals a missing header or route.</p></div>
-    <div class="card task"><h3>Verify, review, ship, and deploy</h3><p>Run focused tests, app typecheck, production build, full serial tests, authenticated browser QA, diff review, PR checks, merge, Worker deployment, and live route verification.</p></div>
-  </section>
+      <h2>Implementation tasks</h2>
+      <section class="tasks">
+        <div class="card task">
+          <h3>Define and test the proxy boundary</h3>
+          <p>
+            Add focused tests first for path matching, safe URL construction,
+            header stripping/injection, login redirects, upstream response
+            hygiene, token extraction, operator authorization, same-origin
+            mutations, allowed native actions, and malformed connector input.
+          </p>
+          <p class="small">
+            Files: <code>apps/bob/src/lib/hermes-proxy.ts</code>, its tests,
+            <code>apps/bob/worker/index.ts</code>.
+          </p>
+        </div>
+        <div class="card task">
+          <h3>Restore Worker routing</h3>
+          <p>
+            Authenticate both proxy surfaces with Bob’s actual auth runtime,
+            require the configured operator allowlist, validate the configured
+            HTTPS origin and browser Origin on mutations, add the proxy bearer
+            only in Worker memory, strip Bob credentials before Hermes,
+            bootstrap the rotating token for native API calls, and preserve
+            safe response headers/body streaming.
+          </p>
+        </div>
+        <div class="card task">
+          <h3>Add the typed console model and client</h3>
+          <p>
+            Keep console-specific types and transformations app-local. Fetch
+            status, platforms, jobs, sessions, and providers in parallel behind
+            one overview call. Expose only explicit mutation methods.
+          </p>
+        </div>
+        <div class="card task">
+          <h3>Port the stale UI exactly</h3>
+          <p>
+            Use the current shared UI primitives and layout, preserving text,
+            hierarchy, controls, 30-second refresh, mutation notices, and
+            responsive card/list behavior.
+          </p>
+        </div>
+        <div class="card task">
+          <h3>Integrate navigation and operations contract</h3>
+          <p>
+            Add Hermes as a utility destination without changing Bob’s two-mode
+            shell. Extend the nginx contract only if live proxy proof reveals a
+            missing header or route.
+          </p>
+        </div>
+        <div class="card task">
+          <h3>Verify, review, ship, and deploy</h3>
+          <p>
+            Run focused tests, app typecheck, production build, full serial
+            tests, authenticated browser QA, diff review, PR checks, merge,
+            Worker deployment, and live route verification.
+          </p>
+        </div>
+      </section>
 
-  <h2>Test flow and failure modes</h2>
-  <pre><code>request -> route match -> Bob auth -> origin validation -> token bootstrap -> upstream fetch -> sanitized response
-   |          |             |               |                  |                 |
-  404      no bleed       401/302          503                502               502
+      <h2>Test flow and failure modes</h2>
+      <pre><code>request -> route match -> Bob auth -> operator/origin gate -> token bootstrap -> upstream fetch -> sanitized response
+   |          |             |               |                        |                 |
+  404      no bleed       401/302         403/405                    502               502
 </code></pre>
-  <table><thead><tr><th>Codepath</th><th>Production failure</th><th>Coverage / handling / user signal</th></tr></thead><tbody>
-    <tr><td>Bob authentication</td><td>Expired or missing session</td><td>Tested; HTML redirects to login, API returns 401.</td></tr>
-    <tr><td>Origin configuration</td><td>Malformed or non-HTTPS origin</td><td>Tested; fail closed with 503, never issue an arbitrary fetch.</td></tr>
-    <tr><td>Token bootstrap</td><td>Hermes HTML changes or upstream is down</td><td>Tested; 502 with a clear console error and retry.</td></tr>
-    <tr><td>Overview fan-out</td><td>One upstream subrequest fails</td><td>Tested; entire snapshot rejects so stale mixed state is not presented.</td></tr>
-    <tr><td>Connector mutation</td><td>Malformed token or Hermes rejects it</td><td>Tested; 400/structured upstream message shown, secret not logged.</td></tr>
-    <tr><td>Cron mutation</td><td>Job disappears between poll and click</td><td>Handled as upstream error; visible notice; query revalidates after success.</td></tr>
-    <tr><td>Stock dashboard proxy</td><td>Redirect/header points at origin host</td><td>Test response rewriting/stripping; browser remains on Bob origin.</td></tr>
-  </tbody></table>
-  <p class="ok"><strong>Critical silent gaps:</strong> none after the tests above land.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Codepath</th>
+            <th>Production failure</th>
+            <th>Coverage / handling / user signal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Bob authentication</td>
+            <td>Expired or missing session</td>
+            <td>Tested; HTML redirects to login, API returns 401.</td>
+          </tr>
+          <tr>
+            <td>Operator and browser-origin authorization</td>
+            <td>Valid Bob user is not an operator, or a mutation is cross-origin</td>
+            <td>Tested; fail closed with 403 before any Hermes fetch.</td>
+          </tr>
+          <tr>
+            <td>Origin configuration</td>
+            <td>Malformed or non-HTTPS origin</td>
+            <td>
+              Tested; fail closed with 502, never issue an arbitrary fetch.
+            </td>
+          </tr>
+          <tr>
+            <td>Token bootstrap</td>
+            <td>Hermes HTML changes or upstream is down</td>
+            <td>Tested; 502 with a clear console error and retry.</td>
+          </tr>
+          <tr>
+            <td>Overview fan-out</td>
+            <td>One upstream subrequest fails</td>
+            <td>
+              Tested; entire snapshot rejects so stale mixed state is not
+              presented.
+            </td>
+          </tr>
+          <tr>
+            <td>Connector mutation</td>
+            <td>Malformed token or Hermes rejects it</td>
+            <td>
+              Tested; 400/structured upstream message shown, secret not logged.
+            </td>
+          </tr>
+          <tr>
+            <td>Cron mutation</td>
+            <td>Job disappears between poll and click</td>
+            <td>
+              Handled as upstream error; visible notice; query revalidates after
+              success.
+            </td>
+          </tr>
+          <tr>
+            <td>Stock dashboard proxy</td>
+            <td>Redirect/header points at origin host</td>
+            <td>
+              Test response rewriting/stripping; browser remains on Bob origin.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="ok">
+        <strong>Critical silent gaps:</strong> none after the tests above land.
+      </p>
 
-  <h2>Performance review</h2>
-  <ul><li>One browser poll fans out to five independent Hermes reads in parallel.</li><li>TanStack Query uses 15-second freshness and 30-second polling, matching the approved stale UI.</li><li>Mutations invalidate only the Hermes overview key.</li><li>No console package is added to the workspace graph; types and helpers stay within the Bob app.</li></ul>
+      <h2>Performance review</h2>
+      <ul>
+        <li>
+          One browser poll fans out to five independent Hermes reads in
+          parallel.
+        </li>
+        <li>
+          TanStack Query uses 15-second freshness and 30-second polling,
+          matching the approved stale UI.
+        </li>
+        <li>Mutations invalidate only the Hermes overview key.</li>
+        <li>
+          No console package is added to the workspace graph; types and helpers
+          stay within the Bob app.
+        </li>
+      </ul>
 
-  <h2>Execution order</h2>
-  <table><thead><tr><th>Lane</th><th>Modules</th><th>Dependency</th></tr></thead><tbody>
-    <tr><td>A</td><td><code>apps/bob/src/lib</code>, <code>apps/bob/worker</code></td><td>None</td></tr>
-    <tr><td>B</td><td><code>apps/bob/src/app/(dashboard)</code>, <code>components/layout</code></td><td>Typed client contract from A</td></tr>
-    <tr><td>C</td><td><code>apps/hermes-shepherd</code>, deployment</td><td>A + B verified</td></tr>
-  </tbody></table>
-  <p>Sequential implementation in one worktree is preferred because the Worker/client contract is shared with the UI and avoids merge-conflict risk. No subagent lane is required.</p>
+      <h2>Execution order</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Lane</th>
+            <th>Modules</th>
+            <th>Dependency</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>A</td>
+            <td><code>apps/bob/src/lib</code>, <code>apps/bob/worker</code></td>
+            <td>None</td>
+          </tr>
+          <tr>
+            <td>B</td>
+            <td>
+              <code>apps/bob/src/app/(dashboard)</code>,
+              <code>components/layout</code>
+            </td>
+            <td>Typed client contract from A</td>
+          </tr>
+          <tr>
+            <td>C</td>
+            <td><code>apps/hermes-shepherd</code>, deployment</td>
+            <td>A + B verified</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Sequential implementation in one worktree is preferred because the
+        Worker/client contract is shared with the UI and avoids merge-conflict
+        risk. No subagent lane is required.
+      </p>
 
-  <h2>Acceptance</h2>
-  <ol><li>Logged-out HTML navigation redirects safely; logged-out API returns 401.</li><li>Logged-in Bob user can open both <code>/hermes-console</code> and the stock dashboard.</li><li>All stale console sections render from live Hermes data on desktop and narrow mobile widths.</li><li>Connector and cron actions return visible success/failure and refresh state.</li><li>No origin bearer or connector secret appears in browser JS, logs, repository, or Bob persistence.</li><li>Focused tests, typecheck, build, full tests, CI, deploy, and live runtime checks are reported as distinct proof boundaries.</li></ol>
+      <h2>Acceptance</h2>
+      <ol>
+        <li>
+          Logged-out HTML navigation redirects safely; logged-out API returns
+          401.
+        </li>
+        <li>
+          Logged-in Bob user can open both <code>/hermes-console</code> and the
+          stock dashboard.
+        </li>
+        <li>
+          All stale console sections render from live Hermes data on desktop and
+          narrow mobile widths.
+        </li>
+        <li>
+          Connector and cron actions return visible success/failure and refresh
+          state.
+        </li>
+        <li>
+          No origin bearer or connector secret appears in browser JS, logs,
+          repository, or Bob persistence.
+        </li>
+        <li>
+          Focused tests, typecheck, build, full tests, CI, deploy, and live
+          runtime checks are reported as distinct proof boundaries.
+        </li>
+      </ol>
 
-  <h2>GSTACK REVIEW REPORT</h2>
-  <table><thead><tr><th>Review</th><th>Trigger</th><th>Status</th><th>Findings</th></tr></thead><tbody>
-    <tr><td>Eng Review</td><td><code>/plan-eng-review</code></td><td class="ok">CLEAR</td><td>Four architecture concerns folded into the plan: current auth boundary, explicit proxy surface, server-only native token, and aggregate polling.</td></tr>
-    <tr><td>Design Review</td><td>Stale approved UI</td><td class="ok">SOURCE LOCKED</td><td>The stale branch is the exact visual source of truth; implementation QA remains required.</td></tr>
-    <tr><td>CEO Review</td><td>Scope challenge</td><td class="ok">SCOPE REDUCED</td><td>Port console and proxy only; exclude 40+ unrelated stale branch changes.</td></tr>
-    <tr><td>Outside Voice</td><td>Codex host</td><td>SKIPPED</td><td>No nested outside-model invocation.</td></tr>
-  </tbody></table>
-  <p><strong>VERDICT:</strong> ENG CLEARED — ready to implement.</p>
-  <p>NO UNRESOLVED DECISIONS</p>
-</main></body></html>
+      <h2>GSTACK REVIEW REPORT</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Review</th>
+            <th>Trigger</th>
+            <th>Status</th>
+            <th>Findings</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Eng Review</td>
+            <td><code>/plan-eng-review</code></td>
+            <td class="ok">CLEAR</td>
+            <td>
+              Four architecture concerns folded into the plan: current auth
+              boundary, explicit proxy surface, server-only native token, and
+              aggregate polling.
+            </td>
+          </tr>
+          <tr>
+            <td>Design Review</td>
+            <td>Stale approved UI</td>
+            <td class="ok">SOURCE LOCKED</td>
+            <td>
+              The stale branch is the exact visual source of truth;
+              implementation QA remains required.
+            </td>
+          </tr>
+          <tr>
+            <td>CEO Review</td>
+            <td>Scope challenge</td>
+            <td class="ok">SCOPE REDUCED</td>
+            <td>
+              Port console and proxy only; exclude 40+ unrelated stale branch
+              changes.
+            </td>
+          </tr>
+          <tr>
+            <td>Outside Voice</td>
+            <td>Codex host</td>
+            <td>SKIPPED</td>
+            <td>No nested outside-model invocation.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p><strong>VERDICT:</strong> ENG CLEARED — ready to implement.</p>
+      <p>NO UNRESOLVED DECISIONS</p>
+    </main>
+  </body>
+</html>

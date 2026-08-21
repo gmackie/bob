@@ -11,7 +11,12 @@ test("Hermes remains loopback-only behind Bob session or service auth", async ()
   assert.match(config, /proxy_set_header Authorization \$http_authorization;/);
   assert.match(config, /proxy_set_header Cookie \$http_cookie;/);
   assert.match(config, /proxy_set_header X-Hermes-Auth-Uri \$request_uri;/);
-  assert.match(config, /proxy_set_header X-Hermes-Auth-Method \$request_method;/);
+  assert.match(
+    config,
+    /proxy_set_header X-Hermes-Auth-Method \$request_method;/,
+  );
   assert.match(config, /proxy_pass http:\/\/127\.0\.0\.1:9119\//);
+  assert.match(config, /proxy_set_header Authorization "";/);
+  assert.match(config, /proxy_set_header Cookie "";/);
   assert.doesNotMatch(config, /Bearer\s+[A-Za-z0-9_-]{8,}/);
 });
