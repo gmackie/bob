@@ -561,7 +561,7 @@ export class Relay {
    * Silently drops if no daemon is connected — the daemon will pick it up
    * from the DB on next connect.
    */
-  nudgeSession(input: NudgeInput): void {
+  async nudgeSession(input: NudgeInput): Promise<void> {
     this.broadcastWorkspaceIdInvalidation(
       input.workspaceId,
       "work_item_dispatched",
@@ -570,6 +570,36 @@ export class Relay {
 
     const daemon = this.daemonByWorkspace.get(input.workspaceId);
     if (!daemon) return;
+
+    // The nudge payload (taskExecutor → /internal/nudge) carries no persona,
+    // so read it off the session row like the tick-delivery path does. Without
+    // this, nudge-delivered sessions ran with personaConfig undefined → the
+    // runner picked permissionMode "prompt" → ACP agents (claude/grok) parked
+    // "blocked" on their first tool call with nobody there to approve
+    // (2026-08-21). DB is the source of truth for persona either way.
+    let personaId = input.personaId;
+    let personaConfig = input.personaConfig;
+    if (!personaConfig) {
+      try {
+        const session = await db.query.chatConversations.findFirst({
+          where: eq(chatConversations.id, input.sessionId),
+          columns: { personaId: true, personaMetadata: true } as any,
+        });
+        const personaMetadata = (session as any)?.personaMetadata as Record<string, unknown> | null;
+        personaId = personaId ?? ((session as any)?.personaId ?? undefined);
+        if (personaMetadata) {
+          personaConfig = {
+            model: typeof personaMetadata.model === "string" ? personaMetadata.model : undefined,
+            systemPrompt: typeof personaMetadata.systemPrompt === "string" ? personaMetadata.systemPrompt : undefined,
+            allowedTools: Array.isArray(personaMetadata.allowedTools) ? personaMetadata.allowedTools as string[] : undefined,
+            autonomyLevel: typeof personaMetadata.autonomyLevel === "string" ? personaMetadata.autonomyLevel : undefined,
+            metadata: typeof personaMetadata.metadata === "object" ? personaMetadata.metadata as Record<string, unknown> : undefined,
+          };
+        }
+      } catch (err) {
+        console.warn(`[Relay] nudge persona lookup failed for ${input.sessionId}:`, err);
+      }
+    }
 
     this.send(daemon, {
       type: "session_available",
@@ -582,8 +612,8 @@ export class Relay {
       description: input.description,
       identifier: input.identifier,
       branch: input.branch,
-      personaId: input.personaId,
-      personaConfig: input.personaConfig,
+      personaId,
+      personaConfig,
     });
   }
 
