@@ -157,11 +157,15 @@ async function collectMetrics(date: string, capTotal: number): Promise<DigestMet
     .groupBy(workItems.status);
   const q = Object.fromEntries(queueRows.map((r) => [r.status, r.n])) as Record<string, number>;
 
-  // Lead time: first claim (earliest session for the work item) → merge.
+  // Lead time: first claim of THIS attempt → merge. An item can have sessions
+  // from earlier abandoned attempts weeks back (HABIT-9 had a July run), so
+  // only sessions within 7 days before the merge count as this attempt.
   const leads = await db
     .select({
       minutes: sql<number>`extract(epoch from (${pullRequests.mergedAt}::timestamptz - (
-        select min(c2.created_at) from chat_conversations c2 where c2.work_item_id = ${chatConversations.workItemId}
+        select min(c2.created_at) from chat_conversations c2
+         where c2.work_item_id = ${chatConversations.workItemId}
+           and c2.created_at::timestamptz > ${pullRequests.mergedAt}::timestamptz - interval '7 days'
       )::timestamptz)) / 60`,
     })
     .from(pullRequests)
