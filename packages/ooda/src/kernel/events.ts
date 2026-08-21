@@ -76,6 +76,7 @@ export async function appendConversationEvent(
   db: OodaDatabase,
   ownerId: string,
   input: AppendConversationEventInputV1,
+  options: { captureMemory?: boolean } = {},
 ): Promise<AppendConversationEventResultV1> {
   const replay = await findEventReplay(db, ownerId, input);
   if (replay) return replay;
@@ -128,7 +129,7 @@ export async function appendConversationEvent(
         .returning();
       if (!event) throw new Error("Event insert returned no row");
 
-      const capture = deriveMemoryCapture({
+      const capture = options.captureMemory === false ? null : deriveMemoryCapture({
         type: input.type,
         payload: input.payload,
       });

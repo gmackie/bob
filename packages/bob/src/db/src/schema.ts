@@ -26,6 +26,7 @@ export * from "@bob/ci/schema";
 export * from "@bob/notifications/schema";
 export * from "@bob/cookies/schema";
 export * from "@bob/secrets/schema";
+export * from "./hermes-schema.js";
 export {
   agentPersonas,
   personaSource,

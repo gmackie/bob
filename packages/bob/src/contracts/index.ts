@@ -5,7 +5,72 @@ export {
 } from "./errors.js";
 
 export { mapTrpcError } from "./bridge.js";
-export type { NotFoundContext, MessageContext, TrpcErrorCode } from "./bridge.js";
+export type {
+  NotFoundContext,
+  MessageContext,
+  TrpcErrorCode,
+} from "./bridge.js";
+
+// --- Hermes operator protocol ---
+
+export {
+  HermesApproveIntentSchema,
+  HermesCaptureIntentSchema,
+  HermesCloseIntentSchema,
+  HermesFleetIntentSchema,
+  HermesOperatorChannelSchema,
+  HermesOperatorIntentNameSchema,
+  HermesOperatorIntentSchema,
+  HermesResearchIntentSchema,
+  HermesStatusIntentSchema,
+  HermesStopIntentSchema,
+  HermesTodayIntentSchema,
+  HermesWorkIntentSchema,
+  parseHermesOperatorIntent,
+} from "./schemas/hermes-operator.js";
+export type {
+  HermesOperatorChannel,
+  HermesOperatorIntent,
+  HermesOperatorIntentName,
+} from "./schemas/hermes-operator.js";
+
+export {
+  HERMES_INTENT_POLICIES,
+  getHermesIntentPolicy,
+} from "./hermes-policy.js";
+export type {
+  HermesIntentEffect,
+  HermesIntentPolicy,
+  HermesOwningSystem,
+  HermesRiskClass,
+} from "./hermes-policy.js";
+
+export {
+  HermesActionEnvelopeSchema,
+  HermesApprovalSchema,
+  HermesActionScopeSchema,
+  HermesCanonicalEvidenceSchema,
+  HermesExecutionEnvelopeSchema,
+  HermesExecutionReceiptSchema,
+  HermesInspectionEnvelopeSchema,
+  HermesProposalEnvelopeSchema,
+  assertHermesApproval,
+  assertHermesExecutionEnvelope,
+  assertHermesExecutionReceipt,
+  digestHermesActionScope,
+  parseHermesActionEnvelope,
+} from "./schemas/hermes-action.js";
+export type {
+  HermesActionEnvelope,
+  HermesActionScope,
+  HermesApproval,
+  HermesApprovalCheck,
+  HermesCanonicalEvidence,
+  HermesExecutionEnvelope,
+  HermesExecutionReceipt,
+  HermesInspectionEnvelope,
+  HermesProposalEnvelope,
+} from "./schemas/hermes-action.js";
 
 // --- RpcGroups ---
 
