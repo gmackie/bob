@@ -111,6 +111,7 @@ class HermesOperatorPluginTests(unittest.TestCase):
         self.assertEqual(request.full_url, "https://bob.example.com/api/v1/hermes/operator")
         self.assertEqual(request.get_header("Authorization"), "Bearer bob_test_key")
         self.assertEqual(request.get_header("Content-type"), "application/json")
+        self.assertEqual(request.get_header("User-agent"), "hermes-operator/1.0")
         self.assertEqual(
             json.loads(request.data),
             {

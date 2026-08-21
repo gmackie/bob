@@ -79,6 +79,7 @@ def _post_operator(body: dict) -> dict:
         headers={
             "Authorization": f"Bearer {os.environ['HERMES_BOB_OPERATOR_API_KEY']}",
             "Content-Type": "application/json",
+            "User-Agent": "hermes-operator/1.0",
         },
         method="POST",
     )
