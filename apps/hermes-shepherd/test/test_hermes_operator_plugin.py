@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -86,11 +87,13 @@ class HermesOperatorPluginTests(unittest.TestCase):
             "HERMES_SESSION_MESSAGE_ID": "9918",
         }
         with (
+            tempfile.TemporaryDirectory() as state_dir,
             patch.dict(
                 plugin.os.environ,
                 {
                     "HERMES_BOB_OPERATOR_URL": "https://bob.example.com/api/v1/hermes/operator",
                     "HERMES_BOB_OPERATOR_API_KEY": "bob_test_key",
+                    "HERMES_OPERATOR_STATE_DIR": state_dir,
                 },
                 clear=True,
             ),
@@ -118,6 +121,43 @@ class HermesOperatorPluginTests(unittest.TestCase):
                 "payload": {"text": "Remember the lab workflow."},
             },
         )
+
+    def test_capture_retry_reuses_the_persisted_occurred_at(self):
+        plugin = load_plugin()
+        sent = []
+        session = {
+            "HERMES_SESSION_PLATFORM": "telegram",
+            "HERMES_SESSION_CHAT_ID": "4512",
+            "HERMES_SESSION_MESSAGE_ID": "9918",
+        }
+
+        def open_request(request, timeout):
+            sent.append(json.loads(request.data))
+            return FakeHttpResponse({
+                "schemaVersion": 1,
+                "intent": "capture.receipt",
+                "summary": "Captured in OODA.",
+                "canonicalRef": {"kind": "conversation_event", "id": "event-42"},
+            })
+
+        with (
+            tempfile.TemporaryDirectory() as state_dir,
+            patch.dict(plugin.os.environ, {
+                "HERMES_BOB_OPERATOR_URL": "https://bob.example.com/api/v1/hermes/operator",
+                "HERMES_BOB_OPERATOR_API_KEY": "bob_test_key",
+                "HERMES_OPERATOR_STATE_DIR": state_dir,
+            }, clear=True),
+            patch.object(plugin, "_session_env", return_value=session),
+            patch.object(plugin, "_utc_now", side_effect=[
+                "2026-08-21T13:30:00Z", "2026-08-21T13:31:00Z",
+            ]),
+            patch.object(plugin, "urlopen", side_effect=open_request),
+        ):
+            plugin.handle_capture("Remember the lab workflow.")
+            plugin.handle_capture("Remember the lab workflow.")
+
+        self.assertEqual(sent[0]["occurredAt"], "2026-08-21T13:30:00Z")
+        self.assertEqual(sent[1]["occurredAt"], sent[0]["occurredAt"])
 
     def test_capture_fails_closed_without_stable_telegram_message_context(self):
         plugin = load_plugin()

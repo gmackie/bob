@@ -84,7 +84,7 @@ export function createBobWorkStatusReader(
     summary: string;
     canonicalRef: { kind: string; id: string };
     observedAt: string;
-    coverage: "complete" | "unknown";
+    coverage: "complete" | "partial" | "unknown";
   }>;
 } {
   return {
@@ -112,11 +112,14 @@ export function createBobWorkStatusReader(
           };
         }
         const item = result.workItem;
+        const terminal = ["completed", "done"].includes(item.status);
         return {
-          summary: `${item.identifier} is ${item.status.replaceAll("_", " ").toUpperCase()}: ${item.title}`,
+          summary: `${item.identifier} is ${item.status.replaceAll("_", " ").toUpperCase()}: ${item.title}${terminal
+            ? ". Bob work-item state only; release, deployment, installation, and runtime evidence were not checked."
+            : ""}`,
           canonicalRef: { kind: "work-item", id: item.id },
           observedAt,
-          coverage: "complete",
+          coverage: terminal ? "partial" : "complete",
         };
       } catch {
         return {
@@ -319,7 +322,9 @@ export function createBobEveningCloseReader(
     async read() {
       try {
         const date = dependencies.now().toISOString().slice(0, 10);
-        const changed = (await dependencies.listChanged())
+        const listed = await dependencies.listChanged();
+        const truncated = listed.length > 100;
+        const changed = listed.slice(0, 100)
           .filter((item) => item.updatedAt?.slice(0, 10) === date);
         const itemsFor = (statuses: readonly string[]) => changed
           .filter((item) => statuses.includes(item.status))
@@ -332,7 +337,7 @@ export function createBobEveningCloseReader(
           completed: itemsFor(["completed", "done"]),
           blocked: itemsFor(["blocked"]),
           waiting: itemsFor(["in_review", "pending"]),
-          gaps: [],
+          gaps: truncated ? ["bob work-item results were truncated"] : [],
         };
       } catch {
         return {

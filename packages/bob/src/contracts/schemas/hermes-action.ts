@@ -214,6 +214,13 @@ export function assertHermesExecutionEnvelope(
     throw new Error("Hermes execution approval expiry does not match");
   }
   const requestedAt = Date.parse(execution.requestedAt);
+  const proposalExpiresAt = Date.parse(proposal.expiresAt);
+  if (Date.parse(approval.expiresAt) > proposalExpiresAt) {
+    throw new Error("Hermes approval extends beyond the proposal expiry");
+  }
+  if (requestedAt >= proposalExpiresAt) {
+    throw new Error("Hermes proposal expired before execution was requested");
+  }
   if (
     !Number.isFinite(requestedAt) ||
     requestedAt < Date.parse(approval.approvedAt) ||
@@ -282,6 +289,7 @@ export function digestHermesActionScope(input: unknown): string {
 export interface HermesApprovalCheck {
   readonly now: Date;
   readonly consumedApprovalIds: ReadonlySet<string>;
+  readonly expectedActorRef: string;
 }
 
 export function assertHermesApproval(
@@ -309,6 +317,9 @@ export function assertHermesApproval(
   }
   if (check.consumedApprovalIds.has(approval.approvalId)) {
     throw new Error("Hermes approval has already been consumed");
+  }
+  if (approval.actorRef !== check.expectedActorRef) {
+    throw new Error("Hermes approval actor does not match the authenticated actor");
   }
   if (approval.scopeDigest !== digestHermesActionScope(expectedScope)) {
     throw new Error(

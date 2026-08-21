@@ -114,6 +114,20 @@ describe("Bob Hermes status reader", () => {
     });
   });
 
+  it("labels terminal Bob state as partial when release/runtime evidence is not read", async () => {
+    const reader = createBobWorkStatusReader({
+      now: () => new Date("2026-08-21T14:00:00Z"),
+      getById: async () => ({ workItem: {
+        id: "work-2", identifier: "BOB-18", title: "Release Hermes", status: "completed",
+      } }),
+    });
+
+    const result = await reader.read("status BOB-18");
+
+    expect(result.coverage).toBe("partial");
+    expect(result.summary).toMatch(/release.*runtime.*not checked/i);
+  });
+
   it("reports unknown coverage when a query has no canonical identifier", async () => {
     const reader = createBobWorkStatusReader({
       now: () => new Date("2026-08-21T14:00:00Z"),
@@ -321,6 +335,18 @@ describe("Hermes evening close readers", () => {
       waiting: [{ label: "IN REVIEW · BOB-22 · Review route", canonicalRef: { kind: "work-item", id: "waiting-1" } }],
       gaps: [],
     });
+  });
+
+  it("names Bob truncation instead of reporting a complete close", async () => {
+    const reader = createBobEveningCloseReader({
+      now: () => new Date("2026-08-21T22:00:00Z"),
+      listChanged: async () => Array.from({ length: 101 }, (_, index) => ({
+        id: `work-${index}`, title: `Work ${index}`, status: "completed",
+        updatedAt: "2026-08-21T18:00:00Z",
+      })),
+    });
+
+    expect((await reader.read()).gaps).toContain("bob work-item results were truncated");
   });
 
   it("assembles a partial close while naming sources not yet included", async () => {

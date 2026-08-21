@@ -3,6 +3,7 @@
 import json
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
@@ -15,6 +16,36 @@ def _session_env() -> dict[str, str]:
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _capture_occurred_at(request_id: str) -> str:
+    """Persist transport time before sending so retries keep identical OODA input."""
+    state_dir = Path(os.environ.get(
+        "HERMES_OPERATOR_STATE_DIR", Path.home() / ".hermes" / "state" / "hermes-operator"
+    ))
+    state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    state_path = state_dir / "capture-times.json"
+    if state_path.exists():
+        values = json.loads(state_path.read_text(encoding="utf-8"))
+        if not isinstance(values, dict) or not all(
+            isinstance(key, str) and isinstance(value, str)
+            for key, value in values.items()
+        ):
+            raise ValueError("invalid capture timestamp state")
+    else:
+        values = {}
+    occurred_at = values.get(request_id)
+    if occurred_at is not None:
+        return occurred_at
+    occurred_at = _utc_now()
+    values[request_id] = occurred_at
+    if len(values) > 4096:
+        values = dict(list(values.items())[-4096:])
+    temporary = state_path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(values, separators=(",", ":")), encoding="utf-8")
+    os.chmod(temporary, 0o600)
+    os.replace(temporary, state_path)
+    return occurred_at
 
 
 def _operator_url() -> str:
@@ -79,12 +110,13 @@ def handle_capture(raw_args: str) -> str:
     if platform != "telegram" or not chat_id or not message_id:
         return "Capture unavailable: stable Telegram message context is missing."
     try:
+        request_id = f"{platform}:{chat_id}:{message_id}"
         body = {
             "schemaVersion": 1,
-            "requestId": f"{platform}:{chat_id}:{message_id}",
+            "requestId": request_id,
             "intent": "capture",
             "channel": platform,
-            "occurredAt": _utc_now(),
+            "occurredAt": _capture_occurred_at(request_id),
             "payload": {"text": text},
         }
         receipt = _post_operator(body)

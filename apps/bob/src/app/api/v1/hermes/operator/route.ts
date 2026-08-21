@@ -65,7 +65,7 @@ async function postOperator(request: Request): Promise<Response> {
                 {
                   workspaceId,
                   statuses: ["completed", "done", "blocked", "in_review", "pending"],
-                  limit: 100,
+                  limit: 101,
                 },
               ),
             })

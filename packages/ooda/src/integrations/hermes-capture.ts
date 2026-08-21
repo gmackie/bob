@@ -28,8 +28,8 @@ export function createHermesCaptureAdapter(
         await writer.append({
           conversationId: command.conversationId,
           branchId: command.branchId,
-          type: "user_turn",
-          actor: { type: "user" },
+          type: "external_evidence",
+          actor: { type: "integration", id: "hermes" },
           payload: {
             format: "text",
             text: command.text,

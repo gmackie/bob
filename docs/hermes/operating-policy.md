@@ -30,7 +30,7 @@ The public contract lives in `@gmacko/bob/contracts`. Unknown fields fail closed
 
 Retries reuse the original request ID. OODA returns the original event with `replayed: true`; Skillfleet records the replay outcome separately from a new successful capture.
 
-The live capture route requires `HERMES_OPERATOR_OWNER_USER_ID`, `HERMES_OODA_ORIGIN_URL`, `HERMES_OODA_API_KEY`, `HERMES_OODA_CONVERSATION_ID`, `HERMES_OODA_BRANCH_ID`, and `HERMES_USAGE_DIGEST_SECRET`. These are propagated from the Worker runtime environment. `today`, `status`, and `close` remain explicitly unavailable at the production route until their canonical source readers are connected.
+The operator route requires `HERMES_OPERATOR_OWNER_USER_ID`, `HERMES_OODA_ORIGIN_URL`, `HERMES_OODA_API_KEY`, `HERMES_OODA_CONVERSATION_ID`, `HERMES_OODA_BRANCH_ID`, and `HERMES_USAGE_DIGEST_SECRET`. Bob work-item, OODA, Skillfleet, and ForgeGraph readers are wired when their corresponding runtime settings are present. Missing sources remain named gaps, terminal Bob work-item state alone is partial release evidence, and an incompletely configured intent fails closed instead of fabricating a complete result.
 
 ## Daily delivery
 

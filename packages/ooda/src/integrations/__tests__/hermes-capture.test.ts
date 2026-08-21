@@ -4,15 +4,15 @@ import type { AppendConversationEventInputV1 } from "../../contracts/v1";
 import { createHermesCaptureAdapter } from "../hermes-capture";
 
 describe("Hermes OODA capture adapter", () => {
-  it("appends one user-authored event with transport idempotency and returns an opaque receipt", async () => {
+  it("appends one event-only integration record with transport idempotency and returns an opaque receipt", async () => {
     const append = vi.fn(async (_input: AppendConversationEventInputV1) => ({
       event: {
         id: "event-42",
         conversationId: "conversation-42",
         branchId: "branch-42",
         sequence: "7",
-        type: "user_turn" as const,
-        actor: { type: "user" as const },
+        type: "external_evidence" as const,
+        actor: { type: "integration" as const, id: "hermes" },
         payload: { format: "text", text: "Remember the lab workflow." },
         sensitivity: "personal" as const,
         correlationId: "telegram:4512:9918",
@@ -43,8 +43,8 @@ describe("Hermes OODA capture adapter", () => {
       expect.objectContaining({
         idempotencyKey: "telegram:4512:9918",
         correlationId: "telegram:4512:9918",
-        actor: { type: "user" },
-        type: "user_turn",
+        actor: { type: "integration", id: "hermes" },
+        type: "external_evidence",
         sensitivity: "personal",
       }),
     );

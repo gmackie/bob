@@ -40,11 +40,11 @@ class HermesOperatorReconciliationTests(unittest.TestCase):
             created.append(definition)
             return job
 
-        first = reconciler.reconcile_daily_jobs(list_jobs, create_job)
-        second = reconciler.reconcile_daily_jobs(list_jobs, create_job)
+        first = reconciler.reconcile_daily_jobs(list_jobs, create_job, lambda *_: None, lambda *_: None)
+        second = reconciler.reconcile_daily_jobs(list_jobs, create_job, lambda *_: None, lambda *_: None)
 
-        self.assertEqual(first, {"created": 2, "existing": 0})
-        self.assertEqual(second, {"created": 0, "existing": 2})
+        self.assertEqual(first, {"created": 2, "existing": 0, "updated": 0, "removed": 0})
+        self.assertEqual(second, {"created": 0, "existing": 2, "updated": 0, "removed": 0})
         self.assertEqual(
             created,
             [
@@ -66,6 +66,27 @@ class HermesOperatorReconciliationTests(unittest.TestCase):
                 },
             ],
         )
+
+    def test_reconcile_repairs_drift_and_removes_duplicates(self):
+        reconciler = load_reconciler()
+        jobs = [
+            {"id": "bad", **reconciler.DAILY_JOBS[0], "schedule": {"kind": "cron", "expr": "0 9 * * *"}},
+            {"id": "duplicate", **reconciler.DAILY_JOBS[0]},
+            {"id": "evening", **reconciler.DAILY_JOBS[1]},
+        ]
+        updated = []
+        removed = []
+
+        result = reconciler.reconcile_daily_jobs(
+            lambda: jobs,
+            lambda **_: self.fail("no create expected"),
+            lambda job_id, definition: updated.append((job_id, definition)),
+            lambda job_id: removed.append(job_id),
+        )
+
+        self.assertEqual(updated, [("bad", {**reconciler.DAILY_JOBS[0], "enabled": True})])
+        self.assertEqual(removed, ["duplicate"])
+        self.assertEqual(result, {"created": 0, "existing": 1, "updated": 1, "removed": 1})
 
     def test_job_entrypoint_maps_fixed_filename_to_operator_intent(self):
         runner = load_job_runner()

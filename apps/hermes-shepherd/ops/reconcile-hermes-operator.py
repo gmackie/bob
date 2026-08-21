@@ -29,31 +29,61 @@ DAILY_JOBS = (
 def reconcile_daily_jobs(
     list_jobs: Callable[[], list[dict[str, Any]]],
     create_job: Callable[..., dict[str, Any]],
+    update_job: Callable[[str, dict[str, Any]], Any],
+    remove_job: Callable[[str], Any],
 ) -> dict[str, int]:
-    existing_names = {
-        job.get("name")
-        for job in list_jobs()
-        if isinstance(job, dict) and isinstance(job.get("name"), str)
-    }
     created = 0
     existing = 0
+    updated = 0
+    removed = 0
+    jobs_by_name: dict[str, list[dict[str, Any]]] = {}
+    for job in list_jobs():
+        if isinstance(job, dict) and isinstance(job.get("name"), str):
+            jobs_by_name.setdefault(job["name"], []).append(job)
+
+    def matches(job: dict[str, Any], definition: dict[str, Any]) -> bool:
+        schedule = job.get("schedule")
+        schedule_expr = schedule.get("expr") if isinstance(schedule, dict) else schedule
+        return (
+            schedule_expr == definition["schedule"]
+            and all(job.get(field) == definition[field]
+                    for field in ("prompt", "deliver", "script", "no_agent"))
+            and job.get("enabled", True) is True
+        )
+
     for definition in DAILY_JOBS:
-        if definition["name"] in existing_names:
-            existing += 1
+        matches_name = jobs_by_name.get(definition["name"], [])
+        if not matches_name:
+            create_job(**definition)
+            created += 1
             continue
-        create_job(**definition)
-        existing_names.add(definition["name"])
-        created += 1
-    return {"created": created, "existing": existing}
+        canonical, *duplicates = matches_name
+        canonical_id = canonical.get("id")
+        if not isinstance(canonical_id, str):
+            raise ValueError("Hermes job is missing an ID")
+        if matches(canonical, definition):
+            existing += 1
+        else:
+            update_job(canonical_id, {**definition, "enabled": True})
+            updated += 1
+        for duplicate in duplicates:
+            duplicate_id = duplicate.get("id")
+            if not isinstance(duplicate_id, str):
+                raise ValueError("duplicate Hermes job is missing an ID")
+            remove_job(duplicate_id)
+            removed += 1
+    return {"created": created, "existing": existing, "updated": updated, "removed": removed}
 
 
 def main() -> None:
-    from cron.jobs import list_jobs
+    from cron.jobs import list_jobs, remove_job, update_job
     from cron.scheduler import create_job_with_scheduler_registration
 
     result = reconcile_daily_jobs(
-        list_jobs,
+        lambda: list_jobs(include_disabled=True),
         create_job_with_scheduler_registration,
+        update_job,
+        remove_job,
     )
     print(json.dumps(result, separators=(",", ":")))
 

@@ -168,6 +168,7 @@ describe("Hermes action contract", () => {
       assertHermesExecutionEnvelope(execution, proposal, approval, {
         now: new Date("2026-08-21T13:02:00Z"),
         consumedApprovalIds: new Set(),
+        expectedActorRef: "owner:primary",
       }),
     ).toEqual(execution);
     expect(() =>
@@ -178,6 +179,7 @@ describe("Hermes action contract", () => {
         {
           now: new Date("2026-08-21T13:02:00Z"),
           consumedApprovalIds: new Set(),
+          expectedActorRef: "owner:primary",
         },
       ),
     ).toThrow(/approval window/i);
@@ -257,18 +259,21 @@ describe("Hermes action contract", () => {
       assertHermesApproval(approval, scope, {
         now: new Date("2026-08-21T13:05:00Z"),
         consumedApprovalIds: new Set(),
+        expectedActorRef: "owner:primary",
       }),
     ).toEqual(approval);
     expect(() =>
       assertHermesApproval(approval, scope, {
         now: new Date("2026-08-21T13:16:00Z"),
         consumedApprovalIds: new Set(),
+        expectedActorRef: "owner:primary",
       }),
     ).toThrow(/expired/i);
     expect(() =>
       assertHermesApproval(approval, scope, {
         now: new Date("2026-08-21T13:05:00Z"),
         consumedApprovalIds: new Set([approval.approvalId]),
+        expectedActorRef: "owner:primary",
       }),
     ).toThrow(/consumed/i);
     expect(() =>
@@ -278,8 +283,45 @@ describe("Hermes action contract", () => {
         {
           now: new Date("2026-08-21T13:05:00Z"),
           consumedApprovalIds: new Set(),
+          expectedActorRef: "owner:primary",
         },
       ),
     ).toThrow(/scope/i);
+    expect(() =>
+      assertHermesApproval(approval, scope, {
+        now: new Date("2026-08-21T13:05:00Z"),
+        consumedApprovalIds: new Set(),
+        expectedActorRef: "owner:secondary",
+      }),
+    ).toThrow(/actor/i);
+  });
+
+  it("rejects execution after the proposal expires even when approval remains active", () => {
+    const scope = {
+      schemaVersion: 1, actionClass: "work.proposal", owner: "bob",
+      targetRef: "work-item:42", parametersDigest: `sha256:${"9".repeat(64)}`,
+    } as const;
+    const proposal = parseHermesActionEnvelope({
+      schemaVersion: 1, kind: "proposal", proposalId: "proposal-expiry",
+      inspectionId: "inspection-expiry", owner: "bob", scope,
+      scopeDigest: digestHermesActionScope(scope), summary: "Bounded proposal",
+      proposedAt: "2026-08-21T13:00:00Z", expiresAt: "2026-08-21T13:05:00Z",
+      evidence: [{ kind: "work_item", ref: "bob:42", observedAt: "2026-08-21T13:00:00Z" }],
+    });
+    const approval = {
+      schemaVersion: 1, approvalId: "approval-expiry", proposalId: "proposal-expiry",
+      actorRef: "owner:primary", scopeDigest: digestHermesActionScope(scope),
+      approvedAt: "2026-08-21T13:01:00Z", expiresAt: "2026-08-21T13:10:00Z",
+    } as const;
+    const execution = {
+      schemaVersion: 1, kind: "execution", executionId: "execution-expiry",
+      proposalId: "proposal-expiry", approvalId: "approval-expiry", owner: "bob",
+      scope, scopeDigest: digestHermesActionScope(scope), idempotencyKey: "execute:expiry",
+      requestedAt: "2026-08-21T13:06:00Z", approvalExpiresAt: "2026-08-21T13:10:00Z",
+    } as const;
+    expect(() => assertHermesExecutionEnvelope(execution, proposal, approval, {
+      now: new Date("2026-08-21T13:06:00Z"), consumedApprovalIds: new Set(),
+      expectedActorRef: "owner:primary",
+    })).toThrow(/proposal.*expir/i);
   });
 });
