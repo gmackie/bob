@@ -17,7 +17,8 @@
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path .prettierignore",
     "lint": "eslint --flag unstable_native_nodejs_ts_config",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "ios:device:production": "APP_ENV=production API_URL=https://bob.blder.bot AUTH_URL=https://bob.blder.bot OODA_API_URL=https://ooda.blder.bot GATEWAY_PUBLIC_URL=wss://ws.blder.bot expo run:ios --configuration Release --no-bundler --device"
   },
   "dependencies": {
     "@better-auth/expo": "catalog:",
