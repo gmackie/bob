@@ -291,9 +291,10 @@ describe("personal OS routers", () => {
       "owner-a",
       expect.objectContaining({
         idempotencyKey: "telegram:4512:9918",
-        actor: { type: "integration", id: "hermes" },
-        type: "external_evidence",
+        actor: { type: "user" },
+        type: "user_turn",
       }),
+      { captureMemory: false },
     );
   });
 

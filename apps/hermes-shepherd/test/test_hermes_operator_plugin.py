@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -158,6 +159,23 @@ class HermesOperatorPluginTests(unittest.TestCase):
 
         self.assertEqual(sent[0]["occurredAt"], "2026-08-21T13:30:00Z")
         self.assertEqual(sent[1]["occurredAt"], sent[0]["occurredAt"])
+
+    def test_capture_timestamp_journal_serializes_concurrent_writers(self):
+        plugin = load_plugin()
+        with tempfile.TemporaryDirectory() as state_dir, patch.dict(
+            plugin.os.environ, {"HERMES_OPERATOR_STATE_DIR": state_dir}, clear=True
+        ):
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                values = list(pool.map(
+                    plugin._capture_occurred_at,
+                    [f"telegram:4512:{index}" for index in range(32)],
+                ))
+            state = json.loads(
+                (Path(state_dir) / "capture-times.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(len(values), 32)
+        self.assertEqual(len(state), 32)
 
     def test_capture_fails_closed_without_stable_telegram_message_context(self):
         plugin = load_plugin()

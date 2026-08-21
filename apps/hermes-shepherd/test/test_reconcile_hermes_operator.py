@@ -88,6 +88,23 @@ class HermesOperatorReconciliationTests(unittest.TestCase):
         self.assertEqual(removed, ["duplicate"])
         self.assertEqual(result, {"created": 0, "existing": 1, "updated": 1, "removed": 1})
 
+    def test_reconcile_preserves_an_emergency_paused_job(self):
+        reconciler = load_reconciler()
+        paused = {
+            "id": "paused", **reconciler.DAILY_JOBS[0], "enabled": False,
+            "state": "paused", "schedule": {"kind": "cron", "expr": "0 9 * * *"},
+        }
+        updated = []
+
+        result = reconciler.reconcile_daily_jobs(
+            lambda: [paused], lambda **_: None,
+            lambda job_id, definition: updated.append((job_id, definition)),
+            lambda _: None,
+        )
+
+        self.assertEqual(updated, [])
+        self.assertEqual(result, {"created": 1, "existing": 1, "updated": 0, "removed": 0})
+
     def test_job_entrypoint_maps_fixed_filename_to_operator_intent(self):
         runner = load_job_runner()
         calls = []

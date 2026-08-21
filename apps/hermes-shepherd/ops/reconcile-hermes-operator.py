@@ -48,8 +48,11 @@ def reconcile_daily_jobs(
             schedule_expr == definition["schedule"]
             and all(job.get(field) == definition[field]
                     for field in ("prompt", "deliver", "script", "no_agent"))
-            and job.get("enabled", True) is True
         )
+
+    def paused(job: dict[str, Any]) -> bool:
+        return (job.get("enabled") is False or job.get("state") == "paused"
+                or job.get("paused") is True)
 
     for definition in DAILY_JOBS:
         matches_name = jobs_by_name.get(definition["name"], [])
@@ -57,11 +60,12 @@ def reconcile_daily_jobs(
             create_job(**definition)
             created += 1
             continue
+        matches_name.sort(key=lambda job: not paused(job))
         canonical, *duplicates = matches_name
         canonical_id = canonical.get("id")
         if not isinstance(canonical_id, str):
             raise ValueError("Hermes job is missing an ID")
-        if matches(canonical, definition):
+        if paused(canonical) or matches(canonical, definition):
             existing += 1
         else:
             update_job(canonical_id, {**definition, "enabled": True})

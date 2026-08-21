@@ -24,7 +24,7 @@ export const hermesRouter = {
     .mutation(({ ctx, input }) =>
       runKernel(() =>
         createHermesCaptureAdapter({
-          append: (event) => appendConversationEvent(ctx.db, ctx.userId, event),
+          append: (event, options) => appendConversationEvent(ctx.db, ctx.userId, event, options),
         }).capture(input),
       ),
     ),

@@ -1198,6 +1198,37 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
     });
   });
 
+  it("persists an event-only user turn without deriving a memory seed", async () => {
+    const created = await createConversation(db!, "owner-a", {
+      title: "Hermes inbox",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "create-hermes-inbox",
+    });
+    const input = {
+      conversationId: created.conversation.id,
+      branchId: created.branch.id,
+      type: "user_turn" as const,
+      actor: { type: "user" as const },
+      payload: { format: "text", text: "One event only", source: "hermes" },
+      sensitivity: "personal" as const,
+      correlationId: "telegram:4512:9918",
+      idempotencyKey: "telegram:4512:9918",
+      occurredAt: "2026-08-21T13:30:00.000Z",
+    };
+
+    const first = await appendConversationEvent(db!, "owner-a", input, { captureMemory: false });
+    const replay = await appendConversationEvent(db!, "owner-a", input, { captureMemory: false });
+    const captured = await db!.select().from(schema.memorySeeds)
+      .where(eq(schema.memorySeeds.sourceEventId, first.event.id));
+
+    expect(first.event.type).toBe("user_turn");
+    expect(replay).toEqual({ event: first.event, replayed: true });
+    expect(captured).toEqual([]);
+  });
+
   it("collapses concurrent retries with one idempotency key into one sequence", async () => {
     const created = await createConversation(db!, "owner-a", {
       title: "Concurrent retry",

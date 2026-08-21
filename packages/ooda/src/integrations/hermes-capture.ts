@@ -11,6 +11,7 @@ import {
 export interface HermesCaptureWriter {
   append(
     input: AppendConversationEventInputV1,
+    options?: { captureMemory?: boolean },
   ): Promise<AppendConversationEventResultV1>;
 }
 
@@ -28,8 +29,8 @@ export function createHermesCaptureAdapter(
         await writer.append({
           conversationId: command.conversationId,
           branchId: command.branchId,
-          type: "external_evidence",
-          actor: { type: "integration", id: "hermes" },
+          type: "user_turn",
+          actor: { type: "user" },
           payload: {
             format: "text",
             text: command.text,
@@ -39,7 +40,7 @@ export function createHermesCaptureAdapter(
           correlationId: command.requestId,
           idempotencyKey: command.requestId,
           occurredAt: command.occurredAt,
-        }),
+        }, { captureMemory: false }),
       );
       return HermesCaptureReceiptV1Schema.parse({
         schemaVersion: 1,

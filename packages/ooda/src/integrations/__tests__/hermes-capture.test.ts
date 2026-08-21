@@ -11,8 +11,8 @@ describe("Hermes OODA capture adapter", () => {
         conversationId: "conversation-42",
         branchId: "branch-42",
         sequence: "7",
-        type: "external_evidence" as const,
-        actor: { type: "integration" as const, id: "hermes" },
+        type: "user_turn" as const,
+        actor: { type: "user" as const },
         payload: { format: "text", text: "Remember the lab workflow." },
         sensitivity: "personal" as const,
         correlationId: "telegram:4512:9918",
@@ -43,10 +43,11 @@ describe("Hermes OODA capture adapter", () => {
       expect.objectContaining({
         idempotencyKey: "telegram:4512:9918",
         correlationId: "telegram:4512:9918",
-        actor: { type: "integration", id: "hermes" },
-        type: "external_evidence",
+        actor: { type: "user" },
+        type: "user_turn",
         sensitivity: "personal",
       }),
+      { captureMemory: false },
     );
   });
 });

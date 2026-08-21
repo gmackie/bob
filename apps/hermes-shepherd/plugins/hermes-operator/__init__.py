@@ -2,6 +2,7 @@
 
 import json
 import os
+import fcntl
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -25,27 +26,34 @@ def _capture_occurred_at(request_id: str) -> str:
     ))
     state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     state_path = state_dir / "capture-times.json"
-    if state_path.exists():
-        values = json.loads(state_path.read_text(encoding="utf-8"))
-        if not isinstance(values, dict) or not all(
-            isinstance(key, str) and isinstance(value, str)
-            for key, value in values.items()
-        ):
-            raise ValueError("invalid capture timestamp state")
-    else:
-        values = {}
-    occurred_at = values.get(request_id)
-    if occurred_at is not None:
-        return occurred_at
-    occurred_at = _utc_now()
-    values[request_id] = occurred_at
-    if len(values) > 4096:
-        values = dict(list(values.items())[-4096:])
-    temporary = state_path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(values, separators=(",", ":")), encoding="utf-8")
-    os.chmod(temporary, 0o600)
-    os.replace(temporary, state_path)
-    return occurred_at
+    lock_path = state_dir / "capture-times.lock"
+    with lock_path.open("a+", encoding="utf-8") as lock:
+        os.chmod(lock_path, 0o600)
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            if state_path.exists():
+                values = json.loads(state_path.read_text(encoding="utf-8"))
+                if not isinstance(values, dict) or not all(
+                    isinstance(key, str) and isinstance(value, str)
+                    for key, value in values.items()
+                ):
+                    raise ValueError("invalid capture timestamp state")
+            else:
+                values = {}
+            occurred_at = values.get(request_id)
+            if occurred_at is not None:
+                return occurred_at
+            occurred_at = _utc_now()
+            values[request_id] = occurred_at
+            if len(values) > 4096:
+                values = dict(list(values.items())[-4096:])
+            temporary = state_path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(values, separators=(",", ":")), encoding="utf-8")
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, state_path)
+            return occurred_at
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
 def _operator_url() -> str:
