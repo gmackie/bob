@@ -23,6 +23,7 @@ import { pickAcrossProjects } from "./autoDrain-pick";
 import { mirrorWorkItemEvent } from "../services/tracker/trackerMirror.js";
 import type { AgentHealthVerdict } from "../services/automation/agentHealthRouter.js";
 import { assessAgentHealth, chooseAgent } from "../services/automation/agentHealthRouter.js";
+import { paceDailyBudget } from "../services/health/pacing.js";
 
 // Sessions actively holding a runner execution slot. Mirrors the runner's own
 // busy check (its activeSessions map) — NOT "idle", which means the agent
@@ -63,6 +64,14 @@ export interface AutoDrainOptions {
   healthRouting?: boolean;
   /** Window for the health assessment. Default 2h. */
   healthWindowMs?: number;
+  /** Spread the daily cap across the day instead of spending it first-come. Default on. */
+  pacing?: boolean;
+  /** Runs allowed above the pro-rata line (default = concurrency). */
+  burst?: number;
+}
+
+function minuteOfDayUtc(d: Date): number {
+  return d.getUTCHours() * 60 + d.getUTCMinutes();
 }
 
 /**
@@ -132,14 +141,32 @@ export async function autoDrainBacklog(
 
   const freeSlots = Math.max(0, cfg.concurrency - running);
   const remainingToday = Math.max(0, cfg.dailyCap - today);
-  const budget = Math.min(freeSlots, remainingToday);
+
+  // Spend the daily cap as a RATE across the day rather than a kill switch:
+  // a busy morning narrows the pipe to a trickle instead of going dark until
+  // midnight. The cap is still the hard ceiling. See services/health/pacing.
+  const pacing =
+    opts.pacing !== false
+      ? paceDailyBudget({
+          dailyCap: cfg.dailyCap,
+          executeToday: today,
+          minuteOfDay: minuteOfDayUtc(new Date()),
+          burst: opts.burst ?? cfg.concurrency,
+        })
+      : { allowance: remainingToday, earned: cfg.dailyCap, pacingBinds: false };
+  const budget = Math.min(freeSlots, remainingToday, pacing.allowance);
 
   const base = { running, dispatchedToday: today, items: [] as AutoDrainResult["items"] };
   if (budget <= 0) {
     return {
       ...base,
       dispatched: 0,
-      reason: freeSlots <= 0 ? "no free slots" : "daily cap reached",
+      reason:
+        freeSlots <= 0
+          ? "no free slots"
+          : remainingToday <= 0
+            ? "daily cap reached"
+            : `paced (${today}/${pacing.earned} earned so far today)`,
     };
   }
 

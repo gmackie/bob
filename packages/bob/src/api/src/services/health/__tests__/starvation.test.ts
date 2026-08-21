@@ -25,3 +25,10 @@ describe("detectStarvation", () => {
     expect(detectStarvation({ ...base, executeToday: 0, msSinceLastExecute: Infinity }).starved).toBe(true);
   });
 });
+
+describe("detectStarvation with pacing", () => {
+  it("a paced-out tick is a throttle, not starvation", () => {
+    expect(detectStarvation({ ...base, pacedAllowance: 0 }).reason).toBe("paced");
+    expect(detectStarvation({ ...base, pacedAllowance: 2 }).reason).toBe("starved");
+  });
+});

@@ -326,6 +326,12 @@ export default Sentry.withSentry(
             agents,
             healthRouting:
               String(runtimeEnv.BOB_AGENT_HEALTH_ROUTING_ENABLED ?? "true") !== "false",
+            // Spend the daily cap as a rate across the day (narrow the pipe,
+            // don't shut it). Burst defaults to the concurrency.
+            pacing: String(runtimeEnv.BOB_AUTO_DRAIN_PACING_ENABLED ?? "true") !== "false",
+            burst: runtimeEnv.BOB_AUTO_DRAIN_BURST
+              ? Number(runtimeEnv.BOB_AUTO_DRAIN_BURST)
+              : undefined,
           });
           console.log(
             `[auto-drain] dispatched=${result.dispatched} running=${result.running} today=${result.dispatchedToday}` +
@@ -373,6 +379,7 @@ export default Sentry.withSentry(
               windowMs: Number(runtimeEnv.BOB_STARVATION_WINDOW_MS ?? 2 * 60 * 60 * 1000),
               fallbackConcurrency: concurrency,
               fallbackDailyCap: dailyCap,
+              pacing: String(runtimeEnv.BOB_AUTO_DRAIN_PACING_ENABLED ?? "true") !== "false",
             });
             if (s.starved) {
               const { buildFailurePayload, getFailureSentryTags } = await import(

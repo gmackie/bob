@@ -40,6 +40,11 @@
     "BOB_AUTO_DRAIN_ENABLED": "true",
     "BOB_AUTO_DRAIN_CONCURRENCY": "4",
     "BOB_AUTO_DRAIN_DAILY_CAP": "40",
+    // The cap is spent as a RATE across the UTC day (pro-rata + a burst of
+    // BOB_AUTO_DRAIN_BURST, default = concurrency) so a busy morning narrows
+    // the pipe instead of going dark until midnight. Flip to "false" for the
+    // old first-come-first-served cap.
+    "BOB_AUTO_DRAIN_PACING_ENABLED": "true",
     // Dispatch rotation. claude restored 2026-08-23 after its weekly limit
     // reset. Review/repair stay on codex so a second provider carries that
     // load (and the reviewer is never the author's own model).
