@@ -76,7 +76,7 @@
 <body>
 <header class="hero"><div class="hero-inner">
   <div class="kicker">Bob · Autonomous SDLC</div>
-  <h1>Kanbanger-fed queue, worked end to end <span class="badge draft">Draft</span></h1>
+  <h1>Kanbanger-fed queue, worked end to end <span class="badge active">P0/P1 shipped · P2 next</span></h1>
   <div class="meta"><span>2026-08-20</span><span>gmacko monorepo @ master</span><span>author: Claude for Graham</span></div>
 </div></header>
 <main>
@@ -145,32 +145,32 @@ flowchart LR
 </div>
 
 <h2>Phases</h2>
-<div class="progress"><i class="active"></i><i></i><i></i><i></i></div>
+<div class="progress"><i class="done"></i><i class="done"></i><i class="active"></i><i></i></div>
 <ul class="timeline">
-<li class="active"><b>P0 — Unblock intake</b> (today): Kanbanger API up, sync reconciles status both ways, stale-sync alert.</li>
-<li><b>P1 — Close the loop</b> (1–2 days): merge→done, Kanbanger write-back, reaper rollback, one-off backfill of the 372+29 stranded items.</li>
-<li><b>P2 — Ship stage</b> (2–3 days): cron-driven pipeline advance, ForgeGraph deploy after merge, retire task-runner execution.</li>
+<li class="done"><b>P0 — Unblock intake</b> (today): Kanbanger API up, sync reconciles status both ways, stale-sync alert.</li>
+<li class="done"><b>P1 — Close the loop</b> (1–2 days): merge→done, Kanbanger write-back, reaper rollback, one-off backfill of the 372+29 stranded items.</li>
+<li class="active"><b>P2 — Ship stage</b> (2–3 days): cron-driven pipeline advance, ForgeGraph deploy after merge, retire task-runner execution.</li>
 <li><b>P3 — Harden &amp; observe</b> (ongoing): throughput metrics, budget/backpressure, daily digest, agent routing.</li>
 </ul>
 
-<h2>P0 — Unblock intake <span class="badge active">In progress</span></h2>
+<h2>P0 — Unblock intake <span class="badge done">Done 2026-08-21</span></h2>
 <table>
 <tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
-<tr><td>Restore Kanbanger list resolvers (redeploy prod worker from last Postgres commit; if it persists, compare Hyperdrive vs direct)</td><td><code>linear-clone/apps/web</code> (separate repo)</td><td><code>{ issues(first:1){nodes{id}} }</code> returns data; Bob <code>last_synced_at</code> advances on next :00/:15/:30/:45 tick</td><td><span class="badge active">Doing</span></td></tr>
-<tr><td>Sync reconciles existing items: mirror Kanbanger state → Bob status for items not in flight (backlog⇄todo, canceled→cancelled, completed→done). Never downgrade <code>in_progress</code>/<code>in_review</code>.</td><td><code>packages/bob/src/api/src/handlers/linearSetup.ts</code>, new <code>services/linear/reconcileStatus.ts</code> + tests</td><td>Unit: table-driven transitions. Prod: the 98 backlog items whose Kanbanger state is Todo flip to <code>todo</code>; auto-drain dispatches within 5 min</td><td><span class="badge todo">Todo</span></td></tr>
+<tr><td>Restore Kanbanger list resolvers (redeploy prod worker from last Postgres commit; if it persists, compare Hyperdrive vs direct)</td><td><code>linear-clone/apps/web</code> (separate repo)</td><td><code>{ issues(first:1){nodes{id}} }</code> returns data; Bob <code>last_synced_at</code> advances on next :00/:15/:30/:45 tick</td><td><span class="badge done">Done</span></td></tr>
+<tr><td>Sync reconciles existing items: mirror Kanbanger state → Bob status for items not in flight (backlog⇄todo, canceled→cancelled, completed→done). Never downgrade <code>in_progress</code>/<code>in_review</code>.</td><td><code>packages/bob/src/api/src/handlers/linearSetup.ts</code>, new <code>services/linear/reconcileStatus.ts</code> + tests</td><td>Unit: table-driven transitions. Prod: the 98 backlog items whose Kanbanger state is Todo flip to <code>todo</code>; auto-drain dispatches within 5 min</td><td><span class="badge done">Done</span></td></tr>
 <tr><td>Sync imports kind <code>task</code> (already) and auto-drain stays <code>task</code>-only — confirm imported issues are dispatchable; set <code>agentTypeOverride</code> from a Kanbanger label (<code>agent:codex</code> etc.) when present</td><td><code>linearSetup.ts</code></td><td>Imported row has <code>kind='task'</code>; label maps to override</td><td><span class="badge todo">Todo</span></td></tr>
-<tr><td>Record sync failures in <code>last_sync_result</code> and raise <code>linear-sync-stale</code> Sentry alert when <code>last_synced_at</code> &gt; 60 min old</td><td><code>apps/bob/worker/index.ts</code>, <code>packages/bob/src/observability/src/alerts.ts</code></td><td>Force an error → alert fires once per hour, not per tick</td><td><span class="badge todo">Todo</span></td></tr>
+<tr><td>Record sync failures in <code>last_sync_result</code> and raise <code>linear-sync-stale</code> Sentry alert when <code>last_synced_at</code> &gt; 60 min old</td><td><code>apps/bob/worker/index.ts</code>, <code>packages/bob/src/observability/src/alerts.ts</code></td><td>Force an error → alert fires once per hour, not per tick</td><td><span class="badge done">Done</span></td></tr>
 <tr><td>Daily-cap sanity: <code>BOB_AUTO_DRAIN_DAILY_CAP=20</code> vs 105 ready issues — raise to 40 once P1 lands (merge rate is the real limiter)</td><td><code>apps/bob/wrangler.jsonc</code></td><td>Dispatch log shows cap no longer the binding constraint</td><td><span class="badge todo">Todo</span></td></tr>
 </table>
 
-<h2>P1 — Close the loop <span class="badge todo">Todo</span></h2>
+<h2>P1 — Close the loop <span class="badge done">Done 2026-08-21</span></h2>
 <table>
 <tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
-<tr><td>On squash-merge: <code>work_items.status='done'</code>, activity row, and Kanbanger issue → completed-type state + comment with PR URL (via <code>planningWriteService</code>, which exists but has no callers)</td><td><code>autoMergeReview.ts</code>, <code>services/integrations/planningWriteService.ts</code></td><td>Merge a PR → item done, Kanbanger card Done with comment</td><td><span class="badge todo">Todo</span></td></tr>
-<tr><td>On claim: Kanbanger → started-type state ("In Progress"); on PR open (relay terminal): → "In Review" if the team has one, comment with PR link</td><td><code>autoDrain.ts</code>, <code>apps/bob-ws-gateway/src/relay.ts:2061-2145</code></td><td>Card moves across the Kanbanger board as Bob works it</td><td><span class="badge todo">Todo</span></td></tr>
-<tr><td>Reaper rolls the work item back: <code>in_progress</code>→<code>todo</code> with <code>source_metadata.attempts++</code>; after 3 attempts → <code>blocked</code> + Kanbanger comment</td><td><code>reapStuckSessions.ts</code></td><td>Kill a runner mid-task → item re-dispatched next tick; 4th failure blocks</td><td><span class="badge todo">Todo</span></td></tr>
-<tr><td>PR closed-unmerged (human rejected) → item back to <code>backlog</code> + Kanbanger comment</td><td><code>autoMergeReview.ts</code></td><td>Close a PR → card returns to Backlog</td><td><span class="badge todo">Todo</span></td></tr>
-<tr><td>One-off reconcile script for the 372 <code>in_review</code> + 29 <code>in_progress</code>: merged PR→done, closed PR→backlog, no PR &amp; no live session→todo (attempt 1)</td><td><code>packages/bob/src/api/scripts/reconcile-stranded.ts</code></td><td>Dry-run prints counts; apply; status histogram matches</td><td><span class="badge todo">Todo</span></td></tr>
+<tr><td>On squash-merge: <code>work_items.status='done'</code>, activity row, and Kanbanger issue → completed-type state + comment with PR URL (via <code>planningWriteService</code>, which exists but has no callers)</td><td><code>autoMergeReview.ts</code>, <code>services/integrations/planningWriteService.ts</code></td><td>Merge a PR → item done, Kanbanger card Done with comment</td><td><span class="badge done">Done</span></td></tr>
+<tr><td>On claim: Kanbanger → started-type state ("In Progress"); on PR open (relay terminal): → "In Review" if the team has one, comment with PR link</td><td><code>autoDrain.ts</code>, <code>apps/bob-ws-gateway/src/relay.ts:2061-2145</code></td><td>Card moves across the Kanbanger board as Bob works it</td><td><span class="badge done">Done</span></td></tr>
+<tr><td>Reaper rolls the work item back: <code>in_progress</code>→<code>todo</code> with <code>source_metadata.attempts++</code>; after 3 attempts → <code>blocked</code> + Kanbanger comment</td><td><code>reapStuckSessions.ts</code></td><td>Kill a runner mid-task → item re-dispatched next tick; 4th failure blocks</td><td><span class="badge done">Done</span></td></tr>
+<tr><td>PR closed-unmerged (human rejected) → item back to <code>backlog</code> + Kanbanger comment</td><td><code>autoMergeReview.ts</code></td><td>Close a PR → card returns to Backlog</td><td><span class="badge done">Done</span></td></tr>
+<tr><td>One-off reconcile script for the 372 <code>in_review</code> + 29 <code>in_progress</code>: merged PR→done, closed PR→backlog, no PR &amp; no live session→todo (attempt 1)</td><td><code>packages/bob/src/api/scripts/reconcile-stranded.ts</code></td><td>Dry-run prints counts; apply; status histogram matches</td><td><span class="badge done">Done</span></td></tr>
 <tr><td>Dedupe guard: skip import if an open PR already exists for the issue identifier (branch <code>bob/gma-NNN</code>)</td><td><code>linearSetup.ts</code></td><td>Re-sync never produces twin PRs</td><td><span class="badge todo">Todo</span></td></tr>
 </table>
 
@@ -186,12 +186,18 @@ flowchart LR
 <h2>P3 — Harden &amp; observe <span class="badge todo">Todo</span></h2>
 <table>
 <tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+<tr><td>Reaper: treat <code>blocked</code> sessions with no awaiting-input question and an expired lease as dead (runner-restart case)</td><td><code>reapStuckSessions.ts</code></td><td>Restart runner mid-run → item re-queued next tick</td><td><span class="badge todo">Todo</span></td></tr>
 <tr><td>Throughput alert: 0 dispatches in 2 h while dispatchable items &gt; 0 → Sentry</td><td><code>worker/index.ts</code></td><td>Synthetic starvation fires alert</td><td><span class="badge todo">Todo</span></td></tr>
 <tr><td>Daily digest (merged / blocked / failed / lead time) posted as a Kanbanger comment on a pinned issue or to OODA</td><td>new handler</td><td>Digest appears daily</td><td><span class="badge todo">Todo</span></td></tr>
 <tr><td>Wire <code>agent-router.ts</code> scoring (zero callers today) behind a flag; keep rotation as fallback</td><td><code>autoDrain.ts</code>, <code>services/automation/agent-router.ts</code></td><td>A/B on merge rate per agent</td><td><span class="badge todo">Todo</span></td></tr>
 <tr><td>Delete or wire <code>findExpiredAwaitingInputSessions</code>; fix <code>"cancelled"</code> vs <code>"canceled"</code> in webhook mapping</td><td><code>workflowStatusService.ts</code>, <code>processLinearWebhook.ts:401</code></td><td>Tests</td><td><span class="badge todo">Todo</span></td></tr>
 </table>
 
+
+<h2>Status log</h2>
+<div class="callout ok"><b>2026-08-21 04:30 UTC — P0/P1 live.</b> Kanbanger list resolvers restored by redeploying the prod worker (root cause: stale deployed isolate/bundle — same code + DB worked locally). First reconciling sync: <code>9 imported · 88 updated</code>, queue <code>todo</code> 4 → 85. Auto-drain dispatched; cards moved to In Progress with Bob's comment (e.g. HABIT-12). Backfill: 152 stranded <code>in_review</code> → <code>done</code> (119 cards → Done in Kanbanger), 242 → <code>backlog</code>.</div>
+<div class="callout"><b>Found along the way.</b> (1) ooda-runner's <code>ProtectSystem=strict</code> made the worktree volume read-only inside the service — every <code>git worktree add</code> failed with EROFS; fixed with a <code>ReadWritePaths</code> drop-in. (2) codex's ChatGPT auth on hetzner-bob is expired (401) and review/repair both defaulted to codex — routed to claude, codex pulled from rotation via <code>BOB_AUTO_DRAIN_AGENTS</code> until re-auth. (3) Sessions left <code>blocked</code> by a runner restart are skipped by the reaper — P3 item: treat <code>blocked</code> with no awaiting-input question as reapable.</div>
+<div class="callout"><b>Needs your call.</b> Kanbanger has ~177 cards in <code>started</code> (flipped by the legacy task-runner) with no Bob session behind them; Bob deliberately does not follow <code>started</code>. Bulk-move them to Todo (Bob will work them) or Backlog (park)?</div>
 <h2>Decisions (made to keep moving — shout if wrong)</h2>
 <ul>
 <li><b>Kanbanger owns the queue; Bob mirrors.</b> Bob's Board becomes a view, not a second source of truth. Human gating happens in Kanbanger (Backlog→Todo).</li>
