@@ -320,7 +320,13 @@ export default Sentry.withSentry(
           const agents = agentsVar
             ? agentsVar.split(",").map((a) => a.trim()).filter(Boolean)
             : undefined;
-          const result = await autoDrainBacklog({ concurrency, dailyCap, agents });
+          const result = await autoDrainBacklog({
+            concurrency,
+            dailyCap,
+            agents,
+            healthRouting:
+              String(runtimeEnv.BOB_AGENT_HEALTH_ROUTING_ENABLED ?? "true") !== "false",
+          });
           console.log(
             `[auto-drain] dispatched=${result.dispatched} running=${result.running} today=${result.dispatchedToday}` +
               (result.reason ? ` reason="${result.reason}"` : "") +

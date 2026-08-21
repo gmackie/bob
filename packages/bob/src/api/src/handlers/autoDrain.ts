@@ -21,6 +21,8 @@ import {
 import { formatWorkItemIdentifier } from "./workItems";
 import { pickAcrossProjects } from "./autoDrain-pick";
 import { mirrorWorkItemEvent } from "../services/tracker/trackerMirror.js";
+import type { AgentHealthVerdict } from "../services/automation/agentHealthRouter.js";
+import { assessAgentHealth, chooseAgent } from "../services/automation/agentHealthRouter.js";
 
 // Sessions actively holding a runner execution slot. Mirrors the runner's own
 // busy check (its activeSessions map) — NOT "idle", which means the agent
@@ -53,6 +55,14 @@ export interface AutoDrainOptions {
   dailyCap: number;
   /** Only rotate through these agents (defaults to the full rotation). */
   agents?: string[];
+  /**
+   * Skip agents whose recent sessions are failing hard (expired auth, rate
+   * limit). Default on; the plain rotation is the fallback when every agent
+   * looks unhealthy. See services/automation/agentHealthRouter.
+   */
+  healthRouting?: boolean;
+  /** Window for the health assessment. Default 2h. */
+  healthWindowMs?: number;
 }
 
 /**
@@ -157,6 +167,36 @@ export async function autoDrainBacklog(
   }
 
   const picked = pickAcrossProjects(ready, budget);
+
+  // Health-gate the rotation on recent outcomes so a provider with dead auth
+  // or an exhausted quota stops receiving dispatches without a human editing
+  // BOB_AUTO_DRAIN_AGENTS (codex and claude each burned a quarter of a day's
+  // dispatches that way on 2026-08-21).
+  let verdicts: AgentHealthVerdict[] = agents.map((agent) => ({ agent, healthy: true, reason: "health routing off" }));
+  if (opts.healthRouting !== false) {
+    try {
+      const windowMs = opts.healthWindowMs ?? 2 * 60 * 60 * 1000;
+      const since = new Date(Date.now() - windowMs).toISOString();
+      const rows = await db
+        .select({
+          agent: chatConversations.agentType,
+          completed: sql<number>`count(*) filter (where ${chatConversations.status} = 'completed')::int`,
+          errored: sql<number>`count(*) filter (where ${chatConversations.status} in ('error','failed'))::int`,
+        })
+        .from(chatConversations)
+        .where(sql`${chatConversations.createdAt} >= ${since}`)
+        .groupBy(chatConversations.agentType);
+      verdicts = assessAgentHealth(agents, rows.map((r) => ({ agent: r.agent, completed: r.completed, errored: r.errored })));
+      const unhealthy = verdicts.filter((v) => !v.healthy);
+      if (unhealthy.length && unhealthy.length < agents.length) {
+        console.warn(
+          `[auto-drain] health routing skipping ${unhealthy.map((v) => `${v.agent} (${v.reason})`).join(", ")}`,
+        );
+      }
+    } catch (err) {
+      console.warn("[auto-drain] health assessment failed; using plain rotation:", err);
+    }
+  }
   const { executeTask } = await import("@bob/execution/runtime/taskExecutor");
 
   const dispatchedItems: AutoDrainResult["items"] = [];
@@ -189,11 +229,10 @@ export async function autoDrainBacklog(
           id: wi.id,
         });
 
-      // Prefer a per-item agent override, else rotate.
+      // Prefer a per-item agent override, else health-gated rotation.
       const agentType =
         wi.agentTypeOverride ??
-        agents[(today + dispatchedItems.length) % agents.length] ??
-        "claude";
+        chooseAgent(agents, verdicts, today + dispatchedItems.length).agent;
 
       await executeTask(
         wi.ownerUserId,
