@@ -3,16 +3,44 @@
 import json
 import os
 import fcntl
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 
+_gateway_command_context: ContextVar[dict[str, str]] = ContextVar(
+    "hermes_operator_gateway_command_context",
+    default={},
+)
+
+
+def capture_gateway_context(*, event, **_kwargs) -> None:
+    """Bridge transport IDs that Hermes exposes before slash-command dispatch."""
+    source = event.source
+    platform = getattr(source.platform, "value", source.platform)
+    message_id = getattr(source, "message_id", None) or getattr(event, "message_id", None)
+    _gateway_command_context.set({
+        "HERMES_SESSION_PLATFORM": str(platform or ""),
+        "HERMES_SESSION_CHAT_ID": str(getattr(source, "chat_id", "") or ""),
+        "HERMES_SESSION_MESSAGE_ID": str(message_id or ""),
+    })
+
+
 def _session_env() -> dict[str, str]:
     from gateway.session_context import get_session_env
 
-    return get_session_env()
+    names = (
+        "HERMES_SESSION_PLATFORM",
+        "HERMES_SESSION_CHAT_ID",
+        "HERMES_SESSION_MESSAGE_ID",
+    )
+    gateway_values = _gateway_command_context.get()
+    return {
+        name: get_session_env(name, "") or gateway_values.get(name, "")
+        for name in names
+    }
 
 
 def _utc_now() -> str:
@@ -224,6 +252,7 @@ def handle_scheduled(intent: str) -> str:
 
 
 def register(ctx) -> None:
+    ctx.register_hook("pre_gateway_dispatch", capture_gateway_context)
     ctx.register_command(
         "capture",
         handler=handle_capture,

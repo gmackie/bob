@@ -1,7 +1,9 @@
 import importlib.util
 import json
+import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from types import ModuleType, SimpleNamespace
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -11,6 +13,7 @@ from urllib.error import URLError
 PLUGIN_PATH = (
     Path(__file__).parents[1] / "plugins" / "hermes-operator" / "__init__.py"
 )
+PLUGIN_MANIFEST_PATH = PLUGIN_PATH.with_name("plugin.yaml")
 
 
 def load_plugin():
@@ -24,6 +27,7 @@ def load_plugin():
 class FakePluginContext:
     def __init__(self):
         self.commands = []
+        self.hooks = []
 
     def register_command(self, name, handler, description="", args_hint=""):
         self.commands.append(
@@ -34,6 +38,9 @@ class FakePluginContext:
                 "args_hint": args_hint,
             }
         )
+
+    def register_hook(self, name, handler):
+        self.hooks.append({"name": name, "handler": handler})
 
 
 class FakeHttpResponse:
@@ -51,6 +58,39 @@ class FakeHttpResponse:
 
 
 class HermesOperatorPluginTests(unittest.TestCase):
+    def test_manifest_declares_predispatch_hook(self):
+        manifest = PLUGIN_MANIFEST_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("provides_hooks:\n  - pre_gateway_dispatch\n", manifest)
+
+    def test_reads_each_gateway_session_context_value_by_name(self):
+        plugin = load_plugin()
+        gateway_module = ModuleType("gateway")
+        session_context_module = ModuleType("gateway.session_context")
+        requested = []
+
+        def get_session_env(name, default=""):
+            requested.append((name, default))
+            return f"value:{name}"
+
+        session_context_module.get_session_env = get_session_env
+        with patch.dict(sys.modules, {
+            "gateway": gateway_module,
+            "gateway.session_context": session_context_module,
+        }):
+            session = plugin._session_env()
+
+        self.assertEqual(session, {
+            "HERMES_SESSION_PLATFORM": "value:HERMES_SESSION_PLATFORM",
+            "HERMES_SESSION_CHAT_ID": "value:HERMES_SESSION_CHAT_ID",
+            "HERMES_SESSION_MESSAGE_ID": "value:HERMES_SESSION_MESSAGE_ID",
+        })
+        self.assertEqual(requested, [
+            ("HERMES_SESSION_PLATFORM", ""),
+            ("HERMES_SESSION_CHAT_ID", ""),
+            ("HERMES_SESSION_MESSAGE_ID", ""),
+        ])
+
     def test_registers_native_capture_command(self):
         plugin = load_plugin()
         context = FakePluginContext()
@@ -63,6 +103,35 @@ class HermesOperatorPluginTests(unittest.TestCase):
         self.assertIs(command["handler"], plugin.handle_capture)
         self.assertEqual(command["args_hint"], "")
         self.assertIn("OODA", command["description"])
+        self.assertEqual(len(context.hooks), 1)
+        self.assertEqual(context.hooks[0]["name"], "pre_gateway_dispatch")
+
+    def test_predispatch_context_bridges_transport_identity_before_session_binding(self):
+        plugin = load_plugin()
+        event = SimpleNamespace(
+            message_id="9918",
+            source=SimpleNamespace(
+                platform=SimpleNamespace(value="telegram"),
+                chat_id="4512",
+                message_id=None,
+            ),
+        )
+
+        result = plugin.capture_gateway_context(event=event)
+
+        self.assertIsNone(result)
+        gateway_module = ModuleType("gateway")
+        session_context_module = ModuleType("gateway.session_context")
+        session_context_module.get_session_env = lambda _name, default="": default
+        with patch.dict(sys.modules, {
+            "gateway": gateway_module,
+            "gateway.session_context": session_context_module,
+        }):
+            self.assertEqual(plugin._session_env(), {
+                "HERMES_SESSION_PLATFORM": "telegram",
+                "HERMES_SESSION_CHAT_ID": "4512",
+                "HERMES_SESSION_MESSAGE_ID": "9918",
+            })
 
     def test_capture_posts_stable_transport_request_and_returns_receipt(self):
         plugin = load_plugin()
