@@ -497,6 +497,23 @@ export default Sentry.withSentry(
           }
         }
 
+        // 2b. Daily digest (once per UTC day at/after BOB_DIGEST_HOUR_UTC):
+        // last-24h loop metrics → pinned Kanbanger issue + in-app notification.
+        if (String(runtimeEnv.BOB_DAILY_DIGEST_ENABLED ?? "true") !== "false") {
+          try {
+            const { dailyDigest } = await import("@bob/api/handlers/dailyDigest");
+            const r = await dailyDigest({
+              hourUtc: Number(runtimeEnv.BOB_DIGEST_HOUR_UTC ?? 13),
+              dailyCap,
+            });
+            if (r.posted || (r.reason && !/before digest hour|already posted/.test(r.reason))) {
+              console.log(`[daily-digest] posted=${r.posted}${r.reason ? ` reason="${r.reason}"` : ""}${r.date ? ` date=${r.date}` : ""}`);
+            }
+          } catch (error) {
+            console.error("[daily-digest] failed:", error);
+          }
+        }
+
         // 3. Deploy stage: after merges, read deploy evidence (Actions run on
         // the merge SHA / ForgeGraph deployment by commitSha) and write it back
         // to the tracker card + work item. Best-effort; never blocks the loop.
