@@ -38,7 +38,11 @@
     "BOB_AUTH_BYPASS_USER_ID": "tkE66fMc4mevdYYjtq78ALErJ7QnhAge",
     "BOB_AUTO_DRAIN_ENABLED": "true",
     "BOB_AUTO_DRAIN_CONCURRENCY": "4",
-    "BOB_AUTO_DRAIN_DAILY_CAP": "20",
+    "BOB_AUTO_DRAIN_DAILY_CAP": "40",
+    // Dispatch rotation. codex pulled 2026-08-21: its ChatGPT auth on the
+    // runner expired (401 on the responses websocket) — re-auth on hetzner-bob
+    // then add it back.
+    "BOB_AUTO_DRAIN_AGENTS": "claude,grok,cursor",
     // Autonomous PR reviewer + auto-merge (see worker/index.ts scheduled →
     // handlers/autoMergeReview). Reviews open PRs with Claude and merges those
     // that are CI-green + AI-approved + conflict-free. Needs the ANTHROPIC_API_KEY
@@ -65,7 +69,9 @@
     // per PR, one attempt per head SHA, a per-PR attempt cap, and a per-run
     // budget. Conservative budgets — repair mutates PR branches.
     "BOB_AUTO_REPAIR_ENABLED": "true",
-    "BOB_AUTO_REPAIR_AGENT": "codex",
+    "BOB_AUTO_REPAIR_AGENT": "claude",
+    // Reviewer agent (default in code is codex; see codex note above).
+    "BOB_AUTO_MERGE_REVIEW_AGENT": "claude",
     "BOB_AUTO_REPAIR_MAX_PER_RUN": "3",
     "BOB_AUTO_REPAIR_MAX_ATTEMPTS_PER_PR": "3"
   }

@@ -26,7 +26,7 @@
 
 import { and, desc, eq, inArray, notLike } from "@bob/db";
 import { db } from "@bob/db/client";
-import { pullRequests, taskRuns } from "@bob/db/schema";
+import { chatConversations, pullRequests, taskRuns, workItems } from "@bob/db/schema";
 import {
   
   dispatchRepairSession,
@@ -39,6 +39,7 @@ import {
   createProviderClient,
   getConnection,
 } from "../services/git/providerConnectionService";
+import { mirrorWorkItemEvent } from "../services/tracker/trackerMirror.js";
 
 // task_run statuses that mean a session is still in flight for a PR — for a
 // review, the verdict hasn't posted yet; for a repair, the fix hasn't landed —
@@ -322,6 +323,13 @@ export async function autoReviewAndMerge(
             closedAt: remote.closedAt?.toISOString() ?? null,
           })
           .where(eq(pullRequests.id, pr.id));
+        // Settle the work item too: merged → done, closed → back to the
+        // human gate. Without this the item sat in in_review forever and the
+        // tracker card was never closed (372 stranded items by 2026-08-20).
+        await settleWorkItemForPr(
+          pr,
+          remote.state === "merged" ? "merged" : "pr_closed",
+        );
         result.skipped++;
         result.items.push({ pr: label, action: "skipped", reason: `remote ${remote.state}` });
         continue;
@@ -331,6 +339,10 @@ export async function autoReviewAndMerge(
         result.items.push({ pr: label, action: "skipped", reason: "draft" });
         continue;
       }
+
+      // First time we see this PR open: tell the tracker (card → In Review,
+      // comment with the PR link). Idempotent via a marker on the work item.
+      await announcePrOpenedOnce(pr);
 
       const headSha = remote.headSha;
       if (!headSha) {
@@ -573,6 +585,7 @@ export async function autoReviewAndMerge(
         .update(pullRequests)
         .set({ status: "merged", mergedAt: new Date().toISOString() })
         .where(eq(pullRequests.id, pr.id));
+      await settleWorkItemForPr(pr, "merged");
       result.merged++;
       result.items.push({ pr: label, action: "merged" });
     } catch (err) {
@@ -588,4 +601,63 @@ export async function autoReviewAndMerge(
   }
 
   return result;
+}
+
+
+// ---------------------------------------------------------------------------
+// Work-item settlement + tracker mirroring
+// ---------------------------------------------------------------------------
+
+type PrRow = typeof pullRequests.$inferSelect;
+
+/** Resolve the work item a PR was produced for (via its session). */
+async function workItemIdForPr(pr: PrRow): Promise<string | null> {
+  if (!pr.sessionId) return null;
+  const session = await db.query.chatConversations.findFirst({
+    where: eq(chatConversations.id, pr.sessionId),
+    columns: { workItemId: true },
+  });
+  return session?.workItemId ?? null;
+}
+
+/**
+ * Merged → work item done + tracker Done; closed-unmerged → work item back to
+ * backlog (human gate) + tracker Backlog. Best-effort, never throws.
+ */
+export async function settleWorkItemForPr(
+  pr: PrRow,
+  outcome: "merged" | "pr_closed",
+): Promise<void> {
+  try {
+    const workItemId = await workItemIdForPr(pr);
+    if (!workItemId) return;
+    const r = await mirrorWorkItemEvent(db, workItemId, { kind: outcome, prUrl: pr.url });
+    console.log(
+      `[auto-merge] settled work item ${workItemId.slice(0, 8)} ${outcome} → ${r.bobStatus ?? "(unchanged)"} mirrored=${r.mirrored}${r.reason ? ` (${r.reason})` : ""}`,
+    );
+  } catch (err) {
+    console.error(`[auto-merge] settle failed for ${pr.url}:`, err);
+  }
+}
+
+async function announcePrOpenedOnce(pr: PrRow): Promise<void> {
+  try {
+    const workItemId = await workItemIdForPr(pr);
+    if (!workItemId) return;
+    const item = await db.query.workItems.findFirst({
+      where: eq(workItems.id, workItemId),
+      columns: { sourceMetadata: true },
+    });
+    const meta = (item?.sourceMetadata ?? {}) as Record<string, unknown>;
+    const announced = Array.isArray(meta.announcedPrs) ? (meta.announcedPrs as string[]) : [];
+    if (announced.includes(pr.url)) return;
+    // Mark first so a tracker hiccup can't cause a comment storm.
+    await db
+      .update(workItems)
+      .set({ sourceMetadata: { ...meta, announcedPrs: [...announced, pr.url] } })
+      .where(eq(workItems.id, workItemId));
+    await mirrorWorkItemEvent(db, workItemId, { kind: "pr_opened", prUrl: pr.url });
+  } catch (err) {
+    console.error(`[auto-merge] pr_opened announce failed for ${pr.url}:`, err);
+  }
 }

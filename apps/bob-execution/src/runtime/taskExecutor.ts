@@ -247,6 +247,14 @@ export async function findRepositoryForTask(
   return null;
 }
 
+/**
+ * Persona applied to sessions nobody is watching (auto-drain, review, repair).
+ * The runner maps autonomyLevel "full" → permissionMode "skip"; anything else
+ * makes ACP adapters (claude/grok) raise permission_request and wait for a
+ * human, which for a cron-dispatched run means blocked forever.
+ */
+export const UNATTENDED_PERSONA: Record<string, unknown> = { autonomyLevel: "full" };
+
 export async function executeTask(
   userId: string,
   task: PlanningTask,
@@ -335,7 +343,7 @@ export async function executeTask(
       gitBranch: branch,
       planningTaskId: task.id,
       personaId: options?.personaId ?? null,
-      personaMetadata: options?.personaMetadata ?? null,
+      personaMetadata: options?.personaMetadata ?? UNATTENDED_PERSONA,
     })
     .returning();
   const insertedSession = expectInsertedRow(
@@ -591,6 +599,10 @@ export async function dispatchReviewSession(
       agentType,
       title,
       status: "pending",
+      // Unattended run: ACP adapters (claude/grok) pause on every permission
+      // prompt unless the persona grants full autonomy, and nobody is there to
+      // answer — the session would sit "blocked" forever.
+      personaMetadata: UNATTENDED_PERSONA,
       gitBranch: reviewBranch,
       sessionType: "execution",
       planningWorkspaceId: workspaceId,
@@ -796,6 +808,10 @@ export async function dispatchRepairSession(
       agentType,
       title,
       status: "pending",
+      // Unattended run: ACP adapters (claude/grok) pause on every permission
+      // prompt unless the persona grants full autonomy, and nobody is there to
+      // answer — the session would sit "blocked" forever.
+      personaMetadata: UNATTENDED_PERSONA,
       gitBranch: workBranch,
       sessionType: "execution",
       planningWorkspaceId: workspaceId,

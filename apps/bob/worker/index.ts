@@ -140,12 +140,87 @@ export default Sentry.withSentry(
                 { workspaceId: integ.workspaceId, importIssues: true },
               );
               console.log(
-                `[linear-sync] ws=${integ.workspaceId} projectsCreated=${r.projectsCreated} projectsExisting=${r.projectsExisting} issuesImported=${r.issuesImported}` +
+                `[linear-sync] ws=${integ.workspaceId} projectsCreated=${r.projectsCreated} projectsExisting=${r.projectsExisting} issuesImported=${r.issuesImported} issuesUpdated=${r.issuesUpdated}` +
                   (r.issuesTruncated ? " (issues truncated)" : ""),
               );
             }
           } catch (err) {
             console.error("[linear-sync] failed:", err);
+            // Persist the failure where the Settings UI can show it. Leave
+            // lastSyncedAt alone — its age is what the staleness alert below
+            // measures.
+            try {
+              const { db } = await import("@bob/db/client");
+              const { workspaceIntegrations } = await import("@bob/db/schema");
+              const { eq } = await import("@bob/db");
+              const msg = err instanceof Error ? err.message : String(err);
+              await db
+                .update(workspaceIntegrations)
+                .set({ lastSyncResult: `error: ${msg}`.slice(0, 500) })
+                .where(eq(workspaceIntegrations.provider, "linear"));
+            } catch {
+              /* best-effort */
+            }
+          }
+        }
+        // 0b. Staleness guard: the sync above fails silently from the queue's
+        // point of view (the cron keeps ticking, counters look fine), so
+        // escalate when no sync has completed for over an hour. Kanbanger's
+        // API broke on 2026-08-14 and nothing noticed for 6 days.
+        if (syncLinearOn) {
+          try {
+            const { db } = await import("@bob/db/client");
+            const { workspaceIntegrations } = await import("@bob/db/schema");
+            const { eq, and } = await import("@bob/db");
+            const staleMs = Number(
+              runtimeEnv.BOB_LINEAR_SYNC_STALE_MS ?? 60 * 60 * 1000,
+            );
+            const rows = await db.query.workspaceIntegrations.findMany({
+              where: and(
+                eq(workspaceIntegrations.provider, "linear"),
+                eq(workspaceIntegrations.enabled, true),
+              ),
+              columns: { workspaceId: true, lastSyncedAt: true, lastSyncResult: true },
+            });
+            const now = Date.now();
+            const stale = rows.filter(
+              (r) =>
+                r.lastSyncedAt &&
+                now - new Date(r.lastSyncedAt).getTime() > staleMs,
+            );
+            if (stale.length) {
+              const { buildFailurePayload, getFailureSentryTags } =
+                await import("@bob/observability/failures");
+              const failure = {
+                surface: "job" as const,
+                operation: "linear_sync",
+                error: new Error(
+                  `tracker sync stale for ${stale.length} integration(s): ` +
+                    stale
+                      .map(
+                        (r) =>
+                          `ws=${r.workspaceId} lastSyncedAt=${r.lastSyncedAt} last=${r.lastSyncResult ?? "-"}`,
+                      )
+                      .join("; "),
+                ),
+                alertId: "linear-sync-stale",
+                tenant: runtimeEnv.BOB_TENANT_ID
+                  ? { tenantId: String(runtimeEnv.BOB_TENANT_ID) }
+                  : undefined,
+              };
+              console.error(
+                "[linear-sync] STALE — queue is not being fed",
+                buildFailurePayload(failure),
+              );
+              Sentry.withScope((scope) => {
+                scope.setLevel("error");
+                scope.setTags(getFailureSentryTags(failure));
+                scope.setContext("failure", buildFailurePayload(failure));
+                Sentry.captureException(failure.error);
+              });
+            }
+          } catch (err) {
+            console.error("[linear-sync] staleness check failed:", err);
           }
         }
         // 1. Dispatch backlog work.
@@ -218,7 +293,13 @@ export default Sentry.withSentry(
             "@bob/api/handlers/autoDrain"
           );
           try {
-          const result = await autoDrainBacklog({ concurrency, dailyCap });
+          // Optional agent allow-list (comma-separated) so an agent with broken
+          // credentials can be pulled from rotation with a var change.
+          const agentsVar = String(runtimeEnv.BOB_AUTO_DRAIN_AGENTS ?? "").trim();
+          const agents = agentsVar
+            ? agentsVar.split(",").map((a) => a.trim()).filter(Boolean)
+            : undefined;
+          const result = await autoDrainBacklog({ concurrency, dailyCap, agents });
           console.log(
             `[auto-drain] dispatched=${result.dispatched} running=${result.running} today=${result.dispatchedToday}` +
               (result.reason ? ` reason="${result.reason}"` : "") +

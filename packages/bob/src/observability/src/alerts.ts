@@ -120,6 +120,19 @@ export const OBSERVABILITY_ALERTS: readonly ObservabilityAlertDefinition[] = [
     runbook:
       "Check runner_leases.last_heartbeat_at for stale/restarted runners, and the hetzner-bob/vanuc ooda-runner services. The reaped sessions are tagged last_error.code='reaped_stuck_session'; group them by workspace/agent_type to find which runner failed. See [[bob-runner-dispatch-ops]] and the 2026-07-29 token-outage ops note.",
   },
+  {
+    id: "linear-sync-stale",
+    name: "Tracker (Linear/Kanbanger) sync stale — queue not being fed",
+    service: "bob-worker",
+    surface: "job",
+    severity: "high",
+    description:
+      "The 15-minute tracker sync has not completed successfully for over an hour for an enabled Linear/Kanbanger integration. New Todo cards stop reaching Bob and auto-drain starves while the tracker fills up — the 2026-08-14 Kanbanger API outage went unnoticed for 6 days because the sync threw every tick and nothing alerted.",
+    sentryTag: "surface:job",
+    posthogEvent: "critical_job_failure",
+    runbook:
+      "Check workspace_integrations.last_sync_result for the captured error. Probe the tracker: `{ issues(first:1){ nodes { id } } }` against linear_api_url with the stored key. If the API 500s on list resolvers but `viewer` works, redeploy the tasks.gmac.io worker (2026-08-21 fix). If the key is rejected, rotate it in Settings → Integrations.",
+  },
 ] as const;
 
 export function getAlertsForSurface(
