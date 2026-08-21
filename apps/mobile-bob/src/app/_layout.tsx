@@ -139,6 +139,28 @@ function MainPane({
     );
   }
 
+  if (target.type === "execution-session") {
+    return (
+      <AgentThreadView
+        sessionId={target.sessionId}
+        events={gateway.selectedSessionEvents}
+        onSendInput={gateway.sendInput}
+        onStopSession={gateway.stopSession}
+      />
+    );
+  }
+
+  if (target.type === "work-item") {
+    return (
+      <WorkItemPane
+        workItemId={target.workItemId}
+        entryView={selectedWorkItemView}
+        onOpenSession={onOpenSession}
+        onOpenInspector={onOpenInspector}
+      />
+    );
+  }
+
   if (target.type === "tasks-dashboard") {
     return (
       <TasksDashboard

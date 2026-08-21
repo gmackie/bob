@@ -18,10 +18,20 @@ describe("voice transcript review", () => {
     });
   });
 
-  it("reviews transcripts when the recognizer cannot report confidence", () => {
-    expect(transcriptDisposition({ text: "unrated result", confidence: -1 })).toMatchObject({
-      action: "review",
-      reason: "confidence_unavailable",
+  it("sends transcripts when the recognizer cannot report confidence (Apple on-device dictation)", () => {
+    // SFSpeechRecognizer on-device returns 0/null confidence on finals; that
+    // is the normal case, so trust and send rather than forcing review.
+    expect(transcriptDisposition({ text: "unrated result", confidence: -1 })).toEqual({
+      action: "send",
+      text: "unrated result",
+    });
+    expect(transcriptDisposition({ text: "zero conf", confidence: 0 })).toEqual({
+      action: "send",
+      text: "zero conf",
+    });
+    expect(transcriptDisposition({ text: "null conf", confidence: null })).toEqual({
+      action: "send",
+      text: "null conf",
     });
   });
 

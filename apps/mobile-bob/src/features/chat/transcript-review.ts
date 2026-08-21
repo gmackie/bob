@@ -15,8 +15,13 @@ export function transcriptDisposition(input: {
   const text = input.text.trim();
   if (!text) return { action: "discard" };
   const threshold = input.threshold ?? 0.72;
-  if (input.confidence === null || input.confidence < 0) {
-    return { action: "review", text, reason: "confidence_unavailable" };
+  // Apple's on-device SFSpeechRecognizer (dictation mode) routinely reports
+  // confidence 0 or null on final results, so "no confidence" is the NORMAL
+  // case, not a low-quality signal. Treat unavailable confidence as
+  // trustworthy and send it — only route to review when a real confidence
+  // score is present AND below the threshold.
+  if (input.confidence === null || input.confidence <= 0) {
+    return { action: "send", text };
   }
   if (input.confidence < threshold) {
     return { action: "review", text, reason: "low_confidence" };
