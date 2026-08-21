@@ -1,0 +1,17 @@
+[Unit]
+Description=Reconcile Bob Hermes operator cron jobs
+After=hermes-gateway.service
+Wants=hermes-gateway.service
+
+[Service]
+Type=oneshot
+User=bob
+Group=bob
+Environment=HOME=/home/bob
+Environment=HERMES_HOME=/home/bob/.hermes
+Environment=PYTHONPATH=/home/bob/.hermes/hermes-agent
+ExecStart=/home/bob/.hermes/hermes-agent/venv/bin/python /home/bob/.hermes/plugins/hermes-operator/reconcile-hermes-operator.py
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/bob/.hermes

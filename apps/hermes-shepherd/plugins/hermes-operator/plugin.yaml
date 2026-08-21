@@ -1,0 +1,11 @@
+name: hermes-operator
+version: 1.0.0
+description: Native Hermes commands for the Bob and OODA operator plane.
+author: GMACKO
+kind: standalone
+requires_env:
+  - name: HERMES_BOB_OPERATOR_URL
+    description: HTTPS URL for Bob's Hermes operator ingress.
+  - name: HERMES_BOB_OPERATOR_API_KEY
+    description: Service credential for Bob's Hermes operator ingress.
+    secret: true
