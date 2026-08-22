@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { accessSync, constants as fsConstants, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import WebSocket from "ws";
@@ -124,6 +124,28 @@ interface ServerSessionAvailable {
       attachedFiles: Array<{ name: string; sizeLabel: string; content?: string }>;
     };
   };
+}
+
+/**
+ * Can this runner actually execute `agentType`?
+ *
+ * A runner used to claim ANY session offered to it and only discover a missing
+ * agent when the spawn failed — 74 sessions died with `spawn codex ENOENT` on
+ * 2026-08-22 because two personal machines (gmacko-mini, vanuc) claimed codex
+ * work they had no binary for, burning the dispatch each time. Declining is
+ * safe: an unclaimed session stays `pending` and the gateway re-offers it to
+ * the other daemons on their next delivery tick.
+ *
+ * Pure so the PATH resolution is testable: `pathDirs` is the search path and
+ * `isExecutable` the filesystem probe.
+ */
+export function canRunAgentBinary(
+  command: string,
+  pathDirs: readonly string[],
+  isExecutable: (p: string) => boolean,
+): boolean {
+  if (command.includes("/")) return isExecutable(command);
+  return pathDirs.some((dir) => dir.length > 0 && isExecutable(`${dir}/${command}`));
 }
 
 export function buildCliCommand(
@@ -776,9 +798,48 @@ export class BobGatewayConnector {
     }
   }
 
+  /** Cache of agentType -> runnable on this host (binaries don't come and go mid-process). */
+  private readonly agentRunnable = new Map<string, boolean>();
+
+  private canRunAgent(agentType: string): boolean {
+    const cached = this.agentRunnable.get(agentType);
+    if (cached !== undefined) return cached;
+
+    let ok = this.adapters.has(agentType);
+    if (!ok) {
+      // Falls through to the CLI path: check the binary it would spawn.
+      const { command } = buildCliCommand(agentType, "", { personaConfig: undefined });
+      const prepend = process.env.BOB_AGENT_PATH_PREPEND;
+      const pathDirs = [
+        ...(prepend ? prepend.split(":") : []),
+        ...(process.env.PATH ?? "").split(":"),
+      ];
+      ok = canRunAgentBinary(command, pathDirs, (p) => {
+        try {
+          accessSync(p, fsConstants.X_OK);
+          return true;
+        } catch {
+          return false;
+        }
+      });
+    }
+    this.agentRunnable.set(agentType, ok);
+    return ok;
+  }
+
   private async handleSessionAvailable(session: ServerSessionAvailable): Promise<void> {
     if (this.activeSessions.size >= this.config.maxConcurrent) {
       console.log(`[bob-gw] At capacity (${this.config.maxConcurrent}), skipping ${session.sessionId}`);
+      return;
+    }
+
+    // Never claim work this runner can't execute — the session stays pending
+    // and the gateway offers it to a daemon that can (see canRunAgentBinary).
+    const wantedAgent = session.agentType || "claude";
+    if (!this.canRunAgent(wantedAgent)) {
+      console.log(
+        `[bob-gw] Declining ${session.sessionId}: no "${wantedAgent}" adapter or binary on this runner`,
+      );
       return;
     }
 
