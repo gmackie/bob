@@ -10,6 +10,7 @@
   },
   "scripts": {
     "start": "node task-runner.js",
-    "check": "node --check task-runner.js"
+    "check": "node --check task-runner.js",
+    "test": "node --test task-runner.test.js"
   }
 }

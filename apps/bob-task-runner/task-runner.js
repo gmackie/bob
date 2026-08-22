@@ -144,10 +144,41 @@ function effectiveRepoDir(slug) {
   return getRepoDir(slug);
 }
 
-// Slugs whose clone failed this process: skipped until restart so a repo
-// that exists nowhere (stale startup_repo row) can't burn a scan slot
-// every cycle.
-const _cloneFailed = new Set();
+// A startup present in the remote config with a Linear project but NO repoSlug
+// is a repo-optional (knowledge/ops) target — e.g. a portfolio company with no
+// code repo whose only agent work is "Refresh stale KB entries" and similar
+// targetSystem:"manual" tasks. Its issues are claimed and run in a scratch dir
+// with no clone, no branch, no commit. remoteEntry() returns null for these
+// (it requires repoSlug), so we detect them straight off the raw config.
+function isRepoOptional(slug) {
+  const r = _remoteRepos[slug];
+  return !!(r && r.projectId && !r.repoSlug);
+}
+
+// A throwaway working directory for repo-optional issues. The agent gets its
+// instructions from the issue description and does API/CLI work; the dir is
+// just a cwd it doesn't need to be a repo.
+function scratchDirFor(slug) {
+  const dir = join(STATE_DIR, "scratch", slug);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+// Slugs whose clone recently failed, mapped to the failure timestamp. A failed
+// slug is benched for CLONE_FAIL_COOLDOWN_MS so a repo that exists nowhere (a
+// stale/wrong startup_repo row) can't burn a scan slot every cycle — but the
+// bench EXPIRES so a *transient* clone failure (a momentary forge/network blip
+// on a repo that really does exist) self-heals on the next scan after the
+// cooldown, instead of benching a good repo until the process restarts.
+const CLONE_FAIL_COOLDOWN_MS = 30 * 60_000; // 30 min
+const _cloneFailed = new Map(); // slug -> last failure timestamp (ms)
+
+// Pure (exported for tests): is this slug currently benched for a recent clone
+// failure? `cloneFailed` is the slug->timestamp map.
+function cloneBenched(slug, cloneFailed, now, cooldownMs = CLONE_FAIL_COOLDOWN_MS) {
+  const t = cloneFailed.get(slug);
+  return t != null && now - t < cooldownMs;
+}
 
 // Clone a missing repo at claim time so provisioning a new company needs
 // zero host access. Returns true when the dir exists (already or after
@@ -174,8 +205,69 @@ function ensureRepoDir(slug) {
       console.log(`[runner] clone failed (${url}): ${e.message.split("\n")[0]}`);
     }
   }
-  _cloneFailed.add(slug);
+  _cloneFailed.set(slug, Date.now());
   return false;
+}
+
+// --- Candidate gates (pure, exported for tests) ------------------------
+// These mirror the per-slug and per-issue filtering the scan loop applies.
+// They are pure so the selection rules can be regression-tested without the
+// network / filesystem / git the runner otherwise needs.
+
+// A slug is eligible to be scanned this cycle when it has a project + repo,
+// hasn't failed to clone earlier THIS process, and either exists on disk or
+// can be lazily cloned from the remote config.
+//
+// The `cloneFailed` guard is the fix for the head-of-line stall: without it,
+// a single un-clonable high-priority issue (a stale/wrong startup_repo row
+// pointing at a repo that exists nowhere — e.g. `gmackie/classcheck`) is
+// re-selected every cycle, unclaimed when the clone fails, then re-selected
+// again, starving every other startup's work forever. ensureRepoDir populates
+// _cloneFailed on a failed clone; this is the read the claim-time guard always
+// assumed existed ("the slug goes on _cloneFailed, so this process won't
+// thrash on it").
+function slugEligible(slug, { projectId, repoDir, cloneBenched, repoExists, hasRemote, repoOptional }) {
+  if (!projectId) return false;
+  if (cloneBenched) return false;
+  // Repo-optional (knowledge/ops) startups have a Linear project but no code
+  // repo; their issues run in a scratch dir with no clone, so they need neither
+  // a repoDir nor a remote to be materializable.
+  if (repoOptional) return true;
+  if (!repoDir) return false;
+  // Missing dirs are fine when the remote config can clone them at claim
+  // time; only skip when we'd have no way to materialize the repo.
+  if (!repoExists && !hasRemote) return false;
+  return true;
+}
+
+// An individual issue is claimable when it passes the bizpulse growth-marker
+// gate and the staleness gate. `defaultSlugs` is the set of hardcoded slugs.
+//
+// bizpulse project holds founder/ops work orders that are NOT for autonomous
+// execution — only genuine GTM playbook dispatches (which carry the marker
+// emitted by buildGtmPlaybookInstructions) may be claimed there. Title alone
+// is not enough: July's bulk objective work orders are also [pulse]-titled,
+// and letting an agent execute one ended with it self-grading a business
+// objective 'achieved' (GMA-385).
+//
+// STALE issues are never auto-claimed when the claim only became possible
+// today (remote-config slugs, freshly clonable repos): month-old [pulse] work
+// orders and backlog need a deliberate re-dispatch (the roadmap's ↻ refresh)
+// before an agent acts on them — GMA-385/364 both started as silent
+// stale-claims. Rules: [pulse]-titled operating work orders are fresh-only
+// EVERYWHERE; remote-only slugs are fresh-only for everything.
+function issueClaimable(slug, issue, { now, defaultSlugs }) {
+  if (
+    slug === "bizpulse" &&
+    !(issue.description || "").includes("## Agent Instructions — growth.")
+  ) {
+    return false;
+  }
+  const ageMs = issue.updatedAt ? now - Date.parse(issue.updatedAt) : Infinity;
+  const stale = ageMs > 14 * 86_400_000;
+  if (stale && issue.title.startsWith("[pulse]")) return false;
+  if (stale && !defaultSlugs.has(slug)) return false;
+  return true;
 }
 // --- end remote config -------------------------------------------------
 const TEAM_ID = process.env.LINEAR_TEAM_ID || "5027d80c-70dc-4c48-b88b-40053c03aec3";
@@ -473,6 +565,72 @@ async function runAgent(agentType, repoDir, prompt, logFile) {
 // [pulse] playbook issues (GTM research etc.) are operating work, not code
 // work: the issue body carries the full agent instructions, success is an API
 // side effect (batch POSTed, run transitioned), and no commits are expected.
+// Repo-optional lane: knowledge/ops tasks (e.g. "Refresh stale KB entries")
+// on startups with no code repo. Runs the agent in a scratch dir with the
+// issue description as instructions — no clone, no branch, no commit. Success
+// is the agent printing "TASK_RESULT: ok". Mirrors processPlaybookIssue's
+// no-git flow but with a generic operating prompt instead of the GTM one.
+async function processRepoOptionalIssue(issue, slug, workDir) {
+  const logFile = join(LOG_DIR, `${issue.identifier}-${Date.now()}.txt`);
+
+  console.log(`[runner] Processing repo-optional issue ${issue.identifier}: ${issue.title}`);
+
+  if (DRY_RUN) {
+    console.log(`[runner] DRY RUN -- would run repo-optional agent here`);
+    return "dry_run";
+  }
+
+  const { id: bobRunId, agentType } = await bobStartRun(issue, slug);
+
+  try {
+    await updateIssueState(issue.id, "started");
+    await addIssueComment(issue.id, `🤖 Bob agent claiming this issue (repo-optional).\n\nRunner: ${agentType}`);
+  } catch (e) {
+    console.log(`[runner] Failed to update Linear: ${e.message}`);
+  }
+
+  const prompt = `You are an AI agent executing an operating task for the ${slug} startup in the BizPulse portfolio.
+
+This is a knowledge/operations task with NO code repository. You are running in a scratch working directory (${workDir}); do NOT expect a checked-out repo, and do NOT create git branches or commits. The issue description below contains your full instructions. Environment you can rely on:
+- PULSE_SERVICE_SECRET is set (Authorization: Bearer for BizPulse service endpoints)
+- PULSE_API_KEY and PULSE_API_URL are set (the \`pulse\` CLI is installed and authenticates with them)
+
+## Issue
+**${issue.title}**
+
+${issue.description || "No description provided."}
+
+## Ground rules
+- Do the work described using the pulse CLI / BizPulse API. Verify each call succeeded from its response before moving on.
+- Do NOT modify or create any git repository.
+- End your final message with exactly one line: "TASK_RESULT: ok" if every required step succeeded, or "TASK_RESULT: failed — <short reason>" otherwise.`;
+
+  console.log(`[runner] Starting repo-optional agent...`);
+  const result = await runAgent(agentType, workDir, prompt, logFile);
+  console.log(`[runner] Agent exited with code ${result.exitCode}`);
+  await bobPushLog(bobRunId, result.output);
+  try { writeFileSync(logFile, result.output); } catch {}
+
+  const succeeded = result.exitCode === 0 && /TASK_RESULT:\s*ok/i.test(result.output);
+  const tail = result.output.length > 1500 ? result.output.slice(-1500) : result.output;
+
+  if (succeeded) {
+    try {
+      await addIssueComment(issue.id, `✅ Bob agent completed this task.\n\n\`\`\`\n${tail}\n\`\`\``);
+      await updateIssueState(issue.id, "completed");
+    } catch {}
+    await bobFinishRun(bobRunId, "completed", { exitCode: result.exitCode });
+    return "completed";
+  }
+
+  try {
+    await addIssueComment(issue.id, `⚠️ Bob agent did not report success on this task.\n\n\`\`\`\n${tail}\n\`\`\`\nLog: ${logFile}`);
+    await updateIssueState(issue.id, "unstarted");
+  } catch {}
+  await bobFinishRun(bobRunId, "failed", { exitCode: result.exitCode, reason: "no_success_marker" });
+  return "no_success";
+}
+
 async function processPlaybookIssue(issue, slug, repoDir) {
   const logFile = join(LOG_DIR, `${issue.identifier}-${Date.now()}.txt`);
 
@@ -579,13 +737,20 @@ async function processIssue(issue, slug, repoDir) {
 ${issue.description || "No description provided."}
 
 ## Instructions
-1. Read CLAUDE.md to understand the project
-2. Find the relevant code referenced in the issue description
-3. Implement the fix with minimal changes
-4. Run any available tests to verify your changes
-5. Create a git commit with a descriptive message referencing ${issue.identifier}
+1. Read CLAUDE.md to understand the project.
+2. Find the relevant code referenced in the issue description.
+3. Implement the change with minimal edits, directly in the working tree.
+4. Run any available tests to verify your changes.
 
-If you cannot fully resolve the issue, make as much progress as possible and document what remains in a commit message.
+## IMPORTANT — do NOT touch git
+The runner owns version control. Do NOT run any git commands — no branch, no
+commit, no push — and do NOT open a pull request. Just leave your changes in the
+working tree. The runner will stage everything, commit it on branch
+\`${branchName}\`, push it, and open the PR for you. If you create your own
+branch/commit/PR, the runner will not see your work and it will be lost.
+
+If you cannot fully resolve the issue, make as much progress as possible and
+leave the partial changes in the working tree (uncommitted).
 
 Do NOT modify unrelated files. Stay focused on this specific issue.`;
 
@@ -594,52 +759,67 @@ Do NOT modify unrelated files. Stay focused on this specific issue.`;
   console.log(`[runner] Codex exited with code ${result.exitCode}`);
   await bobPushLog(bobRunId, result.output);
 
-  // Check if any commits were made
-  let hasCommits = false;
+  // The runner owns git: detect what the agent changed in the WORKING TREE
+  // (staged, unstaged, or untracked) rather than expecting the agent to have
+  // committed. This is robust to the agent editing files without touching git
+  // (the instructed behavior) and fixes the prior bug where an agent that made
+  // its own commit/branch (e.g. bob/GMA-412 vs the runner's bob/gma-412) was
+  // reported as "no_changes" while its work sat on an orphaned branch.
+  let hasChanges = false;
   try {
-    const diffCount = execSync(`git log main..HEAD --oneline 2>/dev/null | wc -l`, {
-      cwd: repoDir, encoding: "utf8"
+    const porcelain = execSync(`git status --porcelain`, {
+      cwd: repoDir, encoding: "utf8",
     }).trim();
-    hasCommits = parseInt(diffCount) > 0;
-  } catch {
-    try {
-      const diffCount = execSync(`git log master..HEAD --oneline 2>/dev/null | wc -l`, {
-        cwd: repoDir, encoding: "utf8"
-      }).trim();
-      hasCommits = parseInt(diffCount) > 0;
-    } catch {}
+    hasChanges = porcelain.length > 0;
+  } catch (e) {
+    console.log(`[runner] git status failed: ${e.message}`);
   }
 
-  if (hasCommits) {
-    console.log(`[runner] Commits found, pushing branch`);
+  if (hasChanges) {
+    console.log(`[runner] Working-tree changes found, committing + pushing ${branchName}`);
+    let pushed = false;
     try {
-      // Plain push: --force is both unnecessary (branches are per-issue) and
-      // rejected by some repos (preflight-app blocks force pushes).
+      const msg = `${issue.identifier}: ${issue.title}\n\nAutomated change by the Bob task runner for ${issue.identifier}.`;
+      execSync(`git add -A`, { cwd: repoDir, stdio: "pipe" });
+      // Inline identity so the commit never fails on an unconfigured git user.
+      execSync(`git -c user.name=bob -c user.email=bob@blder.bot commit -F -`, {
+        cwd: repoDir, input: msg, stdio: ["pipe", "pipe", "pipe"],
+      });
+      // Plain push: --force is unnecessary (per-issue branch) and rejected by
+      // some repos (preflight-app blocks force pushes).
       execSync(`git push -u origin ${branchName}`, { cwd: repoDir, stdio: "pipe" });
+      pushed = true;
     } catch (e) {
-      console.log(`[runner] Push failed: ${e.message}`);
+      console.log(`[runner] Commit/push failed: ${e.message.split("\n")[0]}`);
     }
 
     try {
-      await addIssueComment(issue.id, `✅ Bob agent completed work on branch \`${branchName}\`.\n\nReview the changes and merge when ready.`);
+      const note = pushed
+        ? `✅ Bob agent completed this issue. Changes committed and pushed to branch \`${branchName}\` — review and merge when ready.`
+        : `⚠️ Bob agent produced changes but the runner could not push branch \`${branchName}\`. Log: ${logFile}`;
+      await addIssueComment(issue.id, note);
+      await updateIssueState(issue.id, pushed ? "completed" : "unstarted");
     } catch {}
 
-    await bobFinishRun(bobRunId, "completed", { exitCode: result.exitCode });
-    return "completed";
+    await bobFinishRun(bobRunId, pushed ? "completed" : "failed", {
+      exitCode: result.exitCode,
+      ...(pushed ? {} : { reason: "push_failed" }),
+    });
+    return pushed ? "completed" : "push_failed";
   } else {
-    console.log(`[runner] No commits made`);
+    console.log(`[runner] No working-tree changes`);
     try {
-      await addIssueComment(issue.id, `⚠️ Bob agent attempted this issue but did not produce commits.\n\nLog: ${logFile}\nMay need manual intervention.`);
+      await addIssueComment(issue.id, `⚠️ Bob agent attempted this issue but produced no changes.\n\nLog: ${logFile}\nMay need manual intervention.`);
       await updateIssueState(issue.id, "unstarted");
     } catch {}
 
-    // Clean up branch
+    // Clean up the empty branch.
     try {
       execSync(`git checkout main 2>/dev/null || git checkout master`, { cwd: repoDir, stdio: "pipe" });
       execSync(`git branch -D ${branchName} 2>/dev/null || true`, { cwd: repoDir, stdio: "pipe" });
     } catch {}
 
-    await bobFinishRun(bobRunId, "failed", { exitCode: result.exitCode, reason: "no_commits" });
+    await bobFinishRun(bobRunId, "failed", { exitCode: result.exitCode, reason: "no_changes" });
     return "no_changes";
   }
 }
@@ -674,45 +854,30 @@ async function runOnce() {
   // Collect all issues across all startups, then pick the highest priority globally
   const allCandidates = [];
 
+  const defaultSlugs = new Set(Object.keys(DEFAULT_PROJECTS));
   for (const slug of targetSlugs) {
     const projectId = projects[slug];
+    const repoOptional = isRepoOptional(slug);
     const repoDir = effectiveRepoDir(slug);
-    if (!projectId || !repoDir) continue;
-    // Missing dirs are fine when the remote config can clone them at claim
-    // time; only skip when we'd have no way to materialize the repo.
-    if (!existsSync(repoDir) && !remoteEntry(slug)) continue;
+    if (
+      !slugEligible(slug, {
+        projectId,
+        repoDir,
+        cloneBenched: cloneBenched(slug, _cloneFailed, Date.now()),
+        repoExists: repoDir ? existsSync(repoDir) : false,
+        hasRemote: !!remoteEntry(slug),
+        repoOptional,
+      })
+    ) {
+      continue;
+    }
 
     try {
       const issues = await getUnstartedIssues(projectId);
       for (const issue of issues) {
-        // The bizpulse project holds founder/ops work orders that are NOT
-        // for autonomous execution — only genuine GTM playbook dispatches
-        // may be claimed there. Title alone is not enough: July's bulk
-        // objective work orders are also [pulse]-titled, and letting an
-        // agent execute one ended with it self-grading a business
-        // objective 'achieved' (GMA-385). The GTM instruction marker only
-        // appears in issues built by buildGtmPlaybookInstructions.
-        if (
-          slug === "bizpulse" &&
-          !(issue.description || "").includes("## Agent Instructions — growth.")
-        ) {
-          continue;
-        }
-        // STALE issues are never auto-claimed when the claim only became
-        // possible today (remote-config slugs, freshly clonable repos):
-        // month-old [pulse] work orders and backlog need a deliberate
-        // re-dispatch (the roadmap's ↻ refresh) before an agent acts on
-        // them — GMA-385/364 both started as silent stale-claims. Rules:
-        // [pulse]-titled operating work orders: fresh-only EVERYWHERE;
-        // remote-only slugs: fresh-only for everything.
-        const ageMs = issue.updatedAt
-          ? Date.now() - Date.parse(issue.updatedAt)
-          : Infinity;
-        const stale = ageMs > 14 * 86_400_000;
-        if (stale && issue.title.startsWith("[pulse]")) continue;
-        if (stale && !(slug in DEFAULT_PROJECTS)) continue;
+        if (!issueClaimable(slug, issue, { now: Date.now(), defaultSlugs })) continue;
         if (!isClaimed(issue.id)) {
-          allCandidates.push({ issue, slug, repoDir });
+          allCandidates.push({ issue, slug, repoDir, repoOptional });
         }
       }
     } catch (e) {
@@ -736,24 +901,45 @@ async function runOnce() {
     return nb - na;
   });
 
-  const { issue, slug, repoDir } = allCandidates[0];
+  const { issue, slug, repoDir, repoOptional } = allCandidates[0];
   console.log(`[runner] Found: ${issue.identifier} (P${issue.priority}) - ${issue.title} [${slug}]`);
   console.log(`[runner] ${allCandidates.length} total unclaimed issues across ${targetSlugs.length} startups`);
 
   markClaimed(issue.id, slug);
 
-  if (!ensureRepoDir(slug)) {
-    // Repo unavailable is an infrastructure failure, not a verdict on the
-    // issue: UNCLAIM it so a future process (after the repo exists or the
-    // config is fixed) can pick it up. The slug goes on _cloneFailed, so
-    // this process won't thrash on it.
-    console.log(`[runner] ${issue.identifier} unclaimed (repo unavailable for ${slug})`);
-    unclaim(issue.id);
-    return true;
+  let workDir;
+  if (repoOptional) {
+    // Knowledge/ops task on a startup with no repo: run in a scratch dir, no
+    // clone. This is what makes "Refresh stale KB entries" and other
+    // targetSystem:"manual" audit issues claimable instead of failing on a
+    // repo they never needed.
+    workDir = scratchDirFor(slug);
+    console.log(`[runner] ${issue.identifier} is repo-optional (${slug} has no repo) — scratch dir ${workDir}`);
+  } else {
+    if (!ensureRepoDir(slug)) {
+      // Repo unavailable is an infrastructure failure, not a verdict on the
+      // issue: UNCLAIM it so a future process (after the repo exists or the
+      // config is fixed) can pick it up. The slug goes on _cloneFailed, so
+      // this process won't thrash on it.
+      console.log(`[runner] ${issue.identifier} unclaimed (repo unavailable for ${slug})`);
+      unclaim(issue.id);
+      return true;
+    }
+    workDir = repoDir;
   }
 
   try {
-    const status = await processIssue(issue, slug, repoDir);
+    let status;
+    if (repoOptional) {
+      // A [pulse]-titled playbook that happens to land on a repo-optional slug
+      // still runs through the playbook lane (also no-git); everything else is
+      // a generic operating task.
+      status = issue.title.startsWith("[pulse]")
+        ? await processPlaybookIssue(issue, slug, workDir)
+        : await processRepoOptionalIssue(issue, slug, workDir);
+    } else {
+      status = await processIssue(issue, slug, workDir);
+    }
     markDone(issue.id, status);
     console.log(`[runner] ${issue.identifier} -> ${status}`);
     return true;
@@ -788,7 +974,14 @@ async function main() {
   }
 }
 
-main().catch(e => {
-  console.error(`[runner] Fatal: ${e.message}`);
-  process.exit(1);
-});
+// Exported for regression tests. Only auto-run the poller when invoked
+// directly (node task-runner.js), so requiring the module in a test does not
+// start the 2-minute scan loop.
+module.exports = { slugEligible, issueClaimable, cloneBenched };
+
+if (require.main === module) {
+  main().catch(e => {
+    console.error(`[runner] Fatal: ${e.message}`);
+    process.exit(1);
+  });
+}
