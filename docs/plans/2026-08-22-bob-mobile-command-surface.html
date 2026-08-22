@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Bob Mobile Command Surface — Implementation Plan</title>
+  <style>
+    :root{--ink:#17201e;--muted:#5e6b67;--paper:#f5f1e8;--panel:#fffdf8;--line:#d8d1c4;--green:#234f42;--mint:#d9eadf;--amber:#b46c24;--blue:#315b72;--red:#8b3e36;--mono:ui-monospace,SFMono-Regular,Menlo,monospace}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif}main{max-width:1180px;margin:auto;padding:30px 24px 80px}.hero{background:var(--green);color:#fff;border-radius:24px;padding:42px;box-shadow:0 18px 45px #183b3026}.eyebrow{font:700 12px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:#bfe2d1}.hero h1{font-size:clamp(34px,6vw,64px);line-height:1.02;margin:18px 0 14px;max-width:900px}.hero p{max-width:800px;font-size:18px;color:#e1efe8}.meta,.chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}.chip{border:1px solid #ffffff45;border-radius:999px;padding:6px 10px;font:700 12px var(--mono)}section{margin-top:32px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:28px}h2{font-size:28px;margin:0 0 14px}h3{font-size:19px;margin:24px 0 8px}.lead{font-size:18px;max-width:900px}.callout{border-left:5px solid var(--amber);background:#fff5df;padding:16px 18px;border-radius:8px;margin:18px 0}.decision{border-left-color:var(--green);background:#eaf5ee}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}.card{border:1px solid var(--line);border-radius:12px;padding:17px;background:#fff}.card h3{margin:0 0 8px}.metric{font:800 28px var(--mono);color:var(--green)}table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:12px 10px}th{font:800 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:#f4f0e8}code,pre{font-family:var(--mono)}code{background:#ede8df;border-radius:4px;padding:2px 5px}pre{overflow:auto;background:#18211f;color:#d8eee4;border-radius:12px;padding:16px;font-size:12px}.status{white-space:nowrap;font:800 11px var(--mono);color:var(--blue)}.phase{border-top:6px solid var(--green)}ul,ol{padding-left:22px}.journey{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:18px 0}.step{padding:12px;border-radius:10px;background:var(--mint);min-height:95px}.step b{display:block;font:800 12px var(--mono);margin-bottom:5px}.diagram{width:100%;height:auto;border:1px solid var(--line);border-radius:12px;background:#fbfaf5}.risk-high{color:var(--red);font-weight:800}.risk-med{color:var(--amber);font-weight:800}.footer{color:var(--muted);font-size:13px;text-align:center;margin-top:28px}@media(max-width:760px){main{padding:14px 12px 50px}.hero,section{padding:21px}.journey{grid-template-columns:1fr}th:nth-child(2),td:nth-child(2){display:none}}
+  </style>
+</head>
+<body><main>
+  <header class="hero">
+    <div class="eyebrow">Bob · Mobile · Hermes · OODA</div>
+    <h1>Make Bob the daily mobile command surface</h1>
+    <p>An execution plan for one trustworthy mobile front door: capture and deliberate through OODA, inspect and approve work through Bob, reach Hermes when conversational operations are useful, and preserve explicit authority at every durable boundary.</p>
+    <div class="meta"><span class="chip">Status: ready for implementation</span><span class="chip">Date: 2026-08-22</span><span class="chip">Owner: Bob platform</span><span class="chip">Horizon: 8–10 weeks</span></div>
+  </header>
+
+  <section>
+    <h2>Executive decision</h2>
+    <p class="lead"><strong><code>apps/mobile-bob</code> is the sole production mobile client.</strong> OODA remains the deliberation and memory authority, Bob remains the execution authority, Hermes is an operator runtime behind bounded intents, and Skillfleet remains the fleet/configuration authority. The standalone OODA mobile shell becomes a contract fixture and is retired after parity evidence exists.</p>
+    <div class="callout decision"><strong>Why this direction:</strong> Bob mobile already has tested conversation streaming, voice state machines, TTS/barge-in, offline outbox, memory and vault browsing, jobs, proposals, corrections, and context inspection. Rebuilding those features in a second app would create two stores, two offline semantics, and two approval surfaces.</div>
+    <div class="grid">
+      <div class="card"><div class="metric">1</div><h3>Mobile application</h3><p>One binary, one navigation model, one notification/deep-link contract.</p></div>
+      <div class="card"><div class="metric">0</div><h3>Implicit durable writes</h3><p>Research may run in bounded scratch space; durable and external mutations require approval.</p></div>
+      <div class="card"><div class="metric">100%</div><h3>Accepted capture durability</h3><p>Every acknowledged offline or online capture must become replay-safe canonical state.</p></div>
+      <div class="card"><div class="metric">&lt;400ms</div><h3>Warm interaction target</h3><p>Local shell and optimistic capture feedback before network completion.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>System ownership and request flow</h2>
+    <svg class="diagram" viewBox="0 0 1060 300" role="img" aria-label="Bob mobile architecture">
+      <defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0l8 4-8 4z" fill="#315b72"/></marker></defs>
+      <g font-family="system-ui" font-size="14"><rect x="30" y="80" width="180" height="130" rx="16" fill="#234f42"/><text x="120" y="112" text-anchor="middle" fill="white" font-weight="700">Bob Mobile</text><text x="120" y="140" text-anchor="middle" fill="#d9eadf">capture · chat · today</text><text x="120" y="164" text-anchor="middle" fill="#d9eadf">approvals · work · fleet</text><text x="120" y="188" text-anchor="middle" fill="#d9eadf">offline · notifications</text>
+      <rect x="310" y="25" width="190" height="105" rx="14" fill="#d9eadf"/><text x="405" y="58" text-anchor="middle" font-weight="700">OODA edge + kernel</text><text x="405" y="84" text-anchor="middle">conversation · context</text><text x="405" y="106" text-anchor="middle">memory · proposal · research</text>
+      <rect x="310" y="170" width="190" height="105" rx="14" fill="#f6dfbd"/><text x="405" y="203" text-anchor="middle" font-weight="700">Bob execution API</text><text x="405" y="229" text-anchor="middle">objectives · work · runs</text><text x="405" y="251" text-anchor="middle">evidence · receipts</text>
+      <rect x="610" y="25" width="190" height="105" rx="14" fill="#dfeaf0"/><text x="705" y="58" text-anchor="middle" font-weight="700">Hermes operator</text><text x="705" y="84" text-anchor="middle">bounded intents</text><text x="705" y="106" text-anchor="middle">brief · status · research</text>
+      <rect x="610" y="170" width="190" height="105" rx="14" fill="#eadfdc"/><text x="705" y="203" text-anchor="middle" font-weight="700">Skillfleet</text><text x="705" y="229" text-anchor="middle">fleet · skills · MCP · plugins</text><text x="705" y="251" text-anchor="middle">plan · verify · rollback</text>
+      <rect x="885" y="98" width="145" height="105" rx="14" fill="#eee9df"/><text x="958" y="132" text-anchor="middle" font-weight="700">ForgeGraph</text><text x="958" y="158" text-anchor="middle">CI · deploy</text><text x="958" y="180" text-anchor="middle">release evidence</text>
+      <g stroke="#315b72" stroke-width="2" fill="none" marker-end="url(#a)"><path d="M210 120L300 80"/><path d="M210 175L300 220"/><path d="M500 75L600 75"/><path d="M500 225L600 225"/><path d="M800 75L875 130"/><path d="M800 225L875 175"/></g></g>
+    </svg>
+    <details><summary>Editable diagram source</summary><pre>flowchart LR
+  M[Bob Mobile] --> O[OODA edge + kernel]
+  M --> B[Bob execution API]
+  O --> H[Hermes bounded operator]
+  B --> S[Skillfleet plans and receipts]
+  H --> F[ForgeGraph evidence]
+  S --> F</pre></details>
+    <table><thead><tr><th>Authority</th><th>Owns</th><th>Must not own</th></tr></thead><tbody>
+      <tr><td>Bob mobile</td><td>Presentation, local encrypted queue, notification routing, biometric confirmation, accessible interaction state.</td><td>Canonical business state, reusable approval tokens, fleet credentials.</td></tr>
+      <tr><td>OODA</td><td>Conversation/event history, context snapshots, memory/vault, research jobs, proposals and decision lineage.</td><td>Direct infrastructure or project mutation.</td></tr>
+      <tr><td>Bob</td><td>Objectives, work items, agent runs, execution receipts and links to evidence.</td><td>Fleet package configuration or hidden deliberation state.</td></tr>
+      <tr><td>Hermes</td><td>Intent translation and channel-specific read/propose workflows.</td><td>General shell, infrastructure writes, long-lived authority.</td></tr>
+      <tr><td>Skillfleet</td><td>Machine census, skill/MCP/plugin desired state, reconcile plans, verification and rollback.</td><td>Prompt/transcript content or mobile session state.</td></tr>
+    </tbody></table>
+  </section>
+
+  <section>
+    <h2>Daily-driver journeys</h2>
+    <div class="journey"><div class="step"><b>1 · OPEN</b>Today summarizes priorities, blocked work, pending approvals, fleet attention, and recent receipts.</div><div class="step"><b>2 · CAPTURE</b>Hold-to-talk or type; local receipt appears immediately and survives offline restart.</div><div class="step"><b>3 · DELIBERATE</b>OODA builds a cited context snapshot and can launch bounded research.</div><div class="step"><b>4 · APPROVE</b>Diff, scope, consequences, expiry, rollback and evidence target are visible together.</div><div class="step"><b>5 · VERIFY</b>Bob shows the immutable receipt and links execution, CI, deploy, or fleet evidence.</div></div>
+    <table><thead><tr><th>Surface</th><th>Required behavior</th><th>Exit evidence</th></tr></thead><tbody>
+      <tr><td>Today</td><td>Fast cached shell; freshness badges; no false “all clear”; tap-through to canonical evidence.</td><td>Cold/warm timing, stale-data test, VoiceOver traversal, airplane-mode snapshot.</td></tr>
+      <tr><td>Capture</td><td>Text and on-device STT; attachment staging; idempotency key before acknowledgement; explicit destination correction.</td><td>Kill/relaunch and duplicate-delivery tests; no accepted capture loss in dogfood.</td></tr>
+      <tr><td>Conversation</td><td>Streaming, reconnect, correction, branch, citations, context inspection, ElevenLabs TTS grant and immediate barge-in.</td><td>SSE replay tests, audio interruption tests, expired-grant test, accessibility transcript.</td></tr>
+      <tr><td>Approval inbox</td><td>Read-only by default; biometric step-up for consequential approval; one-time capability consumed server-side.</td><td>Replay, expiry, device-loss and cross-owner negative tests.</td></tr>
+      <tr><td>Work</td><td>Objective/work/run hierarchy; pause/cancel where supported; status derived from evidence, never optimistic UI alone.</td><td>Contract fixture across Bob and mobile; delayed receipt reconciliation test.</td></tr>
+      <tr><td>Fleet</td><td>Read health, coverage and proposed config diff; approve a Skillfleet plan, never mutate a host directly.</td><td>No direct SSH/secret surface in bundle; plan/receipt deep-link test.</td></tr>
+    </tbody></table>
+  </section>
+
+  <section class="phase">
+    <h2>Phase 0 — Freeze contracts and measure the real baseline</h2>
+    <p>Duration: 3–4 days. No visual redesign begins until ownership and compatibility fixtures are executable.</p>
+    <table><thead><tr><th>Task</th><th>Files</th><th>Verification and commit</th><th>Status</th></tr></thead><tbody>
+      <tr><td><strong>0.1 Capability map.</strong> Add a machine-readable manifest for every mobile journey, owning API, rollout capability, offline support and authority class.</td><td><code>apps/mobile-bob/src/features/operations/capability-manifest.ts</code><br><code>packages/ooda/src/contracts/v1/rollout.ts</code><br><code>apps/mobile-bob/src/features/operations/__tests__/capability-manifest.test.ts</code></td><td>Write the failing exact-key fixture first. Run <code>pnpm --filter @bob/mobile test -- capability-manifest</code>. Commit: <code>test(mobile): lock command-surface capability map</code>.</td><td class="status">PLANNED</td></tr>
+      <tr><td><strong>0.2 Contract corpus.</strong> Capture sanitized golden fixtures for conversation events, proposals, jobs, Hermes intents, fleet summaries and receipts. Fixtures contain no transcript text, raw paths or credentials.</td><td><code>packages/ooda/src/contracts/v1/__fixtures__/</code><br><code>apps/mobile-bob/src/features/operations/__fixtures__/</code><br><code>scripts/verify-mobile-contracts.ts</code></td><td>Fail on unknown fields and fixture drift. Run OODA contract tests plus mobile parser tests. Commit: <code>test(contracts): add mobile operations compatibility corpus</code>.</td><td class="status">PLANNED</td></tr>
+      <tr><td><strong>0.3 Baseline telemetry.</strong> Measure launch, first contentful shell, capture acknowledgement, SSE reconnect, TTS start and barge-in without recording content.</td><td><code>apps/mobile-bob/src/lib/telemetry.ts</code><br><code>apps/mobile-bob/src/features/chat/telemetry.ts</code><br><code>apps/mobile-bob/src/features/operations/performance-budget.ts</code></td><td>Schema tests reject text/path/account fields. Production sampling off by default until privacy review. Commit: <code>feat(mobile): define privacy-safe experience budgets</code>.</td><td class="status">PLANNED</td></tr>
+    </tbody></table>
+    <div class="callout"><strong>Gate:</strong> capability manifest covers every route; fixture suites pass against the current production API; measured baseline is stored as aggregate counters only.</div>
+  </section>
+
+  <section class="phase">
+    <h2>Phase 1 — Navigation shell, Today, and trustworthy freshness</h2>
+    <p>Duration: 1 week. Build the operational shell around existing chat rather than rewriting chat first.</p>
+    <table><thead><tr><th>Task</th><th>Files</th><th>Verification and commit</th><th>Status</th></tr></thead><tbody>
+      <tr><td><strong>1.1 Route model.</strong> Establish Today, Chat, Work, Approvals and More; Fleet lives under More until it earns top-level frequency.</td><td><code>apps/mobile-bob/src/app/(tabs)/_layout.tsx</code><br><code>apps/mobile-bob/src/app/(tabs)/index.tsx</code><br><code>apps/mobile-bob/src/app/(tabs)/approvals.tsx</code><br><code>apps/mobile-bob/src/app/(tabs)/work.tsx</code></td><td>Navigation tests cover authentication, deep link, notification launch and restored tab. Commit: <code>feat(mobile): establish daily command navigation</code>.</td><td class="status">PLANNED</td></tr>
+      <tr><td><strong>1.2 Today aggregator.</strong> Add a server-side bounded summary that fans out to OODA, Bob and Skillfleet with per-source timeout, freshness and partial coverage.</td><td><code>apps/ooda-edge/src/app/api/v1/operator/today/route.ts</code><br><code>packages/ooda/src/contracts/v1/operator.ts</code><br><code>packages/ooda/src/api/router/hermes.ts</code></td><td>Contract tests prove a failed dependency degrades one card, never the entire response or an invented zero. Commit: <code>feat(operator): compose evidence-backed today summary</code>.</td><td class="status">PLANNED</td></tr>
+      <tr><td><strong>1.3 Cached shell.</strong> Persist only the bounded summary and freshness metadata in device-protected storage.</td><td><code>apps/mobile-bob/src/features/today/</code><br><code>apps/mobile-bob/src/lib/offline-shell.ts</code></td><td>Airplane-mode, stale badge, logout purge, and cross-account isolation tests. Commit: <code>feat(mobile): add offline-first today shell</code>.</td><td class="status">PLANNED</td></tr>
+    </tbody></table>
+  </section>
+
+  <section class="phase">
+    <h2>Phase 2 — Capture and conversation hardening</h2>
+    <p>Duration: 1–2 weeks. Reuse the existing OODA outbox, SSE, voice and TTS modules; close lifecycle and accessibility gaps.</p>
+    <table><thead><tr><th>Task</th><th>Files</th><th>Verification and commit</th><th>Status</th></tr></thead><tbody>
+      <tr><td><strong>2.1 Unified capture composer.</strong> Text, voice, photos/files and share-sheet URLs enter one local envelope with destination preview and correction.</td><td><code>apps/mobile-bob/src/features/capture/</code><br><code>apps/mobile-bob/src/lib/ooda-outbox.ts</code><br><code>apps/mobile-bob/src/app/capture.tsx</code></td><td>Test background termination after acknowledgement, attachment upload retry, duplicate POST, correction and logout. Commit: <code>feat(mobile): unify replay-safe multimodal capture</code>.</td><td class="status">PLANNED</td></tr>
+      <tr><td><strong>2.2 Voice lifecycle.</strong> Make on-device STT, partial transcript, edit-before-send, TTS grant, audio route changes, Bluetooth, calls and barge-in explicit state-machine events.</td><td><code>apps/mobile-bob/src/features/chat/voice-state-machine.ts</code><br><code>apps/mobile-bob/src/features/chat/use-speech-recognition.ts</code><br><code>apps/mobile-bob/src/features/chat/tts-controller.ts</code></td><td>Deterministic state tests before native integration tests. Validate no audio/text telemetry. Commit: <code>fix(mobile): harden voice and barge-in lifecycle</code>.</td><td class="status">PLANNED</td></tr>
+      <tr><td><strong>2.3 Streaming recovery.</strong> Persist event cursor and reconcile canonical event order after reconnect; show “recovering” separately from “thinking.”</td><td><code>apps/mobile-bob/src/features/chat/use-ooda-conversation.ts</code><br><code>apps/mobile-bob/src/lib/ooda-sse.ts</code><br><code>packages/ooda/src/api/conversation-event-stream.ts</code></td><td>Disconnect at every event boundary, replay duplicates and reordered delivery. Commit: <code>fix(chat): reconcile streamed events across reconnect</code>.</td><td class="status">PLANNED</td></tr>
+      <tr><td><strong>2.4 Accessibility and ergonomics.</strong> Dynamic type, VoiceOver labels/order, reduced motion, haptics policy, keyboard/tablet, one-handed capture and transcript alternatives.</td><td><code>apps/mobile-bob/src/features/chat/</code><br><code>apps/mobile-bob/src/components/tablet/</code><br><code>apps/mobile-bob/src/lib/accessibility.ts</code></td><td>Component a11y tests, iPhone and iPad physical-device checklist, WCAG contrast review. Commit: <code>fix(mobile): make command surface accessible</code>.</td><td class="status">PLANNED</td></tr>
+    </tbody></table>
+  </section>
+
+  <section class="phase">
+    <h2>Phase 3 — Work, proposals, and one-time approvals</h2>
+    <p>Duration: 1–2 weeks. Consequential actions are proposal-driven and evidence-backed.</p>
+    <table><thead><tr><th>Task</th><th>Files</th><th>Verification and commit</th><th>Status</th></tr></thead><tbody>
+      <tr><td><strong>3.1 Approval contract v1.</strong> Standardize proposal summary, structured operations, owner, expiry, impact class, rollback readiness, evidence target and consumed capability.</td><td><code>packages/ooda/src/contracts/v1/proposals.ts</code><br><code>packages/ooda/src/kernel/proposals.ts</code><br><code>apps/ooda-edge/src/app/api/v1/proposals/</code></td><td>Negative tests for replay, expiry, changed payload hash, wrong owner and partial apply. Commit: <code>feat(approvals): bind one-time authority to immutable proposals</code>.</td><td class="status">PLANNED</td></tr>
+      <tr><td><strong>3.2 Approval inbox.</strong> Group by urgency and consequence, display full diff and rollback, require biometric step-up where policy requires it.</td><td><code>apps/mobile-bob/src/features/approvals/</code><br><code>apps/mobile-bob/src/app/(tabs)/approvals.tsx</code></td><td>Snapshot tests for every state; native biometric success/cancel/lockout; no token persisted or logged. Commit: <code>feat(mobile): ship consequence-aware approval inbox</code>.</td><td class="status">PLANNED</td></tr>
+      <tr><td><strong>3.3 Work hierarchy.</strong> Project objective → milestone/work item → run → receipt; link each status to Bob or ForgeGraph evidence.</td><td><code>apps/mobile-bob/src/features/work/</code><br><code>packages/bob/src/work-items/</code><br><code>packages/bob/src/chat/</code></td><td>Contract tests cover delayed/stale/missing evidence and cancellation races. Commit: <code>feat(mobile): expose evidence-backed work hierarchy</code>.</td><td class="status">PLANNED</td></tr>
+    </tbody></table>
+  </section>
+
+  <section class="phase">
+    <h2>Phase 4 — Hermes and Skillfleet operator bridges</h2>
+    <p>Duration: 1 week. Mobile calls bounded operator contracts; it never embeds host credentials or a general remote terminal.</p>
+    <table><thead><tr><th>Task</th><th>Files</th><th>Verification and commit</th><th>Status</th></tr></thead><tbody>
+      <tr><td><strong>4.1 Hermes intents.</strong> Add typed mobile entry points for brief, status, capture, research, pause and dry-run proposal. General chat may explain but cannot widen capabilities.</td><td><code>packages/ooda/src/contracts/v1/hermes.ts</code><br><code>packages/ooda/src/api/router/hermes.ts</code><br><code>apps/mobile-bob/src/features/hermes/</code></td><td>Golden intent/action/receipt fixtures; deny unknown intent and tool escalation. Commit: <code>feat(mobile): integrate bounded Hermes operator intents</code>.</td><td class="status">PLANNED</td></tr>
+      <tr><td><strong>4.2 Fleet read model.</strong> Show machine enrollment, collector freshness, coverage, resource counts and proposed changes from Skillfleet’s sanitized API.</td><td><code>apps/mobile-bob/src/features/fleet/</code><br><code>packages/ooda/src/contracts/v1/skillfleet.ts</code><br><code>apps/ooda-edge/src/app/api/v1/integrations/skillfleet/</code></td><td>Unknown/partial/activity-only states remain distinct; payload rejects addresses, users, paths and secrets. Commit: <code>feat(mobile): add privacy-safe fleet operations view</code>.</td><td class="status">PLANNED</td></tr>
+      <tr><td><strong>4.3 Reconcile approval.</strong> A Skillfleet dry-run becomes an OODA proposal; approval yields a single-use server capability; receipt returns verify/rollback state.</td><td><code>packages/ooda/src/api/router/proposals.ts</code><br><code>apps/ooda-edge/src/app/api/v1/integrations/skillfleet/plans/</code><br><code>apps/mobile-bob/src/features/fleet/plan-inspector.tsx</code></td><td>End-to-end test: propose → approve → apply → verify; forced verify failure → automatic rollback; replay blocked. Commit: <code>feat(fleet): bridge guarded reconcile plans to mobile</code>.</td><td class="status">PLANNED</td></tr>
+    </tbody></table>
+  </section>
+
+  <section class="phase">
+    <h2>Phase 5 — Notifications, release, and retirement</h2>
+    <p>Duration: 2 weeks including dogfood. Ship through staged cohorts and remove the competing mobile shell only after proof.</p>
+    <table><thead><tr><th>Task</th><th>Files</th><th>Verification and commit</th><th>Status</th></tr></thead><tbody>
+      <tr><td><strong>5.1 Notification contract.</strong> Allow only capture receipt, approval requested/expiring, work blocked/completed, security attention and scheduled brief. Payloads contain opaque IDs and bounded categories, not content.</td><td><code>apps/mobile-bob/src/features/notifications/</code><br><code>packages/ooda/src/contracts/v1/notifications.ts</code></td><td>Deep-link authorization, revoked session, duplicate push, privacy preview and stale-object tests. Commit: <code>feat(mobile): add privacy-bounded operations notifications</code>.</td><td class="status">PLANNED</td></tr>
+      <tr><td><strong>5.2 Release ladder.</strong> Internal → 10% OTA → 50% → 100%; native changes use a new store build. Kill switches are capability-specific.</td><td><code>apps/mobile-bob/eas.json</code><br><code>apps/mobile-bob/app.config.ts</code><br><code>docs/runbooks/mobile-command-surface.md</code></td><td>Build, install, restart, auth pairing, notification and physical-device smoke tests are separate evidence rows. Commit: <code>docs(mobile): define command-surface release ladder</code>.</td><td class="status">PLANNED</td></tr>
+      <tr><td><strong>5.3 OODA shell retirement.</strong> Import no local-only data automatically. Publish migration notice, verify contract parity, archive app entry points in OODA repo, and retain fixture harness.</td><td><code>docs/migrations/ooda-mobile-retirement.md</code><br><code>scripts/verify-ooda-mobile-parity.ts</code></td><td>Zero active users on old build, parity manifest green for 14 days, rollback documented. Commit: <code>chore(mobile): complete OODA client convergence</code>.</td><td class="status">PLANNED</td></tr>
+    </tbody></table>
+  </section>
+
+  <section>
+    <h2>Cross-repository contract and delivery protocol</h2>
+    <ol>
+      <li>Contract changes start in the owning OODA or Skillfleet repository with failing compatibility fixtures.</li>
+      <li>Publish a pinned contract artifact and compatibility manifest; do not copy source by hand.</li>
+      <li>Update Bob’s consumer and golden fixtures in a separate commit.</li>
+      <li>Run producer current + producer previous, consumer current + consumer previous, and unknown-field rejection.</li>
+      <li>Deploy server compatibility first, then mobile; keep old mobile supported for at least one release window.</li>
+      <li>Remove compatibility code only after aggregate version telemetry shows the old client below the agreed threshold.</li>
+    </ol>
+    <pre>pnpm --filter @ooda/contracts test
+pnpm --filter @bob/mobile test
+pnpm --filter @bob/mobile typecheck
+pnpm --filter @gmacko/ooda test
+pnpm --filter @gmacko/ooda-edge build</pre>
+  </section>
+
+  <section>
+    <h2>Risk register</h2>
+    <table><thead><tr><th>Risk</th><th>Likelihood / impact</th><th>Mitigation and stop condition</th></tr></thead><tbody>
+      <tr><td>Two mobile authorities continue to evolve.</td><td><span class="risk-high">High / high</span></td><td>Name Bob in the contract manifest; no new product behavior lands in standalone OODA mobile. Stop if migration evidence is missing.</td></tr>
+      <tr><td>Offline acknowledgement precedes durable local write.</td><td><span class="risk-med">Medium / critical</span></td><td>Write envelope transactionally before UI success; crash-injection tests. Zero accepted-capture loss is a release gate.</td></tr>
+      <tr><td>Approval UI becomes a disguised “yes” button.</td><td><span class="risk-med">Medium / high</span></td><td>Require structured diff, scope, consequence, expiry, rollback and evidence target; block approve if any required field is unknown.</td></tr>
+      <tr><td>Hermes toolset widens through general chat.</td><td><span class="risk-med">Medium / critical</span></td><td>Server-side intent allowlist and profile deny list; fixture every intent; no shell or infrastructure write on mobile channel.</td></tr>
+      <tr><td>Summaries hide missing evidence.</td><td><span class="risk-med">Medium / high</span></td><td>First-class unknown/partial/stale states and per-source freshness; never coerce unknown to zero or success.</td></tr>
+      <tr><td>Telemetry becomes a content side channel.</td><td><span class="risk-high">High / critical</span></td><td>Exact-key schemas at emitter, ingest, DB and read API; reject text, raw identifiers and paths; retention and sampling review before enablement.</td></tr>
+    </tbody></table>
+  </section>
+
+  <section>
+    <h2>Definition of done</h2>
+    <div class="grid">
+      <div class="card"><h3>Functional</h3><ul><li>Today, Capture, Chat, Work, Approvals and Fleet journeys work on iPhone and iPad.</li><li>Voice, text and offline capture converge on one canonical event stream.</li><li>Hermes and Skillfleet mutations are proposal-driven.</li></ul></div>
+      <div class="card"><h3>Safety</h3><ul><li>No transcript, prompt, raw path, account identity or credential in aggregate telemetry.</li><li>Approval is owner-bound, payload-bound, expiring and single use.</li><li>Verification failure produces visible rollback evidence.</li></ul></div>
+      <div class="card"><h3>Reliability</h3><ul><li>14-day dogfood has no lost accepted capture, duplicate durable object or unauthorized write.</li><li>Crash, reconnect, notification and device-loss matrices pass.</li><li>Partial dependencies never create false green state.</li></ul></div>
+      <div class="card"><h3>Release proof</h3><ul><li>CI, artifact, discovery, install, restart, auth and live runtime are recorded separately.</li><li>Capability kill switches tested.</li><li>Standalone OODA mobile retired only after parity gate.</li></ul></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Open questions to close in Phase 0</h2>
+    <ol><li>Which approval consequence classes require biometric step-up versus an authenticated tap?</li><li>What is the support window for the previous mobile contract version: 30 or 60 days?</li><li>Should Fleet remain under More until weekly usage exceeds a threshold, or become top-level for the initial operator cohort?</li><li>Which attachments may be retained in OODA, and which should remain ephemeral until explicit promotion?</li></ol>
+    <div class="callout decision"><strong>Recommended defaults:</strong> biometric step-up for deployment, fleet mutation, external communication and credential-adjacent actions; 60-day contract support; Fleet under More; attachments ephemeral until promotion.</div>
+  </section>
+  <p class="footer">Implementation plan · Bob mobile command surface · 2026-08-22</p>
+</main></body></html>
