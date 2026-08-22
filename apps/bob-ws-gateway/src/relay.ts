@@ -1,4 +1,5 @@
 import type { WebSocket } from "ws";
+import { spawnFailureAgent } from "./spawn-failure";
 import { eq, and, or, gt, lt, inArray, asc, desc, sql, isNull } from "@bob/db";
 import { db } from "@bob/db/client";
 import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts, pullRequests, runnerLeases, gatewayConfig, eventLog, workspaceMembers, user } from "@bob/db/schema";
@@ -147,11 +148,20 @@ export interface RelayConfig {
   validateDaemonAuth: (token: string, workspaceId: string) => Promise<string | null>;
 }
 
+
 export class Relay {
   private readonly cfg: RelayConfig;
   private readonly connections = new Map<string, Connection>();
   private readonly clientsByUser = new Map<string, Set<Connection>>();
   private readonly daemonByWorkspace = new Map<string, Connection>();
+  /** hostId -> agent types that host demonstrably cannot spawn (learned from ENOENT). */
+  private readonly hostMissingAgents = new Map<string, Set<string>>();
+
+  /** Would offering `agentType` to this daemon just reproduce a spawn failure? */
+  private hostCannotRun(conn: Connection, agentType: string | null | undefined): boolean {
+    if (!agentType || !conn.hostId) return false;
+    return this.hostMissingAgents.get(conn.hostId)?.has(agentType) ?? false;
+  }
   private readonly subscribers = new Map<string, Set<Connection>>();
   /** Live presence roster for planning session collaborators (BOB-14). */
   private readonly presenceBySession = new Map<string, Map<string, SessionPresenceParticipant>>();
@@ -570,6 +580,12 @@ export class Relay {
 
     const daemon = this.daemonByWorkspace.get(input.workspaceId);
     if (!daemon) return;
+    if (this.hostCannotRun(daemon, input.agentType)) {
+      console.log(
+        `[Relay] not nudging ${input.sessionId} to host ${daemon.hostId}: it cannot spawn "${input.agentType}" (stays pending)`,
+      );
+      return;
+    }
 
     // The nudge payload (taskExecutor → /internal/nudge) carries no persona,
     // so read it off the session row like the tick-delivery path does. Without
@@ -1013,6 +1029,9 @@ export class Relay {
     });
     for (const session of pending) {
       if (conn.deliveredSessions.has(session.id)) continue;
+      // Don't re-offer work this host has already proven it can't spawn; leave
+      // it pending for a daemon that can (see spawnFailureAgent).
+      if (this.hostCannotRun(conn, session.agentType)) continue;
       const isPlanning = session.sessionType === "planning";
 
       // Enrich execution sessions with task context from work_items
@@ -2059,6 +2078,20 @@ export class Relay {
     const errorMessage =
       summary?.error ?? summary?.message ?? summary?.reason ?? undefined;
     const isError = msg.status === "error" || msg.status === "failed";
+
+    // Learn "this host can't run that agent" from a spawn failure so the next
+    // pending-delivery tick doesn't hand it the same kind of work again.
+    const missingAgent = isError ? spawnFailureAgent(errorMessage) : null;
+    if (missingAgent && conn.hostId) {
+      const set = this.hostMissingAgents.get(conn.hostId) ?? new Set<string>();
+      if (!set.has(missingAgent)) {
+        console.warn(
+          `[Relay] host ${conn.hostId} cannot spawn "${missingAgent}" — no longer offering it that agent`,
+        );
+      }
+      set.add(missingAgent);
+      this.hostMissingAgents.set(conn.hostId, set);
+    }
 
     const stateResult = await this.deriveAndWriteState(
       msg.sessionId,
