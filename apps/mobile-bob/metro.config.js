@@ -19,8 +19,17 @@ nativewindConfig.transformerPath = require.resolve(
   "./metro.react-native-css-transformer.cjs",
 );
 
+// Node-only builtins that leak in transitively (see metro-shims/README) get
+// redirected to a stub before falling through to nativewind's resolver.
+const NODE_BUILTIN_SHIMS = {
+  "node:crypto": path.join(__dirname, "metro-shims", "node-crypto-stub.js"),
+};
+
 const nativewindResolveRequest = nativewindConfig.resolver.resolveRequest;
 nativewindConfig.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (NODE_BUILTIN_SHIMS[moduleName]) {
+    return { type: "sourceFile", filePath: NODE_BUILTIN_SHIMS[moduleName] };
+  }
   try {
     return nativewindResolveRequest(context, moduleName, platform);
   } catch (error) {
