@@ -234,6 +234,9 @@
   .st.todo    { background: var(--grey-wash); color: var(--ink-3); }
   .st.gate    { background: var(--orange-wash); color: var(--orange); }
   .st.opt     { background: var(--teal-wash); color: var(--teal); }
+  .st.done    { background: var(--teal); color: #fff; }
+  .st.blocked { background: var(--orange); color: #fff; }
+  .st.manual  { background: var(--orange-wash); color: var(--orange); }
 
   /* ---------- progress ---------- */
 
@@ -313,7 +316,7 @@
 <header class="hero">
   <div class="wrap">
     <p class="kicker">Consolidation survey · gmackie/bob</p>
-    <h1>Collapse OODA into one tree<span class="badge">Draft</span></h1>
+    <h1>Collapse OODA into one tree<span class="badge">In progress</span></h1>
     <p class="lede">The merge already happened in one direction. Finish it: make the Bob monorepo a strict superset, retire the two superseded repos, and hold the product boundary with package walls instead of a second git remote.</p>
     <div class="meta">
       <span>2026-08-23</span>
@@ -339,6 +342,14 @@
     <p>OODA's codebase was mechanically copied into the Bob monorepo in Phase 8A on 2026-04-25. Since then Bob's copy grew a kernel, an oracle, a <code>contracts/v1</code> layer and nine integration adapters that the standalone <code>ooda</code> repo never received. Production for <em>both</em> products now builds from the Bob monorepo, off one shared Postgres, served by one runner, with one mobile app.</p>
     <p>What is left is not a migration — it is a cleanup with a gate in front of it. The standalone repo is ahead of the fold in exactly <strong>two files</strong>, both live features with real consumers. Port those, prove parity, then retire the surfaces that are quietly lying about being deployable.</p>
     <p>The third phase is the part worth keeping from OODA's own convergence plan: the product boundary. It survives the collapse as a <em>package</em> wall — <code>packages/ooda</code> must not import <code>@bob/*</code>, <code>packages/bob</code> must not import <code>@gmacko/ooda</code>, and <code>apps/*</code> is the only place the two compose. That wall is already 99% standing: there is exactly one crossing import in the whole tree.</p>
+  </div>
+
+
+  <div class="callout">
+    <p class="ct">Execution outcome · 2026-08-23</p>
+    <p><strong>Phase 1 complete, gate green.</strong> The census immediately found a third delta the file-level comparison had missed — <code>writeFileOnce</code> and its consumer, the <code>editorial-sync</code> CLI command — plus a documentation gap where <code>db/client.ts</code> throws without <code>DATABASE_URL</code> that <code>.env.example</code> never mentioned. Verdict: PARITY, 305 standalone exports, 0 unclassified.</p>
+    <p><strong>Phase 2 partial.</strong> Task 2.3 was stopped: the plan asserted <code>bob-cli</code> was retired, and it is not — <code>apps/desktop-bob</code> cross-compiles and bundles the Go CLI as its local daemon. <code>ooda-runner</code> replaced it server-side only. The external half of 2.1 and 2.2 (retiring the app record, pushing and archiving) is left for a human hand.</p>
+    <p><strong>Phase 3 complete.</strong> The one crossing import is closed, the guard is in CI and verified to fail on a reintroduced crossing, and the boundary is written down.</p>
   </div>
 
   <figure class="diagram">
@@ -442,8 +453,8 @@
 <section id="phase1">
   <h2><span class="ph">Phase 1</span>Make Bob a strict superset</h2>
   <p class="sub">~1 day · nothing is deleted until this passes</p>
-  <div class="progress"><span></span><span></span><span></span><span></span><span></span></div>
-  <p class="progress-label">0 / 5 complete</p>
+  <div class="progress"><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span></div>
+  <p class="progress-label">5 / 5 complete</p>
 
   <div class="col">
     <p>Both deltas are self-contained modules with tests and real consumers. Neither is dead code, and one of them is a live telemetry gap: Skillfleet's collector reads a workflow journal that <em>only the standalone runner writes</em> — the runner actually doing the work emits nothing.</p>
@@ -458,35 +469,35 @@
           <td><strong>Port the Skillfleet workflow journal.</strong> 357-line module + 126-line test. Swap <span class="p">zod/v4</span> → <span class="p">zod</span> to match the fold's convention (the only diff in the sibling <span class="p">events.ts</span>). Add a <span class="p">./runner-protocol/skillfleet-journal</span> subpath export.</td>
           <td><span class="p">packages/ooda/src/runner-protocol/skillfleet-journal.ts</span><span class="p">…/__tests__/skillfleet-journal.test.ts</span><span class="p">packages/ooda/package.json</span></td>
           <td><span class="p">pnpm --filter @gmacko/ooda test</span> — 126-line suite passes unchanged; a fresh test asserts <span class="p">{state:"disabled"}</span> when no journal path is configured</td>
-          <td><span class="st todo">todo</span></td>
+          <td><span class="st done">done</span></td>
         </tr>
         <tr>
           <td class="id">1.2</td>
           <td><strong>Wire the journal into the live runner.</strong> Mirror the standalone call site. <em>Bob's runner serves both products</em>, so the <span class="p">source</span> field must be <span class="p">"bob"</span> for gateway-claimed sessions and <span class="p">"ooda"</span> for OODA jobs — the collector validates source per adapter and drops mismatches.</td>
           <td><span class="p">apps/ooda-runner/src/session/session-executor.ts</span><span class="p">apps/ooda-runner/src/agent-jobs/agent-job-executor.ts</span><span class="p">apps/ooda-runner/src/config.ts</span></td>
           <td>Unit test per source value; local run with the journal env var set produces lines the collector's <span class="p">validateWorkflowJournalRecord</span> accepts</td>
-          <td><span class="st todo">todo</span></td>
+          <td><span class="st done">done</span></td>
         </tr>
         <tr>
           <td class="id">1.3</td>
           <td><strong>Port the outline bundle.</strong> 346-line module + test, plus the four missing index exports (<span class="p">createOutlineBundle</span> and its three types).</td>
           <td><span class="p">packages/ooda/src/thread-workspace/create-outline-bundle.ts</span><span class="p">…/__tests__/create-outline-bundle.test.ts</span><span class="p">…/thread-workspace/index.ts</span></td>
           <td><span class="p">pnpm --filter @gmacko/ooda test</span>; idempotency case from the ported suite passes</td>
-          <td><span class="st todo">todo</span></td>
+          <td><span class="st done">done</span></td>
         </tr>
         <tr>
           <td class="id">1.4</td>
           <td><strong>Port the <span class="p">outline</span> CLI command.</strong> Bob's <span class="p">ooda-cli</span> has export / migrate-to-vault / status / threads but not outline.</td>
           <td><span class="p">apps/ooda-cli/src/commands/outline.ts</span><span class="p">apps/ooda-cli/src/index.ts</span></td>
           <td>CLI smoke test against a temp storage root produces the bundle; <span class="p">turbo run typecheck</span></td>
-          <td><span class="st todo">todo</span></td>
+          <td><span class="st done">done</span></td>
         </tr>
         <tr>
           <td class="id">1.5</td>
           <td><strong>Parity census — the gate.</strong> Enumerate every exported symbol in the standalone repo's packages and assert each exists in the fold. Classify anything left as equal / Bob-ahead / OODA-ahead / intentionally dropped. Commit the report as migration evidence. Also hand-diff what a symbol census can't see: migrations and <span class="p">.env.example</span>.</td>
           <td><span class="p">scripts/compare-ooda-fold-parity.mjs</span><span class="p">docs/migrations/ooda-fold-parity.json</span></td>
           <td><strong>Gate:</strong> report contains zero unclassified exports and zero OODA-ahead entries. Phase 2 does not start until this is green.</td>
-          <td><span class="st gate">gate</span></td>
+          <td><span class="st done">done</span></td>
         </tr>
       </tbody>
     </table>
@@ -506,8 +517,8 @@
 <section id="phase2">
   <h2><span class="ph">Phase 2</span>Retire the superseded surfaces</h2>
   <p class="sub">~half a day · order matters</p>
-  <div class="progress"><span></span><span></span><span></span><span></span><span></span></div>
-  <p class="progress-label">0 / 5 complete</p>
+  <div class="progress"><span class="done"></span><span class="done"></span><span></span><span class="done"></span><span class="done"></span></div>
+  <p class="progress-label">4 / 5 — 2.3 blocked, external half of 2.1/2.2 pending</p>
 
   <div class="callout warn">
     <p class="ct">Do 2.1 first</p>
@@ -523,35 +534,35 @@
           <td><strong>Kill the ghost deployment.</strong> Retire the <span class="p">ooda</span> app record and its stages in ForgeGraph; delete the stack files and app config from the standalone repo so no copy of the definition survives.</td>
           <td><span class="p">ooda/.forgegraph.yaml</span><span class="p">ooda/stacks/production.stack.yaml</span><span class="p">ooda/stacks/staging.stack.yaml</span></td>
           <td><span class="p">forge app list</span> no longer offers <span class="p">ooda</span>; <span class="p">forge route list</span> shows the domain served only by the edge worker; the live site still answers</td>
-          <td><span class="st gate">gate</span></td>
+          <td><span class="st manual">files done · record needs you</span></td>
         </tr>
         <tr>
           <td class="id">2.2</td>
           <td><strong>Archive the standalone repo.</strong> Tag the tip <span class="p">pre-archive</span>, replace the README with a pointer to <span class="p">bob/packages/ooda</span> and the parity report, then mark the repo archived. Archive, never delete — the history is the audit trail behind the parity claim.</td>
           <td><span class="p">ooda/README.md</span> · repo settings</td>
           <td>Tag pushed and resolvable; README names the fold path; repo is read-only</td>
-          <td><span class="st todo">todo</span></td>
+          <td><span class="st manual">prepped · push+archive needs you</span></td>
         </tr>
         <tr>
           <td class="id">2.3</td>
-          <td><strong>Archive <span class="p">bob-cli</span>.</strong> Same treatment: tag, README pointing at <span class="p">apps/ooda-runner</span> with a one-line note that the Go/Node choice is open rather than settled, archive.</td>
-          <td><span class="p">bob-cli/README.md</span> · repo settings</td>
-          <td>Repo read-only; README does not imply the daemon is current</td>
-          <td><span class="st todo">todo</span></td>
+          <td><strong>Archive <span class="p">bob-cli</span> — STOPPED, the premise was wrong.</strong> <span class="p">apps/desktop-bob</span> is an active consumer: <span class="p">scripts/build-daemon.mjs</span> cross-compiles <span class="p">github.com/blder/bob</span> for five targets into <span class="p">resources/bin/</span>, two darwin binaries are checked into git, <span class="p">electron-builder.yml</span> bundles that directory, and <span class="p">main.ts:207</span> spawns it on startup. <span class="p">ooda-runner</span> replaced bob-cli <em>server-side only</em>. Archiving would strand the desktop daemon.</td>
+          <td><span class="p">apps/desktop-bob/scripts/build-daemon.mjs</span><span class="p">apps/desktop-bob/electron-builder.yml</span><span class="p">apps/desktop-bob/src/main.ts</span></td>
+          <td>Blocked on resolving the desktop daemon question — see the sharpened Go/Node entry in open questions</td>
+          <td><span class="st blocked">blocked</span></td>
         </tr>
         <tr>
           <td class="id">2.4</td>
           <td><strong>Fix the copy that outlives the code.</strong> The Nodes page still reads "Machines running the bob daemon" — the exact phrase that sends the next person hunting for a Go binary.</td>
           <td><span class="p">apps/bob/src/app/(dashboard)/nodes/page.tsx</span></td>
           <td>Copy names the runner; grep for "bob daemon" across <span class="p">apps/</span> and <span class="p">docs/</span> returns only historical plans</td>
-          <td><span class="st todo">todo</span></td>
+          <td><span class="st done">done</span></td>
         </tr>
         <tr>
           <td class="id">2.5</td>
           <td><strong>Sweep the phantom workspace members.</strong> Five directories match the workspace globs but are empty or hold a single stale <span class="p">tsconfig.tsbuildinfo</span>. They read as real packages in every listing and cost orientation time on every visit.</td>
           <td><span class="p">apps/mobile</span><span class="p">apps/server</span><span class="p">apps/web</span><span class="p">packages/contracts</span><span class="p">packages/ui</span></td>
           <td><span class="p">pnpm install --frozen-lockfile</span> clean; <span class="p">pnpm exec turbo run typecheck --concurrency=1</span> unchanged</td>
-          <td><span class="st todo">todo</span></td>
+          <td><span class="st done">done</span></td>
         </tr>
       </tbody>
     </table>
@@ -561,8 +572,8 @@
 <section id="phase3">
   <h2><span class="ph">Phase 3</span>Make the boundary enforceable</h2>
   <p class="sub">~1 day, plus an optional deeper slice</p>
-  <div class="progress"><span></span><span></span><span></span><span></span></div>
-  <p class="progress-label">0 / 4 complete</p>
+  <div class="progress"><span class="done"></span><span class="done"></span><span class="done"></span><span></span></div>
+  <p class="progress-label">3 / 4 — 3.4 remains optional</p>
 
   <div class="col">
     <p>This is the part of the competing plan that was actually load-bearing, restated for one repo. The two-repo version bought boundary enforcement with a published contracts artifact and cross-repo CI. A guard script buys the same guarantee in an afternoon, and it fails at the moment of the bad import rather than at the next release.</p>
@@ -577,21 +588,21 @@
           <td><strong>Close the one leak.</strong> <span class="p">oracle/embeddings.ts</span> imports <span class="p">traceEmbedding</span> from <span class="p">@bob/telemetry</span>. Telemetry is infrastructure, not a Bob domain noun — move <span class="p">traceEmbedding</span> into <span class="p">@gmacko/core</span> and drop the <span class="p">@bob/telemetry</span> dependency from the package manifest.</td>
           <td><span class="p">packages/ooda/src/oracle/embeddings.ts</span><span class="p">packages/core/src/telemetry/</span><span class="p">packages/ooda/package.json</span></td>
           <td><span class="p">pnpm --filter @gmacko/ooda test</span>; manifest lists no <span class="p">@bob/*</span> dependency</td>
-          <td><span class="st todo">todo</span></td>
+          <td><span class="st done">done</span></td>
         </tr>
         <tr>
           <td class="id">3.2</td>
           <td><strong>Add the boundary guard.</strong> Written as a <span class="p">node --test</span> script beside the five existing <span class="p">verify-*.test.mjs</span> guards — CI already runs these, and the eslint fan-out is documented as memory-constrained, so this does not belong in a lint rule.</td>
           <td><span class="p">scripts/verify-product-boundary.test.mjs</span><span class="p">.forgejo/workflows/ci.yml</span></td>
           <td>Introduce a deliberate <span class="p">@bob/*</span> import inside <span class="p">packages/ooda</span> and prove CI fails; remove it and prove CI passes</td>
-          <td><span class="st todo">todo</span></td>
+          <td><span class="st done">done</span></td>
         </tr>
         <tr>
           <td class="id">3.3</td>
           <td><strong>Write the boundary down.</strong> One section in the root <span class="p">CLAUDE.md</span>: the kernel owns deliberation, memory, provenance and proposals; Bob owns work items, execution and PRs; <span class="p">apps/*</span> composes; durable or external action crosses via proposals, which is already the operating policy the Hermes doc encodes.</td>
           <td><span class="p">CLAUDE.md</span><span class="p">docs/architecture/product-boundary.md</span></td>
           <td>The guard script's allow/deny lists and the prose agree — a reviewer can check one against the other</td>
-          <td><span class="st todo">todo</span></td>
+          <td><span class="st done">done</span></td>
         </tr>
         <tr>
           <td class="id">3.4</td>
