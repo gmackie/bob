@@ -1,0 +1,45 @@
+{
+  "generatedFrom": {
+    "fold": "packages/ooda/src",
+    "standalone": "/Volumes/dev/bob/ooda"
+  },
+  "method": "Text scan of exported symbol names across non-test sources in both trees.",
+  "caveat": "Symbol-level only. Migrations, .env.example and service units are not covered and require the hand-diff recorded under handDiff below.",
+  "counts": {
+    "standaloneFiles": 119,
+    "foldFiles": 200,
+    "standaloneSymbols": 305,
+    "foldSymbols": 857,
+    "foldOnlySymbols": 556,
+    "intentionalDrops": 4,
+    "unclassifiedMissing": 0
+  },
+  "handDiff": {
+    "migrations": "DONE 2026-08-23 — all 6 numbered (0000_certain_orphan … 0005_premium_stardust) and all 5 custom (001_buddy_notify … 005_session_output_notify) standalone migrations are present in the fold, which carries 36 total. No standalone migration is missing.",
+    "envExample": "DONE 2026-08-23 — three standalone keys had no literal match in the fold. BIZPULSE_API_URL and OODA_STORAGE_ROOT are present under a prefix or as a commented default, so they are naming differences, not gaps. DATABASE_URL was a real documentation gap: db/client.ts throws at import without it, but only STANDALONE_OODA_DATABASE_URL was documented. Added to .env.example in this change."
+  },
+  "intentionalDrops": [
+    {
+      "symbol": "cn",
+      "location": "ui/src/index.ts",
+      "reason": "@ooda/ui is a strict subset of @gmacko/core/ui, which carries every component plus ~15 more. Only button.stories.tsx has no counterpart."
+    },
+    {
+      "symbol": "extractSessionToken",
+      "location": "db/src/auth.ts",
+      "reason": "Superseded by the Phase 7B-3 auth migration. The fold has no db/auth.ts: session validation comes from @gmacko/core/auth (AuthInstance, validateApiKey, SessionValidationResult), wired in api/trpc.ts. The standalone versions had no production consumer either — only their own tests imported them."
+    },
+    {
+      "symbol": "SessionNotFoundError",
+      "location": "db/src/auth.ts",
+      "reason": "Superseded by the Phase 7B-3 auth migration. The fold has no db/auth.ts: session validation comes from @gmacko/core/auth (AuthInstance, validateApiKey, SessionValidationResult), wired in api/trpc.ts. The standalone versions had no production consumer either — only their own tests imported them."
+    },
+    {
+      "symbol": "validateSessionToken",
+      "location": "db/src/auth.ts",
+      "reason": "Superseded by the Phase 7B-3 auth migration. The fold has no db/auth.ts: session validation comes from @gmacko/core/auth (AuthInstance, validateApiKey, SessionValidationResult), wired in api/trpc.ts. The standalone versions had no production consumer either — only their own tests imported them."
+    }
+  ],
+  "unclassifiedMissing": [],
+  "verdict": "PARITY"
+}
