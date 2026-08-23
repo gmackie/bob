@@ -63,3 +63,25 @@ the bad import.
 The wall is the cheap version of the same idea. Keep it at zero exceptions and
 the two products stay separable; start granting exceptions and the fold
 quietly becomes unsplittable.
+
+## The `ooda` ForgeGraph app record is retired but NOT deleted
+
+`forge app delete ooda` returns a server-side 500. The cause appears to be its
+secret store: the record still holds **9 production secrets**, including
+`OODA_RUNNER_SECRET`, `OODA_ORACLE_TOKEN`, and `BOB_API_URL` /
+`BOB_WORKSPACE_ID` / `BOB_API_KEY` (the last three updated 2026-08-03).
+
+Deleting the record would take those secrets with it. Nothing reads them at
+runtime — the runner gets its environment from `/opt/ooda-runner/.env` on the
+node, per `EnvironmentFile` in `ooda-runner.service` — but that node-local file
+is then the *only* copy. If the node were ever rebuilt, they would be
+unrecoverable.
+
+So the record is marked `RETIRED … DO NOT DEPLOY` in its description instead,
+which achieves the safety goal (nobody mistakes it for live) without
+destroying the credentials. Before anyone deletes it:
+
+1. Export the 9 secrets, or confirm each is either dead or reproduced in the
+   `bob` app's store. Note `bob/production` currently has none of the five
+   OODA/BOB-integration keys above.
+2. Then delete, and expect the 500 to need a server-side fix regardless.
