@@ -1,4 +1,12 @@
-import { mkdir, rename, rm, writeFile as fsWriteFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import {
+  writeFile as fsWriteFile,
+  link,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+} from "node:fs/promises";
 import { dirname, join, normalize, resolve } from "node:path";
 
 import matter from "gray-matter";
@@ -69,4 +77,43 @@ export async function deleteFile(
 ): Promise<void> {
   const fullPath = validatePath(vaultPath, filePath);
   await rm(fullPath, { force: true });
+}
+
+
+/**
+ * Create a generated file without ever overwriting human edits.
+ */
+export async function writeFileOnce(
+  vaultPath: string,
+  filePath: string,
+  content: string,
+): Promise<"created" | "unchanged"> {
+  const fullPath = validatePath(vaultPath, filePath);
+  const tmpPath = `${fullPath}.tmp-${process.pid}-${randomUUID()}`;
+
+  await mkdir(dirname(fullPath), { recursive: true });
+  try {
+    await fsWriteFile(tmpPath, content, { encoding: "utf-8", flag: "wx" });
+    try {
+      // Linking a complete temporary file is atomic and never replaces a target.
+      await link(tmpPath, fullPath);
+      return "created";
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !("code" in error) ||
+        error.code !== "EEXIST"
+      ) {
+        throw error;
+      }
+
+      const existing = await readFile(fullPath, "utf-8");
+      if (existing === content) return "unchanged";
+      throw new VaultWriterError(
+        `Refusing to overwrite existing content at "${filePath}"`,
+      );
+    }
+  } finally {
+    await rm(tmpPath, { force: true });
+  }
 }
