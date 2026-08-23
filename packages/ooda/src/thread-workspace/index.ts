@@ -27,3 +27,10 @@ export {
   abortMerge,
   type PullResult,
 } from "./sync-vault";
+
+export {
+  createOutlineBundle,
+  type CreateOutlineBundleInput,
+  type CreateOutlineBundleResult,
+  type OutlineBundleFile,
+} from "./create-outline-bundle";

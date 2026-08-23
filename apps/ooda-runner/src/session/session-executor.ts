@@ -12,6 +12,10 @@ import type {
   ResearchTRPCSurface,
 } from "@gmacko/ooda/buddy-tools";
 import { CapabilityRegistry } from "@gmacko/ooda/capability-registry";
+import {
+  emitSkillfleetWorkflowEvent,
+  normalizeSkillfleetRuntime,
+} from "@gmacko/ooda/runner-protocol/skillfleet-journal";
 import { createThreadWorkspace } from "@gmacko/ooda/thread-workspace";
 import { resolveThreadPath } from "@gmacko/ooda/thread-model";
 
@@ -53,6 +57,23 @@ export interface SessionExecutorConfig {
    * (dormant) in-process ACP dispatch backstop is wired.
    */
   mcpServer?: BuddyMcpServer;
+  /**
+   * Overrides for the Skillfleet workflow journal, for tests. Omit in
+   * production: the emitter then resolves the journal path from
+   * `SKILLFLEET_OODA_WORKFLOW_JOURNAL` / `SKILLFLEET_WORKFLOW_JOURNAL` and
+   * stays disabled when neither is set.
+   *
+   * Deliberately NOT mirroring the standalone runner, which passed
+   * `{ journalPath: this.workflowJournalPath }` with a field nothing ever
+   * assigned. Because the key was always present, the emitter took the
+   * explicit branch, read `undefined`, and short-circuited to `disabled` —
+   * so the environment variables never took effect and the journal never
+   * produced a record. Omitting the option is what makes it configurable.
+   */
+  workflowJournal?: {
+    journalPath?: string | null;
+    environment?: Record<string, string | undefined>;
+  };
 }
 
 export interface ExecuteSessionInput {
@@ -85,6 +106,7 @@ export class SessionExecutor {
   private research?: ResearchTRPCSurface;
   private capabilityRegistry?: CapabilityRegistry;
   private mcpServer?: BuddyMcpServer;
+  private workflowJournal?: SessionExecutorConfig["workflowJournal"];
 
   constructor(config: SessionExecutorConfig) {
     this.adapter = config.adapter;
@@ -92,10 +114,37 @@ export class SessionExecutor {
     this.research = config.research;
     this.capabilityRegistry = config.capabilityRegistry;
     this.mcpServer = config.mcpServer;
+    this.workflowJournal = config.workflowJournal;
   }
 
   async execute(input: ExecuteSessionInput): Promise<ExecuteSessionResult> {
     const threadDir = resolveThreadPath(this.storageRoot, input.threadSlug);
+    const startedAt = Date.now();
+
+    // Skillfleet workflow journal. Local, append-only, digest-only, and
+    // failure-isolated by the emitter — a journal problem can never fail a
+    // session. `source: "ooda"` because this executor only runs OODA thread
+    // sessions; Bob-claimed runs report `source: "bob"` from the gateway
+    // path. The collector validates source per adapter and drops mismatches.
+    const recordRun = (status: "success" | "failure") =>
+      emitSkillfleetWorkflowEvent(
+        {
+          source: "ooda",
+          identity: `${input.sessionId}:terminal`,
+          observedAt: new Date().toISOString(),
+          sessionId: input.sessionId,
+          projectId: input.threadSlug,
+          provenanceQuality: "direct",
+          kind: "agent_run",
+          payload: {
+            runtime: normalizeSkillfleetRuntime(this.adapter.id),
+            status,
+            durationMs: Date.now() - startedAt,
+            turnCount: 1,
+          },
+        },
+        this.workflowJournal ?? {},
+      );
 
     // Ensure workspace exists
     if (!existsSync(threadDir)) {
@@ -139,7 +188,14 @@ export class SessionExecutor {
       };
 
       // Execute
-      const result = await this.adapter.execute(command, wrappedOnEvent);
+      let result: { exitCode: number };
+      try {
+        result = await this.adapter.execute(command, wrappedOnEvent);
+        await recordRun(result.exitCode === 0 ? "success" : "failure");
+      } catch (error) {
+        await recordRun("failure");
+        throw error;
+      }
 
       return {
         exitCode: result.exitCode,
