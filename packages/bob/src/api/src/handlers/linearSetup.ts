@@ -21,6 +21,7 @@ import {
   mapLinearStatusToBob,
 } from "../services/linear/ensureLinearProject.js";
 import { agentOverrideFromLabels } from "../services/linear/agentLabel.js";
+import { queueOrderForPriority } from "../services/linear/priority.js";
 import { reconcileImportedStatus } from "../services/linear/reconcileStatus.js";
 
 import type { HandlerContext } from "./context.js";
@@ -246,7 +247,7 @@ export async function syncLinearProjects(
             ),
             eq(workItems.externalProvider, "linear"),
           ),
-          columns: { id: true, status: true, agentTypeOverride: true, sourceMetadata: true },
+          columns: { id: true, status: true, agentTypeOverride: true, sourceMetadata: true, queueSortOrder: true },
         });
         const labelOverride = overrideFor(issue);
 
@@ -258,6 +259,11 @@ export async function syncLinearProjects(
           const patch: Partial<typeof workItems.$inferInsert> = {};
           const next = reconcileImportedStatus(existing.status, stateType);
           if (next) patch.status = next;
+
+          // Keep dispatch order in step with the tracker's priority so raising
+          // a card to Urgent actually moves it up Bob's queue.
+          const queueOrder = queueOrderForPriority(issue.priority);
+          if (existing.queueSortOrder !== queueOrder) patch.queueSortOrder = queueOrder;
 
           // Keep the label-driven agent override in sync. Only overrides Bob
           // set FROM a label are cleared when the label goes away — a manual
@@ -290,6 +296,7 @@ export async function syncLinearProjects(
           title: (issue.title || "Untitled").slice(0, 256),
           description: issue.description ?? null,
           status: mapLinearStatusToBob(stateType),
+          queueSortOrder: queueOrderForPriority(issue.priority),
           externalId: issue.id,
           externalProvider: "linear",
           externalUrl: issue.url,
