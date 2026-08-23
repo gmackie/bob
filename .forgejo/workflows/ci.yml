@@ -85,6 +85,9 @@ jobs:
       - name: Validate OODA durable-work rollout
         run: node --test scripts/verify-ooda-durable-work-rollout.test.mjs
 
+      - name: Validate Bob/OODA product boundary
+        run: node --test scripts/verify-product-boundary.test.mjs
+
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
 
       - name: Typecheck
