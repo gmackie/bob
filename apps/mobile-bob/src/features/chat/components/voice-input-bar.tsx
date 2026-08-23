@@ -19,6 +19,13 @@ interface VoiceInputBarProps {
   onSend: (text: string) => void;
   disabled?: boolean;
   onBargeIn?: () => Promise<void> | void;
+  /**
+   * Quote-reply: when set (and changed), opens the keyboard composer
+   * prefilled with this text — e.g. a "> quoted passage" block from an
+   * artifact. The caller should clear it after the draft is consumed.
+   */
+  quoteDraft?: { id: string; text: string } | null;
+  onQuoteDraftConsumed?: () => void;
 }
 
 const emptySnapshot: VoiceGestureSnapshot = {
@@ -27,13 +34,29 @@ const emptySnapshot: VoiceGestureSnapshot = {
   interimTranscript: "",
 };
 
-export function VoiceInputBar({ onSend, disabled = false, onBargeIn }: VoiceInputBarProps) {
+export function VoiceInputBar({
+  onSend,
+  disabled = false,
+  onBargeIn,
+  quoteDraft = null,
+  onQuoteDraftConsumed,
+}: VoiceInputBarProps) {
   const speech = useSpeechRecognition();
   const [snapshot, setSnapshot] = useState<VoiceGestureSnapshot>(emptySnapshot);
   const snapshotRef = useRef<VoiceGestureSnapshot>(emptySnapshot);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [reviewDraft, setReviewDraft] = useState<string | null>(null);
   const [panHandlers, setPanHandlers] = useState<GestureResponderHandlers>({});
+
+  // A new quote-reply draft opens the keyboard composer prefilled with it.
+  const lastQuoteIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!quoteDraft || quoteDraft.id === lastQuoteIdRef.current) return;
+    lastQuoteIdRef.current = quoteDraft.id;
+    setReviewDraft(quoteDraft.text);
+    setKeyboardOpen(true);
+    onQuoteDraftConsumed?.();
+  }, [quoteDraft, onQuoteDraftConsumed]);
 
   const setVoiceSnapshot = useCallback((nextSnapshot: VoiceGestureSnapshot) => {
     snapshotRef.current = nextSnapshot;
@@ -110,7 +133,13 @@ export function VoiceInputBar({ onSend, disabled = false, onBargeIn }: VoiceInpu
       <KeyboardInput
         key={reviewDraft ?? "keyboard"}
         initialValue={reviewDraft ?? ""}
-        reviewLabel={reviewDraft ? "Check the transcript before sending" : undefined}
+        reviewLabel={
+          reviewDraft
+            ? reviewDraft.startsWith("> ")
+              ? "Replying to a passage"
+              : "Check the transcript before sending"
+            : undefined
+        }
         onSend={(text) => {
           onSend(text);
           setReviewDraft(null);
