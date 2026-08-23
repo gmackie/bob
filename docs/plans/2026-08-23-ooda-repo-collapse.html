@@ -316,7 +316,7 @@
 <header class="hero">
   <div class="wrap">
     <p class="kicker">Consolidation survey · gmackie/bob</p>
-    <h1>Collapse OODA into one tree<span class="badge">In progress</span></h1>
+    <h1>Collapse OODA into one tree<span class="badge">Done · 1 blocked</span></h1>
     <p class="lede">The merge already happened in one direction. Finish it: make the Bob monorepo a strict superset, retire the two superseded repos, and hold the product boundary with package walls instead of a second git remote.</p>
     <div class="meta">
       <span>2026-08-23</span>
@@ -349,7 +349,7 @@
     <p class="ct">Execution outcome · 2026-08-23</p>
     <p><strong>Phase 1 complete, gate green.</strong> The census immediately found a third delta the file-level comparison had missed — <code>writeFileOnce</code> and its consumer, the <code>editorial-sync</code> CLI command — plus a documentation gap where <code>db/client.ts</code> throws without <code>DATABASE_URL</code> that <code>.env.example</code> never mentioned. Verdict: PARITY, 305 standalone exports, 0 unclassified.</p>
     <p><strong>Phase 2 partial.</strong> Task 2.3 was stopped: the plan asserted <code>bob-cli</code> was retired, and it is not — <code>apps/desktop-bob</code> cross-compiles and bundles the Go CLI as its local daemon. <code>ooda-runner</code> replaced it server-side only. The external half of 2.1 and 2.2 (retiring the app record, pushing and archiving) is left for a human hand.</p>
-    <p><strong>Phase 3 complete.</strong> The one crossing import is closed, the guard is in CI and verified to fail on a reintroduced crossing, and the boundary is written down.</p>
+    <p><strong>Phase 3 complete, including the optional 3.4.</strong> The one crossing import is closed, the guard is in CI and verified to fail on a reintroduced crossing, the boundary is written down, and the mobile compatibility profile v1 ships with a golden corpus that carries the degraded states rather than only the happy path.</p>
   </div>
 
   <figure class="diagram">
@@ -572,8 +572,8 @@
 <section id="phase3">
   <h2><span class="ph">Phase 3</span>Make the boundary enforceable</h2>
   <p class="sub">~1 day, plus an optional deeper slice</p>
-  <div class="progress"><span class="done"></span><span class="done"></span><span class="done"></span><span></span></div>
-  <p class="progress-label">3 / 4 — 3.4 remains optional</p>
+  <div class="progress"><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span></div>
+  <p class="progress-label">4 / 4 complete</p>
 
   <div class="col">
     <p>This is the part of the competing plan that was actually load-bearing, restated for one repo. The two-repo version bought boundary enforcement with a published contracts artifact and cross-repo CI. A guard script buys the same guarantee in an afternoon, and it fails at the moment of the bad import rather than at the next release.</p>
@@ -609,7 +609,7 @@
           <td><strong>Mobile compatibility profile v1 <em>(optional, larger)</em>.</strong> The strongest idea in the competing plan: one versioned profile every client advertises, plus a golden fixture corpus covering replay, stale, partial, unauthorized, cancellation and rollback. It belongs in <span class="p">packages/ooda/src/contracts/v1</span> next to the kernel, gated by the same guard — no cross-repo publishing needed.</td>
           <td><span class="p">packages/ooda/src/contracts/v1/</span><span class="p">packages/ooda/fixtures/mobile-v1/</span></td>
           <td>Negative tests reject unknown keys; fixture mutation test proves forbidden fields are rejected</td>
-          <td><span class="st opt">optional</span></td>
+          <td><span class="st done">done</span></td>
         </tr>
       </tbody>
     </table>
