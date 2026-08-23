@@ -24,7 +24,7 @@
 //    re-runs and the PR converges to a merge instead of sitting reviewed-but-
 //    stuck forever. Gated (repairEnabled) with per-PR + per-run guards.
 
-import { and, desc, eq, inArray, notLike } from "@bob/db";
+import { and, desc, eq, inArray, notLike, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import { chatConversations, pullRequests, taskRuns, workItems } from "@bob/db/schema";
 import {
@@ -40,6 +40,7 @@ import {
   getConnection,
 } from "../services/git/providerConnectionService";
 import { mirrorWorkItemEvent } from "../services/tracker/trackerMirror.js";
+import { pickHealthyAgent } from "../services/automation/pickHealthyAgent.js";
 
 // task_run statuses that mean a session is still in flight for a PR — for a
 // review, the verdict hasn't posted yet; for a repair, the fix hasn't landed —
@@ -82,6 +83,8 @@ export interface AutoMergeConfig {
    * unattended.
    */
   reviewAgentType?: string;
+  /** Fallback pool when the configured review/repair agent is unhealthy. */
+  agentCandidates?: string[];
   /** When true, dispatch reviews but never actually merge. */
   dryRun?: boolean;
   /**
@@ -309,6 +312,32 @@ export async function autoReviewAndMerge(
 
   const reviewerLogin = cfg.reviewerLogin ?? "bob-reviewer";
 
+  // Review and repair are pinned to one agent each. If that agent's creds die,
+  // every tick re-dispatches into an instant failure (392 burned review
+  // sessions on 2026-08-23) and the merge gate stays shut. Fall back to a
+  // healthy agent for this run; the configured one resumes as soon as it is.
+  const agentPool = cfg.agentCandidates ?? ["claude", "codex", "grok", "cursor"];
+  const sinceHealth = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const healthRows = await db
+    .select({
+      agent: chatConversations.agentType,
+      completed: sql<number>`count(*) filter (where ${chatConversations.status} = 'completed')::int`,
+      errored: sql<number>`count(*) filter (where ${chatConversations.status} in ('error','failed'))::int`,
+    })
+    .from(chatConversations)
+    .where(sql`${chatConversations.createdAt} >= ${sinceHealth}`)
+    .groupBy(chatConversations.agentType)
+    .catch(() => [] as { agent: string; completed: number; errored: number }[]);
+
+  const reviewPick = pickHealthyAgent(cfg.reviewAgentType ?? "codex", agentPool, healthRows);
+  const repairPick = pickHealthyAgent(cfg.repairAgentType ?? "codex", agentPool, healthRows);
+  if (reviewPick.fellBack || repairPick.fellBack) {
+    console.warn(
+      `[auto-merge] agent fallback — review:${reviewPick.agent}${reviewPick.fellBack ? ` (${reviewPick.reason})` : ""}` +
+        ` repair:${repairPick.agent}${repairPick.fellBack ? ` (${repairPick.reason})` : ""}`,
+    );
+  }
+
   for (const pr of openPrs) {
     const label = `${pr.remoteOwner}/${pr.remoteName}#${pr.number}`;
     try {
@@ -473,7 +502,7 @@ export async function autoReviewAndMerge(
             body: remote.body,
             reason,
           },
-          cfg.repairAgentType ?? "codex",
+          repairPick.agent,
         );
         if (!dispatched) {
           result.skipped++;
@@ -552,7 +581,7 @@ export async function autoReviewAndMerge(
             body: remote.body,
             reviewToken: cfg.reviewForgejoToken,
           },
-          cfg.reviewAgentType ?? "codex",
+          reviewPick.agent,
         );
         if (!dispatched) {
           result.skipped++;

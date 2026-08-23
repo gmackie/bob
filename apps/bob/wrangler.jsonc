@@ -75,9 +75,9 @@
     // per PR, one attempt per head SHA, a per-PR attempt cap, and a per-run
     // budget. Conservative budgets — repair mutates PR branches.
     "BOB_AUTO_REPAIR_ENABLED": "true",
-    "BOB_AUTO_REPAIR_AGENT": "codex",
+    "BOB_AUTO_REPAIR_AGENT": "claude",
     // Reviewer agent (default in code is codex; see codex note above).
-    "BOB_AUTO_MERGE_REVIEW_AGENT": "codex",
+    "BOB_AUTO_MERGE_REVIEW_AGENT": "claude",
     "BOB_AUTO_REPAIR_MAX_PER_RUN": "3",
     "BOB_AUTO_REPAIR_MAX_ATTEMPTS_PER_PR": "3",
     // Deploy-stage tracker (2026-08-23): after a merge, read the repo's
