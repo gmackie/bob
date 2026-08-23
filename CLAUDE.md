@@ -95,6 +95,30 @@ Per-area migrations onto gmacko's stack (auth, db, realtime, etc.) land incremen
 
 The 6 pre-existing Bob test failures (`@bob/execution` taskExecutor + `@bob/api` cookies/featureBranch/work-items) are documented in `docs/plans/phase-7b/02-bob-probe.md` and are out of scope for 7B-1a.
 
+## Product boundary (enforced)
+
+Bob and OODA are two products in one repo. The boundary is a package wall, checked by `scripts/verify-product-boundary.test.mjs` in CI:
+
+```
+packages/ooda/**  must not import  @bob/*
+packages/bob/**   must not import  @gmacko/ooda
+apps/**           may import both — composition lives here
+```
+
+- `packages/ooda` owns deliberation, memory, provenance, proposals, research, vault, oracle.
+- `packages/bob` owns work items, execution, runs, PRs, projects, ForgeGraph.
+- `packages/core` owns shared infrastructure and no domain nouns from either side.
+
+**There is no allowlist** — the correct number of exceptions is zero. If a leaf package needs the other side: move it to `@gmacko/core` if it is infrastructure (see `@gmacko/core/telemetry`), go through `@gmacko/ooda/contracts/v1` + `src/integrations/` if it is a cross-product call, or compose it in `apps/*`.
+
+Durable or externally-visible action crosses via **proposals** — immutable payload digest, named owner, expiry, consequence, rollback, single-use approval. Workers get scratch capabilities, never durable writes.
+
+Full rationale: `docs/architecture/product-boundary.md`.
+
+The standalone `ooda` repo was archived 2026-08-23; OODA is developed here. Parity evidence: `docs/migrations/ooda-fold-parity.json`.
+
+**`bob-cli` is not retired.** `apps/ooda-runner` replaced it as the *server-side* daemon, but `apps/desktop-bob` still cross-compiles and bundles the Go CLI (`scripts/build-daemon.mjs`, `electron-builder.yml`). Two daemons exist for two deployment shapes.
+
 ## Skill routing
 
 When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.
