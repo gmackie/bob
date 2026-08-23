@@ -1,4 +1,4 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
 import { LegendList } from "@legendapp/list";
 
@@ -22,6 +22,9 @@ interface MessageListProps {
   onOpenProposal?: (proposalId: string) => void;
   onOpenJob?: (jobId: string) => void;
 }
+
+/** Above this, collapse behind "Show full message" instead of blowing out the thread. */
+const COLLAPSE_THRESHOLD = 480;
 
 function formatTime(timestamp: string): string {
   const date = new Date(timestamp);
@@ -66,6 +69,14 @@ const MessageRow = memo(function MessageRow({
     canResearch && onResearch && canResearchConversationItem(item),
   );
   const isResearching = researchingItemId === item.id;
+  const [expanded, setExpanded] = useState(false);
+  const looksLikeRawOutput =
+    item.display.length > COLLAPSE_THRESHOLD && /^\s*[{[]/.test(item.display);
+  const isLong = item.display.length > COLLAPSE_THRESHOLD;
+  const showCollapsed = isLong && !expanded;
+  const visibleText = showCollapsed
+    ? `${item.display.slice(0, COLLAPSE_THRESHOLD).trimEnd()}…`
+    : item.display;
   return (
     <View className={`mb-3 ${isUser ? "items-end" : "items-start"}`}>
       <View
@@ -92,16 +103,41 @@ const MessageRow = memo(function MessageRow({
             {item.corrected ? " · edited" : ""}
           </Text>
         </View>
+        {looksLikeRawOutput ? (
+          <Text
+            className="mb-1 text-[10px] font-semibold uppercase tracking-wide"
+            style={{ color: isUser ? colors.primaryForeground : colors.muted }}
+          >
+            Raw agent output
+          </Text>
+        ) : null}
         <Text
-          className="text-sm leading-6"
-          style={{
-            color: isUser
-              ? colors.primaryForeground
-              : colors.secondaryForeground,
-          }}
+          className={looksLikeRawOutput ? "text-xs leading-5" : "text-sm leading-6"}
+          style={[
+            {
+              color: isUser
+                ? colors.primaryForeground
+                : colors.secondaryForeground,
+            },
+            looksLikeRawOutput ? { fontFamily: "Menlo" } : null,
+          ]}
         >
-          {item.display}
+          {visibleText}
         </Text>
+        {isLong ? (
+          <Pressable
+            onPress={() => setExpanded((value) => !value)}
+            accessibilityRole="button"
+            className="mt-2 self-start active:opacity-70"
+          >
+            <Text
+              className="text-xs font-semibold underline"
+              style={{ color: isUser ? colors.primaryForeground : colors.accent }}
+            >
+              {expanded ? "Show less" : "Show full message"}
+            </Text>
+          </Pressable>
+        ) : null}
         {status ? (
           <View className="mt-2 flex-row items-center justify-end gap-2">
             <Text
