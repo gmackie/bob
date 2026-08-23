@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { emitSkillfleetWorkflowEvent } from "../skillfleet-journal";
+import { emitSkillfleetWorkflowEvent } from "../journal";
 
 const temporaryDirectories: string[] = [];
 

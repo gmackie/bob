@@ -109,7 +109,7 @@ apps/**           may import both — composition lives here
 - `packages/bob` owns work items, execution, runs, PRs, projects, ForgeGraph.
 - `packages/core` owns shared infrastructure and no domain nouns from either side.
 
-**There is no allowlist** — the correct number of exceptions is zero. If a leaf package needs the other side: move it to `@gmacko/core` if it is infrastructure (see `@gmacko/core/telemetry`), go through `@gmacko/ooda/contracts/v1` + `src/integrations/` if it is a cross-product call, or compose it in `apps/*`.
+**There is no allowlist** — the correct number of exceptions is zero. If a leaf package needs the other side: move it to `@gmacko/core` if it is infrastructure (see `@gmacko/core/telemetry` and `@gmacko/core/skillfleet-bridge`), go through `@gmacko/ooda/contracts/v1` + `src/integrations/` if it is a cross-product call, or compose it in `apps/*`.
 
 Durable or externally-visible action crosses via **proposals** — immutable payload digest, named owner, expiry, consequence, rollback, single-use approval. Workers get scratch capabilities, never durable writes.
 
