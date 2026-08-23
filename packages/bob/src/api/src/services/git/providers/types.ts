@@ -66,6 +66,8 @@ export interface GitPullRequest {
 export interface CommitStatus {
   state: string;
   total: number;
+  /** Individual checks (CI jobs) behind the combined state, when the provider exposes them. */
+  statuses?: { context: string; state: string; targetUrl?: string | null }[];
 }
 
 /** A submitted PR review, used to detect whether we've already reviewed the

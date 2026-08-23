@@ -258,10 +258,20 @@ export function createGiteaClient(
       sha: string,
     ): Promise<CommitStatus> {
       // Forgejo's combined status: state is "" when no statuses exist yet.
-      const res = await request<{ state: string; total_count?: number }>(
-        `/repos/${owner}/${repo}/commits/${sha}/status`,
-      );
-      return { state: res.state || "pending", total: res.total_count ?? 0 };
+      const res = await request<{
+        state: string;
+        total_count?: number;
+        statuses?: { context?: string; status?: string; state?: string; target_url?: string | null }[] | null;
+      }>(`/repos/${owner}/${repo}/commits/${sha}/status`);
+      return {
+        state: res.state || "pending",
+        total: res.total_count ?? 0,
+        statuses: (res.statuses ?? []).map((s) => ({
+          context: s.context ?? "",
+          state: s.status ?? s.state ?? "pending",
+          targetUrl: s.target_url ?? null,
+        })),
+      };
     },
 
     async getPullRequestDiff(

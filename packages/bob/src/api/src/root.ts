@@ -7,6 +7,7 @@ import { captureRouter } from "./router/capture";
 import { chatRouter } from "./router/chat";
 import { checkpointRouter } from "./router/checkpoint";
 import { cookiesRouter } from "./router/cookies";
+import { cockpitRouter } from "./router/cockpit";
 import { dispatchRouter } from "./router/dispatch";
 import { eventRouter } from "./router/event";
 import { featureBranchRouter } from "./router/featureBranch";
@@ -57,6 +58,7 @@ const appRouterRecord = {
   checkpoint: checkpointRouter,
   comment: commentRouter,
   cookies: cookiesRouter,
+  cockpit: cockpitRouter,
   dispatch: dispatchRouter,
   event: eventRouter,
   featureBranch: featureBranchRouter,
