@@ -13,7 +13,7 @@ import type {
 import {
   emitSkillfleetWorkflowEvent,
   normalizeSkillfleetRuntime,
-} from "@gmacko/ooda/runner-protocol/skillfleet-journal";
+} from "@gmacko/core/skillfleet-bridge";
 import { bobRunReporterFromEnv, type BobRunReporter } from "./bob-run-reporter";
 import { EventBuffer } from "./event-buffer";
 import {

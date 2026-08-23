@@ -15,7 +15,7 @@ import { CapabilityRegistry } from "@gmacko/ooda/capability-registry";
 import {
   emitSkillfleetWorkflowEvent,
   normalizeSkillfleetRuntime,
-} from "@gmacko/ooda/runner-protocol/skillfleet-journal";
+} from "@gmacko/core/skillfleet-bridge";
 import { createThreadWorkspace } from "@gmacko/ooda/thread-workspace";
 import { resolveThreadPath } from "@gmacko/ooda/thread-model";
 

@@ -126,7 +126,28 @@ function collect(root, label) {
 }
 
 const standalone = collect(join(oodaRepo, "packages"), "ooda repo");
-const fold = collect(join(repoRoot, "packages", "ooda", "src"), "bob fold");
+
+/**
+ * The fold's surface spans two package roots, not one. Most of OODA landed in
+ * `packages/ooda`, but anything both products need is shared infrastructure and
+ * belongs in `@gmacko/core` — the Skillfleet workflow journal and the embedding
+ * telemetry span both live there. Scanning only `packages/ooda` would report a
+ * symbol as lost the moment it moved to its correct home.
+ */
+const foldRoots = [
+  join(repoRoot, "packages", "ooda", "src"),
+  join(repoRoot, "packages", "core", "src"),
+];
+const fold = foldRoots
+  .map((root) => collect(root, "bob fold"))
+  .reduce((merged, part) => {
+    for (const [name, locations] of part.symbols) {
+      if (!merged.symbols.has(name)) merged.symbols.set(name, new Set());
+      for (const location of locations) merged.symbols.get(name).add(location);
+    }
+    merged.files += part.files;
+    return merged;
+  });
 
 if (standalone.files === 0) {
   console.error(
@@ -157,7 +178,7 @@ const foldOnly = [...fold.symbols.keys()].filter(
 
 const report = {
   generatedFrom: {
-    fold: relative(repoRoot, fold.root),
+    fold: foldRoots.map((root) => relative(repoRoot, root)),
     standalone: oodaRepo,
   },
   method:

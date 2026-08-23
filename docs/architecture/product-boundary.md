@@ -27,9 +27,12 @@ crossing is a design conversation rather than a config edit. When a leaf
 package genuinely needs something from the other side, one of these is true:
 
 1. **It is infrastructure, not domain.** Move it to `@gmacko/core`.
-   `@gmacko/core/telemetry` exists for exactly this reason: OODA's oracle
-   emits embedding spans, the span helper lived in `@bob/telemetry`, and the
-   fix was to move the helper rather than to permit the import.
+   Two modules exist for exactly this reason. `@gmacko/core/telemetry`: OODA's
+   oracle emits embedding spans, the span helper lived in `@bob/telemetry`, and
+   the fix was to move the helper rather than permit the import.
+   `@gmacko/core/skillfleet-bridge`: both products emit workflow journal
+   records, so the journal belongs to neither — it sits in core and each
+   product tags its own `source`.
 2. **It is a cross-product call.** Go through the versioned contracts in
    `@gmacko/ooda/contracts/v1` and the adapters in
    `@gmacko/ooda/src/integrations/`, which speak HTTP and receipts, not
