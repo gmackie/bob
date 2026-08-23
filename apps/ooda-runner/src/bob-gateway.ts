@@ -10,6 +10,10 @@ import type {
   AdapterEvent,
   AdapterProcessHandle,
 } from "@gmacko/ooda/agent-adapters";
+import {
+  emitSkillfleetWorkflowEvent,
+  normalizeSkillfleetRuntime,
+} from "@gmacko/ooda/runner-protocol/skillfleet-journal";
 import { bobRunReporterFromEnv, type BobRunReporter } from "./bob-run-reporter";
 import { EventBuffer } from "./event-buffer";
 import {
@@ -965,6 +969,7 @@ export class BobGatewayConnector {
         .finishRun(bobRunId, "completed", { pullRequestUrl: prUrl ?? undefined })
         .catch(() => {});
       void this.reportToBizPulse(session, "completed", Date.now() - startTime);
+      void this.recordSkillfleetRun(session, "success", Date.now() - startTime);
       void this.reportOodaOutcome(session, "completed", {
         pullRequestUrl: prUrl,
         branch: worktree?.branch ?? null,
@@ -990,6 +995,7 @@ export class BobGatewayConnector {
       await this.bobReporter.pushLog(bobRunId, runOutput).catch(() => {});
       await this.bobReporter.finishRun(bobRunId, "failed", { error: errMsg }).catch(() => {});
       void this.reportToBizPulse(session, "failed", Date.now() - startTime);
+      void this.recordSkillfleetRun(session, "failure", Date.now() - startTime);
       void this.reportOodaOutcome(session, "failed");
     } finally {
       if (worktree) await this.removeWorktree(worktree).catch(() => {});
@@ -1031,6 +1037,7 @@ export class BobGatewayConnector {
       .finishRun(bobRunId, "failed", { reason: "stopped_by_user" })
       .catch(() => {});
     void this.reportToBizPulse(session, "failed", Date.now() - startTime);
+    void this.recordSkillfleetRun(session, "failure", Date.now() - startTime);
   }
 
   /** Detect the repo's default branch (origin/HEAD), falling back to main/master. */
@@ -1522,6 +1529,42 @@ export class BobGatewayConnector {
 
   private sendEvent(sessionId: string, eventType: string, direction: string, payload: Record<string, unknown>): void {
     this.sendDurable(sessionId, { type: "session_event", sessionId, eventType, direction, payload });
+  }
+
+  /**
+   * Append one digest-only `agent_run` record to the Skillfleet workflow
+   * journal. `source: "bob"` — this is the gateway path, so the work was
+   * claimed from Bob, not OODA; the collector validates source per adapter
+   * and silently drops records whose source does not match its expectation.
+   *
+   * Naturally dark: the emitter resolves its journal path from
+   * `SKILLFLEET_WORKFLOW_JOURNAL` (or the bob-specific override) and returns
+   * `disabled` when neither is set, so this is a no-op until someone opts in.
+   * Failure-isolated inside the emitter — a journal problem never reaches the
+   * run.
+   */
+  private async recordSkillfleetRun(
+    session: ServerSessionAvailable,
+    status: "success" | "failure",
+    durationMs: number,
+  ): Promise<void> {
+    await emitSkillfleetWorkflowEvent({
+      source: "bob",
+      identity: `${session.sessionId}:terminal`,
+      observedAt: new Date().toISOString(),
+      sessionId: session.sessionId,
+      // Digested by the emitter before it reaches disk, so the work-item key
+      // never lands in the journal in clear text.
+      projectId: session.identifier ?? null,
+      provenanceQuality: "direct",
+      kind: "agent_run",
+      payload: {
+        runtime: normalizeSkillfleetRuntime(session.agentType),
+        status,
+        durationMs,
+        turnCount: 1,
+      },
+    });
   }
 
   private async reportToBizPulse(
