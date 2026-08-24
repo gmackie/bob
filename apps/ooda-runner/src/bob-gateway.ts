@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { accessSync, constants as fsConstants, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { watchWorktree } from "./worktree-watch";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import WebSocket from "ws";
@@ -914,6 +915,20 @@ export class BobGatewayConnector {
     };
 
     const startTime = Date.now();
+    // Stream file-level progress to the cockpit while the agent works: a
+    // batched fs.watch on the worktree emits `file_changes` (touched paths,
+    // cumulative +/- vs base, last commit) every ~2 s. Best-effort — a watcher
+    // failure only means no live file heat for this session.
+    const stopWatch = worktree
+      ? watchWorktree({
+          path: worktree.path,
+          branch: worktree.branch,
+          baseBranch: worktree.baseBranch,
+          emit: (payload) =>
+            this.sendEvent(session.sessionId, "file_changes", "agent", payload as unknown as Record<string, unknown>),
+          log: (m) => console.log(m),
+        })
+      : null;
     try {
       if (adapter) {
         await this.runWithAdapter(session, adapter, workDir, prompt, collect, worktree);
@@ -992,6 +1007,7 @@ export class BobGatewayConnector {
       void this.reportToBizPulse(session, "failed", Date.now() - startTime);
       void this.reportOodaOutcome(session, "failed");
     } finally {
+      stopWatch?.();
       if (worktree) await this.removeWorktree(worktree).catch(() => {});
       this.activeSessions.delete(session.sessionId);
       this.sessionHandles.delete(session.sessionId);
