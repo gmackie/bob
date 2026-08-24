@@ -316,7 +316,7 @@
 <header class="hero">
   <div class="wrap">
     <p class="kicker">Consolidation survey · gmackie/bob</p>
-    <h1>Collapse OODA into one tree<span class="badge">In review · PR #156</span></h1>
+    <h1>Collapse OODA into one tree<span class="badge">Merged</span></h1>
     <p class="lede">The merge already happened in one direction. Finish it: make the Bob monorepo a strict superset, retire the two superseded repos, and hold the product boundary with package walls instead of a second git remote.</p>
     <div class="meta">
       <span>2026-08-23</span>
@@ -349,6 +349,7 @@
     <p class="ct">Execution outcome · 2026-08-23</p>
     <p><strong>Phase 1 complete, gate green.</strong> The census immediately found a third delta the file-level comparison had missed — <code>writeFileOnce</code> and its consumer, the <code>editorial-sync</code> CLI command — plus a documentation gap where <code>db/client.ts</code> throws without <code>DATABASE_URL</code> that <code>.env.example</code> never mentioned. Verdict: PARITY, 305 standalone exports, 0 unclassified.</p>
     <p><strong>Phase 2 partial.</strong> Task 2.3 was stopped: the plan asserted <code>bob-cli</code> was retired, and it is not — <code>apps/desktop-bob</code> cross-compiles and bundles the Go CLI as its local daemon. <code>ooda-runner</code> replaced it server-side only. The external half of 2.1 and 2.2 (retiring the app record, pushing and archiving) is left for a human hand.</p>
+    <p><strong>Merged 2026-08-24</strong> as #156 (<code>49ed2e68</code>), with #157 (<code>858ce93b</code>) fixing an unrelated cockpit typecheck error that was blocking every deploy in the repo. #142 closed as superseded.</p>
     <p><strong>Overlap found late.</strong> PR #142 had independently ported the same Skillfleet journal six days earlier, into <code>packages/core/src/skillfleet-bridge/</code>. Open PRs were not checked before porting. This work adopted that placement — it is the better one, and the one this repo's boundary doc argues for — while keeping two fixes #142 lacks: the call-site bug that permanently disables the journal, and correct <code>source</code> tagging for gateway-claimed work.</p>
     <p><strong>Phase 3 complete, including the optional 3.4.</strong> The one crossing import is closed, the guard is in CI and verified to fail on a reintroduced crossing, the boundary is written down, and the mobile compatibility profile v1 ships with a golden corpus that carries the degraded states rather than only the happy path.</p>
   </div>
