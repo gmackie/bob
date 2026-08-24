@@ -81,7 +81,7 @@ function minuteOfDayUtc(d: Date): number {
  */
 async function resolveConfig(
   fallback: AutoDrainOptions,
-): Promise<{ enabled: boolean; concurrency: number; dailyCap: number }> {
+): Promise<{ enabled: boolean; concurrency: number; dailyCap: number; disabledAgents: string[] }> {
   try {
     const row = await db.query.autoDrainConfig.findFirst();
     if (row) {
@@ -89,6 +89,7 @@ async function resolveConfig(
         enabled: row.enabled,
         concurrency: row.concurrency,
         dailyCap: row.dailyCap,
+        disabledAgents: row.disabledAgents,
       };
     }
   } catch {
@@ -98,6 +99,7 @@ async function resolveConfig(
     enabled: true,
     concurrency: fallback.concurrency,
     dailyCap: fallback.dailyCap,
+    disabledAgents: [],
   };
 }
 
@@ -112,8 +114,13 @@ export interface AutoDrainResult {
 export async function autoDrainBacklog(
   opts: AutoDrainOptions,
 ): Promise<AutoDrainResult> {
-  const agents = opts.agents?.length ? opts.agents : AGENT_ROTATION;
   const cfg = await resolveConfig(opts);
+  // Rotation = configured list minus the agents a human pulled via the cockpit
+  // (persisted on auto_drain_config; the transient health gate applies on top).
+  const configured = opts.agents?.length ? opts.agents : AGENT_ROTATION;
+  const manuallyDisabled = new Set(cfg.disabledAgents);
+  const filtered = configured.filter((a) => !manuallyDisabled.has(a));
+  const agents = filtered.length ? filtered : configured;
 
   if (!cfg.enabled) {
     return { dispatched: 0, running: 0, dispatchedToday: 0, items: [], reason: "disabled" };

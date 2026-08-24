@@ -11,6 +11,7 @@ import { and, desc, eq, gt, inArray, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
   chatConversations,
+  cockpitAudit,
   pullRequests,
   repositories,
   taskRuns,
@@ -202,10 +203,18 @@ export async function cockpitStatus(cfg: CockpitStatusConfig = {}): Promise<Cock
   const lastTickAt = toDate(lastRun[0]?.at);
 
   // --- agents
+  const manuallyDisabled = new Set(((cfgRow?.disabledAgents ?? [])));
   const verdicts = assessAgentHealth(rotation, healthRows.map((r) => ({ agent: r.agent, completed: r.completed, errored: r.errored })));
   const agents: AgentHealthChip[] = verdicts.map((v) => {
     const s = healthRows.find((r) => r.agent === v.agent);
-    return { agent: v.agent, completed: s?.completed ?? 0, errored: s?.errored ?? 0, healthy: v.healthy, reason: v.reason, inRotation: rotation.includes(v.agent) };
+    return {
+      agent: v.agent,
+      completed: s?.completed ?? 0,
+      errored: s?.errored ?? 0,
+      healthy: v.healthy && !manuallyDisabled.has(v.agent),
+      reason: manuallyDisabled.has(v.agent) ? "pulled from rotation (cockpit)" : v.reason,
+      inRotation: rotation.includes(v.agent) && !manuallyDisabled.has(v.agent),
+    };
   });
 
   // --- queue
@@ -379,6 +388,12 @@ export async function cockpitStatus(cfg: CockpitStatusConfig = {}): Promise<Cock
       for (const s of ss) agentBySession.set(s.id, s.agent);
     }
   }
+  const auditEv = await db
+    .select({ at: cockpitAudit.createdAt, action: cockpitAudit.action, target: cockpitAudit.target })
+    .from(cockpitAudit)
+    .where(gt(cockpitAudit.createdAt, since24h))
+    .catch(() => [] as { at: string; action: string; target: string | null }[]);
+
   const iso = (v: string | Date | null) => {
     const d = toDate(v);
     return (d ?? now).toISOString();
@@ -389,6 +404,7 @@ export async function cockpitStatus(cfg: CockpitStatusConfig = {}): Promise<Cock
     ...mergeEv.map((p) => ({ at: iso(p.at), kind: "merge" as const, agent: null, label: `${p.repo}#${p.number}`, url: p.url })),
     ...errEv.map((e) => ({ at: iso(e.at), kind: "failure" as const, agent: e.agent, label: (e.title ?? "").slice(0, 40) })),
     ...deployEv.map((d) => ({ at: iso(d.at), kind: d.title === "Deployed" ? ("deploy" as const) : ("deploy_failed" as const), agent: null, label: d.title ?? "deploy", url: d.url ?? undefined })),
+    ...auditEv.map((a) => ({ at: iso(a.at), kind: "human" as const, agent: null, label: `${a.action}${a.target ? ` ${a.target}` : ""}` })),
   ].sort((a, b) => a.at.localeCompare(b.at));
   const bucket = (ts: string) => Math.min(23, Math.max(0, 23 - Math.floor((now.getTime() - new Date(ts).getTime()) / 3600_000)));
   const spark = (kind: TimelineEvent["kind"][]) => {

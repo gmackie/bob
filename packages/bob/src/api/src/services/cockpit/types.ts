@@ -66,7 +66,7 @@ export interface AgentHealthChip {
 
 export interface TimelineEvent {
   at: string;
-  kind: "dispatch" | "pr" | "merge" | "deploy" | "deploy_failed" | "failure" | "review";
+  kind: "dispatch" | "pr" | "merge" | "deploy" | "deploy_failed" | "failure" | "review" | "human";
   agent: string | null;
   label: string;
   url?: string;

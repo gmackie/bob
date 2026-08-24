@@ -54,9 +54,23 @@ export const autoDrainConfig = pgTable("auto_drain_config", (t) => ({
   enabled: t.boolean().notNull().default(true),
   concurrency: t.integer().notNull().default(4),
   dailyCap: t.integer().notNull().default(20),
+  // Agents a human pulled from rotation via the cockpit (persists across
+  // deploys, unlike the transient health gate).
+  disabledAgents: t.jsonb().$type<string[]>().notNull().default([]),
   updatedAt: t
     .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
+}));
+
+// One row per cockpit mutation — who pressed what, on what. Rendered in the
+// cockpit timeline so human interventions are first-class history.
+export const cockpitAudit = pgTable("cockpit_audit", (t) => ({
+  id: t.uuid().notNull().primaryKey().defaultRandom(),
+  userId: t.text().notNull(),
+  action: t.varchar({ length: 40 }).notNull(),
+  target: t.text(),
+  payload: t.jsonb().$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: t.timestamp({ mode: "string", withTimezone: true }).notNull().defaultNow(),
 }));
 
 // Single-row runtime config for the ws-gateway trust machinery (heartbeat
