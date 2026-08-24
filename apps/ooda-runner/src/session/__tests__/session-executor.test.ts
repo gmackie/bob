@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach } from "vitest";
-import { mkdtempSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
@@ -300,5 +300,101 @@ describe("SessionExecutor", () => {
         onEvent: () => {},
       }),
     ).rejects.toThrow("Adapter crashed: out of memory");
+  });
+});
+
+describe("SessionExecutor Skillfleet journal", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+    tempDirs.length = 0;
+  });
+
+  const setup = () => {
+    const storageRoot = mkdtempSync(join(tmpdir(), "ooda-exec-journal-"));
+    tempDirs.push(storageRoot);
+    initVaultRepo(storageRoot);
+    return { storageRoot, journalPath: join(storageRoot, "workflows.jsonl") };
+  };
+
+  const readRecords = (journalPath: string) =>
+    readFileSync(journalPath, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+  it("records a successful run as ooda-sourced", async () => {
+    const { storageRoot, journalPath } = setup();
+
+    await new SessionExecutor({
+      adapter: new MockAdapter(),
+      storageRoot,
+      workflowJournal: { journalPath },
+    }).execute({
+      threadSlug: "journal-ok",
+      threadTitle: "Journal OK",
+      sessionId: "session_ok",
+      prompt: "Research sleep optimization",
+      toolProfileId: "research-light",
+      onEvent: () => {},
+    });
+
+    const records = readRecords(journalPath);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      source: "ooda",
+      kind: "agent_run",
+      payload: { status: "success", turnCount: 1 },
+    });
+    // The session id and thread slug are digested, never written in clear.
+    expect(readFileSync(journalPath, "utf8")).not.toContain("session_ok");
+    expect(readFileSync(journalPath, "utf8")).not.toContain("journal-ok");
+  });
+
+  it("records a failure when the adapter throws, and still rethrows", async () => {
+    const { storageRoot, journalPath } = setup();
+
+    await expect(
+      new SessionExecutor({
+        adapter: new ThrowingAdapter(),
+        storageRoot,
+        workflowJournal: { journalPath },
+      }).execute({
+        threadSlug: "journal-fail",
+        threadTitle: "Journal Fail",
+        sessionId: "session_fail",
+        prompt: "This will fail",
+        toolProfileId: "research-light",
+        onEvent: () => {},
+      }),
+    ).rejects.toThrow("Adapter crashed: out of memory");
+
+    expect(readRecords(journalPath)[0]).toMatchObject({
+      source: "ooda",
+      payload: { status: "failure" },
+    });
+  });
+
+  // The reason this port is safe to land: with nothing configured the emitter
+  // short-circuits before touching the filesystem, so the running system is
+  // unchanged until someone sets the journal env var.
+  it("writes nothing when the journal is unconfigured", async () => {
+    const { storageRoot, journalPath } = setup();
+
+    await new SessionExecutor({
+      adapter: new MockAdapter(),
+      storageRoot,
+      workflowJournal: { environment: {} },
+    }).execute({
+      threadSlug: "journal-off",
+      threadTitle: "Journal Off",
+      sessionId: "session_off",
+      prompt: "Research sleep optimization",
+      toolProfileId: "research-light",
+      onEvent: () => {},
+    });
+
+    expect(existsSync(journalPath)).toBe(false);
   });
 });

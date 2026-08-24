@@ -1,4 +1,4 @@
-import { traceEmbedding } from "@bob/telemetry";
+import { traceEmbedding } from "@gmacko/core/telemetry";
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMS = 1536;

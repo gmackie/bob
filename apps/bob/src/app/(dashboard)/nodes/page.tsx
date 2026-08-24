@@ -56,7 +56,7 @@ export default function NodesPage() {
             Nodes
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Machines running the bob daemon. Manage workspaces, repos, and agent capacity.
+            Machines running the ooda-runner agent daemon. Manage workspaces, repos, and agent capacity.
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

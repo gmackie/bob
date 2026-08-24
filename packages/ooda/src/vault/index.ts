@@ -5,7 +5,7 @@
 // imports are the low-friction path.
 export type { VaultConfig, VaultFile } from "./types";
 export { listFiles, readFile } from "./reader";
-export { writeFile, deleteFile } from "./writer";
+export { writeFile, writeFileOnce, deleteFile } from "./writer";
 export {
   isLocked,
   hasConflicts,

@@ -47,7 +47,6 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
-    "@bob/telemetry": "workspace:*",
     "@gmacko/core": "workspace:*",
     "@trpc/server": "catalog:",
     "drizzle-orm": "^0.45.2",

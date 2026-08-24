@@ -6,6 +6,7 @@ export * from "./host";
 export * from "./integrations";
 export * from "./jobs";
 export * from "./memory";
+export * from "./mobile-profile";
 export * from "./problems";
 export * from "./proposals";
 export * from "./rollout";

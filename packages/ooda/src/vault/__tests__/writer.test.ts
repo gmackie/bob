@@ -1,11 +1,16 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
 import matter from "gray-matter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { deleteFile, writeFile } from "../writer";
+import { deleteFile, writeFile, writeFileOnce } from "../writer";
 
 describe("writeFile", () => {
   let vaultPath: string;
@@ -55,9 +60,9 @@ describe("writeFile", () => {
   });
 
   it("rejects path traversal with ..", async () => {
-    await expect(
-      writeFile(vaultPath, "../escape.md", "evil"),
-    ).rejects.toThrow("Path traversal detected");
+    await expect(writeFile(vaultPath, "../escape.md", "evil")).rejects.toThrow(
+      "Path traversal detected",
+    );
   });
 
   it("rejects path traversal embedded in path", async () => {
@@ -94,8 +99,63 @@ describe("deleteFile", () => {
   });
 
   it("rejects path traversal", async () => {
+    await expect(deleteFile(vaultPath, "../escape.md")).rejects.toThrow(
+      "Path traversal detected",
+    );
+  });
+});
+
+describe("writeFileOnce", () => {
+  let vaultPath: string;
+
+  beforeEach(() => {
+    vaultPath = mkdtempSync(join(tmpdir(), "ooda-vault-writer-once-"));
+  });
+
+  afterEach(() => {
+    rmSync(vaultPath, { recursive: true, force: true });
+  });
+
+  it("creates a missing file and accepts an identical retry", async () => {
     await expect(
-      deleteFile(vaultPath, "../escape.md"),
+      writeFileOnce(vaultPath, "Content/packet.md", "same content"),
+    ).resolves.toBe("created");
+    await expect(
+      writeFileOnce(vaultPath, "Content/packet.md", "same content"),
+    ).resolves.toBe("unchanged");
+  });
+
+  it("refuses to replace a human-edited file", async () => {
+    writeFileSync(join(vaultPath, "packet.md"), "human revision");
+
+    await expect(
+      writeFileOnce(vaultPath, "packet.md", "generated scaffold"),
+    ).rejects.toThrow("Refusing to overwrite existing content");
+    expect(readFileSync(join(vaultPath, "packet.md"), "utf-8")).toBe(
+      "human revision",
+    );
+  });
+
+  it("never clobbers a concurrent writer", async () => {
+    const results = await Promise.allSettled([
+      writeFileOnce(vaultPath, "packet.md", "first candidate"),
+      writeFileOnce(vaultPath, "packet.md", "second candidate"),
+    ]);
+
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === "rejected"),
+    ).toHaveLength(1);
+    expect(["first candidate", "second candidate"]).toContain(
+      readFileSync(join(vaultPath, "packet.md"), "utf-8"),
+    );
+  });
+
+  it("keeps path traversal protections", async () => {
+    await expect(
+      writeFileOnce(vaultPath, "../outside.md", "content"),
     ).rejects.toThrow("Path traversal detected");
   });
 });

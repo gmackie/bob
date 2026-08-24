@@ -9,6 +9,8 @@ import { createThreadWorkspace } from "@gmacko/ooda/thread-workspace";
 import { readThreads, formatThreadList } from "./commands/threads";
 import { formatStatus } from "./commands/status";
 import { runExport } from "./commands/export";
+import { runEditorialSync } from "./commands/editorial-sync";
+import { runOutline } from "./commands/outline";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -88,6 +90,74 @@ async function main() {
       }
       await initVaultRepo(storageRoot, remoteUrl);
       console.log(`Vault initialized at ${storageRoot} with remote ${remoteUrl}`);
+      break;
+    }
+
+    case "outline": {
+      const sourceFiles = args.slice(1).filter((arg) => !arg.startsWith("--"));
+      if (sourceFiles.length === 0) {
+        console.error(
+          "Usage: ooda outline <capture.md> [capture.md...] [--context=<note.md>] [--thread=<slug>] [--json]",
+        );
+        process.exit(1);
+      }
+      const contextFiles = args
+        .filter((arg) => arg.startsWith("--context="))
+        .map((arg) => arg.slice("--context=".length));
+      const threadArg = args.find((arg) => arg.startsWith("--thread="));
+      const result = await runOutline({
+        storageRoot,
+        sourceFiles,
+        contextFiles,
+        threadSlug: threadArg?.slice("--thread=".length),
+      });
+
+      if (args.includes("--json")) {
+        console.log(JSON.stringify(result));
+      } else {
+        console.log(
+          `${result.status === "created" ? "Created" : "Kept existing"} outline: ${result.outlinePath}`,
+        );
+      }
+      break;
+    }
+
+    case "editorial-sync": {
+      const apiKey = process.env.BIZPULSE_API_KEY;
+      if (!apiKey) {
+        throw new Error(
+          "BIZPULSE_API_KEY is not set; create a write-scoped BizPulse API key for OODA.",
+        );
+      }
+      const limitArg = args.find((arg) => arg.startsWith("--limit="));
+      const limit = limitArg
+        ? Number(limitArg.slice("--limit=".length))
+        : undefined;
+      if (
+        limit !== undefined &&
+        (!Number.isInteger(limit) || limit < 1 || limit > 20)
+      ) {
+        throw new Error("--limit must be an integer between 1 and 20");
+      }
+      const result = await runEditorialSync({
+        apiUrl: process.env.BIZPULSE_API_URL ?? "https://bizpulse.cc",
+        apiKey,
+        ...(process.env.PERSONAL_WEBSITE_PATH
+          ? { websitePath: process.env.PERSONAL_WEBSITE_PATH }
+          : {}),
+        ...(process.env.PERSONAL_VAULT_PATH
+          ? { personalVaultPath: process.env.PERSONAL_VAULT_PATH }
+          : {}),
+        ...(limit === undefined ? {} : { limit }),
+      });
+      if (args.includes("--json")) {
+        console.log(JSON.stringify(result));
+      } else {
+        console.log(
+          `Editorial sync: ${result.claimed} claimed, ${result.succeeded} written, ${result.failed} failed.`,
+        );
+      }
+      if (result.failed > 0) process.exitCode = 1;
       break;
     }
 
@@ -253,6 +323,8 @@ Commands:
   ooda new <title>          Create a new thread
   ooda export <slug>        Export research brief
   ooda export <slug> --output=<path>  Export to file
+  ooda outline <capture.md>...  Build an outline bundle from captures
+  ooda editorial-sync       Claim + write weekly editorial exports
   ooda init <remote-url>    Initialize vault with ForgeGraph remote
   ooda sync                 Pull + push vault repo
   ooda migrate <remote-url>  Migrate per-thread repos to vault repo

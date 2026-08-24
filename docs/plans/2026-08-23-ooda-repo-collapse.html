@@ -1,0 +1,713 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OODA repo collapse — one tree, package walls</title>
+<style>
+  :root {
+    --ink:        #14181C;
+    --ink-2:      #3B444C;
+    --ink-3:      #6B757E;
+    --paper:      #EDEFEE;
+    --card:       #F7F8F7;
+    --rule:       #CFD5D3;
+    --rule-2:     #DFE3E1;
+    --navy:       #0F1B24;
+    --navy-2:     #16262F;
+    --orange:     #C64A15;
+    --orange-lt:  #F2A063;
+    --teal:       #16645E;
+    --teal-wash:  #DCE9E6;
+    --orange-wash:#F7E2D6;
+    --grey-wash:  #E2E6E4;
+
+    --display: "Futura", "Avenir Next", "Trebuchet MS", "Gill Sans", sans-serif;
+    --body: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --mono: Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.6;
+  }
+
+  .wrap { max-width: 60rem; margin: 0 auto; padding: 0 1.5rem 6rem; }
+  .col  { max-width: 44rem; }
+
+  /* ---------- hero: surveyor's grid ---------- */
+
+  header.hero {
+    background:
+      repeating-linear-gradient(0deg, transparent 0 39px, rgba(242,160,99,.10) 39px 40px),
+      repeating-linear-gradient(90deg, transparent 0 39px, rgba(242,160,99,.10) 39px 40px),
+      linear-gradient(155deg, var(--navy) 0%, var(--navy-2) 62%, #23343A 100%);
+    color: #F0EDE7;
+    padding: 4rem 0 3rem;
+    border-bottom: 4px solid var(--orange);
+  }
+  header.hero .wrap { padding-bottom: 0; }
+
+  .kicker {
+    font-family: var(--display);
+    font-size: .74rem;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--orange-lt);
+    margin: 0 0 1.4rem;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2.1rem, 5.4vw, 3.3rem);
+    font-weight: 500;
+    letter-spacing: -.01em;
+    line-height: 1.08;
+    margin: 0 0 1rem;
+    max-width: 20ch;
+  }
+  .hero .lede {
+    font-size: 1.12rem;
+    color: #C4CBCF;
+    max-width: 46rem;
+    margin: 0 0 1.8rem;
+  }
+  .meta {
+    font-family: var(--mono);
+    font-size: .76rem;
+    color: #8FA0A8;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem 1.4rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid rgba(255,255,255,.12);
+  }
+  .badge {
+    display: inline-block;
+    font-family: var(--display);
+    font-size: .7rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    padding: .34rem .7rem;
+    background: var(--orange);
+    color: #fff;
+    vertical-align: .28em;
+    margin-left: .6rem;
+  }
+
+  /* ---------- stat tiles ---------- */
+
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: 1px;
+    background: rgba(255,255,255,.14);
+    margin: 2rem 0 0;
+    border: 1px solid rgba(255,255,255,.14);
+  }
+  .tile { background: var(--navy); padding: 1.1rem 1.1rem 1.2rem; }
+  .tile .n {
+    font-family: var(--display);
+    font-size: 2rem;
+    line-height: 1;
+    color: var(--orange-lt);
+    font-variant-numeric: tabular-nums;
+  }
+  .tile .l {
+    font-family: var(--display);
+    font-size: .66rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: #8FA0A8;
+    margin-top: .5rem;
+  }
+
+  /* ---------- body ---------- */
+
+  section { padding-top: 3.2rem; }
+
+  h2 {
+    font-family: var(--display);
+    font-size: 1.5rem;
+    font-weight: 500;
+    letter-spacing: .01em;
+    margin: 0 0 .2rem;
+    padding-top: 1rem;
+    border-top: 2px solid var(--ink);
+  }
+  h2 .ph {
+    font-size: .68rem;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--orange);
+    display: block;
+    margin-bottom: .5rem;
+  }
+  h3 {
+    font-family: var(--display);
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    margin: 2rem 0 .6rem;
+    color: var(--ink-2);
+  }
+  .sub { color: var(--ink-3); font-family: var(--display); font-size: .84rem; letter-spacing: .04em; margin: 0 0 1.4rem; }
+  p { margin: 0 0 1rem; }
+
+  code, .p {
+    font-family: var(--mono);
+    font-size: .84em;
+    background: var(--grey-wash);
+    padding: .08em .34em;
+    border-radius: 2px;
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+  pre {
+    font-family: var(--mono);
+    font-size: .8rem;
+    line-height: 1.55;
+    background: var(--navy);
+    color: #D6DEE2;
+    padding: 1.1rem 1.2rem;
+    overflow-x: auto;
+    border-left: 3px solid var(--orange);
+    margin: 1.2rem 0;
+  }
+  pre code { background: none; padding: 0; color: inherit; white-space: pre; font-size: 1em; }
+
+  ul.plain { padding-left: 1.2rem; margin: 1rem 0; }
+  ul.plain li { margin-bottom: .5rem; }
+  ul.plain li::marker { color: var(--orange); }
+
+  .two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 1.4rem 0;
+  }
+  .two > div { background: var(--card); padding: 1.2rem 1.3rem; }
+  .two h3 { margin-top: 0; }
+
+  /* ---------- tables ---------- */
+
+  .scroller { overflow-x: auto; border: 1px solid var(--rule); background: var(--card); margin: 1.3rem 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 46rem; font-size: .87rem; font-family: var(--display); }
+  th {
+    text-align: left;
+    font-size: .64rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding: .8rem .95rem;
+    border-bottom: 2px solid var(--ink);
+    white-space: nowrap;
+  }
+  td {
+    padding: .85rem .95rem;
+    border-bottom: 1px solid var(--rule-2);
+    vertical-align: top;
+    color: var(--ink-2);
+    line-height: 1.5;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.id { font-family: var(--mono); color: var(--orange); white-space: nowrap; font-size: .82rem; }
+  td strong { color: var(--ink); font-weight: 500; }
+  td .p { display: inline-block; margin-bottom: .18rem; white-space: normal; word-break: break-all; }
+
+  .st {
+    display: inline-block;
+    font-size: .6rem;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    padding: .2rem .45rem;
+    white-space: nowrap;
+  }
+  .st.todo    { background: var(--grey-wash); color: var(--ink-3); }
+  .st.gate    { background: var(--orange-wash); color: var(--orange); }
+  .st.opt     { background: var(--teal-wash); color: var(--teal); }
+  .st.done    { background: var(--teal); color: #fff; }
+  .st.blocked { background: var(--orange); color: #fff; }
+  .st.manual  { background: var(--orange-wash); color: var(--orange); }
+
+  /* ---------- progress ---------- */
+
+  .progress { display: flex; gap: 3px; margin: 1.2rem 0 .5rem; }
+  .progress span { height: 9px; flex: 1; background: var(--rule); }
+  .progress span.done { background: var(--teal); }
+  .progress-label { font-family: var(--display); font-size: .68rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+
+  /* ---------- callouts ---------- */
+
+  .callout {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--teal);
+    padding: 1.1rem 1.3rem;
+    margin: 1.4rem 0;
+  }
+  .callout.warn { border-left-color: var(--orange); }
+  .callout .ct {
+    font-family: var(--display);
+    font-size: .66rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--teal);
+    margin: 0 0 .5rem;
+  }
+  .callout.warn .ct { color: var(--orange); }
+  .callout p { margin: 0; font-size: .95rem; }
+  .callout p + p { margin-top: .65rem; }
+
+  /* ---------- diagram ---------- */
+
+  figure.diagram {
+    margin: 1.6rem 0 1rem;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    padding: 1.4rem 1rem;
+    overflow-x: auto;
+  }
+  figure.diagram svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+  figcaption { font-family: var(--display); font-size: .78rem; color: var(--ink-3); margin-top: .9rem; text-align: center; }
+
+  details {
+    border: 1px solid var(--rule);
+    background: var(--card);
+    padding: .7rem 1rem;
+    margin: 1rem 0;
+  }
+  details summary {
+    cursor: pointer;
+    font-family: var(--display);
+    font-size: .74rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  details[open] summary { margin-bottom: .8rem; }
+  details.mermaid-source pre { font-size: .74rem; }
+
+  footer {
+    margin-top: 3.5rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid var(--rule);
+    font-family: var(--display);
+    font-size: .76rem;
+    color: var(--ink-3);
+  }
+
+  @media (max-width: 700px) {
+    .two { grid-template-columns: 1fr; }
+    body { font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="kicker">Consolidation survey · gmackie/bob</p>
+    <h1>Collapse OODA into one tree<span class="badge">In review · PR #156</span></h1>
+    <p class="lede">The merge already happened in one direction. Finish it: make the Bob monorepo a strict superset, retire the two superseded repos, and hold the product boundary with package walls instead of a second git remote.</p>
+    <div class="meta">
+      <span>2026-08-23</span>
+      <span>gmackie/bob @ master</span>
+      <span>author: Claude (with Graham)</span>
+      <span>supersedes: ooda/docs/plans/2026-08-22-ooda-kernel-mobile-convergence</span>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="n">3</div><div class="l">Phases</div></div>
+      <div class="tile"><div class="n">14</div><div class="l">Tasks</div></div>
+      <div class="tile"><div class="n">2</div><div class="l">Repos retired</div></div>
+      <div class="tile"><div class="n">2</div><div class="l">Files to port</div></div>
+      <div class="tile"><div class="n">1</div><div class="l">Boundary leak</div></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section id="overview">
+  <h2><span class="ph">00</span>Overview</h2>
+  <div class="col">
+    <p>OODA's codebase was mechanically copied into the Bob monorepo in Phase 8A on 2026-04-25. Since then Bob's copy grew a kernel, an oracle, a <code>contracts/v1</code> layer and nine integration adapters that the standalone <code>ooda</code> repo never received. Production for <em>both</em> products now builds from the Bob monorepo, off one shared Postgres, served by one runner, with one mobile app.</p>
+    <p>What is left is not a migration — it is a cleanup with a gate in front of it. The standalone repo is ahead of the fold in exactly <strong>two files</strong>, both live features with real consumers. Port those, prove parity, then retire the surfaces that are quietly lying about being deployable.</p>
+    <p>The third phase is the part worth keeping from OODA's own convergence plan: the product boundary. It survives the collapse as a <em>package</em> wall — <code>packages/ooda</code> must not import <code>@bob/*</code>, <code>packages/bob</code> must not import <code>@gmacko/ooda</code>, and <code>apps/*</code> is the only place the two compose. That wall is already 99% standing: there is exactly one crossing import in the whole tree.</p>
+  </div>
+
+
+  <div class="callout">
+    <p class="ct">Execution outcome · 2026-08-23</p>
+    <p><strong>Phase 1 complete, gate green.</strong> The census immediately found a third delta the file-level comparison had missed — <code>writeFileOnce</code> and its consumer, the <code>editorial-sync</code> CLI command — plus a documentation gap where <code>db/client.ts</code> throws without <code>DATABASE_URL</code> that <code>.env.example</code> never mentioned. Verdict: PARITY, 305 standalone exports, 0 unclassified.</p>
+    <p><strong>Phase 2 partial.</strong> Task 2.3 was stopped: the plan asserted <code>bob-cli</code> was retired, and it is not — <code>apps/desktop-bob</code> cross-compiles and bundles the Go CLI as its local daemon. <code>ooda-runner</code> replaced it server-side only. The external half of 2.1 and 2.2 (retiring the app record, pushing and archiving) is left for a human hand.</p>
+    <p><strong>Overlap found late.</strong> PR #142 had independently ported the same Skillfleet journal six days earlier, into <code>packages/core/src/skillfleet-bridge/</code>. Open PRs were not checked before porting. This work adopted that placement — it is the better one, and the one this repo's boundary doc argues for — while keeping two fixes #142 lacks: the call-site bug that permanently disables the journal, and correct <code>source</code> tagging for gateway-claimed work.</p>
+    <p><strong>Phase 3 complete, including the optional 3.4.</strong> The one crossing import is closed, the guard is in CI and verified to fail on a reintroduced crossing, the boundary is written down, and the mobile compatibility profile v1 ships with a golden corpus that carries the degraded states rather than only the happy path.</p>
+  </div>
+
+  <figure class="diagram">
+    <svg id="plan-collapse" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" style="max-width: 1164.7px; background-color: transparent;" viewBox="0 0 1164.6953125 571" role="graphics-document document" aria-roledescription="flowchart-v2"><style>#plan-collapse{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#000000;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#plan-collapse .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#plan-collapse .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#plan-collapse .error-icon{fill:#552222;}#plan-collapse .error-text{fill:#552222;stroke:#552222;}#plan-collapse .edge-thickness-normal{stroke-width:1px;}#plan-collapse .edge-thickness-thick{stroke-width:3.5px;}#plan-collapse .edge-pattern-solid{stroke-dasharray:0;}#plan-collapse .edge-thickness-invisible{stroke-width:0;fill:none;}#plan-collapse .edge-pattern-dashed{stroke-dasharray:3;}#plan-collapse .edge-pattern-dotted{stroke-dasharray:2;}#plan-collapse .marker{fill:#666;stroke:#666;}#plan-collapse .marker.cross{stroke:#666;}#plan-collapse svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#plan-collapse p{margin:0;}#plan-collapse .label{font-family:"trebuchet ms",verdana,arial,sans-serif;color:#000000;}#plan-collapse .cluster-label text{fill:#333;}#plan-collapse .cluster-label span{color:#333;}#plan-collapse .cluster-label span p{background-color:transparent;}#plan-collapse .label text,#plan-collapse span{fill:#000000;color:#000000;}#plan-collapse .node rect,#plan-collapse .node circle,#plan-collapse .node ellipse,#plan-collapse .node polygon,#plan-collapse .node path{fill:#eee;stroke:#999;stroke-width:1px;}#plan-collapse .rough-node .label text,#plan-collapse .node .label text,#plan-collapse .image-shape .label,#plan-collapse .icon-shape .label{text-anchor:middle;}#plan-collapse .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#plan-collapse .rough-node .label,#plan-collapse .node .label,#plan-collapse .image-shape .label,#plan-collapse .icon-shape .label{text-align:center;}#plan-collapse .node.clickable{cursor:pointer;}#plan-collapse .root .anchor path{fill:#666!important;stroke-width:0;stroke:#666;}#plan-collapse .arrowheadPath{fill:#333333;}#plan-collapse .edgePath .path{stroke:#666;stroke-width:1px;}#plan-collapse .flowchart-link{stroke:#666;fill:none;}#plan-collapse .edgeLabel{background-color:white;text-align:center;}#plan-collapse .edgeLabel p{background-color:white;}#plan-collapse .edgeLabel rect{opacity:0.5;background-color:white;fill:white;}#plan-collapse .labelBkg{background-color:rgba(255, 255, 255, 0.5);}#plan-collapse .cluster rect{fill:hsl(0, 0%, 98.9215686275%);stroke:#707070;stroke-width:1px;}#plan-collapse .cluster text{fill:#333;}#plan-collapse .cluster span{color:#333;}#plan-collapse div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:12px;background:hsl(-160, 0%, 93.3333333333%);border:1px solid #707070;border-radius:2px;pointer-events:none;z-index:100;}#plan-collapse .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#000000;}#plan-collapse rect.text{fill:none;stroke-width:0;}#plan-collapse .icon-shape,#plan-collapse .image-shape{background-color:white;text-align:center;}#plan-collapse .icon-shape p,#plan-collapse .image-shape p{background-color:white;padding:2px;}#plan-collapse .icon-shape .label rect,#plan-collapse .image-shape .label rect{opacity:0.5;background-color:white;fill:white;}#plan-collapse .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#plan-collapse .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#plan-collapse .node .neo-node{stroke:#999;}#plan-collapse [data-look="neo"].node rect,#plan-collapse [data-look="neo"].cluster rect,#plan-collapse [data-look="neo"].node polygon{stroke:url(#plan-collapse-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#plan-collapse [data-look="neo"].swimlane.cluster rect{filter:none;}#plan-collapse [data-look="neo"].node path{stroke:url(#plan-collapse-gradient);stroke-width:1px;}#plan-collapse [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#plan-collapse [data-look="neo"].node .neo-line path{stroke:#999;filter:none;}#plan-collapse [data-look="neo"].node circle{stroke:url(#plan-collapse-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#plan-collapse [data-look="neo"].node circle .state-start{fill:#000000;}#plan-collapse [data-look="neo"].icon-shape .icon{fill:url(#plan-collapse-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#plan-collapse [data-look="neo"].icon-shape .icon-neo path{stroke:url(#plan-collapse-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#plan-collapse :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="plan-collapse_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="plan-collapse_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="plan-collapse_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="plan-collapse_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="plan-collapse_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="plan-collapse_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="plan-collapse_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="plan-collapse_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="plan-collapse_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="plan-collapse_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="plan-collapse_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="plan-collapse_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M626.641,285.5L635.887,285.5C645.133,285.5,663.625,285.5,681.451,285.5C699.276,285.5,716.435,285.5,725.014,285.5L733.594,285.5" id="plan-collapse-L_NOW_AFTER_0" class="edge-thickness-thick edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_NOW_AFTER_0" data-points="W3sieCI6NjI2LjY0MDYyNSwieSI6Mjg1LjV9LHsieCI6NjgyLjExNzE4NzUsInkiOjI4NS41fSx7IngiOjczNy41OTM3NSwieSI6Mjg1LjV9XQ==" data-look="classic" marker-end="url(#plan-collapse_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel" transform="translate(682.1171875, 285.5)"><g class="label" data-id="L_NOW_AFTER_0" transform="translate(-30.4765625, -12)"><foreignObject width="60.953125" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>3 phases</p></span></div></foreignObject></g></g></g><g class="nodes"><g class="root" transform="translate(729.59375, 0)"><g class="clusters"><g class="cluster" id="plan-collapse-AFTER" data-look="classic"><rect style="" x="8" y="8" width="419.1015625" height="555"/><g class="cluster-label" transform="translate(43.93359375, 8)"><foreignObject width="347.234375" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5;"><span class="nodeLabel"><p>After: one tree, boundary held by package walls</p></span></div></foreignObject></g></g></g><g class="edgePaths"><path d="M136.302,171.5L130.335,179.75C124.368,188,112.434,204.5,106.467,227.5C100.5,250.5,100.5,280,100.5,307.5C100.5,335,100.5,360.5,105.795,379.009C111.09,397.518,121.68,409.037,126.975,414.796L132.27,420.555" id="plan-collapse-L_K_APPS_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_K_APPS_0" data-points="W3sieCI6MTM2LjMwMTU2MjUsInkiOjE3MS41fSx7IngiOjEwMC41LCJ5IjoyMjF9LHsieCI6MTAwLjUsInkiOjMwOS41fSx7IngiOjEwMC41LCJ5IjozODZ9LHsieCI6MTM0Ljk3NzYyMTgyMjAzMzg4LCJ5Ijo0MjMuNX1d" data-look="classic" marker-end="url(#plan-collapse_flowchart-v2-pointEnd)"/><path d="M263.234,348.5L263.234,354.75C263.234,361,263.234,373.5,257.939,385.509C252.644,397.518,242.054,409.037,236.759,414.796L231.464,420.555" id="plan-collapse-L_B_APPS_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_B_APPS_0" data-points="W3sieCI6MjYzLjIzNDM3NSwieSI6MzQ4LjV9LHsieCI6MjYzLjIzNDM3NSwieSI6Mzg2fSx7IngiOjIyOC43NTY3NTMxNzc5NjYxMiwieSI6NDIzLjV9XQ==" data-look="classic" marker-end="url(#plan-collapse_flowchart-v2-pointEnd)"/><path d="M227.433,171.5L233.4,179.75C239.367,188,251.301,204.5,257.267,220.333C263.234,236.167,263.234,251.333,263.234,258.917L263.234,266.5" id="plan-collapse-L_K_B_0" class="edge-thickness-normal edge-pattern-dotted edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_K_B_0" data-points="W3sieCI6MjI3LjQzMjgxMjUsInkiOjE3MS41fSx7IngiOjI2My4yMzQzNzUsInkiOjIyMX0seyJ4IjoyNjMuMjM0Mzc1LCJ5IjoyNzAuNX1d" data-look="classic" marker-end="url(#plan-collapse_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="L_K_APPS_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_B_APPS_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(263.234375, 221)"><g class="label" data-id="L_K_B_0" transform="translate(-58.515625, -12)"><foreignObject width="117.03125" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>no cross imports</p></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="plan-collapse-flowchart-K-10" data-look="classic" transform="translate(181.8671875, 108.5)"><rect class="basic label-container" style="" x="-130" y="-63" width="260" height="126"/><g class="label" style="" transform="translate(-100, -48)"><rect/><foreignObject width="200" height="96"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>@gmacko/ooda<br />kernel, oracle, contracts/v1<br />deliberation, memory, provenance, proposals</p></span></div></foreignObject></g></g><g class="node default" id="plan-collapse-flowchart-APPS-12" data-look="classic" transform="translate(181.8671875, 474.5)"><rect class="basic label-container" style="" x="-130" y="-51" width="260" height="102"/><g class="label" style="" transform="translate(-100, -36)"><rect/><foreignObject width="200" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>apps/&#42;<br />the only place the two compose</p></span></div></foreignObject></g></g><g class="node default" id="plan-collapse-flowchart-B-11" data-look="classic" transform="translate(263.234375, 309.5)"><rect class="basic label-container" style="" x="-127.734375" y="-39" width="255.46875" height="78"/><g class="label" style="" transform="translate(-97.734375, -24)"><rect/><foreignObject width="195.46875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>@bob/&#42;<br />work items, execution, PRs</p></span></div></foreignObject></g></g></g></g><g class="root" transform="translate(0, 0)"><g class="clusters"><g class="cluster" id="plan-collapse-NOW" data-look="classic"><rect style="" x="8" y="8" width="618.640625" height="555"/><g class="cluster-label" transform="translate(161.8984375, 8)"><foreignObject width="310.84375" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5;"><span class="nodeLabel"><p>Today: two trees, one of them dead weight</p></span></div></foreignObject></g></g></g><g class="edgePaths"><path d="M253.722,123.5L240.268,131.75C226.814,140,199.907,156.5,186.454,172.333C173,188.167,173,203.333,173,210.917L173,218.5" id="plan-collapse-L_OR_ORD_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_OR_ORD_0" data-points="W3sieCI6MjUzLjcyMTUzMDcyMDMzOSwieSI6MTIzLjV9LHsieCI6MTczLCJ5IjoxNzN9LHsieCI6MTczLCJ5IjoyMjIuNX1d" data-look="classic" marker-end="url(#plan-collapse_flowchart-v2-pointEnd)"/><path d="M173,324.5L173,332.75C173,341,173,357.5,173,373.333C173,389.167,173,404.333,173,411.917L173,419.5" id="plan-collapse-L_ORD_BR_0" class="edge-thickness-normal edge-pattern-dotted edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_ORD_BR_0" data-points="W3sieCI6MTczLCJ5IjozMjQuNX0seyJ4IjoxNzMsInkiOjM3NH0seyJ4IjoxNzMsInkiOjQyMy41fV0=" data-look="classic" marker-end="url(#plan-collapse_flowchart-v2-pointEnd)"/><path d="M380.919,123.5L394.373,131.75C407.826,140,434.733,156.5,448.187,172.333C461.641,188.167,461.641,203.333,461.641,210.917L461.641,218.5" id="plan-collapse-L_OR_GHOST_0" class="edge-thickness-normal edge-pattern-dotted edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_OR_GHOST_0" data-points="W3sieCI6MzgwLjkxOTA5NDI3OTY2MSwieSI6MTIzLjV9LHsieCI6NDYxLjY0MDYyNSwieSI6MTczfSx7IngiOjQ2MS42NDA2MjUsInkiOjIyMi41fV0=" data-look="classic" marker-end="url(#plan-collapse_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="L_OR_ORD_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(173, 374)"><g class="label" data-id="L_ORD_BR_0" transform="translate(-49.484375, -12)"><foreignObject width="98.96875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>never merged</p></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(461.640625, 173)"><g class="label" data-id="L_OR_GHOST_0" transform="translate(-82.296875, -12)"><foreignObject width="164.59375" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>stale ForgeGraph stack</p></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="plan-collapse-flowchart-OR-0" data-look="classic" transform="translate(317.3203125, 84.5)"><rect class="basic label-container" style="" x="-101.5859375" y="-39" width="203.171875" height="78"/><g class="label" style="" transform="translate(-71.5859375, -24)"><rect/><foreignObject width="143.171875" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>ooda repo<br />15 packages, 4 apps</p></span></div></foreignObject></g></g><g class="node default" id="plan-collapse-flowchart-ORD-1" data-look="classic" transform="translate(173, 273.5)"><rect class="basic label-container" style="" x="-108.640625" y="-51" width="217.28125" height="102"/><g class="label" style="" transform="translate(-78.640625, -36)"><rect/><foreignObject width="157.28125" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>ahead by two files:<br />skillfleet-journal<br />create-outline-bundle</p></span></div></foreignObject></g></g><g class="node default" id="plan-collapse-flowchart-BR-3" data-look="classic" transform="translate(173, 474.5)"><rect class="basic label-container" style="" x="-130" y="-51" width="260" height="102"/><g class="label" style="" transform="translate(-100, -36)"><rect/><foreignObject width="200" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>bob monorepo<br />packages/ooda + packages/bob</p></span></div></foreignObject></g></g><g class="node default" id="plan-collapse-flowchart-GHOST-2" data-look="classic" transform="translate(461.640625, 273.5)"><rect class="basic label-container" style="" x="-130" y="-51" width="260" height="102"/><g class="label" style="" transform="translate(-100, -36)"><rect/><foreignObject width="200" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>ooda.gmac.io<br />deployment that no longer exists</p></span></div></foreignObject></g></g></g></g></g></g></g><defs><filter id="plan-collapse-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="plan-collapse-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><linearGradient id="plan-collapse-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="hsl(0, 0%, 83.3333333333%)" stop-opacity="1"/><stop offset="100%" stop-color="hsl(0, 0%, 88.9215686275%)" stop-opacity="1"/></linearGradient></svg>
+    <figcaption>Two trees today, one tree after — with the boundary moved from repo to package.</figcaption>
+  </figure>
+
+  <details class="mermaid-source">
+    <summary>Diagram source (mermaid)</summary>
+<pre><code>flowchart LR
+  subgraph NOW["Today: two trees, one of them dead weight"]
+    direction TB
+    OR["ooda repo&lt;br/&gt;15 packages, 4 apps"]
+    ORD["ahead by two files:&lt;br/&gt;skillfleet-journal&lt;br/&gt;create-outline-bundle"]
+    GHOST["ooda gmac io&lt;br/&gt;deployment that no longer exists"]
+    BR["bob monorepo&lt;br/&gt;packages/ooda + packages/bob"]
+    OR --&gt; ORD
+    ORD -.-&gt;|"never merged"| BR
+    OR -.-&gt;|"stale ForgeGraph stack"| GHOST
+  end
+
+  subgraph AFTER["After: one tree, boundary held by package walls"]
+    direction TB
+    K["@gmacko/ooda&lt;br/&gt;kernel, oracle, contracts v1&lt;br/&gt;deliberation, memory, provenance, proposals"]
+    B["@bob/star&lt;br/&gt;work items, execution, PRs"]
+    APPS["apps/star&lt;br/&gt;the only place the two compose"]
+    K --&gt; APPS
+    B --&gt; APPS
+    K -.-&gt;|"no cross imports"| B
+  end
+
+  NOW ==&gt;|"3 phases"| AFTER</code></pre>
+  </details>
+</section>
+
+<section id="goals">
+  <h2><span class="ph">01</span>Goals &amp; non-goals</h2>
+  <div class="two">
+    <div>
+      <h3>Goals</h3>
+      <ul class="plain">
+        <li>Bob's fold becomes a <strong>strict superset</strong> — nothing in the <code>ooda</code> repo is lost on the way out</li>
+        <li>Parity is <strong>proven and committed</strong> as evidence before anything is archived</li>
+        <li>No config anywhere claims to deploy a service that no longer exists</li>
+        <li>The Bob/OODA boundary is <strong>machine-checked in CI</strong>, not a convention</li>
+        <li>One page in <code>CLAUDE.md</code> says who owns what and how durable action crosses</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Non-goals</h3>
+      <ul class="plain">
+        <li>Merging the <em>products</em> — that stays a separate decision, downstream of this one</li>
+        <li>Phase 8B schema merge (OODA tables into <code>@gmacko/core/db</code>) — still deferred</li>
+        <li>Phase 8C tRPC → Effect-RPC conversion — untouched</li>
+        <li>Rewriting the host daemon in Go, or in anything — the language question stays open</li>
+        <li>A published cross-repo contracts artifact — the whole point is that there is no second repo to contract with</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="decisions">
+  <h2><span class="ph">02</span>Decisions this plan assumes</h2>
+  <div class="col">
+    <p>Each of these is a finding from the 2026-08-23 survey, not an assumption:</p>
+  </div>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>#</th><th>Decision</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="id">D1</td>
+          <td><strong>The Bob monorepo is the source of truth for OODA.</strong> Work happens in <span class="p">packages/ooda/</span>, not the standalone repo.</td>
+          <td>Kernel, oracle, <span class="p">contracts/v1</span>, integrations exist only in Bob. <span class="p">agent-adapters</span> 8×, <span class="p">db</span> 2.6×, <span class="p">api</span> 1.9× ahead.</td>
+        </tr>
+        <tr>
+          <td class="id">D2</td>
+          <td><strong>The boundary is a package wall, not a repo wall.</strong> Enforced by a CI guard in the existing <span class="p">node --test</span> style.</td>
+          <td>Exactly one crossing import exists today: <span class="p">packages/ooda/src/oracle/embeddings.ts</span> → <span class="p">@bob/telemetry</span>. Zero in the other direction.</td>
+        </tr>
+        <tr>
+          <td class="id">D3</td>
+          <td><strong>The ghost deployment is retired before the repo is archived</strong>, not after.</td>
+          <td>The <span class="p">ooda</span> repo still ships a production stack for <span class="p">ooda.gmac.io</span>, which is now served by the Bob repo's edge worker off Bob's database.</td>
+        </tr>
+        <tr>
+          <td class="id">D4</td>
+          <td><strong><span class="p">bob-cli</span> is retired, the language question is not.</strong> Archive the Go repo; re-evaluate Go vs Node separately.</td>
+          <td>Confirmed by Graham. Dormant since 2026-05-07; absent from the live path.</td>
+        </tr>
+        <tr>
+          <td class="id">D5</td>
+          <td><strong>Parity is proven before archiving</strong> — OODA's own Phase 0.2 semantic diff, run once, at the right moment.</td>
+          <td>That census was the good idea in the competing plan. It just belongs at the exit, not as the foundation of a six-week two-repo programme.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="phase1">
+  <h2><span class="ph">Phase 1</span>Make Bob a strict superset</h2>
+  <p class="sub">~1 day · nothing is deleted until this passes</p>
+  <div class="progress"><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span></div>
+  <p class="progress-label">5 / 5 complete</p>
+
+  <div class="col">
+    <p>Both deltas are self-contained modules with tests and real consumers. Neither is dead code, and one of them is a live telemetry gap: Skillfleet's collector reads a workflow journal that <em>only the standalone runner writes</em> — the runner actually doing the work emits nothing.</p>
+  </div>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>#</th><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="id">1.1</td>
+          <td><strong>Port the Skillfleet workflow journal.</strong> 357-line module + 126-line test. Swap <span class="p">zod/v4</span> → <span class="p">zod</span> to match the fold's convention (the only diff in the sibling <span class="p">events.ts</span>). Add a <span class="p">./runner-protocol/skillfleet-journal</span> subpath export.</td>
+          <td><span class="p">packages/ooda/src/runner-protocol/skillfleet-journal.ts</span><span class="p">…/__tests__/skillfleet-journal.test.ts</span><span class="p">packages/ooda/package.json</span></td>
+          <td><span class="p">pnpm --filter @gmacko/ooda test</span> — 126-line suite passes unchanged; a fresh test asserts <span class="p">{state:"disabled"}</span> when no journal path is configured</td>
+          <td><span class="st done">done</span></td>
+        </tr>
+        <tr>
+          <td class="id">1.2</td>
+          <td><strong>Wire the journal into the live runner.</strong> Mirror the standalone call site. <em>Bob's runner serves both products</em>, so the <span class="p">source</span> field must be <span class="p">"bob"</span> for gateway-claimed sessions and <span class="p">"ooda"</span> for OODA jobs — the collector validates source per adapter and drops mismatches.</td>
+          <td><span class="p">apps/ooda-runner/src/session/session-executor.ts</span><span class="p">apps/ooda-runner/src/agent-jobs/agent-job-executor.ts</span><span class="p">apps/ooda-runner/src/config.ts</span></td>
+          <td>Unit test per source value; local run with the journal env var set produces lines the collector's <span class="p">validateWorkflowJournalRecord</span> accepts</td>
+          <td><span class="st done">done</span></td>
+        </tr>
+        <tr>
+          <td class="id">1.3</td>
+          <td><strong>Port the outline bundle.</strong> 346-line module + test, plus the four missing index exports (<span class="p">createOutlineBundle</span> and its three types).</td>
+          <td><span class="p">packages/ooda/src/thread-workspace/create-outline-bundle.ts</span><span class="p">…/__tests__/create-outline-bundle.test.ts</span><span class="p">…/thread-workspace/index.ts</span></td>
+          <td><span class="p">pnpm --filter @gmacko/ooda test</span>; idempotency case from the ported suite passes</td>
+          <td><span class="st done">done</span></td>
+        </tr>
+        <tr>
+          <td class="id">1.4</td>
+          <td><strong>Port the <span class="p">outline</span> CLI command.</strong> Bob's <span class="p">ooda-cli</span> has export / migrate-to-vault / status / threads but not outline.</td>
+          <td><span class="p">apps/ooda-cli/src/commands/outline.ts</span><span class="p">apps/ooda-cli/src/index.ts</span></td>
+          <td>CLI smoke test against a temp storage root produces the bundle; <span class="p">turbo run typecheck</span></td>
+          <td><span class="st done">done</span></td>
+        </tr>
+        <tr>
+          <td class="id">1.5</td>
+          <td><strong>Parity census — the gate.</strong> Enumerate every exported symbol in the standalone repo's packages and assert each exists in the fold. Classify anything left as equal / Bob-ahead / OODA-ahead / intentionally dropped. Commit the report as migration evidence. Also hand-diff what a symbol census can't see: migrations and <span class="p">.env.example</span>.</td>
+          <td><span class="p">scripts/compare-ooda-fold-parity.mjs</span><span class="p">docs/migrations/ooda-fold-parity.json</span></td>
+          <td><strong>Gate:</strong> report contains zero unclassified exports and zero OODA-ahead entries. Phase 2 does not start until this is green.</td>
+          <td><span class="st done">done</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <p class="ct">Why the journal port is safe</p>
+    <p><code>emitSkillfleetWorkflowEvent</code> returns <code>{state: "disabled"}</code> and touches nothing when no journal path is configured, via option or env. Porting it is a strict no-op on the running system until someone deliberately sets the path — which is also what makes 1.2 landable ahead of any Skillfleet-side decision.</p>
+  </div>
+
+  <details>
+    <summary>What about @ooda/ui?</summary>
+    <p style="font-size:.94rem"><code>@gmacko/core/ui</code> is a strict superset of the standalone <code>@ooda/ui</code> — it has every component (button, dropdown-menu, field, input, label, separator, toast, theme) plus roughly fifteen more. The only file without a counterpart is <code>button.stories.tsx</code>. Port it if a Storybook setup exists in the monorepo; otherwise record it as an intentional drop in the parity report rather than leaving it unclassified.</p>
+  </details>
+</section>
+
+<section id="phase2">
+  <h2><span class="ph">Phase 2</span>Retire the superseded surfaces</h2>
+  <p class="sub">~half a day · order matters</p>
+  <div class="progress"><span class="done"></span><span class="done"></span><span></span><span class="done"></span><span class="done"></span></div>
+  <p class="progress-label">4 / 5 — 2.3 blocked, external half of 2.1/2.2 pending</p>
+
+  <div class="callout warn">
+    <p class="ct">Do 2.1 first</p>
+    <p>The standalone repo still carries a ForgeGraph app definition and a production stack describing a deployment of <code>ooda.gmac.io</code> with its own Postgres. That domain is currently served by the Bob repo's edge worker bound to Bob's database. Anyone who runs a deploy from the old app definition takes the live product down and points it at an empty database. Retire the deployment target <em>before</em> archiving the repo, not as part of it — an archived repo with a live app record is the same footgun, just harder to notice.</p>
+  </div>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>#</th><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="id">2.1</td>
+          <td><strong>Kill the ghost deployment.</strong> Retire the <span class="p">ooda</span> app record and its stages in ForgeGraph; delete the stack files and app config from the standalone repo so no copy of the definition survives.</td>
+          <td><span class="p">ooda/.forgegraph.yaml</span><span class="p">ooda/stacks/production.stack.yaml</span><span class="p">ooda/stacks/staging.stack.yaml</span></td>
+          <td><span class="p">forge app list</span> no longer offers <span class="p">ooda</span>; <span class="p">forge route list</span> shows the domain served only by the edge worker; the live site still answers</td>
+          <td><span class="st manual">files done · record needs you</span></td>
+        </tr>
+        <tr>
+          <td class="id">2.2</td>
+          <td><strong>Archive the standalone repo.</strong> Tag the tip <span class="p">pre-archive</span>, replace the README with a pointer to <span class="p">bob/packages/ooda</span> and the parity report, then mark the repo archived. Archive, never delete — the history is the audit trail behind the parity claim.</td>
+          <td><span class="p">ooda/README.md</span> · repo settings</td>
+          <td>Tag pushed and resolvable; README names the fold path; repo is read-only</td>
+          <td><span class="st manual">prepped · push+archive needs you</span></td>
+        </tr>
+        <tr>
+          <td class="id">2.3</td>
+          <td><strong>Archive <span class="p">bob-cli</span> — STOPPED, the premise was wrong.</strong> <span class="p">apps/desktop-bob</span> is an active consumer: <span class="p">scripts/build-daemon.mjs</span> cross-compiles <span class="p">github.com/blder/bob</span> for five targets into <span class="p">resources/bin/</span>, two darwin binaries are checked into git, <span class="p">electron-builder.yml</span> bundles that directory, and <span class="p">main.ts:207</span> spawns it on startup. <span class="p">ooda-runner</span> replaced bob-cli <em>server-side only</em>. Archiving would strand the desktop daemon.</td>
+          <td><span class="p">apps/desktop-bob/scripts/build-daemon.mjs</span><span class="p">apps/desktop-bob/electron-builder.yml</span><span class="p">apps/desktop-bob/src/main.ts</span></td>
+          <td>Blocked on resolving the desktop daemon question — see the sharpened Go/Node entry in open questions</td>
+          <td><span class="st blocked">blocked</span></td>
+        </tr>
+        <tr>
+          <td class="id">2.4</td>
+          <td><strong>Fix the copy that outlives the code.</strong> The Nodes page still reads "Machines running the bob daemon" — the exact phrase that sends the next person hunting for a Go binary.</td>
+          <td><span class="p">apps/bob/src/app/(dashboard)/nodes/page.tsx</span></td>
+          <td>Copy names the runner; grep for "bob daemon" across <span class="p">apps/</span> and <span class="p">docs/</span> returns only historical plans</td>
+          <td><span class="st done">done</span></td>
+        </tr>
+        <tr>
+          <td class="id">2.5</td>
+          <td><strong>Sweep the phantom workspace members.</strong> Five directories match the workspace globs but are empty or hold a single stale <span class="p">tsconfig.tsbuildinfo</span>. They read as real packages in every listing and cost orientation time on every visit.</td>
+          <td><span class="p">apps/mobile</span><span class="p">apps/server</span><span class="p">apps/web</span><span class="p">packages/contracts</span><span class="p">packages/ui</span></td>
+          <td><span class="p">pnpm install --frozen-lockfile</span> clean; <span class="p">pnpm exec turbo run typecheck --concurrency=1</span> unchanged</td>
+          <td><span class="st done">done</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="phase3">
+  <h2><span class="ph">Phase 3</span>Make the boundary enforceable</h2>
+  <p class="sub">~1 day, plus an optional deeper slice</p>
+  <div class="progress"><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span></div>
+  <p class="progress-label">4 / 4 complete</p>
+
+  <div class="col">
+    <p>This is the part of the competing plan that was actually load-bearing, restated for one repo. The two-repo version bought boundary enforcement with a published contracts artifact and cross-repo CI. A guard script buys the same guarantee in an afternoon, and it fails at the moment of the bad import rather than at the next release.</p>
+  </div>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>#</th><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="id">3.1</td>
+          <td><strong>Close the one leak.</strong> <span class="p">oracle/embeddings.ts</span> imports <span class="p">traceEmbedding</span> from <span class="p">@bob/telemetry</span>. Telemetry is infrastructure, not a Bob domain noun — move <span class="p">traceEmbedding</span> into <span class="p">@gmacko/core</span> and drop the <span class="p">@bob/telemetry</span> dependency from the package manifest.</td>
+          <td><span class="p">packages/ooda/src/oracle/embeddings.ts</span><span class="p">packages/core/src/telemetry/</span><span class="p">packages/ooda/package.json</span></td>
+          <td><span class="p">pnpm --filter @gmacko/ooda test</span>; manifest lists no <span class="p">@bob/*</span> dependency</td>
+          <td><span class="st done">done</span></td>
+        </tr>
+        <tr>
+          <td class="id">3.2</td>
+          <td><strong>Add the boundary guard.</strong> Written as a <span class="p">node --test</span> script beside the five existing <span class="p">verify-*.test.mjs</span> guards — CI already runs these, and the eslint fan-out is documented as memory-constrained, so this does not belong in a lint rule.</td>
+          <td><span class="p">scripts/verify-product-boundary.test.mjs</span><span class="p">.forgejo/workflows/ci.yml</span></td>
+          <td>Introduce a deliberate <span class="p">@bob/*</span> import inside <span class="p">packages/ooda</span> and prove CI fails; remove it and prove CI passes</td>
+          <td><span class="st done">done</span></td>
+        </tr>
+        <tr>
+          <td class="id">3.3</td>
+          <td><strong>Write the boundary down.</strong> One section in the root <span class="p">CLAUDE.md</span>: the kernel owns deliberation, memory, provenance and proposals; Bob owns work items, execution and PRs; <span class="p">apps/*</span> composes; durable or external action crosses via proposals, which is already the operating policy the Hermes doc encodes.</td>
+          <td><span class="p">CLAUDE.md</span><span class="p">docs/architecture/product-boundary.md</span></td>
+          <td>The guard script's allow/deny lists and the prose agree — a reviewer can check one against the other</td>
+          <td><span class="st done">done</span></td>
+        </tr>
+        <tr>
+          <td class="id">3.4</td>
+          <td><strong>Mobile compatibility profile v1 <em>(optional, larger)</em>.</strong> The strongest idea in the competing plan: one versioned profile every client advertises, plus a golden fixture corpus covering replay, stale, partial, unauthorized, cancellation and rollback. It belongs in <span class="p">packages/ooda/src/contracts/v1</span> next to the kernel, gated by the same guard — no cross-repo publishing needed.</td>
+          <td><span class="p">packages/ooda/src/contracts/v1/</span><span class="p">packages/ooda/fixtures/mobile-v1/</span></td>
+          <td>Negative tests reject unknown keys; fixture mutation test proves forbidden fields are rejected</td>
+          <td><span class="st done">done</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <details>
+    <summary>Guard script shape</summary>
+<pre><code>// packages/ooda/**  must not import  @bob/*
+// packages/bob/**   must not import  @gmacko/ooda*
+// apps/**           may import both — composition lives here
+
+const RULES = [
+  { root: "packages/ooda", forbid: /from\s+"@bob\// },
+  { root: "packages/bob",  forbid: /from\s+"@gmacko\/ooda/ },
+];</code></pre>
+    <p style="font-size:.94rem">Keep it a text scan over tracked sources rather than a resolver — it stays fast, has no build-order dependency, and the failure message can name the exact file and line the way the existing verify scripts do.</p>
+  </details>
+</section>
+
+<section id="risks">
+  <h2><span class="ph">03</span>Risks &amp; mitigations</h2>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Risk</th><th>Rating</th><th>Mitigation / stop condition</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Someone deploys the retired app definition over the live domain</strong></td>
+          <td>High impact, low odds</td>
+          <td>Task 2.1 runs first and deletes every copy of the definition. Stop condition: if the app record cannot be retired, do not archive the repo — a readable repo with a live record is safer than a hidden one.</td>
+        </tr>
+        <tr>
+          <td><strong>The parity census misses runtime-only divergence</strong> — migrations, env vars, systemd units, seed data</td>
+          <td>Medium</td>
+          <td>A symbol census sees exports, not configuration. Task 1.5 explicitly pairs it with a hand-diff of migrations and <span class="p">.env.example</span>. If either shows drift, it becomes a task before the gate closes.</td>
+        </tr>
+        <tr>
+          <td><strong>Someone else is working in the standalone repo</strong></td>
+          <td>Unknown — see open questions</td>
+          <td>Phase 2 is blocked on this answer, Phase 1 and 3 are not. If the answer is yes, Phase 1 still lands (it only adds), and the archive becomes a coordination step rather than a mechanical one.</td>
+        </tr>
+        <tr>
+          <td><strong>Journal wiring changes runner behavior</strong></td>
+          <td>Low</td>
+          <td>Disabled unless a journal path is configured; a test asserts the disabled path. Land 1.1 and 1.2 separately so a revert is one commit.</td>
+        </tr>
+        <tr>
+          <td><strong>Sweeping empty directories breaks a stale project reference</strong></td>
+          <td>Low</td>
+          <td>Serial typecheck across the workspace catches dangling tsconfig references; do 2.5 last in its phase so it is trivially revertible.</td>
+        </tr>
+        <tr>
+          <td><strong>The boundary guard becomes a rubber stamp</strong> — someone adds an allowlist entry instead of fixing the import</td>
+          <td>Medium, long-term</td>
+          <td>Keep the guard allowlist-free. There is exactly one crossing today and 3.1 removes it, so the correct state is zero exceptions — any proposed exception is a design conversation, not a config edit.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="verification">
+  <h2><span class="ph">04</span>Verification</h2>
+  <div class="col">
+    <p>Run per phase, not just at the end. The typecheck and lint fan-out is serialized deliberately — the CI notes record the runner hitting memory pressure with parallel eslint processes.</p>
+  </div>
+<pre><code># Phase 1 — nothing is lost
+pnpm --filter @gmacko/ooda test
+pnpm --filter @gmacko/ooda-runner test
+pnpm exec turbo run typecheck --concurrency=1
+node scripts/compare-ooda-fold-parity.mjs   # gate: zero OODA-ahead entries
+
+# Phase 2 — nothing is broken
+pnpm install --frozen-lockfile
+pnpm exec turbo run typecheck --concurrency=1
+forge app list && forge route list          # ghost deployment is gone, domain still served
+
+# Phase 3 — the wall holds
+node --test scripts/verify-product-boundary.test.mjs
+pnpm exec turbo run test --concurrency=1 -- --no-file-parallelism</code></pre>
+</section>
+
+<section id="open">
+  <h2><span class="ph">05</span>Open questions</h2>
+  <div class="col">
+    <ul class="plain">
+      <li><strong>Is anyone else working in the standalone repo?</strong> The April note said the OODA work was happening in parallel. This gates Phase 2 and nothing else — worth answering before starting, cheap to answer.</li>
+      <li><strong>Go or Node for the host daemon?</strong> Node won by accretion: the gateway client grew inside the runner because the adapters, job protocol and contracts were already there, and splitting it out means maintaining the session protocol twice. Go buys a single static binary with no runtime dependency — which only matters if the daemon ships to other people's machines. That makes it downstream of the multi-tenancy question, not an independent call.</li>
+      <li><strong>Does the public multi-tenant platform change the packaging answer?</strong> If OODA is meant to ship as a tenant-facing product rather than an internal tool, the packaging question is different — and it is the same question that decides the one above.</li>
+      <li><strong>Does the OODA schema stay separate inside the shared database?</strong> Phase 8B (merging OODA's tables into the core schema with tenant FKs) was planned in April and never landed. It is out of scope here, but leaving it undecided indefinitely is how the next fold starts.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  Derived from the 2026-08-23 repository survey: git history, deployment configuration, package manifests and cross-package import analysis. Line counts are non-blank source totals.
+</footer>
+
+</div>
+</body>
+</html>
