@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ClaudeAdapter } from "../claude-adapter";
 import type {
@@ -8,6 +8,20 @@ import type {
   AdapterProcessHandle,
   McpServerConfigLike,
 } from "../types";
+
+// These suites spawn a real Node subprocess per test (the fake CLIs below) and
+// assert on what happens after it exits. Vitest's 5s default has to cover
+// process spawn, the fake CLI's own delay, and teardown — fine on a laptop,
+// marginal on a loaded CI runner, where ci.yml already serializes work for
+// memory pressure. That produced a flake on 2026-08-24: the same commit passed
+// on one PR and timed out on another.
+//
+// Raising the ceiling does not weaken what these tests check. A genuine
+// regression fails an assertion (temp file still there, wrong exit code,
+// missing events), not the clock. Only a true hang hits the timeout, and that
+// is still caught — just later.
+vi.setConfig({ testTimeout: 20_000 });
+
 
 // Fake claude CLI: for each stream-json user message on stdin, emits a
 // `result` line after a short delay; exits when stdin closes (mirroring
