@@ -21,6 +21,12 @@ for name in HERMES_BOB_OPERATOR_URL HERMES_BOB_OPERATOR_API_KEY; do
   fi
 done
 
+# Non-secret usage-journal location for the privacy-safe hermes_usage producer.
+if ! sudo -u bob grep -Eq "^HERMES_OPERATOR_USAGE_JOURNAL=.+" "${HERMES_ENV}"; then
+  echo "HERMES_OPERATOR_USAGE_JOURNAL=/home/bob/.local/state/skillfleet-workflows/bob.jsonl" \
+    | sudo -u bob tee -a "${HERMES_ENV}" >/dev/null
+fi
+
 install -d -o bob -g bob -m 0750 "${PLUGIN_DIR}" "${SCRIPTS_DIR}"
 install -o bob -g bob -m 0644 \
   "${SHEPHERD_DIR}/plugins/hermes-operator/plugin.yaml" \
@@ -37,6 +43,12 @@ install -o bob -g bob -m 0755 \
 install -o bob -g bob -m 0755 \
   "${SCRIPT_DIR}/hermes-operator-job.py" \
   "${SCRIPTS_DIR}/hermes-operator-close.py"
+install -o bob -g bob -m 0755 \
+  "${SCRIPT_DIR}/hermes-operator-send.py" \
+  "${SCRIPTS_DIR}/hermes-operator-morning-send.py"
+install -o bob -g bob -m 0755 \
+  "${SCRIPT_DIR}/hermes-operator-send.py" \
+  "${SCRIPTS_DIR}/hermes-operator-close-send.py"
 
 install -o root -g root -m 0644 \
   "${SCRIPT_DIR}/hermes-operator-reconcile.service" \
