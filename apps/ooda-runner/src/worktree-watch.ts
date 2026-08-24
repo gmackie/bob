@@ -10,7 +10,8 @@
  * commit subject. Everything here is best-effort: a watcher error degrades to
  * no events, never to a failed session.
  */
-import { watch, type FSWatcher } from "node:fs";
+import { openSync, closeSync, readSync, statSync, watch, type FSWatcher } from "node:fs";
+import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -30,6 +31,7 @@ export const IGNORED_SEGMENTS = new Set([
   "target",
   "__pycache__",
   ".venv",
+  ".bob", // runner-internal (check events, shims) — never "file heat"
 ]);
 
 export interface NumstatEntry {
@@ -86,6 +88,8 @@ export interface WorktreeWatchOptions {
   baseBranch: string;
   intervalMs?: number;
   emit: (payload: FileChangesPayload) => void;
+  /** Structured bob-check events tailed from .bob/check-events.ndjson. */
+  emitCheck?: (event: Record<string, unknown>) => void;
   log?: (msg: string) => void;
 }
 
@@ -98,7 +102,36 @@ export function watchWorktree(opts: WorktreeWatchOptions): () => void {
   let flushing = false;
   let stopped = false;
 
+  // Tail .bob/check-events.ndjson (appended by the bob-check shim) regardless
+  // of fs events — cheap stat per tick, read only the new bytes.
+  const checkPath = join(opts.path, ".bob", "check-events.ndjson");
+  let checkOffset = 0;
+  const drainCheckEvents = () => {
+    if (!opts.emitCheck) return;
+    try {
+      const size = statSync(checkPath).size;
+      if (size <= checkOffset) return;
+      const fd = openSync(checkPath, "r");
+      const buf = Buffer.alloc(size - checkOffset);
+      readSync(fd, buf, 0, buf.length, checkOffset);
+      closeSync(fd);
+      checkOffset = size;
+      for (const line of buf.toString("utf8").split("\n")) {
+        const t = line.trim();
+        if (!t) continue;
+        try {
+          opts.emitCheck(JSON.parse(t) as Record<string, unknown>);
+        } catch {
+          /* partial line — will complete next tick */
+        }
+      }
+    } catch {
+      /* file absent until the agent first runs bob-check */
+    }
+  };
+
   const flush = async () => {
+    drainCheckEvents();
     if (flushing || stopped || pending.size === 0) return;
     flushing = true;
     const touched = rankTouched(pending);

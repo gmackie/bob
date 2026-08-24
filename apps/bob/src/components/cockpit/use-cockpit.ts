@@ -34,6 +34,8 @@ export interface TileFeed {
     topFiles: { path: string; added: number; removed: number }[];
     lastCommit: string | null;
   } | null;
+  /** bob-check per-phase state (typecheck/lint/test/build). */
+  check: Record<string, { status: string; passed?: number; failed?: number; total?: number; durationMs?: number }>;
   /** ms timestamp of the last event — drives the "streaming" pulse. */
   lastEventAt: number;
 }
@@ -41,7 +43,7 @@ export interface TileFeed {
 const TAIL_LINES = 8;
 
 function emptyFeed(): TileFeed {
-  return { tail: [], tool: null, files: null, lastEventAt: 0 };
+  return { tail: [], tool: null, files: null, check: {}, lastEventAt: 0 };
 }
 
 export function useCockpit(opts: { includeOoda: boolean }) {
@@ -92,6 +94,20 @@ export function useCockpit(opts: { includeOoda: boolean }) {
       feed.tail = [...feed.tail, `… ${payload.text}`].slice(-TAIL_LINES);
     } else if (event.eventType === "file_changes") {
       feed.files = payload as unknown as TileFeed["files"];
+    } else if (event.eventType === "check") {
+      const phase = typeof payload.phase === "string" ? payload.phase : "all";
+      if (phase !== "all") {
+        feed.check = {
+          ...feed.check,
+          [phase]: {
+            status: String(payload.status ?? "running"),
+            passed: typeof payload.passed === "number" ? payload.passed : undefined,
+            failed: typeof payload.failed === "number" ? payload.failed : undefined,
+            total: typeof payload.total === "number" ? payload.total : undefined,
+            durationMs: typeof payload.durationMs === "number" ? payload.durationMs : undefined,
+          },
+        };
+      }
     }
     feed.lastEventAt = Date.now();
     feedsRef.current.set(event.sessionId, feed);

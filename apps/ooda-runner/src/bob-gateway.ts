@@ -2,6 +2,8 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { accessSync, constants as fsConstants, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { watchWorktree } from "./worktree-watch";
+import { chmodSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import WebSocket from "ws";
@@ -832,6 +834,26 @@ export class BobGatewayConnector {
     return ok;
   }
 
+  /**
+   * Drop the bob-check shim into the worktree so ANY agent can run structured
+   * typecheck/lint/test/build (`./.bob/bin/bob-check`) whose progress streams
+   * to the cockpit as `check` events. Best-effort.
+   */
+  private installBobCheck(worktreePath: string): string | null {
+    try {
+      const cliPath = fileURLToPath(new URL("./bob-check-cli.mjs", import.meta.url));
+      const binDir = join(worktreePath, ".bob", "bin");
+      mkdirSync(binDir, { recursive: true });
+      const shim = join(binDir, "bob-check");
+      writeFileSync(shim, `#!/bin/sh\nexec node "${cliPath}" "$@"\n`);
+      chmodSync(shim, 0o755);
+      return shim;
+    } catch (err) {
+      console.warn(`[bob-gw] bob-check install failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+  }
+
   private async handleSessionAvailable(session: ServerSessionAvailable): Promise<void> {
     if (this.activeSessions.size >= this.config.maxConcurrent) {
       console.log(`[bob-gw] At capacity (${this.config.maxConcurrent}), skipping ${session.sessionId}`);
@@ -874,6 +896,7 @@ export class BobGatewayConnector {
         worktree = await this.setupWorktree(repoPath, session.branch, baseBranch);
         workDir = worktree.path;
         console.log(`[bob-gw] worktree ready: ${workDir} (branch ${worktree.branch})`);
+        this.installBobCheck(worktree.path);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[bob-gw] worktree setup failed: ${msg}`);
@@ -930,6 +953,7 @@ export class BobGatewayConnector {
           baseBranch: worktree.baseBranch,
           emit: (payload) =>
             this.sendEvent(session.sessionId, "file_changes", "agent", payload as unknown as Record<string, unknown>),
+          emitCheck: (event) => this.sendEvent(session.sessionId, "check", "agent", event),
           log: (m) => console.log(m),
         })
       : null;
@@ -1511,6 +1535,11 @@ export class BobGatewayConnector {
     }
     if (session.description) parts.push(`\nDescription:\n${session.description}`);
     if (session.branch) parts.push(`\nWork on branch: ${session.branch}`);
+    parts.push(
+      "\nVerification: run ./.bob/bin/bob-check after each meaningful change and before finishing. " +
+        "It auto-detects this repo's typecheck/lint/test/build and streams structured progress to the operator — " +
+        "prefer it over ad-hoc test commands.",
+    );
 
     const bizpulse = session.personaConfig?.metadata?.bizpulse as
       | { startupSlug?: string }

@@ -28,6 +28,8 @@ export type SessionEventType =
   | "thought"
   // Batched worktree file activity from the runner's fs.watch (cockpit file heat / diff stats).
   | "file_changes"
+  // Structured bob-check progress (phase/status/counts) from the worktree shim.
+  | "check"
   | "state"
   | "error"
   | "heartbeat"
