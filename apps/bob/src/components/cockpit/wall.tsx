@@ -7,6 +7,8 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { OpsButton, type CockpitActions } from "./controls";
+
 import type { CockpitPr, CockpitQueueCard, CockpitSession, CockpitStatus, TileFeed } from "./use-cockpit";
 
 const LANES = ["urgent", "high", "medium", "unset", "low"] as const;
@@ -33,7 +35,7 @@ function ago(seconds: number | null | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
-export function HeaderStrip({ status }: { status: CockpitStatus }) {
+export function HeaderStrip({ status, ops, soundEnabled, onToggleSound, onToggleMode, mode }: { status: CockpitStatus; ops: CockpitActions | null; soundEnabled: boolean; onToggleSound: () => void; onToggleMode: () => void; mode: "wall" | "ops" }) {
   const tickOk = status.loop.tickAgeSeconds != null && status.loop.tickAgeSeconds < 7 * 60;
   const tickWarn = status.loop.tickAgeSeconds != null && status.loop.tickAgeSeconds < 15 * 60;
   const syncOk = status.loop.syncAgeSeconds != null && status.loop.syncAgeSeconds < 30 * 60;
@@ -64,14 +66,26 @@ export function HeaderStrip({ status }: { status: CockpitStatus }) {
           <span
             key={a.agent}
             title={a.reason}
-            className={`rounded border px-2 py-0.5 text-xs ${a.healthy ? "border-white/15 text-white/70" : "border-red-500/60 text-red-400 line-through"}`}
+            onClick={ops ? () => ops.setAgentEnabled.mutate({ agent: a.agent, enabled: !a.inRotation }) : undefined}
+            className={`rounded border px-2 py-0.5 text-xs ${ops ? "cursor-pointer" : ""} ${a.healthy ? "border-white/15 text-white/70" : "border-red-500/60 text-red-400 line-through"}`}
             style={{ borderLeftColor: agentColor(a.agent), borderLeftWidth: 3 }}
           >
             {a.agent} {a.completed}✓{a.errored ? `/${a.errored}✗` : ""}
           </span>
         ))}
+        {ops && (
+          <OpsButton
+            label={status.loop.dispatchEnabled ? "pause dispatch" : "RESUME"}
+            tone={status.loop.dispatchEnabled ? "danger" : "go"}
+            confirm={status.loop.dispatchEnabled ? "pause?" : undefined}
+            busy={ops.setDispatchEnabled.isPending}
+            onClick={() => ops.setDispatchEnabled.mutate({ enabled: !status.loop.dispatchEnabled })}
+          />
+        )}
       </div>
       <div className={`ml-auto ${syncOk ? "text-white/40" : "text-amber-400"}`}>sync {ago(status.loop.syncAgeSeconds)}</div>
+      <button type="button" onClick={onToggleSound} title="sound" className="text-white/40 hover:text-white/80">{soundEnabled ? "🔊" : "🔇"}</button>
+      <button type="button" onClick={onToggleMode} className="rounded border border-white/20 px-2 py-0.5 font-mono text-[10px] uppercase text-white/60 hover:bg-white/10">{mode}</button>
       {status.alerts.length > 0 && (
         <div className="flex items-center gap-2">
           {status.alerts.slice(0, 3).map((al) => (
@@ -86,7 +100,7 @@ export function HeaderStrip({ status }: { status: CockpitStatus }) {
 }
 
 // ---------------------------------------------------------------------------
-export function QueueLanes({ status }: { status: CockpitStatus }) {
+export function QueueLanes({ status, ops }: { status: CockpitStatus; ops: CockpitActions | null }) {
   return (
     <div className="flex h-full flex-col gap-2 overflow-hidden">
       <div className="font-mono text-xs tracking-widest text-white/40">
@@ -103,7 +117,7 @@ export function QueueLanes({ status }: { status: CockpitStatus }) {
               </div>
               <div className="space-y-1">
                 {cards.slice(0, lane === "urgent" || lane === "high" ? 8 : 4).map((c) => (
-                  <QueueCardRow key={c.id} card={c} />
+                  <QueueCardRow key={c.id} card={c} ops={ops} />
                 ))}
               </div>
             </div>
@@ -114,7 +128,7 @@ export function QueueLanes({ status }: { status: CockpitStatus }) {
   );
 }
 
-function QueueCardRow({ card }: { card: CockpitQueueCard }) {
+function QueueCardRow({ card, ops }: { card: CockpitQueueCard; ops: CockpitActions | null }) {
   return (
     <div
       className="animate-[cockpit-enter_.5s_ease-out] rounded border border-white/10 bg-white/[.03] px-2 py-1.5 transition-all duration-500"
@@ -128,6 +142,9 @@ function QueueCardRow({ card }: { card: CockpitQueueCard }) {
         {card.repo && <span>{card.repo}</span>}
         {card.agentOverride && <span className="text-sky-300/80">→{card.agentOverride}</span>}
         <span className="ml-auto">{card.ageMinutes < 120 ? `${card.ageMinutes}m` : `${Math.round(card.ageMinutes / 60 / 24)}d`}</span>
+        {ops && card.lane !== "urgent" && (
+          <OpsButton label="↑ urgent" busy={ops.bumpPriority.isPending} onClick={() => ops.bumpPriority.mutate({ workItemId: card.id, priority: 1 })} />
+        )}
       </div>
     </div>
   );
@@ -138,10 +155,12 @@ export function AgentStage({
   sessions,
   feeds,
   feedVersion: _feedVersion,
+  ops,
 }: {
   sessions: CockpitSession[];
   feeds: Map<string, TileFeed>;
   feedVersion: number;
+  ops: CockpitActions | null;
 }) {
   // Auto-focus: the most recently active tile grows for 20 s, then rotates.
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -172,13 +191,13 @@ export function AgentStage({
   return (
     <div className="grid h-full auto-rows-fr grid-cols-2 gap-3 overflow-hidden">
       {sessions.slice(0, 6).map((s) => (
-        <AgentTile key={s.id} session={s} feed={feeds.get(s.id)} focused={s.id === focusId && sessions.length > 1} />
+        <AgentTile key={s.id} session={s} feed={feeds.get(s.id)} focused={s.id === focusId && sessions.length > 1} ops={ops} />
       ))}
     </div>
   );
 }
 
-function AgentTile({ session, feed, focused }: { session: CockpitSession; feed: TileFeed | undefined; focused: boolean }) {
+function AgentTile({ session, feed, focused, ops }: { session: CockpitSession; feed: TileFeed | undefined; focused: boolean; ops: CockpitActions | null }) {
   const streaming = feed != null && Date.now() - feed.lastEventAt < 5_000;
   const color = agentColor(session.agent);
   return (
@@ -191,6 +210,9 @@ function AgentTile({ session, feed, focused }: { session: CockpitSession; feed: 
         <span style={{ color }}>{session.agent}</span>
         <span className="rounded bg-white/10 px-1.5 text-[10px] uppercase text-white/60">{session.phase}</span>
         <span className="ml-auto text-white/40">{ago(session.elapsedSeconds)}</span>
+        {ops && (
+          <OpsButton label="stop" tone="danger" confirm="stop?" busy={ops.stopSession.isPending} onClick={() => ops.stopSession.mutate({ sessionId: session.id })} />
+        )}
       </div>
       <div className="mt-1 truncate text-sm text-white/90">{session.identifier ? `${session.identifier} · ` : ""}{session.title.replace(/^[0-9a-f-]{36}: /, "")}</div>
       <div className="truncate font-mono text-[10px] text-white/35">
@@ -231,7 +253,7 @@ const STAGE_CLASS: Record<string, string> = {
   skipped: "text-white/15",
 };
 
-export function PrPipelines({ status }: { status: CockpitStatus }) {
+export function PrPipelines({ status, ops }: { status: CockpitStatus; ops: CockpitActions | null }) {
   const rows = status.prs.active.slice(0, 10);
   return (
     <div className="flex h-full flex-col gap-2 overflow-hidden">
@@ -241,17 +263,17 @@ export function PrPipelines({ status }: { status: CockpitStatus }) {
       </div>
       <div className="flex-1 space-y-1.5 overflow-y-auto pr-1">
         {rows.map((pr) => (
-          <PrRow key={pr.id} pr={pr} />
+          <PrRow key={pr.id} pr={pr} ops={ops} />
         ))}
         {status.prs.parked.slice(0, 4).map((pr) => (
-          <PrRow key={pr.id} pr={pr} parked />
+          <PrRow key={pr.id} pr={pr} parked ops={ops} />
         ))}
       </div>
     </div>
   );
 }
 
-function PrRow({ pr, parked }: { pr: CockpitPr; parked?: boolean }) {
+function PrRow({ pr, parked, ops }: { pr: CockpitPr; parked?: boolean; ops: CockpitActions | null }) {
   return (
     <div className={`rounded border px-2 py-1.5 ${parked ? "border-amber-500/30 bg-amber-500/[.04]" : "border-white/10 bg-white/[.03]"}`}>
       <div className="flex items-baseline gap-2 text-xs">
@@ -270,6 +292,13 @@ function PrRow({ pr, parked }: { pr: CockpitPr; parked?: boolean }) {
         <span className="ml-2 truncate text-[10px] text-white/35">
           {parked && pr.parkedReason ? pr.parkedReason : pr.ci ? `ci ${pr.ci.state}${pr.review?.verdict ? ` · ${pr.review.verdict.toLowerCase()}` : ""}${pr.repair.attempts ? ` · repair ${pr.repair.attempts}/${pr.repair.cap}` : ""}` : ""}
         </span>
+        {ops && pr.stages.merge !== "done" && (
+          <span className="ml-auto flex gap-1">
+            <OpsButton label="review" busy={ops.triggerReview.isPending} onClick={() => ops.triggerReview.mutate({ pullRequestId: pr.id })} />
+            <OpsButton label="✓" tone="go" confirm="approve?" busy={ops.reviewPr.isPending} onClick={() => ops.reviewPr.mutate({ pullRequestId: pr.id, verdict: "APPROVE" })} />
+            <OpsButton label="✗" tone="danger" confirm="reject?" busy={ops.reviewPr.isPending} onClick={() => ops.reviewPr.mutate({ pullRequestId: pr.id, verdict: "REQUEST_CHANGES" })} />
+          </span>
+        )}
       </div>
     </div>
   );
