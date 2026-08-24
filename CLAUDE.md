@@ -117,7 +117,7 @@ Full rationale: `docs/architecture/product-boundary.md`.
 
 The standalone `ooda` repo was archived 2026-08-23; OODA is developed here. Parity evidence: `docs/migrations/ooda-fold-parity.json`.
 
-**`bob-cli` is not retired.** `apps/ooda-runner` replaced it as the *server-side* daemon, but `apps/desktop-bob` still cross-compiles and bundles the Go CLI (`scripts/build-daemon.mjs`, `electron-builder.yml`). Two daemons exist for two deployment shapes.
+**`bob-cli` is not retired.** `apps/ooda-runner` replaced it as the *server-side* daemon, but `apps/desktop-bob` still cross-compiles and bundles the Go CLI (`scripts/build-daemon.mjs`, `electron-builder.yml`). Two daemons exist for two deployment shapes, deliberately — see `docs/architecture/host-daemon.md`. Neither is legacy; a gateway protocol change lands in both.
 
 ## Skill routing
 

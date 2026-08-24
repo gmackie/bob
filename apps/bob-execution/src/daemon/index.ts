@@ -41,6 +41,7 @@ import { createOracleClient, fetchOracleSeed, buildSeedQuestion } from "../oracl
 import { readOracleConfig } from "../oracle-config.js";
 import { SessionAdmission } from "./session-admission.js";
 import { claudeOracleArgs } from "./oracle-args.js";
+import { recordBobSessionOutcome } from "./skillfleet-workflow.js";
 
 interface AgentExecutionResult {
   exitCode: number;
@@ -435,6 +436,7 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
 
   send({ type: "session_status", sessionId: session.sessionId, status: "running" });
   sendEvent(session.sessionId, "state", "system", { status: "running" });
+  const skillfleetStartedAt = Date.now();
 
   try {
     let executionResult: AgentExecutionResult | undefined;
@@ -462,6 +464,14 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
         : undefined,
     });
     sendEvent(session.sessionId, "state", "system", { status: "completed" });
+    await recordBobSessionOutcome({
+      sessionId: session.sessionId,
+      projectId: session.planningContext?.projectId ?? workDir,
+      agentType,
+      status: executionResult?.exitCode === 0 ? "success" : "failure",
+      durationMs: Date.now() - skillfleetStartedAt,
+      observedAt: new Date().toISOString(),
+    });
     console.log(`[executor] Session ${session.sessionId} completed`);
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -483,6 +493,14 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
     });
     send({ type: "session_status", sessionId: session.sessionId, status: "error" });
     sendEvent(session.sessionId, "error", "system", { code: "AGENT_ERROR", message: errMsg });
+    await recordBobSessionOutcome({
+      sessionId: session.sessionId,
+      projectId: session.planningContext?.projectId ?? workDir,
+      agentType,
+      status: "failure",
+      durationMs: Date.now() - skillfleetStartedAt,
+      observedAt: new Date().toISOString(),
+    });
   } finally {
     activeSessions.delete(session.sessionId);
     sessionAdmission.release(session.sessionId);
