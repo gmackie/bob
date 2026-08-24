@@ -81,7 +81,7 @@ async function loadCheckRollups(sessionIds: string[]): Promise<Map<string, Check
   const rows = await db
     .select({ sessionId: sessionEvents.sessionId, payload: sessionEvents.payload, createdAt: sessionEvents.createdAt })
     .from(sessionEvents)
-    .where(and(inArray(sessionEvents.sessionId, sessionIds), eq(sessionEvents.eventType, "check"), sql`${sessionEvents.payload}->>'phase' = 'all' and ${sessionEvents.payload} ? 'summary'`))
+    .where(and(inArray(sessionEvents.sessionId, sessionIds), eq(sessionEvents.eventType, "check"), sql`${sessionEvents.payload}->>'phase' = 'all' and ${sessionEvents.payload}->>'summary' is not null`))
     .orderBy(desc(sessionEvents.createdAt))
     .limit(sessionIds.length * 3);
   for (const r of rows) {
