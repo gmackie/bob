@@ -189,7 +189,7 @@ export function useCockpit(opts: { includeOoda: boolean }) {
     dirtyRef.current = true;
   }, []);
 
-  const { connectionState: wsState, subscribe, unsubscribe } = useSessionSocket({
+  const { connectionState: wsState, subscribe, unsubscribe, subscribeWorkspace } = useSessionSocket({
     gatewayUrl: gatewayInfo?.url ?? "",
     token: gatewayInfo?.token ?? "",
     enabled: !!gatewayInfo?.url && !!gatewayInfo?.token,
@@ -199,6 +199,13 @@ export function useCockpit(opts: { includeOoda: boolean }) {
   });
 
   const connectionState = wsState.status;
+
+  // Workspace broadcasts (session status changes, ForgeGraph CI/deploy events
+  // bridged by the gateway) only reach connections that subscribed — without
+  // this the wall would be pure 10 s polling.
+  useEffect(() => {
+    if (connectionState === "connected") subscribeWorkspace();
+  }, [connectionState, subscribeWorkspace]);
 
   // Subscribe to exactly the visible sessions; drop feeds for finished ones.
   const sessionIds = useMemo(() => (status?.sessions ?? []).map((s) => s.id), [status]);

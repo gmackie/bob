@@ -14,6 +14,43 @@ export interface QueueCard {
   ageMinutes: number;
 }
 
+/**
+ * Rollup of an agent's own verification (check-events v2 `summarizeChecks`),
+ * persisted by the runner as one `check` session event with phase "all" when
+ * the run ends. Survives reloads; the live per-test stream does not.
+ */
+export interface CheckPhaseRollup {
+  phase: string;
+  status: string; // running | passed | failed | skipped
+  durationMs?: number;
+  counts?: { passed: number; failed: number; skipped?: number; total?: number };
+  confidence?: string; // exact | scraped
+  failures: { name: string; suite?: string; message?: string }[];
+}
+export interface CheckRollup {
+  status: "passed" | "failed";
+  at: string;
+  phases: CheckPhaseRollup[];
+}
+
+/**
+ * ForgeGraph's view of CI for a commit: builds posted by the repo's own
+ * workflows via /api/fg/ci/report (gate semantics), plus the structured
+ * failure readout for a red build. Fills the gap when Forgejo has no commit
+ * statuses on the PR head.
+ */
+export interface FgCiEvidence {
+  app: string;
+  status: "pass" | "pending" | "fail" | "none";
+  hasCIHistory: boolean;
+  builds: { id: string; pipelineName: string; status: string; runUrl: string }[];
+  failures: {
+    headline: string;
+    tests: { name: string; suite?: string; message?: string }[];
+    errors: string[];
+  } | null;
+}
+
 export interface LiveSession {
   id: string;
   agent: string;
@@ -28,6 +65,8 @@ export interface LiveSession {
   elapsedSeconds: number;
   pr: { number: number; repo: string; url: string } | null;
   provider: string | null;
+  /** Persisted end-of-run verification rollup, if the agent ran bob-check. */
+  check: CheckRollup | null;
 }
 
 export type PipelineStageState = "done" | "active" | "failed" | "waiting" | "skipped";
@@ -50,6 +89,10 @@ export interface PrPipeline {
     deploy: PipelineStageState;
   };
   ci: { state: string; jobs: { name: string; status: string }[] } | null;
+  /** ForgeGraph builds for the head SHA (null when FG is unconfigured or the repo has no FG app). */
+  fgCi: FgCiEvidence | null;
+  /** The producing agent's own bob-check rollup at the end of its run. */
+  agentCheck: CheckRollup | null;
   review: { verdict: string | null; by: string | null } | null;
   repair: { attempts: number; cap: number; inFlight: boolean };
   parkedReason: string | null;

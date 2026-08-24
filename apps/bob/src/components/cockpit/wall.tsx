@@ -199,9 +199,26 @@ export function AgentStage({
   );
 }
 
+/** Persisted end-of-run rollup → the same per-phase shape the live feed builds. */
+function rollupToCheck(rollup: CockpitSession["check"]): TileFeed["check"] {
+  const out: TileFeed["check"] = {};
+  for (const ph of rollup?.phases ?? []) {
+    out[ph.phase] = {
+      status: ph.status,
+      passed: ph.counts?.passed,
+      failed: ph.counts?.failed,
+      total: ph.counts?.total,
+      durationMs: ph.durationMs,
+      failures: ph.failures.map((f) => f.name),
+    };
+  }
+  return out;
+}
+
 function AgentTile({ session, feed, focused, ops }: { session: CockpitSession; feed: TileFeed | undefined; focused: boolean; ops: CockpitActions | null }) {
   const streaming = feed != null && Date.now() - feed.lastEventAt < 5_000;
   const color = agentColor(session.agent);
+  const check = feed?.check && Object.keys(feed.check).length > 0 ? feed.check : session.check ? rollupToCheck(session.check) : null;
   return (
     <div
       className={`flex min-h-0 flex-col overflow-hidden rounded-lg border bg-black/40 p-3 transition-all duration-700 ${focused ? "col-span-2 row-span-2" : ""}`}
@@ -229,11 +246,11 @@ function AgentTile({ session, feed, focused, ops }: { session: CockpitSession; f
         {feed?.tool && <div className="text-sky-300/80">▸ {feed.tool}</div>}
         {!feed?.tail.length && !feed?.tool && <div className="text-white/25">{session.status}…</div>}
       </div>
-      {feed?.check && Object.keys(feed.check).length > 0 && (
+      {check && Object.keys(check).length > 0 && (
         <>
           <div className="mt-2 flex flex-wrap gap-1 font-mono text-[10px]">
             {(["typecheck", "lint", "test", "e2e", "build"] as const).map((ph) => {
-              const c = feed.check[ph];
+              const c = check[ph];
               if (!c || c.status === "skipped") return null;
               const cls = c.status === "passed" ? "border-emerald-500/50 text-emerald-300" : c.status === "failed" ? "border-red-500/60 text-red-300" : "animate-pulse border-sky-400/50 text-sky-300";
               // v2 events carry exact passed counts; v1 lines only total/failed
@@ -247,9 +264,9 @@ function AgentTile({ session, feed, focused, ops }: { session: CockpitSession; f
               );
             })}
           </div>
-          {Object.values(feed.check).some((c) => c.failures?.length) && (
+          {Object.values(check).some((c) => c.failures?.length) && (
             <div className="mt-1 font-mono text-[10px] text-red-300/90">
-              {Object.values(feed.check)
+              {Object.values(check)
                 .flatMap((c) => c.failures ?? [])
                 .slice(0, focused ? 4 : 2)
                 .map((name) => (
@@ -324,6 +341,7 @@ function PrRow({ pr, parked, ops }: { pr: CockpitPr; parked?: boolean; ops: Cock
         <span className="ml-2 truncate text-[10px] text-white/35">
           {parked && pr.parkedReason ? pr.parkedReason : pr.ci ? `ci ${pr.ci.state}${pr.review?.verdict ? ` · ${pr.review.verdict.toLowerCase()}` : ""}${pr.repair.attempts ? ` · repair ${pr.repair.attempts}/${pr.repair.cap}` : ""}` : ""}
         </span>
+        {pr.agentCheck && <AgentCheckChip rollup={pr.agentCheck} />}
         {ops && pr.stages.merge !== "done" && (
           <span className="ml-auto flex gap-1">
             <OpsButton label="review" busy={ops.triggerReview.isPending} onClick={() => ops.triggerReview.mutate({ pullRequestId: pr.id })} />
@@ -332,6 +350,52 @@ function PrRow({ pr, parked, ops }: { pr: CockpitPr; parked?: boolean; ops: Cock
           </span>
         )}
       </div>
+      {pr.fgCi && pr.fgCi.status !== "none" && <FgCiStrip ci={pr.fgCi} />}
+    </div>
+  );
+}
+
+/** The producing agent's own verification: `agent ✓ typecheck lint test 57/57`. */
+function AgentCheckChip({ rollup }: { rollup: NonNullable<CockpitPr["agentCheck"]> }) {
+  const ok = rollup.status === "passed";
+  const ran = rollup.phases.filter((p) => p.status !== "skipped");
+  return (
+    <span
+      title={ran.map((p) => `${p.phase}: ${p.status}${p.counts?.total != null ? ` ${p.counts.passed}/${p.counts.total}` : ""}`).join("\n")}
+      className={`ml-2 whitespace-nowrap rounded border px-1 text-[10px] ${ok ? "border-emerald-500/40 text-emerald-300/80" : "border-red-500/50 text-red-300/90"}`}
+    >
+      agent {ok ? "✓" : "✗"} {ran.map((p) => p.phase[0]).join("")}
+      {(() => {
+        const t = ran.find((p) => p.phase === "test" && p.counts?.total != null);
+        return t ? ` ${t.counts!.passed}/${t.counts!.total}` : "";
+      })()}
+    </span>
+  );
+}
+
+/** ForgeGraph builds for the head SHA, with the structured failure readout on red. */
+function FgCiStrip({ ci }: { ci: NonNullable<CockpitPr["fgCi"]> }) {
+  const tone = ci.status === "pass" ? "text-emerald-300/80" : ci.status === "fail" ? "text-red-300/90" : "animate-pulse text-sky-300/80";
+  return (
+    <div className="mt-1 font-mono text-[10px]">
+      <span className={tone}>
+        fg {ci.status === "pending" ? "building" : ci.status}
+      </span>
+      <span className="text-white/35">
+        {" "}
+        · {ci.builds.map((b) => `${b.pipelineName || "ci"} ${b.status}`).join(" · ")}
+      </span>
+      {ci.failures && (
+        <div className="mt-0.5 text-red-300/90">
+          <div className="truncate">{ci.failures.headline}</div>
+          {ci.failures.tests.slice(0, 3).map((t) => (
+            <div key={`${t.suite ?? ""}${t.name}`} className="truncate pl-2 text-red-300/70">✗ {t.name}{t.message ? ` — ${t.message}` : ""}</div>
+          ))}
+          {ci.failures.errors.slice(0, 2).map((e) => (
+            <div key={e} className="truncate pl-2 text-red-300/70">✗ {e}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

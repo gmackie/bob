@@ -89,6 +89,7 @@ const WORKSPACE_EVENT_TYPES = new Set<ServerWorkspaceInvalidationType>([
   "task_priority_changed",
   "task_status_changed",
   "work_item_dispatched",
+  "external_pipeline_changed",
 ]);
 
 export function createNudgeHandler(cfg: NudgeConfig) {

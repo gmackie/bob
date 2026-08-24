@@ -313,6 +313,7 @@ export class BobWsClient {
       case "task_priority_changed":
       case "task_status_changed":
       case "work_item_dispatched":
+      case "external_pipeline_changed":
         this.opts.onWorkspaceEvent?.(msg);
         break;
 

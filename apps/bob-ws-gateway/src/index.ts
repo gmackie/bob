@@ -13,6 +13,7 @@ import { PersistenceWriter, type SessionEventRecord } from "./persistence.js";
 import { OutboxWorker } from "./outbox.js";
 import { Relay } from "./relay.js";
 import { createNudgeHandler, createWorkspaceEventHandler, readJsonBody, bearerFrom } from "./nudge.js";
+import { startFgEventsBridge } from "./fg-events.js";
 import {
   assertNoAuthBypassInProduction,
   validateBrowserToken,
@@ -126,6 +127,29 @@ const relay = new Relay({
   validateBrowserToken,
   validateDaemonAuth,
 });
+
+// ForgeGraph → cockpit bridge (dark without FG_API_TOKEN). CI build, changeset,
+// deploy and alert events from FG's SSE feed become external_pipeline_changed
+// invalidations so every open wall refetches immediately.
+const FG_API_TOKEN = process.env.FG_API_TOKEN ?? "";
+const FG_API_URL = process.env.FG_API_URL ?? "https://forgegraf.com";
+let stopFgBridge: (() => void) | null = null;
+if (FG_API_TOKEN) {
+  stopFgBridge = startFgEventsBridge({
+    baseUrl: FG_API_URL,
+    token: FG_API_TOKEN,
+    onEvents: (events) => {
+      const sent = relay.broadcastGlobalInvalidation("external_pipeline_changed", {
+        source: "forgegraph",
+        types: events.map((e) => e.type),
+        events: events.slice(0, 20),
+      });
+      if (sent) console.log(`[fg-events] ${events.length} event(s) → ${sent} wall(s): ${events.map((e) => e.type).join(", ")}`);
+    },
+  });
+} else {
+  console.log("[fg-events] FG_API_TOKEN not set — ForgeGraph bridge off");
+}
 
 // Outbox worker: delivers transition pushes with retries; receipts cron
 // resolves downstream APNs/FCM failures and prunes dead tokens.
@@ -262,6 +286,7 @@ server.listen(PORT, () => {
 
 // Graceful shutdown
 async function shutdown(signal: string) {
+  stopFgBridge?.();
   console.log(`[ws-gateway] received ${signal}, shutting down`);
   outboxWorker.stop();
   server.close();

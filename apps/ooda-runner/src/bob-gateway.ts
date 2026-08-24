@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { accessSync, constants as fsConstants, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { watchWorktree } from "./worktree-watch";
+import { summarizeChecks, type CheckEvent } from "@forgegraph/check-events";
 import { chmodSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { homedir, hostname } from "node:os";
@@ -946,17 +947,43 @@ export class BobGatewayConnector {
     // batched fs.watch on the worktree emits `file_changes` (touched paths,
     // cumulative +/- vs base, last commit) every ~2 s. Best-effort — a watcher
     // failure only means no live file heat for this session.
-    const stopWatch = worktree
+    // Every check-events line the agent produces is forwarded live; the run
+    // also keeps them so the end-of-run rollup (summarizeChecks → one
+    // `check` event with phase "all") is persisted for the PR pipeline and
+    // for wall reloads that missed the stream.
+    const checkEvents: CheckEvent[] = [];
+    const watchHandle = worktree
       ? watchWorktree({
           path: worktree.path,
           branch: worktree.branch,
           baseBranch: worktree.baseBranch,
           emit: (payload) =>
             this.sendEvent(session.sessionId, "file_changes", "agent", payload as unknown as Record<string, unknown>),
-          emitCheck: (event) => this.sendEvent(session.sessionId, "check", "agent", event),
+          emitCheck: (event) => {
+            if (checkEvents.length < 20_000) checkEvents.push(event);
+            this.sendEvent(session.sessionId, "check", "agent", event as unknown as Record<string, unknown>);
+          },
           log: (m) => console.log(m),
         })
       : null;
+    const emitCheckSummary = () => {
+      try {
+        watchHandle?.drainChecks();
+        if (!checkEvents.length) return;
+        const summary = summarizeChecks(checkEvents.filter((e) => e.phase !== "all"));
+        this.sendEvent(session.sessionId, "check", "agent", {
+          v: 2,
+          phase: "all",
+          event: "run_finished",
+          at: new Date().toISOString(),
+          adapter: "runner",
+          status: summary.status,
+          summary,
+        });
+      } catch (err) {
+        console.warn(`[bob-gw] check summary failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    };
     try {
       if (adapter) {
         await this.runWithAdapter(session, adapter, workDir, prompt, collect, worktree);
@@ -968,6 +995,8 @@ export class BobGatewayConnector {
         await this.reportInterrupted(session, bobRunId, runOutput, startTime);
         return;
       }
+
+      emitCheckSummary();
 
       // Worktree path: push the branch and open a PR if commits were produced.
       let prUrl: string | null = null;
@@ -1028,6 +1057,7 @@ export class BobGatewayConnector {
         ? outputTail(runOutput)
         : "";
       const errMsg = tail ? `${baseMsg} — ${tail}` : baseMsg;
+      emitCheckSummary();
       console.error(`[bob-gw] Session ${session.sessionId} failed: ${errMsg}`);
       this.sendStatus(session.sessionId, "error", { code: "AGENT_ERROR", error: errMsg });
       this.sendEvent(session.sessionId, "error", "system", { code: "AGENT_ERROR", message: errMsg });
@@ -1037,7 +1067,7 @@ export class BobGatewayConnector {
       void this.recordSkillfleetRun(session, "failure", Date.now() - startTime);
       void this.reportOodaOutcome(session, "failed");
     } finally {
-      stopWatch?.();
+      watchHandle?.stop();
       if (worktree) await this.removeWorktree(worktree).catch(() => {});
       this.activeSessions.delete(session.sessionId);
       this.sessionHandles.delete(session.sessionId);
@@ -1537,8 +1567,9 @@ export class BobGatewayConnector {
     if (session.branch) parts.push(`\nWork on branch: ${session.branch}`);
     parts.push(
       "\nVerification: run ./.bob/bin/bob-check after each meaningful change and before finishing. " +
-        "It auto-detects this repo's typecheck/lint/test/build and streams structured progress to the operator — " +
-        "prefer it over ad-hoc test commands.",
+        "It auto-detects this repo's typecheck/lint/test/e2e/build (package.json scripts, justfile, Makefile, forge-ci.toml) " +
+        "and streams per-test progress to the operator — prefer it over ad-hoc test commands. " +
+        "You may pass phases to narrow it, e.g. `./.bob/bin/bob-check test`.",
     );
 
     const bizpulse = session.personaConfig?.metadata?.bizpulse as

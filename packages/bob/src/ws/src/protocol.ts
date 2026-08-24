@@ -344,7 +344,11 @@ export type ServerWorkspaceInvalidationType =
   | "session_event_appended"
   | "task_priority_changed"
   | "task_status_changed"
-  | "work_item_dispatched";
+  | "work_item_dispatched"
+  // An external pipeline (ForgeGraph CI build / changeset / deploy / alert)
+  // changed; payload = { source, type, data }. Bridged by the gateway from
+  // ForgeGraph's SSE feed so the cockpit refetches instead of waiting for a poll.
+  | "external_pipeline_changed";
 
 export interface ServerWorkspaceInvalidation {
   type: ServerWorkspaceInvalidationType;

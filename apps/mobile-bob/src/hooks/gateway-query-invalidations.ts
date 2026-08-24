@@ -33,6 +33,7 @@ const GATEWAY_EVENT_INVALIDATION_ROOTS = new Set([
 
 const GATEWAY_REALTIME_INVALIDATION_MESSAGES = new Set([
   "event",
+  "external_pipeline_changed",
   "planning_session_produced_drafts",
   "planning_session_produced_tasks",
   "git_status_changed",

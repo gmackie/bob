@@ -1213,6 +1213,45 @@ export class Relay {
                 : String(event.createdAt),
           });
         }
+
+        // Cockpit state past the truncation point: the newest file_changes
+        // snapshot and the check-run boundaries (run_started/run_finished/
+        // skipped carry final per-phase counts; per-test events are chatty
+        // and reconstructible from those). A wall that reloads mid-session
+        // rebuilds its tile from these instead of showing stale early output.
+        const cockpitState = await db.query.sessionEvents.findMany({
+          where: and(
+            eq(sessionEvents.sessionId, sub.sessionId),
+            gt(sessionEvents.seq, lastSentSeq),
+            or(
+              eq(sessionEvents.eventType, "file_changes"),
+              and(
+                eq(sessionEvents.eventType, "check"),
+                sql`coalesce(${sessionEvents.payload}->>'event', 'run_finished') in ('run_started','run_finished','skipped')`,
+              ),
+            ),
+          ),
+          orderBy: desc(sessionEvents.seq),
+          limit: 40,
+        });
+        // cockpitState is newest-first: keep only the newest file_changes
+        // snapshot, then send everything oldest-first.
+        const newestFiles = cockpitState.find((e) => e.eventType === "file_changes");
+        const toResend = cockpitState.filter((e) => e.eventType !== "file_changes" || e === newestFiles).reverse();
+        for (const event of toResend) {
+          this.send(conn, {
+            type: "event",
+            sessionId: event.sessionId,
+            seq: event.seq,
+            eventType: event.eventType as any,
+            direction: event.direction as any,
+            payload: event.payload,
+            createdAt:
+              (event.createdAt as unknown) instanceof Date
+                ? (event.createdAt as unknown as Date).toISOString()
+                : String(event.createdAt),
+          });
+        }
       }
     }
   }
@@ -2460,6 +2499,25 @@ export class Relay {
         producedTaskCount: planningCounts.producedTaskCount,
       });
     }
+  }
+
+  /**
+   * Fan an invalidation to EVERY workspace-subscribed browser regardless of
+   * scope — for events that belong to no Bob workspace (ForgeGraph CI /
+   * deploy / alert changes bridged from its SSE feed). Consumers treat it as
+   * "refetch pipeline state"; the payload identifies the source event.
+   */
+  broadcastGlobalInvalidation(
+    type: ServerWorkspaceInvalidationType,
+    payload?: Record<string, unknown>,
+  ): number {
+    let sent = 0;
+    for (const c of this.connections.values()) {
+      if (c.kind !== "browser" || !c.workspaceSubscribed) continue;
+      this.send(c, { type, createdAt: new Date().toISOString(), payload });
+      sent++;
+    }
+    return sent;
   }
 
   private broadcastWorkspaceIdInvalidation(

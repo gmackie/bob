@@ -243,7 +243,7 @@ async function fetchActionRuns(
 }
 
 /** Resolve the ForgeGraph app bound to a repo via its `.forgegraph.yaml`. */
-async function resolveFgAppSlug(
+export async function resolveFgAppSlug(
   instanceUrl: string,
   token: string,
   owner: string,

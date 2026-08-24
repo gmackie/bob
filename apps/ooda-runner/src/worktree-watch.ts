@@ -15,7 +15,17 @@ import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import { parseCheckEventLine, type CheckEvent } from "@forgegraph/check-events";
+
 const execFileAsync = promisify(execFile);
+
+/**
+ * Where check-events land. The bob-check shim pins FG_CHECK_EVENTS_PATH to the
+ * legacy `.bob/` file; anything using @forgegraph/check-events directly (the
+ * vitest/jest reporters, a bare `fg-check`) writes the package default `.fg/`.
+ * Tail both so every producer streams.
+ */
+export const CHECK_EVENT_FILES = [".bob/check-events.ndjson", ".fg/check-events.ndjson"] as const;
 
 export const IGNORED_SEGMENTS = new Set([
   "node_modules",
@@ -32,6 +42,7 @@ export const IGNORED_SEGMENTS = new Set([
   "__pycache__",
   ".venv",
   ".bob", // runner-internal (check events, shims) — never "file heat"
+  ".fg", // @forgegraph/check-events default events dir
 ]);
 
 export interface NumstatEntry {
@@ -88,13 +99,23 @@ export interface WorktreeWatchOptions {
   baseBranch: string;
   intervalMs?: number;
   emit: (payload: FileChangesPayload) => void;
-  /** Structured bob-check events tailed from .bob/check-events.ndjson. */
-  emitCheck?: (event: Record<string, unknown>) => void;
+  /**
+   * check-events (v2 envelope; v1 bob-check lines are upgraded on parse)
+   * tailed from the worktree's events files — see CHECK_EVENT_FILES.
+   */
+  emitCheck?: (event: CheckEvent) => void;
   log?: (msg: string) => void;
 }
 
-/** Start watching; returns a stop function. Never throws. */
-export function watchWorktree(opts: WorktreeWatchOptions): () => void {
+export interface WorktreeWatchHandle {
+  /** Stop watching (drains any check events written since the last tick first). */
+  stop: () => void;
+  /** Read newly appended check events now, ahead of the next tick. */
+  drainChecks: () => void;
+}
+
+/** Start watching; returns a handle. Never throws. */
+export function watchWorktree(opts: WorktreeWatchOptions): WorktreeWatchHandle {
   const interval = opts.intervalMs ?? 2000;
   const pending = new Map<string, { n: number; last: number }>();
   let watcher: FSWatcher | null = null;
@@ -102,31 +123,35 @@ export function watchWorktree(opts: WorktreeWatchOptions): () => void {
   let flushing = false;
   let stopped = false;
 
-  // Tail .bob/check-events.ndjson (appended by the bob-check shim) regardless
-  // of fs events — cheap stat per tick, read only the new bytes.
-  const checkPath = join(opts.path, ".bob", "check-events.ndjson");
-  let checkOffset = 0;
+  // Tail the check-events files regardless of fs events — cheap stat per
+  // tick, read only the new bytes, carry a partial trailing line until its
+  // newline arrives, and reset on truncation/recreation.
+  const tails = CHECK_EVENT_FILES.map((rel) => ({ path: join(opts.path, rel), offset: 0, carry: "" }));
   const drainCheckEvents = () => {
     if (!opts.emitCheck) return;
-    try {
-      const size = statSync(checkPath).size;
-      if (size <= checkOffset) return;
-      const fd = openSync(checkPath, "r");
-      const buf = Buffer.alloc(size - checkOffset);
-      readSync(fd, buf, 0, buf.length, checkOffset);
-      closeSync(fd);
-      checkOffset = size;
-      for (const line of buf.toString("utf8").split("\n")) {
-        const t = line.trim();
-        if (!t) continue;
-        try {
-          opts.emitCheck(JSON.parse(t) as Record<string, unknown>);
-        } catch {
-          /* partial line — will complete next tick */
+    for (const t of tails) {
+      try {
+        const size = statSync(t.path).size;
+        if (size < t.offset) {
+          t.offset = 0;
+          t.carry = "";
         }
+        if (size === t.offset) continue;
+        const fd = openSync(t.path, "r");
+        const buf = Buffer.alloc(size - t.offset);
+        readSync(fd, buf, 0, buf.length, t.offset);
+        closeSync(fd);
+        t.offset = size;
+        const text = t.carry + buf.toString("utf8");
+        const lines = text.split("\n");
+        t.carry = lines.pop() ?? "";
+        for (const line of lines) {
+          const event = parseCheckEventLine(line);
+          if (event) opts.emitCheck(event);
+        }
+      } catch {
+        /* file absent until the agent first runs a check */
       }
-    } catch {
-      /* file absent until the agent first runs bob-check */
     }
   };
 
@@ -188,13 +213,17 @@ export function watchWorktree(opts: WorktreeWatchOptions): () => void {
     opts.log?.(`[worktree-watch] could not start: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  return () => {
-    stopped = true;
-    if (timer) clearInterval(timer);
-    try {
-      watcher?.close();
-    } catch {
-      /* ignore */
-    }
+  return {
+    drainChecks: drainCheckEvents,
+    stop: () => {
+      drainCheckEvents();
+      stopped = true;
+      if (timer) clearInterval(timer);
+      try {
+        watcher?.close();
+      } catch {
+        /* ignore */
+      }
+    },
   };
 }

@@ -14,6 +14,7 @@ import {
   cockpitAudit,
   pullRequests,
   repositories,
+  sessionEvents,
   taskRuns,
   workItemArtifacts,
   workItems,
@@ -26,7 +27,9 @@ import type { PipelineFacts } from "../services/cockpit/pipeline.js";
 import { toDate } from "../services/cockpit/toDate.js";
 import type {
   AgentHealthChip,
+  CheckRollup,
   CockpitStatus,
+  FgCiEvidence,
   LiveSession,
   PriorityLane,
   PrPipeline,
@@ -35,7 +38,10 @@ import type {
 } from "../services/cockpit/types.js";
 import { createProviderClient, getConnection } from "../services/git/providerConnectionService.js";
 import type { GitProvider } from "../services/git/providers/types.js";
+import { fetchFgCiEvidence, fgGateToCiFacts } from "../services/forgegraph/ciEvidence.js";
+import { getForgeGraphConfig } from "../services/forgegraph/config.js";
 import { paceDailyBudget } from "../services/health/pacing.js";
+import { resolveFgAppSlug } from "./trackDeployments.js";
 
 const ACTIVE = ["pending", "provisioning", "starting", "running", "blocked", "stopping", "host_unknown"];
 const LANE_BY_ORDER: Record<number, PriorityLane> = { 10: "urgent", 20: "high", 30: "medium", 40: "unset", 50: "low" };
@@ -64,6 +70,52 @@ interface PrRemote {
 }
 const remoteCache = new Map<string, PrRemote>();
 const REMOTE_TTL_MS = 30_000;
+
+/**
+ * Latest persisted end-of-run check rollup per session (runner emits one
+ * `check` event with phase "all" carrying `summarizeChecks` output).
+ */
+async function loadCheckRollups(sessionIds: string[]): Promise<Map<string, CheckRollup>> {
+  const out = new Map<string, CheckRollup>();
+  if (!sessionIds.length) return out;
+  const rows = await db
+    .select({ sessionId: sessionEvents.sessionId, payload: sessionEvents.payload, createdAt: sessionEvents.createdAt })
+    .from(sessionEvents)
+    .where(and(inArray(sessionEvents.sessionId, sessionIds), eq(sessionEvents.eventType, "check"), sql`${sessionEvents.payload}->>'phase' = 'all' and ${sessionEvents.payload} ? 'summary'`))
+    .orderBy(desc(sessionEvents.createdAt))
+    .limit(sessionIds.length * 3);
+  for (const r of rows) {
+    if (out.has(r.sessionId)) continue;
+    const summary = (r.payload as { summary?: { status?: string; phases?: unknown[] } }).summary;
+    if (!summary || !Array.isArray(summary.phases)) continue;
+    out.set(r.sessionId, {
+      status: summary.status === "passed" ? "passed" : "failed",
+      at: (toDate(r.createdAt) ?? new Date()).toISOString(),
+      phases: (summary.phases as CheckRollup["phases"]).map((ph) => ({
+        phase: ph.phase,
+        status: ph.status,
+        durationMs: ph.durationMs,
+        counts: ph.counts,
+        confidence: ph.confidence,
+        failures: Array.isArray(ph.failures) ? ph.failures.slice(0, 10) : [],
+      })),
+    });
+  }
+  return out;
+}
+
+/** ForgeGraph app slug per owner/repo, resolved from .forgegraph.yaml (10 min cache; null cached too). */
+const fgSlugCache = new Map<string, { at: number; slug: string | null }>();
+const FG_SLUG_TTL_MS = 10 * 60_000;
+async function fgAppSlugFor(cfg: CockpitStatusConfig, owner: string, repo: string): Promise<string | null> {
+  const key = `${owner}/${repo}`.toLowerCase();
+  const hit = fgSlugCache.get(key);
+  if (hit && Date.now() - hit.at < FG_SLUG_TTL_MS) return hit.slug;
+  if (!cfg.forgejoToken) return null;
+  const slug = await resolveFgAppSlug(cfg.forgejoInstanceUrl ?? "https://git.forgegraf.com", cfg.forgejoToken, owner, repo);
+  fgSlugCache.set(key, { at: Date.now(), slug });
+  return slug;
+}
 
 async function fetchPrRemote(
   pr: { id: string; userId: string; provider: string; instanceUrl: string | null; remoteOwner: string; remoteName: string; number: number },
@@ -266,6 +318,7 @@ export async function cockpitStatus(cfg: CockpitStatusConfig = {}): Promise<Cock
     const its = await db.select({ id: workItems.id, p: workItems.externalProvider }).from(workItems).where(inArray(workItems.id, liveItemIds));
     for (const i of its) itemProvider.set(i.id, i.p);
   }
+  const liveCheck = await loadCheckRollups(liveRows.map((l) => l.id));
   const sessions: LiveSession[] = liveRows
     .map((l) => {
       const phase: LiveSession["phase"] = l.title?.startsWith("Review:") ? "review" : l.title?.startsWith("Repair:") ? "repair" : l.workItemId ? "execute" : "other";
@@ -284,6 +337,7 @@ export async function cockpitStatus(cfg: CockpitStatusConfig = {}): Promise<Cock
         elapsedSeconds: Math.round((now.getTime() - (toDate(l.createdAt) ?? now).getTime()) / 1000),
         pr: sessionPr.get(l.id) ?? null,
         provider,
+        check: liveCheck.get(l.id) ?? null,
       };
     })
     .filter((s) => (cfg.includeOoda ?? false) || s.provider !== "ooda");
@@ -331,9 +385,19 @@ export async function cockpitStatus(cfg: CockpitStatusConfig = {}): Promise<Cock
   const reviewerLogin = "bob-reviewer";
   const active: PrPipeline[] = [];
   const parked: PrPipeline[] = [];
+  const fg = getForgeGraphConfig();
+  const prCheck = await loadCheckRollups(prSessionIds);
   await Promise.all(
     prRows.map(async (p) => {
       const remote = p.status === "open" ? await fetchPrRemote(p, cfg, reviewerLogin) : null;
+      // ForgeGraph's builds for the head — the CI source of truth when the
+      // repo's workflow reports to FG but posts no Forgejo commit status.
+      let fgCi: FgCiEvidence | null = null;
+      if (fg && remote?.headSha) {
+        const slug = await fgAppSlugFor(cfg, p.remoteOwner, p.remoteName).catch(() => null);
+        if (slug) fgCi = await fetchFgCiEvidence({ baseUrl: fg.baseUrl, token: fg.apiToken }, slug, remote.headSha);
+      }
+      const fgFacts = fgCi && fgCi.status !== "none" && (remote?.ciTotal ?? 0) === 0 ? fgGateToCiFacts(fgCi) : null;
       const runs = runsByPr.get(p.id) ?? [];
       const live = (ph: string) => runs.some((r) => r.phase === ph && ["starting", "running", "blocked"].includes(r.status) && r.sessionStatus != null && ACTIVE.includes(r.sessionStatus));
       const item = p.sessionId ? prItem.get(p.sessionId) : undefined;
@@ -342,8 +406,8 @@ export async function cockpitStatus(cfg: CockpitStatusConfig = {}): Promise<Cock
         mergedAt: p.mergedAt,
         closed: p.status === "closed",
         mergeable: remote?.mergeable ?? null,
-        ciState: remote?.ciState ?? "none",
-        ciTotal: remote?.ciTotal ?? 0,
+        ciState: fgFacts?.ciState ?? remote?.ciState ?? "none",
+        ciTotal: fgFacts?.ciTotal ?? remote?.ciTotal ?? 0,
         verdict: remote?.verdict ?? null,
         reviewInFlight: live("review"),
         repairAttempts: runs.filter((r) => r.phase === "repair").length,
@@ -362,7 +426,9 @@ export async function cockpitStatus(cfg: CockpitStatusConfig = {}): Promise<Cock
         headSha: remote?.headSha ?? null,
         openedAt: (toDate(p.createdAt) ?? now).toISOString(),
         stages,
-        ci: remote ? { state: remote.ciState, jobs: remote.jobs } : null,
+        ci: remote ? { state: fgFacts?.ciState ?? remote.ciState, jobs: remote.jobs } : null,
+        fgCi,
+        agentCheck: p.sessionId ? (prCheck.get(p.sessionId) ?? null) : null,
         review: remote ? { verdict: remote.verdict, by: remote.verdictBy } : null,
         repair: { attempts: facts.repairAttempts, cap: repairCap, inFlight: facts.repairInFlight },
         parkedReason,
