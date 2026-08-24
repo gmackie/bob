@@ -43,7 +43,14 @@ export interface FgCiEvidence {
   app: string;
   status: "pass" | "pending" | "fail" | "none";
   hasCIHistory: boolean;
-  builds: { id: string; pipelineName: string; status: string; runUrl: string }[];
+  builds: {
+    id: string;
+    pipelineName: string;
+    status: string;
+    runUrl: string;
+    /** check-events v2 summary posted by the CI runner (exact per-phase counts), when the run produced one. */
+    tests: CheckRollup | null;
+  }[];
   failures: {
     headline: string;
     tests: { name: string; suite?: string; message?: string }[];

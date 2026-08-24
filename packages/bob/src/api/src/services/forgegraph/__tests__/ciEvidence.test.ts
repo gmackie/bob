@@ -58,3 +58,41 @@ describe("fetchFgCiEvidence", () => {
     expect(ev).toBeNull();
   });
 });
+
+describe("check-events summaries from FG builds", () => {
+  it("normalizes metadata.tests and derives failures from exact results before scraping", async () => {
+    const { normalizeTests, failuresFromTests } = await import("../ciEvidence.js");
+    const rollup = normalizeTests(
+      {
+        status: "failed",
+        phases: [
+          { phase: "typecheck", status: "passed", durationMs: 900, failures: [] },
+          { phase: "test", status: "failed", durationMs: 8120, confidence: "exact", counts: { passed: 57, failed: 1, total: 58 }, failures: [{ name: "computeStreak › gaps", suite: "streak.test.ts", message: "expected 3, got 4" }] },
+        ],
+      },
+      "2026-08-24T00:00:00.000Z",
+    );
+    expect(rollup?.status).toBe("failed");
+    expect(rollup?.phases.map((p) => p.phase)).toEqual(["typecheck", "test"]);
+    const f = failuresFromTests(rollup);
+    expect(f?.headline).toBe("test: 1 failed of 58");
+    expect(f?.tests[0]).toEqual({ name: "computeStreak › gaps", suite: "streak.test.ts", message: "expected 3, got 4" });
+    expect(normalizeTests(null)).toBeNull();
+    expect(normalizeTests({ status: "passed" })).toBeNull();
+    expect(failuresFromTests(normalizeTests({ status: "passed", phases: [{ phase: "test", status: "passed", failures: [] }] }))).toBeNull();
+  });
+
+  it("skips the failures endpoint when the red build streamed exact results", async () => {
+    const { fetchFgCiEvidence } = await import("../ciEvidence.js");
+    const fetchImpl = vi.fn(async (url: string | URL | Request, _init?: RequestInit) => {
+      if (String(url).includes("/api/fg/ci/gate")) {
+        return new Response(JSON.stringify({ status: "fail", hasCIHistory: true, builds: [{ id: "b9", pipelineName: "ci", status: "failed", runUrl: "", tests: { status: "failed", phases: [{ phase: "test", status: "failed", counts: { passed: 3, failed: 2, total: 5 }, failures: [{ name: "a" }, { name: "b" }] }] } }] }));
+      }
+      throw new Error("failures endpoint should not be called");
+    });
+    const ev = await fetchFgCiEvidence({ baseUrl: "https://fg.test", token: "t" }, "exact-app", "sha9", fetchImpl as unknown as typeof fetch);
+    expect(ev?.failures?.tests.map((t) => t.name)).toEqual(["a", "b"]);
+    expect(ev?.builds[0]?.tests?.phases[0]?.counts?.total).toBe(5);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});

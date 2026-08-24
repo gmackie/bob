@@ -385,6 +385,22 @@ function FgCiStrip({ ci }: { ci: NonNullable<CockpitPr["fgCi"]> }) {
         {" "}
         · {ci.builds.map((b) => `${b.pipelineName || "ci"} ${b.status}`).join(" · ")}
       </span>
+      {ci.builds.some((b) => b.tests) && (
+        <div className="mt-0.5 flex flex-wrap gap-1">
+          {ci.builds
+            .flatMap((b) => b.tests?.phases ?? [])
+            .filter((p) => p.status !== "skipped")
+            .map((p, i) => {
+              const cls = p.status === "passed" ? "border-emerald-500/40 text-emerald-300/80" : p.status === "failed" ? "border-red-500/50 text-red-300/90" : "animate-pulse border-sky-400/40 text-sky-300/80";
+              const counts = p.counts && p.counts.total != null ? ` ${p.counts.passed}/${p.counts.total}` : p.counts ? ` ${p.counts.passed}✓${p.counts.failed ? `/${p.counts.failed}✗` : ""}` : "";
+              return (
+                <span key={`${p.phase}-${i}`} className={`rounded border px-1 ${cls}`} title={p.confidence === "scraped" ? "counts scraped from output (approximate)" : "exact counts from check-events"}>
+                  {p.phase}{counts}{p.confidence === "scraped" ? "~" : ""}
+                </span>
+              );
+            })}
+        </div>
+      )}
       {ci.failures && (
         <div className="mt-0.5 text-red-300/90">
           <div className="truncate">{ci.failures.headline}</div>

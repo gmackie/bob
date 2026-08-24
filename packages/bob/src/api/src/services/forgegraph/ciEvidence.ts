@@ -11,7 +11,7 @@
  * Pure mapping functions are exported for tests; the fetcher caches 30 s per
  * app+sha because the wall polls every 10 s.
  */
-import type { FgCiEvidence } from "../cockpit/types.js";
+import type { CheckRollup, FgCiEvidence } from "../cockpit/types.js";
 
 export interface FgCiConfig {
   baseUrl: string;
@@ -21,7 +21,42 @@ export interface FgCiConfig {
 export interface FgGateResponse {
   status: "pass" | "pending" | "fail" | "none";
   hasCIHistory: boolean;
-  builds: { id: string; pipelineName: string; status: string; runUrl: string }[];
+  builds: { id: string; pipelineName: string; status: string; runUrl: string; finishedAt?: string; tests?: unknown }[];
+}
+
+/** Normalize the CheckSummary FG stores under builds.metadata.tests. */
+export function normalizeTests(raw: unknown, at?: string): CheckRollup | null {
+  if (!raw || typeof raw !== "object") return null;
+  const t = raw as { status?: string; phases?: unknown };
+  if (!Array.isArray(t.phases)) return null;
+  return {
+    status: t.status === "passed" ? "passed" : "failed",
+    at: at || new Date(0).toISOString(),
+    phases: (t.phases as CheckRollup["phases"]).map((p) => ({
+      phase: p.phase,
+      status: p.status,
+      durationMs: p.durationMs,
+      counts: p.counts,
+      confidence: p.confidence,
+      failures: Array.isArray(p.failures) ? p.failures.slice(0, 10) : [],
+    })),
+  };
+}
+
+/** When CI streamed exact results, its failing tests beat the log scrape. */
+export function failuresFromTests(tests: CheckRollup | null): FgCiEvidence["failures"] {
+  if (!tests) return null;
+  const failing = tests.phases.flatMap((p) => p.failures.map((f) => ({ ...f, phase: p.phase })));
+  const redPhases = tests.phases.filter((p) => p.status === "failed");
+  if (!failing.length && !redPhases.length) return null;
+  const headline = redPhases
+    .map((p) => (p.counts ? `${p.phase}: ${p.counts.failed} failed of ${p.counts.total ?? p.counts.passed + p.counts.failed}` : `${p.phase} failed`))
+    .join("; ");
+  return {
+    headline: headline || `${failing.length} failing`,
+    tests: failing.slice(0, 10).map((f) => ({ name: f.name, suite: f.suite, message: f.message })),
+    errors: [],
+  };
 }
 
 export interface FgFailuresResponse {
@@ -81,13 +116,24 @@ export async function fetchFgCiEvidence(
     const res = await fetchImpl(`${base}/api/fg/ci/gate?app=${encodeURIComponent(appSlug)}&sha=${encodeURIComponent(sha)}`, { headers });
     if (res.ok) {
       const gate = (await res.json()) as FgGateResponse;
+      const builds = (gate.builds ?? []).map((b) => ({
+        id: b.id,
+        pipelineName: b.pipelineName,
+        status: b.status,
+        runUrl: b.runUrl,
+        tests: normalizeTests(b.tests, b.finishedAt),
+      }));
       let failures: FgCiEvidence["failures"] = null;
-      const red = gate.status === "fail" ? gate.builds.find((b) => b.status === "failed") : undefined;
+      const red = gate.status === "fail" ? builds.find((b) => b.status === "failed") : undefined;
       if (red) {
-        const fr = await fetchImpl(`${base}/api/fg/ci/runs/${encodeURIComponent(red.id)}/failures`, { headers }).catch(() => null);
-        if (fr?.ok) failures = flattenFailures((await fr.json()) as FgFailuresResponse);
+        // exact check-events failures first; the log-scrape endpoint only when CI didn't stream
+        failures = failuresFromTests(red.tests);
+        if (!failures) {
+          const fr = await fetchImpl(`${base}/api/fg/ci/runs/${encodeURIComponent(red.id)}/failures`, { headers }).catch(() => null);
+          if (fr?.ok) failures = flattenFailures((await fr.json()) as FgFailuresResponse);
+        }
       }
-      value = { app: appSlug, status: gate.status, hasCIHistory: gate.hasCIHistory, builds: gate.builds ?? [], failures };
+      value = { app: appSlug, status: gate.status, hasCIHistory: gate.hasCIHistory, builds, failures };
     }
   } catch {
     value = hit?.value ?? null;
