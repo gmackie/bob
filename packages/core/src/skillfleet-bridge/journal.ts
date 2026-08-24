@@ -321,6 +321,31 @@ async function appendRecord(journalPath: string, record: WorkflowRecord) {
   }
 }
 
+/**
+ * Resolve the journal file for a record's source.
+ *
+ * Bob and OODA get independent journals, each falling back to the shared
+ * SKILLFLEET_WORKFLOW_JOURNAL. This is not cosmetic: Skillfleet's collector
+ * builds one adapter per source (`journalAdapter(expectedSource)`) and throws
+ * "workflow journal source mismatch" on any record whose source does not match
+ * the file it came from. Routing every source to one path therefore causes the
+ * collector to silently discard the mismatched half.
+ *
+ * Ported from feat/skillfleet-workflow-journal (57face47), which had solved
+ * this before the journal landed on master; the branch had been rewritten past
+ * the head its PR was showing, so the fix was missed on the way in.
+ */
+function journalPathForSource(
+  source: WorkflowSource,
+  environment: Record<string, string | undefined>,
+): string | null {
+  const perSource =
+    source === "bob"
+      ? environment.SKILLFLEET_BOB_WORKFLOW_JOURNAL
+      : environment.SKILLFLEET_OODA_WORKFLOW_JOURNAL;
+  return perSource ?? environment.SKILLFLEET_WORKFLOW_JOURNAL ?? null;
+}
+
 export async function emitSkillfleetWorkflowEvent(
   input: WorkflowEventInput,
   options: {
@@ -336,9 +361,7 @@ export async function emitSkillfleetWorkflowEvent(
   const environment = options.environment ?? process.env;
   const journalPath = Object.hasOwn(options, "journalPath")
     ? options.journalPath ?? null
-    : environment.SKILLFLEET_OODA_WORKFLOW_JOURNAL
-      ?? environment.SKILLFLEET_WORKFLOW_JOURNAL
-      ?? null;
+    : journalPathForSource(input.source, environment);
   if (journalPath === null || journalPath === "") return { state: "disabled" };
   let record: WorkflowRecord;
   try {
