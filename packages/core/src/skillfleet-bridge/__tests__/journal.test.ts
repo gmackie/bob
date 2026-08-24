@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -122,6 +122,77 @@ describe("standalone Skillfleet journal compatibility", () => {
     expect(result.state).toBe("written");
     expect(JSON.parse(readFileSync(oodaJournal, "utf8").trim()).source).toBe("ooda");
     expect(() => readFileSync(legacyJournal, "utf8")).toThrow();
+  });
+});
+
+describe("per-source journal routing", () => {
+  const base = {
+    identity: "event",
+    observedAt: "2026-08-17T12:00:00.000Z",
+    sessionId: null,
+    projectId: null,
+    provenanceQuality: "direct" as const,
+    kind: "agent_run" as const,
+    payload: {
+      runtime: "claude" as const,
+      status: "success" as const,
+      durationMs: 5,
+      turnCount: 1,
+    },
+  };
+
+  // Skillfleet's collector builds one adapter per source and throws
+  // "workflow journal source mismatch" on any record whose source does not
+  // match the file it came from. Routing both sources to one path makes the
+  // collector silently discard the mismatched half — so this is a data-loss
+  // guard, not a tidiness preference.
+  it("sends bob and ooda records to independent journals", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "skillfleet-routing-"));
+    temporaryDirectories.push(directory);
+    const bobJournal = join(directory, "bob.jsonl");
+    const oodaJournal = join(directory, "ooda.jsonl");
+    const environment = {
+      SKILLFLEET_BOB_WORKFLOW_JOURNAL: bobJournal,
+      SKILLFLEET_OODA_WORKFLOW_JOURNAL: oodaJournal,
+    };
+
+    await emitSkillfleetWorkflowEvent({ ...base, source: "bob" }, { environment });
+    await emitSkillfleetWorkflowEvent({ ...base, source: "ooda" }, { environment });
+
+    expect(JSON.parse(readFileSync(bobJournal, "utf8").trim()).source).toBe("bob");
+    expect(JSON.parse(readFileSync(oodaJournal, "utf8").trim()).source).toBe("ooda");
+  });
+
+  // The regression this replaces: with only the OODA var set, bob-sourced
+  // records used to land in the OODA journal, where the collector drops them.
+  it("does not put bob records in the ooda journal", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "skillfleet-routing-"));
+    temporaryDirectories.push(directory);
+    const oodaJournal = join(directory, "ooda.jsonl");
+
+    const result = await emitSkillfleetWorkflowEvent(
+      { ...base, source: "bob" },
+      { environment: { SKILLFLEET_OODA_WORKFLOW_JOURNAL: oodaJournal } },
+    );
+
+    expect(result).toEqual({ state: "disabled" });
+    expect(existsSync(oodaJournal)).toBe(false);
+  });
+
+  it("falls back to the shared journal when no per-source var is set", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "skillfleet-routing-"));
+    temporaryDirectories.push(directory);
+    const shared = join(directory, "shared.jsonl");
+    const environment = { SKILLFLEET_WORKFLOW_JOURNAL: shared };
+
+    await emitSkillfleetWorkflowEvent({ ...base, source: "bob" }, { environment });
+    await emitSkillfleetWorkflowEvent({ ...base, source: "ooda" }, { environment });
+
+    const sources = readFileSync(shared, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => (JSON.parse(line) as { source: string }).source);
+    expect(sources).toEqual(["bob", "ooda"]);
   });
 });
 
