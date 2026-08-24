@@ -35,7 +35,7 @@ export const cockpitRouter = {
         forgejoInstanceUrl: process.env.BOB_FORGEJO_INSTANCE_URL ?? "https://git.forgegraf.com",
         rotation: (process.env.BOB_AUTO_DRAIN_AGENTS ?? "claude,codex,grok,cursor")
           .split(",")
-          .map((a) => a.trim())
+          .map((a: string) => a.trim())
           .filter(Boolean),
         repairCap: Number(process.env.BOB_AUTO_REPAIR_MAX_ATTEMPTS_PER_PR ?? 3),
       }),
