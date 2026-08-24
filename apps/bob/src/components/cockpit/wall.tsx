@@ -230,20 +230,34 @@ function AgentTile({ session, feed, focused, ops }: { session: CockpitSession; f
         {!feed?.tail.length && !feed?.tool && <div className="text-white/25">{session.status}…</div>}
       </div>
       {feed?.check && Object.keys(feed.check).length > 0 && (
-        <div className="mt-2 flex gap-1 font-mono text-[10px]">
-          {(["typecheck", "lint", "test", "build"] as const).map((ph) => {
-            const c = feed.check[ph];
-            if (!c) return null;
-            const cls = c.status === "passed" ? "border-emerald-500/50 text-emerald-300" : c.status === "failed" ? "border-red-500/60 text-red-300" : "animate-pulse border-sky-400/50 text-sky-300";
-            return (
-              <span key={ph} className={`rounded border px-1.5 py-0.5 ${cls}`}>
-                {ph}
-                {c.total != null ? ` ${(c.total ?? 0) - (c.failed ?? 0)}/${c.total}` : ""}
-                {c.status === "passed" ? " ✓" : c.status === "failed" ? " ✗" : " …"}
-              </span>
-            );
-          })}
-        </div>
+        <>
+          <div className="mt-2 flex flex-wrap gap-1 font-mono text-[10px]">
+            {(["typecheck", "lint", "test", "e2e", "build"] as const).map((ph) => {
+              const c = feed.check[ph];
+              if (!c || c.status === "skipped") return null;
+              const cls = c.status === "passed" ? "border-emerald-500/50 text-emerald-300" : c.status === "failed" ? "border-red-500/60 text-red-300" : "animate-pulse border-sky-400/50 text-sky-300";
+              // v2 events carry exact passed counts; v1 lines only total/failed
+              const done = c.passed ?? (c.total != null ? c.total - (c.failed ?? 0) : null);
+              return (
+                <span key={ph} className={`rounded border px-1.5 py-0.5 ${cls}`}>
+                  {ph}
+                  {done != null && c.total != null ? ` ${done}/${c.total}` : ""}
+                  {c.status === "passed" ? " ✓" : c.status === "failed" ? " ✗" : " …"}
+                </span>
+              );
+            })}
+          </div>
+          {Object.values(feed.check).some((c) => c.failures?.length) && (
+            <div className="mt-1 font-mono text-[10px] text-red-300/90">
+              {Object.values(feed.check)
+                .flatMap((c) => c.failures ?? [])
+                .slice(0, focused ? 4 : 2)
+                .map((name) => (
+                  <div key={name} className="truncate">✗ {name}</div>
+                ))}
+            </div>
+          )}
+        </>
       )}
       {feed?.files && (
         <div className="mt-2 font-mono text-[10px]">

@@ -34,16 +34,86 @@ export interface TileFeed {
     topFiles: { path: string; added: number; removed: number }[];
     lastCommit: string | null;
   } | null;
-  /** bob-check per-phase state (typecheck/lint/test/build). */
-  check: Record<string, { status: string; passed?: number; failed?: number; total?: number; durationMs?: number }>;
+  /** bob-check per-phase state (typecheck/lint/test/e2e/build). */
+  check: Record<string, CheckPhaseState>;
   /** ms timestamp of the last event — drives the "streaming" pulse. */
   lastEventAt: number;
+}
+
+export interface CheckPhaseState {
+  status: string;
+  passed?: number;
+  failed?: number;
+  total?: number;
+  durationMs?: number;
+  /** Failing test names (check-events v2 only) — the tile shows the first few live. */
+  failures?: string[];
+  /** Per-stream running counts (v2): parallel suites report separately, tiles show the sum. */
+  streams?: Record<string, { passed: number; failed: number; total?: number }>;
 }
 
 const TAIL_LINES = 8;
 
 function emptyFeed(): TileFeed {
   return { tail: [], tool: null, files: null, check: {}, lastEventAt: 0 };
+}
+
+/**
+ * Fold one check-events v2 event (run_started / test_finished / run_finished /
+ * skipped, per-stream counts, CTRF-shaped test objects) into the tile's
+ * per-phase state. v1 lines keep the legacy branch below — both shapes share
+ * the `check` session event type.
+ */
+function applyCheckV2(feed: TileFeed, phase: string, payload: Record<string, unknown>): void {
+  const kind = typeof payload.event === "string" ? payload.event : "";
+  const prev = feed.check[phase] ?? { status: "running" };
+  const next: CheckPhaseState = { ...prev, streams: { ...prev.streams } };
+  const stream = typeof payload.stream === "string" ? payload.stream : "";
+  const counts = payload.counts as
+    | { passed?: number; failed?: number; total?: number }
+    | undefined;
+
+  if (kind === "run_started") {
+    next.status = "running";
+  } else if (kind === "skipped") {
+    next.status = "skipped";
+  } else if (kind === "run_finished") {
+    const status = typeof payload.status === "string" ? payload.status : "failed";
+    // a failed stream fails the phase for good — a later passing stream can't clear it
+    next.status = prev.status === "failed" ? "failed" : status;
+    if (typeof payload.durationMs === "number") {
+      next.durationMs = Math.max(prev.durationMs ?? 0, payload.durationMs);
+    }
+  }
+
+  if (counts && (kind === "test_finished" || kind === "run_finished")) {
+    next.streams![stream] = {
+      passed: counts.passed ?? 0,
+      failed: counts.failed ?? 0,
+      total: typeof counts.total === "number" ? counts.total : undefined,
+    };
+  }
+  if (kind === "test_finished") {
+    const test = payload.test as { name?: string; status?: string } | undefined;
+    if (test?.status === "failed" && typeof test.name === "string") {
+      const fails = prev.failures ?? [];
+      if (!fails.includes(test.name)) next.failures = [...fails, test.name].slice(-3);
+    }
+  }
+
+  const streamCounts = Object.values(next.streams!);
+  if (streamCounts.length > 0) {
+    next.passed = streamCounts.reduce((sum, c) => sum + c.passed, 0);
+    next.failed = streamCounts.reduce((sum, c) => sum + c.failed, 0);
+    const totals = streamCounts
+      .map((c) => c.total)
+      .filter((t): t is number => typeof t === "number");
+    next.total =
+      totals.length === streamCounts.length
+        ? totals.reduce((sum, t) => sum + t, 0)
+        : undefined;
+  }
+  feed.check = { ...feed.check, [phase]: next };
 }
 
 export function useCockpit(opts: { includeOoda: boolean }) {
@@ -97,16 +167,21 @@ export function useCockpit(opts: { includeOoda: boolean }) {
     } else if (event.eventType === "check") {
       const phase = typeof payload.phase === "string" ? payload.phase : "all";
       if (phase !== "all") {
-        feed.check = {
-          ...feed.check,
-          [phase]: {
-            status: String(payload.status ?? "running"),
-            passed: typeof payload.passed === "number" ? payload.passed : undefined,
-            failed: typeof payload.failed === "number" ? payload.failed : undefined,
-            total: typeof payload.total === "number" ? payload.total : undefined,
-            durationMs: typeof payload.durationMs === "number" ? payload.durationMs : undefined,
-          },
-        };
+        if (payload.v === 2) {
+          applyCheckV2(feed, phase, payload);
+        } else {
+          // legacy bob-check v1 lines: one terminal object per phase
+          feed.check = {
+            ...feed.check,
+            [phase]: {
+              status: String(payload.status ?? "running"),
+              passed: typeof payload.passed === "number" ? payload.passed : undefined,
+              failed: typeof payload.failed === "number" ? payload.failed : undefined,
+              total: typeof payload.total === "number" ? payload.total : undefined,
+              durationMs: typeof payload.durationMs === "number" ? payload.durationMs : undefined,
+            },
+          };
+        }
       }
     }
     feed.lastEventAt = Date.now();
