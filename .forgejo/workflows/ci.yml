@@ -232,9 +232,21 @@ jobs:
   deploy:
     name: Deploy web to bob.blder.bot
     needs: ci
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # `always()` so this job RUNS on a red ci instead of being skipped.
+    # A skipped job reports success, which is why three separate deploy
+    # blocks on 2026-08-23/24 went unnoticed: the commit status looked
+    # fine and the deploy simply never happened. The guard step below
+    # keeps the same safety property — no deploy on red — but says so.
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
+      - name: Refuse to deploy on a red CI run
+        if: needs.ci.result != 'success'
+        run: |
+          echo "::error::Deploy blocked — the 'ci' job finished '${{ needs.ci.result }}'."
+          echo "Both deploy jobs gate on 'ci', so ANY red check anywhere in the"
+          echo "monorepo stops every deploy. Fix the failing package and re-run."
+          exit 1
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -260,9 +272,21 @@ jobs:
   deploy-ooda-edge:
     name: Deploy OODA edge (approval-gated)
     needs: ci
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # `always()` so this job RUNS on a red ci instead of being skipped.
+    # A skipped job reports success, which is why three separate deploy
+    # blocks on 2026-08-23/24 went unnoticed: the commit status looked
+    # fine and the deploy simply never happened. The guard step below
+    # keeps the same safety property — no deploy on red — but says so.
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
+      - name: Refuse to deploy on a red CI run
+        if: needs.ci.result != 'success'
+        run: |
+          echo "::error::Deploy blocked — the 'ci' job finished '${{ needs.ci.result }}'."
+          echo "Both deploy jobs gate on 'ci', so ANY red check anywhere in the"
+          echo "monorepo stops every deploy. Fix the failing package and re-run."
+          exit 1
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
