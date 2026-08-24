@@ -13,6 +13,7 @@ import type { TRPCRouterRecord } from "@trpc/server";
 
 import { agentRunRouter } from "@bob/api/router/agentRun";
 import { authRouter } from "@bob/api/router/auth";
+import { cockpitRouter } from "@bob/api/router/cockpit";
 import { cookiesRouter } from "@bob/api/router/cookies";
 import { checkpointRouter } from "@bob/api/router/checkpoint";
 import { chatRouter } from "@bob/api/router/chat";
@@ -59,6 +60,7 @@ const edgeRouterRecord = {
   auth: authRouter,
   chat: chatRouter,
   checkpoint: checkpointRouter,
+  cockpit: cockpitRouter,
   comment: commentRouter,
   cookies: cookiesRouter,
   dispatch: dispatchRouter,
