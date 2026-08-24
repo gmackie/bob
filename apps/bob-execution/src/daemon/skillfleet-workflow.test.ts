@@ -6,6 +6,17 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { recordBobSessionOutcome } from "./skillfleet-workflow";
 
+/** Shape of one journal line, so the assertions are not reading `any`. */
+interface JournalRecord {
+  source: string;
+  kind: string;
+  sessionIdDigest: string;
+  payload: { runtime: string; status: string; turnCount: number };
+}
+
+const readRecord = (journalPath: string): JournalRecord =>
+  JSON.parse(readFileSync(journalPath, "utf8").trim()) as JournalRecord;
+
 const dirs: string[] = [];
 
 afterEach(async () => {
@@ -38,7 +49,7 @@ describe("recordBobSessionOutcome", () => {
     const result = await recordBobSessionOutcome(outcome, { journalPath });
 
     expect(result.state).toBe("written");
-    const record = JSON.parse(readFileSync(journalPath, "utf8").trim());
+    const record = readRecord(journalPath);
     expect(record).toMatchObject({
       source: "bob",
       kind: "agent_run",
@@ -53,7 +64,7 @@ describe("recordBobSessionOutcome", () => {
     const serialized = readFileSync(journalPath, "utf8");
     expect(serialized).not.toContain("session-1");
     expect(serialized).not.toContain("project-1");
-    expect(JSON.parse(serialized.trim()).sessionIdDigest).toMatch(
+    expect(readRecord(journalPath).sessionIdDigest).toMatch(
       /^sha256:[a-f0-9]{64}$/,
     );
   });
@@ -64,9 +75,7 @@ describe("recordBobSessionOutcome", () => {
       { ...outcome, status: "failure" },
       { journalPath },
     );
-    expect(
-      JSON.parse(readFileSync(journalPath, "utf8").trim()).payload.status,
-    ).toBe("failure");
+    expect(readRecord(journalPath).payload.status).toBe("failure");
   });
 
   // The reason this is safe to land: with nothing configured the emitter
