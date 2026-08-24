@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { OpsButton, type CockpitActions } from "./controls";
+import { MOTION_GLYPH, type MotionLevel } from "./use-motion";
 
 import type { CockpitPr, CockpitQueueCard, CockpitSession, CockpitStatus, TileFeed } from "./use-cockpit";
 
@@ -35,7 +36,7 @@ function ago(seconds: number | null | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
-export function HeaderStrip({ status, ops, soundEnabled, onToggleSound, onToggleMode, mode }: { status: CockpitStatus; ops: CockpitActions | null; soundEnabled: boolean; onToggleSound: () => void; onToggleMode: () => void; mode: "wall" | "ops" }) {
+export function HeaderStrip({ status, ops, soundEnabled, onToggleSound, onToggleMode, mode, motionLevel, onCycleMotion }: { status: CockpitStatus; ops: CockpitActions | null; soundEnabled: boolean; onToggleSound: () => void; onToggleMode: () => void; mode: "wall" | "ops"; motionLevel: MotionLevel; onCycleMotion: () => void }) {
   const tickOk = status.loop.tickAgeSeconds != null && status.loop.tickAgeSeconds < 7 * 60;
   const tickWarn = status.loop.tickAgeSeconds != null && status.loop.tickAgeSeconds < 15 * 60;
   const syncOk = status.loop.syncAgeSeconds != null && status.loop.syncAgeSeconds < 30 * 60;
@@ -85,6 +86,7 @@ export function HeaderStrip({ status, ops, soundEnabled, onToggleSound, onToggle
       </div>
       <div className={`ml-auto ${syncOk ? "text-white/40" : "text-amber-400"}`}>sync {ago(status.loop.syncAgeSeconds)}</div>
       <button type="button" onClick={onToggleSound} title="sound" className="text-white/40 hover:text-white/80">{soundEnabled ? "🔊" : "🔇"}</button>
+      <button type="button" onClick={onCycleMotion} title={`motion: ${motionLevel} (click to cycle)`} className="rounded border border-white/20 px-2 py-0.5 font-mono text-[10px] text-white/60 hover:bg-white/10">{MOTION_GLYPH[motionLevel]} {motionLevel}</button>
       <button type="button" onClick={onToggleMode} className="rounded border border-white/20 px-2 py-0.5 font-mono text-[10px] uppercase text-white/60 hover:bg-white/10">{mode}</button>
       {status.alerts.length > 0 && (
         <div className="flex items-center gap-2">

@@ -1,9 +1,11 @@
 "use client";
 
 /**
- * /cockpit — Bob's live SDLC wall. V1: read-only, motion level "live".
+ * /cockpit — Bob's live SDLC wall.
  * ?ooda=1 shows OODA-originated work too (hidden by default).
- * Ops mode (controls) arrives in V2 on this same route.
+ * ?mode=ops enables the owner-only controls; the header button toggles too.
+ * Motion levels minimal/live/ambient/spectacle cycle from the header
+ * (ambient+ renders the spectacle canvas behind the wall).
  */
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -11,8 +13,10 @@ import { Suspense } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { useCockpitActions } from "~/components/cockpit/controls";
+import { SpectacleLayer, type BurstKind } from "~/components/cockpit/spectacle";
 import { AgentStage, HeaderStrip, PrPipelines, QueueLanes, Timeline24h } from "~/components/cockpit/wall";
 import { useCockpit } from "~/components/cockpit/use-cockpit";
+import { useCockpitMotion } from "~/components/cockpit/use-motion";
 import { useCockpitSound } from "~/components/cockpit/use-sound";
 
 function CockpitInner() {
@@ -23,8 +27,10 @@ function CockpitInner() {
   const actions = useCockpitActions();
   const ops = mode === "ops" ? actions : null;
   const sound = useCockpitSound();
+  const motion = useCockpitMotion();
+  const burstQueueRef = useRef<BurstKind[]>([]);
 
-  // Chime on new merges/deploys/failures (compare timeline tails between polls).
+  // New merges/deploys/failures between polls drive both chimes and bursts.
   const lastSeenRef = useRef<string | null>(null);
   useEffect(() => {
     if (!status) return;
@@ -33,10 +39,15 @@ function CockpitInner() {
     if (!last) return;
     for (const e of status.timeline) {
       if (e.at <= last) continue;
-      if (e.kind === "merge") sound.play("merge");
-      else if (e.kind === "deploy") sound.play("deploy");
-      else if (e.kind === "failure" || e.kind === "deploy_failed") sound.play("failure");
-      else if (e.kind === "pr") sound.play("pr");
+      let kind: BurstKind | null = null;
+      if (e.kind === "merge") kind = "merge";
+      else if (e.kind === "deploy") kind = "deploy";
+      else if (e.kind === "failure" || e.kind === "deploy_failed") kind = "failure";
+      else if (e.kind === "pr") kind = "pr";
+      if (kind) {
+        sound.play(kind);
+        burstQueueRef.current.push(kind);
+      }
     }
   }, [status, sound]);
 
@@ -51,20 +62,35 @@ function CockpitInner() {
   const stale = (staleSeconds ?? 0) > 60 || connectionState === "disconnected";
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="relative flex h-screen flex-col">
       <style>{`@keyframes cockpit-enter { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }`}</style>
-      {stale && (
-        <div className="bg-amber-500/90 px-6 py-1 text-center font-mono text-xs text-black">
-          data may be stale — {connectionState === "disconnected" ? "gateway disconnected, retrying" : `last update ${staleSeconds}s ago`}
-        </div>
+      {motion.level === "minimal" && (
+        <style>{`.cockpit-content *, .cockpit-content { animation: none !important; transition: none !important; }`}</style>
       )}
-      <HeaderStrip status={status} ops={ops} soundEnabled={sound.enabled} onToggleSound={sound.toggle} onToggleMode={() => setMode((m) => (m === "wall" ? "ops" : "wall"))} mode={mode} />
-      <div className="grid min-h-0 flex-1 grid-cols-[1fr_2fr_1.2fr] gap-4 p-4">
-        <QueueLanes status={status} ops={ops} />
-        <AgentStage sessions={status.sessions} feeds={feeds} feedVersion={feedVersion} ops={ops} />
-        <PrPipelines status={status} ops={ops} />
+      <SpectacleLayer level={motion.level} sessions={status.sessions} feeds={feeds} burstQueueRef={burstQueueRef} />
+      <div className="cockpit-content relative z-10 flex min-h-0 flex-1 flex-col">
+        {stale && (
+          <div className="bg-amber-500/90 px-6 py-1 text-center font-mono text-xs text-black">
+            data may be stale — {connectionState === "disconnected" ? "gateway disconnected, retrying" : `last update ${staleSeconds}s ago`}
+          </div>
+        )}
+        <HeaderStrip
+          status={status}
+          ops={ops}
+          soundEnabled={sound.enabled}
+          onToggleSound={sound.toggle}
+          onToggleMode={() => setMode((m) => (m === "wall" ? "ops" : "wall"))}
+          mode={mode}
+          motionLevel={motion.level}
+          onCycleMotion={motion.cycle}
+        />
+        <div className="grid min-h-0 flex-1 grid-cols-[1fr_2fr_1.2fr] gap-4 p-4">
+          <QueueLanes status={status} ops={ops} />
+          <AgentStage sessions={status.sessions} feeds={feeds} feedVersion={feedVersion} ops={ops} />
+          <PrPipelines status={status} ops={ops} />
+        </div>
+        <Timeline24h status={status} />
       </div>
-      <Timeline24h status={status} />
     </div>
   );
 }
