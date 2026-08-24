@@ -69,22 +69,38 @@ quietly becomes unsplittable.
 
 ## The `ooda` ForgeGraph app record is retired but NOT deleted
 
-`forge app delete ooda` returns a server-side 500. The cause appears to be its
-secret store: the record still holds **9 production secrets**, including
-`OODA_RUNNER_SECRET`, `OODA_ORACLE_TOKEN`, and `BOB_API_URL` /
+**Recommendation: leave it. Do not migrate the secrets, do not retry the delete.**
+
+`forge app delete ooda` returns a server-side 500. Investigating why turned up
+the reason that makes deletion the wrong goal anyway: the record still holds
+**9 production secrets** — `DATABASE_URL`, `DATABASE_URL_LOCAL`, `HYPERDRIVE_ID`,
+`AUTH_SECRET`, `OODA_RUNNER_SECRET`, `OODA_ORACLE_TOKEN`, and `BOB_API_URL` /
 `BOB_WORKSPACE_ID` / `BOB_API_KEY` (the last three updated 2026-08-03).
 
-Deleting the record would take those secrets with it. Nothing reads them at
-runtime — the runner gets its environment from `/opt/ooda-runner/.env` on the
-node, per `EnvironmentFile` in `ooda-runner.service` — but that node-local file
-is then the *only* copy. If the node were ever rebuilt, they would be
-unrecoverable.
+Nothing reads them at runtime — the runner takes its environment from
+`/opt/ooda-runner/.env` on the node, per `EnvironmentFile` in
+`ooda-runner.service`. But that node-local file is then the *only* copy, and
+`bob/production` holds none of those five OODA/BOB-integration keys. Deleting
+the record would leave a rebuilt node with no way to recover them.
 
-So the record is marked `RETIRED … DO NOT DEPLOY` in its description instead,
-which achieves the safety goal (nobody mistakes it for live) without
-destroying the credentials. Before anyone deletes it:
+The record's purpose has changed rather than expired. It is no longer a
+deployable app; it is **the credential store of record for the runner node**.
+Verified 2026-08-23: archiving the git repo does not affect secret access, so
+the store keeps working with the repo read-only.
 
-1. Export the 9 secrets, or confirm each is either dead or reproduced in the
-   `bob` app's store. Note `bob/production` currently has none of the five
-   OODA/BOB-integration keys above.
-2. Then delete, and expect the 500 to need a server-side fix regardless.
+Three reasons not to "tidy" this further:
+
+1. **Migrating the secrets to the `bob` app buys nothing.** They would be the
+   same secrets in a different record, and the move itself is the risky step —
+   handling nine live credentials to change a label.
+2. **Deleting after migrating is worse.** It converts a working backup into a
+   single copy plus a migration that has to have gone perfectly.
+3. **The 500 is a ForgeGraph bug worth reporting on its own.** Whatever cascade
+   it is failing on, an app delete that half-succeeds around a secret store is a
+   sharper edge than this record.
+
+The safety goal — nobody mistakes it for live — is met by the description
+(`RETIRED … DO NOT DEPLOY`) and by the stack files being gone from the archived
+repo, so nothing can be deployed from it regardless.
+
+Revisit only if every one of the nine is independently confirmed dead.
