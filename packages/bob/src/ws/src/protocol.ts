@@ -24,6 +24,10 @@ export type SessionEventType =
   | "input"
   | "tool_call"
   | "tool_result"
+  // Agent reasoning summaries (ACP adapters emit these; renderers may show or fold them).
+  | "thought"
+  // Batched worktree file activity from the runner's fs.watch (cockpit file heat / diff stats).
+  | "file_changes"
   | "state"
   | "error"
   | "heartbeat"
