@@ -28,33 +28,47 @@ describe("flattenFailures", () => {
   });
 });
 
+/**
+ * Extract the URL from whatever `fetch` was handed. `String(url)` gives
+ * "[object Object]" for a Request, so every `includes()` match below would
+ * quietly stop matching rather than fail loudly — the trap no-base-to-string
+ * is pointing at.
+ */
+function requestUrl(url: string | URL | Request): string {
+  if (typeof url === "string") return url;
+  return url instanceof URL ? url.href : url.url;
+}
+
 describe("fetchFgCiEvidence", () => {
   it("reads the gate and, for a red build, its structured failures", async () => {
-    const fetchImpl = vi.fn(async (url: string | URL | Request, _init?: RequestInit) => {
-      const u = String(url);
+    // Not `async`: nothing here awaits, so the promise is returned explicitly.
+    const fetchImpl = vi.fn((url: string | URL | Request, _init?: RequestInit) => {
+      const u = requestUrl(url);
       if (u.includes("/api/fg/ci/gate")) {
-        return new Response(JSON.stringify({ status: "fail", hasCIHistory: true, builds: [{ id: "b1", pipelineName: "ci", status: "failed", runUrl: "https://x/1" }] }));
+        return Promise.resolve(
+          new Response(JSON.stringify({ status: "fail", hasCIHistory: true, builds: [{ id: "b1", pipelineName: "ci", status: "failed", runUrl: "https://x/1" }] })),
+        );
       }
       if (u.includes("/api/fg/ci/runs/b1/failures")) {
-        return new Response(JSON.stringify({ headline: "1 test failure", parsed: true, groups: [{ kind: "test", count: 1, tests: [{ name: "boom" }] }] }));
+        return Promise.resolve(
+          new Response(JSON.stringify({ headline: "1 test failure", parsed: true, groups: [{ kind: "test", count: 1, tests: [{ name: "boom" }] }] })),
+        );
       }
-      return new Response("nope", { status: 404 });
+      return Promise.resolve(new Response("nope", { status: 404 }));
     });
-    const ev = await fetchFgCiEvidence({ baseUrl: "https://fg.test/", token: "t" }, "habitplay", "abc123", fetchImpl as unknown as typeof fetch);
+    const ev = await fetchFgCiEvidence({ baseUrl: "https://fg.test/", token: "t" }, "habitplay", "abc123", fetchImpl);
     expect(ev?.status).toBe("fail");
     expect(ev?.builds[0]?.runUrl).toBe("https://x/1");
     expect(ev?.failures?.tests[0]?.name).toBe("boom");
-    expect(fetchImpl.mock.calls[0]![1]).toMatchObject({ headers: { Authorization: "Bearer t" } });
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({ headers: { Authorization: "Bearer t" } });
     // cached: a second call for the same app+sha does not refetch
-    await fetchFgCiEvidence({ baseUrl: "https://fg.test/", token: "t" }, "habitplay", "abc123", fetchImpl as unknown as typeof fetch);
+    await fetchFgCiEvidence({ baseUrl: "https://fg.test/", token: "t" }, "habitplay", "abc123", fetchImpl);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it("returns null (not a throw) when the gate call fails", async () => {
-    const fetchImpl = vi.fn(async () => {
-      throw new Error("ECONNRESET");
-    });
-    const ev = await fetchFgCiEvidence({ baseUrl: "https://fg.test", token: "t" }, "app", "deadbeef", fetchImpl as unknown as typeof fetch);
+    const fetchImpl = vi.fn(() => Promise.reject(new Error("ECONNRESET")));
+    const ev = await fetchFgCiEvidence({ baseUrl: "https://fg.test", token: "t" }, "app", "deadbeef", fetchImpl);
     expect(ev).toBeNull();
   });
 });
@@ -84,13 +98,15 @@ describe("check-events summaries from FG builds", () => {
 
   it("skips the failures endpoint when the red build streamed exact results", async () => {
     const { fetchFgCiEvidence } = await import("../ciEvidence.js");
-    const fetchImpl = vi.fn(async (url: string | URL | Request, _init?: RequestInit) => {
-      if (String(url).includes("/api/fg/ci/gate")) {
-        return new Response(JSON.stringify({ status: "fail", hasCIHistory: true, builds: [{ id: "b9", pipelineName: "ci", status: "failed", runUrl: "", tests: { status: "failed", phases: [{ phase: "test", status: "failed", counts: { passed: 3, failed: 2, total: 5 }, failures: [{ name: "a" }, { name: "b" }] }] } }] }));
+    const fetchImpl = vi.fn((url: string | URL | Request, _init?: RequestInit) => {
+      if (requestUrl(url).includes("/api/fg/ci/gate")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ status: "fail", hasCIHistory: true, builds: [{ id: "b9", pipelineName: "ci", status: "failed", runUrl: "", tests: { status: "failed", phases: [{ phase: "test", status: "failed", counts: { passed: 3, failed: 2, total: 5 }, failures: [{ name: "a" }, { name: "b" }] }] } }] })),
+        );
       }
       throw new Error("failures endpoint should not be called");
     });
-    const ev = await fetchFgCiEvidence({ baseUrl: "https://fg.test", token: "t" }, "exact-app", "sha9", fetchImpl as unknown as typeof fetch);
+    const ev = await fetchFgCiEvidence({ baseUrl: "https://fg.test", token: "t" }, "exact-app", "sha9", fetchImpl);
     expect(ev?.failures?.tests.map((t) => t.name)).toEqual(["a", "b"]);
     expect(ev?.builds[0]?.tests?.phases[0]?.counts?.total).toBe(5);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
