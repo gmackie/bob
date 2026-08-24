@@ -31,7 +31,7 @@ export function normalizeTests(raw: unknown, at?: string): CheckRollup | null {
   if (!Array.isArray(t.phases)) return null;
   return {
     status: t.status === "passed" ? "passed" : "failed",
-    at: at || new Date(0).toISOString(),
+    at: at === "" || at === undefined ? new Date(0).toISOString() : at,
     phases: (t.phases as CheckRollup["phases"]).map((p) => ({
       phase: p.phase,
       status: p.status,
@@ -87,7 +87,7 @@ export function fgGateToCiFacts(gate: Pick<FgGateResponse, "status" | "builds">)
 
 /** Flatten a CiFailureSummary into what a PR row can show at a glance. */
 export function flattenFailures(f: FgFailuresResponse | null): FgCiEvidence["failures"] {
-  if (!f || !f.parsed) return null;
+  if (!f?.parsed) return null;
   const tests: { name: string; suite?: string; message?: string }[] = [];
   const errors: string[] = [];
   for (const g of f.groups) {
@@ -115,7 +115,13 @@ export async function fetchFgCiEvidence(
   try {
     const res = await fetchImpl(`${base}/api/fg/ci/gate?app=${encodeURIComponent(appSlug)}&sha=${encodeURIComponent(sha)}`, { headers });
     if (res.ok) {
-      const gate = (await res.json()) as FgGateResponse;
+      // `res.json()` is an unvalidated cast, so the declared shape is a claim
+      // rather than a guarantee: mark `builds` optional so the `?? []` guard
+      // below is honest. Dropping the guard to satisfy the linter would turn a
+      // partial response from ForgeGraph into a TypeError.
+      const gate = (await res.json()) as Omit<FgGateResponse, "builds"> & {
+        builds?: FgGateResponse["builds"];
+      };
       const builds = (gate.builds ?? []).map((b) => ({
         id: b.id,
         pipelineName: b.pipelineName,
