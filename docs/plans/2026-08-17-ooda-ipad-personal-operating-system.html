@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OODA iPad Personal Operating System — Implementation Plan</title>
+<style>
+  :root {
+    --bg: #0b1114; --surface: #111b20; --surface-2: #17252b; --ink: #edf2ec;
+    --muted: #9badab; --line: #294047; --accent: #f3b44b; --accent-soft: #392d16;
+    --teal: #62d1c5; --teal-soft: #143c3a; --blue: #86bff2; --blue-soft: #173247;
+    --bad: #f28f84; --bad-soft: #402522; --good: #8ed49d; --good-soft: #173a22;
+    --hero: radial-gradient(circle at 78% 18%, #244a4b 0, transparent 31%),
+            radial-gradient(circle at 15% 82%, #4b3515 0, transparent 30%),
+            linear-gradient(145deg, #0a1216 0%, #111f24 55%, #0b1114 100%);
+    --display: "Avenir Next", "SF Pro Display", "Segoe UI", sans-serif;
+    --body: "Iowan Old Style", Palatino, Georgia, serif;
+    --mono: "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.64 var(--body); }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 1.5rem 5rem; }
+  header.hero { background: var(--hero); border-bottom: 1px solid var(--line); padding: 4.5rem 1.5rem 3rem; }
+  .hero-inner { max-width: 1080px; margin: 0 auto; }
+  .kicker { color: var(--teal); font: 700 .78rem var(--display); letter-spacing: .2em; text-transform: uppercase; }
+  h1 { max-width: 900px; margin: .7rem 0 .8rem; font: 800 clamp(2.3rem, 5vw, 4.5rem)/1.02 var(--display); letter-spacing: -.045em; }
+  .hero-deck { max-width: 760px; color: #c7d4d1; font: 1.1rem/1.55 var(--display); }
+  .meta { color: var(--muted); font: .88rem var(--display); }
+  .meta span + span::before { content: "·"; margin: 0 .55rem; color: var(--accent); }
+  h2 { margin: 3.2rem 0 1rem; padding-bottom: .45rem; border-bottom: 1px solid var(--line); font: 750 1.55rem var(--display); letter-spacing: -.015em; }
+  h3 { margin: 1.7rem 0 .55rem; font: 700 1.08rem var(--display); }
+  h4 { margin: 1.3rem 0 .4rem; color: var(--teal); font: 700 .92rem var(--display); text-transform: uppercase; letter-spacing: .08em; }
+  p { margin: .55rem 0 1rem; max-width: 78ch; }
+  a { color: var(--blue); }
+  ul, ol { padding-left: 1.35rem; }
+  li { margin: .25rem 0; }
+  code { padding: .1rem .35rem; border: 1px solid var(--line); border-radius: 5px; background: #0a1519; font: .84em var(--mono); }
+  pre { overflow-x: auto; padding: 1rem; border: 1px solid var(--line); border-radius: 11px; background: #081014; font: .82rem/1.55 var(--mono); }
+  pre code { padding: 0; border: 0; background: none; }
+  .badge { display: inline-block; padding: .14rem .6rem; border-radius: 999px; font: 700 .7rem var(--display); letter-spacing: .04em; vertical-align: middle; }
+  .badge.approved, .badge.done { color: var(--good); background: var(--good-soft); }
+  .badge.todo { color: var(--muted); background: #233239; }
+  .badge.active { color: var(--blue); background: var(--blue-soft); }
+  .badge.risk { color: var(--accent); background: var(--accent-soft); }
+  .badge.blocked { color: var(--bad); background: var(--bad-soft); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: .75rem; margin: 1.8rem 0; }
+  .stat { padding: 1rem 1.1rem; border: 1px solid var(--line); border-radius: 14px; background: linear-gradient(160deg, var(--surface-2), var(--surface)); }
+  .stat b { display: block; color: var(--accent); font: 850 2rem/1 var(--display); }
+  .stat span { color: var(--muted); font: 700 .72rem var(--display); letter-spacing: .09em; text-transform: uppercase; }
+  .progress { display: flex; gap: 5px; height: 10px; margin: 1rem 0 2rem; }
+  .progress i { flex: 1; border-radius: 5px; background: var(--line); }
+  .progress i.active { background: var(--blue); }
+  .card { margin: 1rem 0; padding: 1rem 1.25rem; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+  .goals { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .callout { margin: 1rem 0; padding: .85rem 1rem; border-left: 4px solid var(--accent); border-radius: 0 10px 10px 0; background: var(--accent-soft); }
+  .callout.info { border-left-color: var(--teal); background: var(--teal-soft); }
+  table { width: 100%; margin: .8rem 0 1.2rem; border-collapse: collapse; table-layout: fixed; font-size: .9rem; }
+  th { color: var(--muted); font: 700 .72rem var(--display); letter-spacing: .07em; text-align: left; text-transform: uppercase; }
+  th, td { padding: .58rem .65rem; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; vertical-align: top; }
+  .task-table th:nth-child(1), .task-table td:nth-child(1) { width: 25%; }
+  .task-table th:nth-child(2), .task-table td:nth-child(2) { width: 34%; }
+  .task-table th:nth-child(4), .task-table td:nth-child(4) { width: 8%; }
+  details { margin: .7rem 0; padding: .65rem .9rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  summary { cursor: pointer; font: 700 .95rem var(--display); }
+  .timeline { margin: 1rem 0; padding: 0 0 0 1.5rem; border-left: 2px solid var(--line); list-style: none; }
+  .timeline li { position: relative; padding: 0 0 1.1rem; }
+  .timeline li::before { content: ""; position: absolute; left: -1.88rem; top: .38rem; width: .65rem; height: .65rem; border: 2px solid var(--muted); border-radius: 50%; background: var(--bg); }
+  .timeline li.active::before { border-color: var(--blue); background: var(--blue-soft); }
+  .timeline b { font-family: var(--display); }
+  figure.diagram { margin: 1.2rem 0 .35rem; padding: 1.2rem; overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: #0f191e; text-align: center; }
+  figure.diagram svg { max-width: 100%; height: auto; }
+  figure.diagram figcaption { margin-top: .8rem; color: var(--muted); font: .84rem var(--display); }
+  .mermaid-source pre { white-space: pre-wrap; }
+  .phase-rule { margin-top: 2.5rem; border: 0; border-top: 1px dashed var(--line); }
+  .small { color: var(--muted); font: .85rem var(--display); }
+  @media (max-width: 760px) {
+    .goals { grid-template-columns: 1fr; }
+    table, thead, tbody, tr, th, td { display: block; }
+    thead { display: none; }
+    tr { margin: .75rem 0; padding: .6rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    td { width: 100% !important; border: 0; padding: .3rem; }
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <div class="kicker">Approved implementation plan</div>
+    <h1>OODA iPad Personal Operating System <span class="badge approved">Approved</span></h1>
+    <p class="hero-deck">Turn the deployed OODA kernel into the voice-first, context-rich iPad surface used every day—without weakening privacy, canonical system ownership, or explicit promotion from thought to commitment.</p>
+    <p class="meta">
+      <span>2026-08-17</span>
+      <span>repo: <code>gmacko/bob</code> @ <code>docs/ooda-ipad-personal-os-plan</code></span>
+      <span>author: Codex with Graham</span>
+    </p>
+  </div>
+</header>
+<main>
+  <div class="stats">
+    <div class="stat"><b>9</b><span>Phases</span></div>
+    <div class="stat"><b>58</b><span>Work packages</span></div>
+    <div class="stat"><b>5</b><span>Ownership domains</span></div>
+    <div class="stat"><b>14d</b><span>Final dogfood gate</span></div>
+  </div>
+  <div class="progress" aria-label="Implementation phase progress">
+    <i class="active"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+  </div>
+
+  <h2>Overview</h2>
+  <p>OODA already has durable conversations, resumable streams, policy-visible context packs, bounded agent jobs, proposal approvals, and integration receipts. The missing daily-driver layer is not another kernel rewrite: it is an iPadOS 26 workspace, guaranteed local transcription, trustworthy offline projections, explicit venture scope, Obsidian Git retrieval, and a complete brainstorming-to-approved-work ladder.</p>
+  <p>This plan delivers a vertical slice first: open OODA on an iPad, speak locally, inspect or correct the transcript, brainstorm with venture and vault context, approve an Obsidian note or task, and inspect the receipt. Later phases deepen portfolio navigation, memory, agent orchestration, operations, and cross-device parity.</p>
+
+  <div class="callout info">
+    <strong>Implementation protocol.</strong> Execute from isolated worktrees based on current <code>forge/master</code>. Use test-driven development for each package, land small changesets, and re-run the cross-package contract suite at every phase boundary. Never modify the dirty canonical Bob, vault, or KanBanger checkouts.
+  </div>
+
+  <h2>Current state and proof boundary</h2>
+  <ul>
+    <li>Production source begins at Bob merge <code>e8e742a9</code>, which unlocked private opportunity reviews without enabling BizPulse writes.</li>
+    <li>The current iPad shell supports Tasks and Planning only; <code>/chat</code> falls back to the Tasks surface.</li>
+    <li>Current speech uses <code>expo-speech-recognition</code>. It requests system on-device recognition when available, but no app-owned transcription engine or model lifecycle exists.</li>
+    <li>Offline accepted turns are durable, but synced transcript history, proposals, corrections, and context are not cached.</li>
+    <li>BizPulse context is live but shallow; venture selection and typed venture-to-project mappings are absent.</li>
+    <li>The Obsidian adapter safely writes approved notes, but personal vault retrieval, Git sync, citations, and a working tablet browser are absent.</li>
+    <li>The planning worktree dependency baseline is <span class="badge blocked">Unverified</span>: Node 24 was selected correctly, but the monorepo linker was terminated before package binaries were complete. Phase 0 must establish a clean baseline before source edits.</li>
+  </ul>
+
+  <h2>Architecture</h2>
+  <figure class="diagram">
+    <svg id="ooda-ipad-architecture" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" style="max-width: 1265.64px; background-color: transparent;" viewBox="0 0 1265.640625 974" role="graphics-document document" aria-roledescription="flowchart-v2"><style>#ooda-ipad-architecture{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#ccc;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#ooda-ipad-architecture .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#ooda-ipad-architecture .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#ooda-ipad-architecture .error-icon{fill:#a44141;}#ooda-ipad-architecture .error-text{fill:#ddd;stroke:#ddd;}#ooda-ipad-architecture .edge-thickness-normal{stroke-width:1px;}#ooda-ipad-architecture .edge-thickness-thick{stroke-width:3.5px;}#ooda-ipad-architecture .edge-pattern-solid{stroke-dasharray:0;}#ooda-ipad-architecture .edge-thickness-invisible{stroke-width:0;fill:none;}#ooda-ipad-architecture .edge-pattern-dashed{stroke-dasharray:3;}#ooda-ipad-architecture .edge-pattern-dotted{stroke-dasharray:2;}#ooda-ipad-architecture .marker{fill:lightgrey;stroke:lightgrey;}#ooda-ipad-architecture .marker.cross{stroke:lightgrey;}#ooda-ipad-architecture svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#ooda-ipad-architecture p{margin:0;}#ooda-ipad-architecture .label{font-family:"trebuchet ms",verdana,arial,sans-serif;color:#ccc;}#ooda-ipad-architecture .cluster-label text{fill:#F9FFFE;}#ooda-ipad-architecture .cluster-label span{color:#F9FFFE;}#ooda-ipad-architecture .cluster-label span p{background-color:transparent;}#ooda-ipad-architecture .label text,#ooda-ipad-architecture span{fill:#ccc;color:#ccc;}#ooda-ipad-architecture .node rect,#ooda-ipad-architecture .node circle,#ooda-ipad-architecture .node ellipse,#ooda-ipad-architecture .node polygon,#ooda-ipad-architecture .node path{fill:#1f2020;stroke:#ccc;stroke-width:1px;}#ooda-ipad-architecture .rough-node .label text,#ooda-ipad-architecture .node .label text,#ooda-ipad-architecture .image-shape .label,#ooda-ipad-architecture .icon-shape .label{text-anchor:middle;}#ooda-ipad-architecture .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#ooda-ipad-architecture .rough-node .label,#ooda-ipad-architecture .node .label,#ooda-ipad-architecture .image-shape .label,#ooda-ipad-architecture .icon-shape .label{text-align:center;}#ooda-ipad-architecture .node.clickable{cursor:pointer;}#ooda-ipad-architecture .root .anchor path{fill:lightgrey!important;stroke-width:0;stroke:lightgrey;}#ooda-ipad-architecture .arrowheadPath{fill:lightgrey;}#ooda-ipad-architecture .edgePath .path{stroke:lightgrey;stroke-width:1px;}#ooda-ipad-architecture .flowchart-link{stroke:lightgrey;fill:none;}#ooda-ipad-architecture .edgeLabel{background-color:hsl(0, 0%, 34.4117647059%);text-align:center;}#ooda-ipad-architecture .edgeLabel p{background-color:hsl(0, 0%, 34.4117647059%);}#ooda-ipad-architecture .edgeLabel rect{opacity:0.5;background-color:hsl(0, 0%, 34.4117647059%);fill:hsl(0, 0%, 34.4117647059%);}#ooda-ipad-architecture .labelBkg{background-color:rgba(87.75, 87.75, 87.75, 0.5);}#ooda-ipad-architecture .cluster rect{fill:hsl(180, 1.5873015873%, 28.3529411765%);stroke:rgba(255, 255, 255, 0.25);stroke-width:1px;}#ooda-ipad-architecture .cluster text{fill:#F9FFFE;}#ooda-ipad-architecture .cluster span{color:#F9FFFE;}#ooda-ipad-architecture div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:12px;background:hsl(20, 1.5873015873%, 12.3529411765%);border:1px solid rgba(255, 255, 255, 0.25);border-radius:2px;pointer-events:none;z-index:100;}#ooda-ipad-architecture .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#ccc;}#ooda-ipad-architecture rect.text{fill:none;stroke-width:0;}#ooda-ipad-architecture .icon-shape,#ooda-ipad-architecture .image-shape{background-color:hsl(0, 0%, 34.4117647059%);text-align:center;}#ooda-ipad-architecture .icon-shape p,#ooda-ipad-architecture .image-shape p{background-color:hsl(0, 0%, 34.4117647059%);padding:2px;}#ooda-ipad-architecture .icon-shape .label rect,#ooda-ipad-architecture .image-shape .label rect{opacity:0.5;background-color:hsl(0, 0%, 34.4117647059%);fill:hsl(0, 0%, 34.4117647059%);}#ooda-ipad-architecture .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#ooda-ipad-architecture .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#ooda-ipad-architecture .node .neo-node{stroke:#ccc;}#ooda-ipad-architecture [data-look="neo"].node rect,#ooda-ipad-architecture [data-look="neo"].cluster rect,#ooda-ipad-architecture [data-look="neo"].node polygon{stroke:url(#ooda-ipad-architecture-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#ooda-ipad-architecture [data-look="neo"].swimlane.cluster rect{filter:none;}#ooda-ipad-architecture [data-look="neo"].node path{stroke:url(#ooda-ipad-architecture-gradient);stroke-width:1px;}#ooda-ipad-architecture [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#ooda-ipad-architecture [data-look="neo"].node .neo-line path{stroke:#ccc;filter:none;}#ooda-ipad-architecture [data-look="neo"].node circle{stroke:url(#ooda-ipad-architecture-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#ooda-ipad-architecture [data-look="neo"].node circle .state-start{fill:#000000;}#ooda-ipad-architecture [data-look="neo"].icon-shape .icon{fill:url(#ooda-ipad-architecture-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#ooda-ipad-architecture [data-look="neo"].icon-shape .icon-neo path{stroke:url(#ooda-ipad-architecture-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#ooda-ipad-architecture :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="ooda-ipad-architecture_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="ooda-ipad-architecture_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="ooda-ipad-architecture_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="ooda-ipad-architecture_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="ooda-ipad-architecture_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="ooda-ipad-architecture_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="ooda-ipad-architecture_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="ooda-ipad-architecture_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="ooda-ipad-architecture_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="ooda-ipad-architecture_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="ooda-ipad-architecture_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="ooda-ipad-architecture_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M507.641,134L507.641,138.167C507.641,142.333,507.641,150.667,507.641,158.333C507.641,166,507.641,173,507.641,176.5L507.641,180" id="ooda-ipad-architecture-L_IPAD_EDGE_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_IPAD_EDGE_0" data-points="W3sieCI6NTA3LjY0MDYyNSwieSI6MTM0fSx7IngiOjUwNy42NDA2MjUsInkiOjE1OX0seyJ4Ijo1MDcuNjQwNjI1LCJ5IjoxODR9XQ==" data-look="classic" marker-end="url(#ooda-ipad-architecture_flowchart-v2-pointEnd)"/><path d="M507.641,286L507.641,290.167C507.641,294.333,507.641,302.667,507.641,310.333C507.641,318,507.641,325,507.641,328.5L507.641,332" id="ooda-ipad-architecture-L_EDGE_KERNEL_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_EDGE_KERNEL_0" data-points="W3sieCI6NTA3LjY0MDYyNSwieSI6Mjg2fSx7IngiOjUwNy42NDA2MjUsInkiOjMxMX0seyJ4Ijo1MDcuNjQwNjI1LCJ5IjozMzZ9XQ==" data-look="classic" marker-end="url(#ooda-ipad-architecture_flowchart-v2-pointEnd)"/><path d="M377.641,410.395L328.921,419.162C280.201,427.93,182.76,445.465,134.04,459.526C85.32,473.588,85.32,484.175,85.32,489.469L85.32,494.763" id="ooda-ipad-architecture-L_KERNEL_DB_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_KERNEL_DB_0" data-points="W3sieCI6Mzc3LjY0MDYyNSwieSI6NDEwLjM5NDU2NDk5NjIwNzd9LHsieCI6ODUuMzIwMzEyNSwieSI6NDYzfSx7IngiOjg1LjMyMDMxMjUsInkiOjQ5OC43NjI1ODQ2ODYyNzkzfV0=" data-look="classic" marker-end="url(#ooda-ipad-architecture_flowchart-v2-pointEnd)"/><path d="M377.641,418.871L347.641,426.226C317.641,433.581,257.641,448.29,227.641,468.312C197.641,488.333,197.641,513.667,197.641,541C197.641,568.333,197.641,597.667,197.641,619.833C197.641,642,197.641,657,197.641,664.5L197.641,672" id="ooda-ipad-architecture-L_KERNEL_POLICY_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_KERNEL_POLICY_0" data-points="W3sieCI6Mzc3LjY0MDYyNSwieSI6NDE4Ljg3MDk2Nzc0MTkzNTV9LHsieCI6MTk3LjY0MDYyNSwieSI6NDYzfSx7IngiOjE5Ny42NDA2MjUsInkiOjUzOX0seyJ4IjoxOTcuNjQwNjI1LCJ5Ijo2Mjd9LHsieCI6MTk3LjY0MDYyNSwieSI6Njc2fV0=" data-look="classic" marker-end="url(#ooda-ipad-architecture_flowchart-v2-pointEnd)"/><path d="M197.641,778L197.641,784.167C197.641,790.333,197.641,802.667,252.819,819.276C307.997,835.885,418.354,856.769,473.532,867.212L528.71,877.654" id="ooda-ipad-architecture-L_POLICY_SOURCES_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_POLICY_SOURCES_0" data-points="W3sieCI6MTk3LjY0MDYyNSwieSI6Nzc4fSx7IngiOjE5Ny42NDA2MjUsInkiOjgxNX0seyJ4Ijo1MzIuNjQwNjI1LCJ5Ijo4NzguMzk3ODQ5NDYyMzY1Nn1d" data-look="classic" marker-end="url(#ooda-ipad-architecture_flowchart-v2-pointEnd)"/><path d="M611.654,438L620.152,442.167C628.649,446.333,645.645,454.667,654.143,462.333C662.641,470,662.641,477,662.641,480.5L662.641,484" id="ooda-ipad-architecture-L_KERNEL_RUNNER_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_KERNEL_RUNNER_0" data-points="W3sieCI6NjExLjY1Mzc4Mjg5NDczNjksInkiOjQzOH0seyJ4Ijo2NjIuNjQwNjI1LCJ5Ijo0NjN9LHsieCI6NjYyLjY0MDYyNSwieSI6NDg4fV0=" data-look="classic" marker-end="url(#ooda-ipad-architecture_flowchart-v2-pointEnd)"/><path d="M572.811,590L561.949,596.167C551.088,602.333,529.364,614.667,518.502,628.333C507.641,642,507.641,657,507.641,664.5L507.641,672" id="ooda-ipad-architecture-L_RUNNER_MODELS_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_RUNNER_MODELS_0" data-points="W3sieCI6NTcyLjgxMTA3OTU0NTQ1NDUsInkiOjU5MH0seyJ4Ijo1MDcuNjQwNjI1LCJ5Ijo2Mjd9LHsieCI6NTA3LjY0MDYyNSwieSI6Njc2fV0=" data-look="classic" marker-end="url(#ooda-ipad-architecture_flowchart-v2-pointEnd)"/><path d="M752.47,590L763.332,596.167C774.194,602.333,795.917,614.667,806.779,628.333C817.641,642,817.641,657,817.641,664.5L817.641,672" id="ooda-ipad-architecture-L_RUNNER_GRAPH_0" class="edge-thickness-normal edge-pattern-dotted edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_RUNNER_GRAPH_0" data-points="W3sieCI6NzUyLjQ3MDE3MDQ1NDU0NTUsInkiOjU5MH0seyJ4Ijo4MTcuNjQwNjI1LCJ5Ijo2Mjd9LHsieCI6ODE3LjY0MDYyNSwieSI6Njc2fV0=" data-look="classic" marker-end="url(#ooda-ipad-architecture_flowchart-v2-pointEnd)"/><path d="M637.641,402.935L719.307,412.946C800.974,422.957,964.307,442.978,1045.974,458.489C1127.641,474,1127.641,485,1127.641,490.5L1127.641,496" id="ooda-ipad-architecture-L_KERNEL_OUTBOX_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_KERNEL_OUTBOX_0" data-points="W3sieCI6NjM3LjY0MDYyNSwieSI6NDAyLjkzNTQ4Mzg3MDk2Nzc0fSx7IngiOjExMjcuNjQwNjI1LCJ5Ijo0NjN9LHsieCI6MTEyNy42NDA2MjUsInkiOjUwMH1d" data-look="classic" marker-end="url(#ooda-ipad-architecture_flowchart-v2-pointEnd)"/><path d="M1127.641,578L1127.641,586.167C1127.641,594.333,1127.641,610.667,1127.641,624.333C1127.641,638,1127.641,649,1127.641,654.5L1127.641,660" id="ooda-ipad-architecture-L_OUTBOX_WRITES_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_OUTBOX_WRITES_0" data-points="W3sieCI6MTEyNy42NDA2MjUsInkiOjU3OH0seyJ4IjoxMTI3LjY0MDYyNSwieSI6NjI3fSx7IngiOjExMjcuNjQwNjI1LCJ5Ijo2NjR9XQ==" data-look="classic" marker-end="url(#ooda-ipad-architecture_flowchart-v2-pointEnd)"/><path d="M1127.641,790L1127.641,794.167C1127.641,798.333,1127.641,806.667,1072.462,821.276C1017.284,835.885,906.927,856.769,851.749,867.212L796.571,877.654" id="ooda-ipad-architecture-L_WRITES_SOURCES_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_WRITES_SOURCES_0" data-points="W3sieCI6MTEyNy42NDA2MjUsInkiOjc5MH0seyJ4IjoxMTI3LjY0MDYyNSwieSI6ODE1fSx7IngiOjc5Mi42NDA2MjUsInkiOjg3OC4zOTc4NDk0NjIzNjU2fV0=" data-look="classic" marker-end="url(#ooda-ipad-architecture_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="L_IPAD_EDGE_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_EDGE_KERNEL_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_KERNEL_DB_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_KERNEL_POLICY_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_POLICY_SOURCES_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_KERNEL_RUNNER_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_RUNNER_MODELS_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(817.640625, 627)"><g class="label" data-id="L_RUNNER_GRAPH_0" transform="translate(-62.3984375, -12)"><foreignObject width="124.796875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>bounded strategy</p></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_KERNEL_OUTBOX_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_OUTBOX_WRITES_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_WRITES_SOURCES_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="ooda-ipad-architecture-flowchart-IPAD-0" data-look="classic" transform="translate(507.640625, 71)"><rect class="basic label-container" style="" x="-130" y="-63" width="260" height="126"/><g class="label" style="" transform="translate(-100, -48)"><rect/><foreignObject width="200" height="96"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>iPadOS 26<br />local speech • adaptive workspace • encrypted cache</p></span></div></foreignObject></g></g><g class="node default" id="ooda-ipad-architecture-flowchart-EDGE-1" data-look="classic" transform="translate(507.640625, 235)"><rect class="basic label-container" style="" x="-130" y="-51" width="260" height="102"/><g class="label" style="" transform="translate(-100, -36)"><rect/><foreignObject width="200" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>OODA Edge API<br />authenticated HTTP • resumable SSE</p></span></div></foreignObject></g></g><g class="node default" id="ooda-ipad-architecture-flowchart-KERNEL-2" data-look="classic" transform="translate(507.640625, 387)"><rect class="basic label-container" style="" x="-130" y="-51" width="260" height="102"/><g class="label" style="" transform="translate(-100, -36)"><rect/><foreignObject width="200" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>OODA Personal-OS Kernel<br />events • memory • disclosure • proposals</p></span></div></foreignObject></g></g><g class="node default" id="ooda-ipad-architecture-flowchart-DB-3" data-look="classic" transform="translate(85.3203125, 539)"><path d="M0,13.82494272783148 a77.3203125,13.82494272783148 0,0,0 154.640625,0 a77.3203125,13.82494272783148 0,0,0 -154.640625,0 l0,52.824942727831484 a77.3203125,13.82494272783148 0,0,0 154.640625,0 l0,-52.824942727831484" class="basic label-container outer-path" style="" transform="translate(-77.3203125, -40.237414091747226)"/><g class="label" style="" transform="translate(-69.8203125, -2)"><rect/><foreignObject width="139.640625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Postgres + pgvector</p></span></div></foreignObject></g></g><g class="node default" id="ooda-ipad-architecture-flowchart-POLICY-4" data-look="classic" transform="translate(197.640625, 727)"><rect class="basic label-container" style="" x="-130" y="-51" width="260" height="102"/><g class="label" style="" transform="translate(-100, -36)"><rect/><foreignObject width="200" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>Context policy<br />exact receipts • freshness • sensitivity</p></span></div></foreignObject></g></g><g class="node default" id="ooda-ipad-architecture-flowchart-SOURCES-5" data-look="classic" transform="translate(662.640625, 903)"><rect class="basic label-container" style="" x="-130" y="-63" width="260" height="126"/><g class="label" style="" transform="translate(-100, -48)"><rect/><foreignObject width="200" height="96"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>Context sources<br />Obsidian Git • BizPulse • Bob / KanBanger • ForgeGraph</p></span></div></foreignObject></g></g><g class="node default" id="ooda-ipad-architecture-flowchart-RUNNER-6" data-look="classic" transform="translate(662.640625, 539)"><rect class="basic label-container" style="" x="-130" y="-51" width="260" height="102"/><g class="label" style="" transform="translate(-100, -36)"><rect/><foreignObject width="200" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>Trusted runner<br />subscription broker • sandbox • job strategies</p></span></div></foreignObject></g></g><g class="node default" id="ooda-ipad-architecture-flowchart-MODELS-7" data-look="classic" transform="translate(507.640625, 727)"><rect class="basic label-container" style="" x="-130" y="-51" width="260" height="102"/><g class="label" style="" transform="translate(-100, -36)"><rect/><foreignObject width="200" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>Subscription runtimes<br />Grok CLI / ACP • Claude • Codex app-server</p></span></div></foreignObject></g></g><g class="node default" id="ooda-ipad-architecture-flowchart-GRAPH-8" data-look="classic" transform="translate(817.640625, 727)"><rect class="basic label-container" style="" x="-130" y="-51" width="260" height="102"/><g class="label" style="" transform="translate(-100, -36)"><rect/><foreignObject width="200" height="72"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>Optional job-local graph<br />comparison • synthesis • opportunity review</p></span></div></foreignObject></g></g><g class="node default" id="ooda-ipad-architecture-flowchart-OUTBOX-9" data-look="classic" transform="translate(1127.640625, 539)"><rect class="basic label-container" style="" x="-130" y="-39" width="260" height="78"/><g class="label" style="" transform="translate(-100, -24)"><rect/><foreignObject width="200" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>Approval ledger + transactional outbox</p></span></div></foreignObject></g></g><g class="node default" id="ooda-ipad-architecture-flowchart-WRITES-10" data-look="classic" transform="translate(1127.640625, 727)"><rect class="basic label-container" style="" x="-130" y="-63" width="260" height="126"/><g class="label" style="" transform="translate(-100, -48)"><rect/><foreignObject width="200" height="96"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>Idempotent domain adapters<br />receipts • reconciliation • repairs</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="ooda-ipad-architecture-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#FFFFFF"/></filter></defs><defs><filter id="ooda-ipad-architecture-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#FFFFFF"/></filter></defs><linearGradient id="ooda-ipad-architecture-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#cccccc" stop-opacity="1"/><stop offset="100%" stop-color="hsl(180, 0%, 18.3529411765%)" stop-opacity="1"/></linearGradient></svg>
+    <figcaption>OODA remains the policy and event kernel. iPad, subscription runtimes, and domain systems interact through typed, inspectable boundaries.</figcaption>
+  </figure>
+  <details class="mermaid-source">
+    <summary>Diagram source (Mermaid)</summary>
+    <pre><code>flowchart TB
+  IPAD[&quot;iPadOS 26 — local speech • adaptive workspace • encrypted cache&quot;]
+  EDGE[&quot;OODA Edge API — authenticated HTTP • resumable SSE&quot;]
+  KERNEL[&quot;OODA Personal-OS Kernel — events • memory • disclosure • proposals&quot;]
+  DB[(&quot;Postgres + pgvector&quot;)]
+  POLICY[&quot;Context policy — receipts • freshness • sensitivity&quot;]
+  SOURCES[&quot;Obsidian Git • BizPulse • Bob / KanBanger • ForgeGraph&quot;]
+  RUNNER[&quot;Trusted runner — subscription broker • sandbox • strategies&quot;]
+  MODELS[&quot;Grok CLI / ACP • Claude • Codex app-server&quot;]
+  GRAPH[&quot;Optional job graph — comparison • synthesis • opportunity review&quot;]
+  OUTBOX[&quot;Approval ledger + transactional outbox&quot;]
+  WRITES[&quot;Idempotent adapters — receipts • reconciliation • repairs&quot;]
+  IPAD --&gt; EDGE --&gt; KERNEL
+  KERNEL --&gt; DB
+  KERNEL --&gt; POLICY --&gt; SOURCES
+  KERNEL --&gt; RUNNER --&gt; MODELS
+  RUNNER -. bounded strategy .-&gt; GRAPH
+  KERNEL --&gt; OUTBOX --&gt; WRITES
+  WRITES --&gt; SOURCES</code></pre>
+  </details>
+
+  <h2>Goals &amp; non-goals</h2>
+  <div class="goals">
+    <div class="card">
+      <h3>Goals</h3>
+      <ul>
+        <li>Make OODA the default iPadOS 26 conversational workspace.</li>
+        <li>Guarantee local microphone transcription by default.</li>
+        <li>Blend permitted Obsidian, BizPulse, Bob, KanBanger, and ForgeGraph evidence with visible provenance.</li>
+        <li>Support existing-venture and new-opportunity brainstorming without silently creating work.</li>
+        <li>Preserve Bob planning and execution capabilities inside both the iPad PersonalOS surface and OODA web.</li>
+        <li>Turn approved outcomes into idempotent, repairable external deliveries.</li>
+        <li>Prove usability on a real iPad through a 14-day dogfood gate.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Non-goals</h3>
+      <ul>
+        <li>Spoken answers, ambient listening, or wake words.</li>
+        <li>Fully offline LLM inference.</li>
+        <li>Automatic external writes, publishing, purchasing, or destructive actions.</li>
+        <li>Making LangGraph, LangChain, or Strands the OODA kernel.</li>
+        <li>Mirroring every conversation into Obsidian.</li>
+        <li>Multi-user collaboration or Android-tablet parity in the first release.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Canonical ownership</h2>
+  <table>
+    <thead><tr><th>System</th><th>Owns</th><th>OODA interaction</th><th>Write boundary</th></tr></thead>
+    <tbody>
+      <tr><td>OODA</td><td>Conversation events, memory, context receipts, proposals, approvals, jobs, lineage</td><td>Canonical deliberation layer</td><td>Private writes automatic; external proposals require approval</td></tr>
+      <tr><td>Obsidian</td><td>Curated personal knowledge and narrative thinking</td><td>Git-backed retrieval and approved note proposals</td><td>Exact-file preview, optimistic blob check, scoped commit</td></tr>
+      <tr><td>BizPulse</td><td>Venture identity, lifecycle, objectives, portfolio focus, external project mappings</td><td>Venture briefs, similarity, opportunity-review delivery</td><td>Approved venture or mapping proposal</td></tr>
+      <tr><td>KanBanger / Bob</td><td>Committed task state / execution planning and runs</td><td>Venture-grouped work and execution lineage</td><td>Approved task/project or mapping mutation</td></tr>
+      <tr><td>ForgeGraph</td><td>Changesets, builds, deployments, incidents, runtime evidence</td><td>Read-only evidence and completion receipts</td><td>Deployment remains just-in-time approved</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Milestones and dependency order</h2>
+  <ul class="timeline">
+    <li class="active"><b>Phase 0 — Safe baseline and measurements</b><br>Establish a clean Node 24 worktree, real-device target, source snapshots, and rollback evidence.</li>
+    <li><b>Phase 1 — Contracts, events, and projections</b><br>Add scope, citation, source freshness, mapping, and offline synchronization contracts.</li>
+    <li><b>Phase 2 — iPad OODA shell</b><br>Make conversation the default and install the seven-destination adaptive rail.</li>
+    <li><b>Phase 3 — Guaranteed local transcription</b><br>Implement the engine seam, SpeechAnalyzer bridge, bakeoff, model readiness, and five-minute capture.</li>
+    <li><b>Phase 4 — Secure offline daily driver</b><br>Encrypt local projections, add Face ID, and broaden the outbox.</li>
+    <li><b>Phase 5 — Venture and work graph</b><br>Ship venture briefs, tasks-under-ventures, Other, Queues, and typed mappings.</li>
+    <li><b>Phase 6 — Obsidian Git knowledge</b><br>Index permitted notes, cite exact spans, and deliver safe scoped commits.</li>
+    <li><b>Phase 7 — Brainstorming and promotion</b><br>Complete opportunity, memory, proposal editing, Today, and universal search flows.</li>
+    <li><b>Phase 8 — Agent strategy, operations, and rollout</b><br>Add telemetry/evals, bounded graph strategies, TestFlight, and 14-day proof.</li>
+  </ul>
+
+  <h2>Phase 0 — Safe baseline and measurements <span class="badge active">First</span></h2>
+  <p>No feature code begins until the base, device, private repositories, and restore paths are current and inspectable.</p>
+  <table class="task-table">
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>0.1 Create implementation worktree from current production base</td><td><code>~/.config/superpowers/worktrees/bob/feat/ooda-ipad-daily-driver</code></td><td><code>git status --short</code> empty; HEAD equals current <code>forge/master</code></td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>0.2 Establish Node 24 dependency baseline</td><td><code>package.json</code>, <code>pnpm-lock.yaml</code>, local toolchain only</td><td><code>pnpm install --frozen-lockfile</code>; focused OODA/mobile tests and typechecks pass before edits</td><td><span class="badge blocked">Blocked</span></td></tr>
+      <tr><td>0.3 Resolve target iPad and native release lane</td><td><code>apps/mobile-bob/eas.json</code>, Preflight application record</td><td>Device UDID registered; internal build can install; iPadOS 26 confirmed</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>0.4 Snapshot production schemas and feature gates</td><td><code>docs/ooda/</code> inventory, OODA/BizPulse/KanBanger read-only reports</td><td>Counts, deployed SHAs, migrations, rollout stage, backups, and restore rehearsal recorded</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>0.5 Reconcile vault remotes before indexing</td><td>Private vault repository; no Bob source file</td><td>Local commits intentionally pushed/reconciled; GitHub canonical; Gitea mirror relationship documented</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>0.6 Capture speech benchmark corpus</td><td><code>apps/mobile-bob/e2e/fixtures/ooda-speech/manifest.json</code> (metadata only; recordings remain private)</td><td>Short, jargon, noisy, AirPods, and five-minute cases defined with expected text and retention policy</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>Phase 0 commands and stop conditions</summary>
+    <pre><code>fnm use 24.14.0
+pnpm install --frozen-lockfile
+pnpm --filter @gmacko/ooda test
+pnpm --filter @gmacko/ooda typecheck
+pnpm --filter @bob/mobile test
+pnpm --filter @bob/mobile typecheck
+pnpm --filter @gmacko/ooda-runner test
+pnpm --filter @gmacko/ooda-runner typecheck</code></pre>
+    <p>Stop if dependency installation is incomplete, the target device is unknown, a database backup cannot restore, a credential is embedded in a remote URL, or the vault remotes contain divergent unpublished histories.</p>
+  </details>
+
+  <h2>Phase 1 — Contracts, events, and projections <span class="badge todo">Todo</span></h2>
+  <p>Model the new UX as versioned contracts and event-derived projections before wiring screens or integrations.</p>
+  <table class="task-table">
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>1.1 Conversation scope and anchor contracts</td><td>Create <code>packages/ooda/src/contracts/v1/workspace.ts</code>; modify <code>conversation.ts</code>, <code>events.ts</code>, <code>index.ts</code></td><td>Fixtures cover <code>new_thought</code>, <code>venture</code>, and <code>portfolio</code>; scope changes retain causation and branch lineage</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>1.2 Typed citations and source freshness</td><td>Modify <code>context.ts</code>, <code>integrations.ts</code>, <code>events.ts</code></td><td>Every citation carries source system, external ID, span, deep link, observed time, version, and sensitivity decision</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>1.3 Venture/work projection contract</td><td>Create <code>packages/ooda/src/contracts/v1/portfolio.ts</code>; modify <code>packages/ooda-client/src/v1/</code></td><td>Cursor fixtures include zero-task ventures, destination-aware task refs, partial source errors, aliases, and computed Other reasons</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>1.4 Proposal revision and attachment versions</td><td>Modify <code>proposals.ts</code>, <code>packages/ooda/src/db/schema/orchestration.ts</code>; add Drizzle migration</td><td>Approval of stale proposal version conflicts; edit/split/merge/attach creates immutable successors</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>1.5 Offline command and conflict envelopes</td><td>Create <code>contracts/v1/offline.ts</code>; modify <code>problems.ts</code></td><td>Idempotency and expected-version tests cover turns, corrections, pins, proposals, scopes, and queued promotions</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>1.6 Rebuildable Today/search projections</td><td>Modify <code>db/schema/orchestration.ts</code>, <code>kernel/projections.ts</code>; create <code>kernel/today.ts</code>, <code>kernel/universal-search.ts</code></td><td>Rebuild twice yields byte-equivalent results; five-item attention ceiling is deterministic</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>Core contract sketch and TDD loop</summary>
+    <pre><code>type ConversationScopeV1 =
+  | { kind: "new_thought" }
+  | { kind: "portfolio" }
+  | { kind: "venture"; ventureId: string; ventureVersion?: string };
+
+type SourceCitationV1 = {
+  sourceSystem: "obsidian" | "bizpulse" | "kanbanger" | "bob" | "forgegraph";
+  externalId: string;
+  span?: { heading?: string; start?: number; end?: number };
+  deepLink?: string;
+  observedAt: string;
+  sourceVersion: string;
+  disclosureDecisionId: string;
+};</code></pre>
+    <ol>
+      <li>Add malformed and valid fixtures to <code>contracts/v1/__tests__/contracts.test.ts</code>.</li>
+      <li>Run the focused test and observe the expected schema failure.</li>
+      <li>Add the smallest schema/export change.</li>
+      <li>Run contract, kernel projection, and client typechecks.</li>
+      <li>Commit the contract slice before database or UI consumers.</li>
+    </ol>
+  </details>
+
+  <h2>Phase 2 — iPad OODA shell <span class="badge todo">Todo</span></h2>
+  <p>Make OODA reachable, default, adaptive, and usable before investing in a new recognizer.</p>
+  <table class="task-table">
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>2.1 Promote OODA to the default tablet mode</td><td>Modify <code>features/chat/navigation.ts</code>, <code>features/tablet/shell.ts</code>, <code>app/_layout.tsx</code> and their tests</td><td>Authenticated iPad home resolves to <code>/chat</code>; route round-trips do not fall back to Tasks</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>2.2 Build the seven-destination rail</td><td>Create <code>components/tablet/OodaSidebar.tsx</code>, <code>features/tablet/ooda-rail.ts</code>; modify <code>TabletSidebar.tsx</code></td><td>New thought, Today, pins, recents, ventures, Queues, and search/archive are keyboard and VoiceOver navigable</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>2.3 Adapt conversation and inspector panes</td><td>Create <code>components/tablet/OodaConversationPane.tsx</code>, <code>OodaInspectorPane.tsx</code>; refactor <code>chat-screen.tsx</code></td><td>Landscape three-pane, medium two-pane, portrait focused layouts preserve selection and scroll position</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>2.4 Add venture, Today, Queue, and search targets</td><td>Modify <code>features/tablet/navigation.ts</code>, <code>shell.ts</code>, <code>app/_layout.tsx</code>; add route tests</td><td>Deep links, back navigation, force-quit restoration, and branch selection land on the same target</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>2.5 Fold legacy Tasks into Ventures/Queues</td><td>Modify <code>app/tasks*.tsx</code>, <code>TasksDashboard.tsx</code>, <code>TaskLaneTablePane.tsx</code></td><td>Compatibility redirects preserve old links; Planning remains separately reachable; no duplicate task surface remains after parity</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>Tablet state-model acceptance tests</summary>
+    <p>Write pure tests first in <code>features/tablet/shell.test.ts</code> and <code>navigation.test.ts</code>. Cover every rail target, portrait/landscape transition, missing selection, stale deep link, last-conversation restore, and compatibility redirect. Only then mount React Native panes.</p>
+  </details>
+
+  <h2>Phase 3 — Guaranteed local transcription <span class="badge todo">Todo</span></h2>
+  <p>Use iPadOS 26 SpeechAnalyzer as the leading candidate, but promote an engine only after a real-device comparison. Official references: <a href="https://developer.apple.com/documentation/speech/speechanalyzer">Apple SpeechAnalyzer</a>, <a href="https://github.com/mybigday/whisper.rn">whisper.rn</a>, and <a href="https://docs.swmansion.com/react-native-executorch/docs/hooks/natural-language-processing/useSpeechToText">React Native ExecuTorch STT</a>.</p>
+  <table class="task-table">
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>3.1 Introduce the engine-neutral interface</td><td>Create <code>features/chat/transcription/types.ts</code>, <code>engine-registry.ts</code>, <code>use-transcription.ts</code>; retain compatibility wrapper in <code>use-speech-recognition.ts</code></td><td>State-machine tests run unchanged against fake system, SpeechAnalyzer, and embedded engines</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>3.2 Bridge SpeechAnalyzer through an Expo local module</td><td>Create <code>apps/mobile-bob/modules/ooda-transcription/</code> with Swift module, TypeScript facade, config, and tests; modify <code>app.config.js</code></td><td>Live partial/final AsyncSequence events; local asset readiness; cancel deletes temporary buffers; network-capture test is silent</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>3.3 Build isolated benchmark profiles</td><td>Modify <code>eas.json</code>, <code>package.json</code>; create <code>e2e/ooda-stt-benchmark.ts</code> and engine adapters</td><td>Same private corpus reports correction rate, partial/final latency, RSS, thermal state, battery, and five-minute stability</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>3.4 Select and harden the winner</td><td>Keep winning adapter; remove losing production dependencies; record ADR under <code>docs/ooda/</code></td><td>≥90% ordinary turns accepted unchanged; partial ≈300ms; final ≈1.2s; no discouraging sustained thermal behavior</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>3.5 Model/readiness and explicit cloud retry</td><td>Create <code>transcription/model-manager.ts</code>, <code>components/transcription-setup.tsx</code>; modify settings and disclosure UI</td><td>Text works before setup; airplane self-test passes; network fallback is impossible without a per-recording confirmation</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>3.6 Long-form, vocabulary, and audio routes</td><td>Modify <code>voice-input-bar.tsx</code>, <code>voice-state-machine.ts</code>, <code>speech-capture-finalizer.ts</code>; create <code>personal-vocabulary.ts</code></td><td>Five-minute locked recording, AirPods route changes, interruptions, last-good-partial recovery, and confirmed jargon corrections pass on device</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>Transcription interface sketch</summary>
+    <pre><code>interface TranscriptionEngine {
+  readonly id: "speech_analyzer" | "whisper_rn" | "executorch";
+  inspectReadiness(): Promise&lt;TranscriptionReadiness&gt;;
+  prepare(input: { locale: string }): Promise&lt;void&gt;;
+  start(input: CapturePolicy): AsyncIterable&lt;TranscriptionEvent&gt;;
+  stop(): Promise&lt;TranscriptionFinal&gt;;
+  cancel(): Promise&lt;void&gt;;
+  purgeEphemeralAudio(): Promise&lt;void&gt;;
+}</code></pre>
+    <p>The UI consumes only normalized events. Engine-native confidence, committed/non-committed segments, timestamps, and errors remain in a redacted diagnostic receipt.</p>
+  </details>
+
+  <h2>Phase 4 — Secure offline daily driver <span class="badge todo">Todo</span></h2>
+  <p>Replace the single-conversation AsyncStorage shell with an encrypted, queryable local projection while preserving the current durable-before-delivery outbox.</p>
+  <table class="task-table">
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>4.1 Add encrypted SQLite projection</td><td>Modify <code>app.config.js</code>, <code>package.json</code>; create <code>features/chat/offline/database.ts</code>, <code>schema.ts</code>, <code>migrations.ts</code></td><td>SQLCipher enabled in native build; key sealed with SecureStore; database unreadable without device key</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>4.2 Cache conversations and permitted context</td><td>Create <code>offline/projections.ts</code>, <code>retention.ts</code>; modify <code>ooda-offline-shell.ts</code></td><td>Pinned retained; unpinned 30-day policy; deletions and sensitivity changes purge cached rows</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>4.3 Generalize offline commands</td><td>Refactor <code>ooda-outbox.ts</code>; create <code>offline/commands.ts</code>, <code>reconciler.ts</code></td><td>Turns, corrections, pins, scopes, proposal edits, and approved queued writes are idempotent across reboot and retry</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>4.4 Add explicit multi-device conflicts</td><td>Create <code>components/conflict-card.tsx</code>, <code>offline/conflicts.ts</code></td><td>Append-only events merge; competing corrections/scope/proposal versions stop with actionable conflict cards</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>4.5 Face ID and privacy surfaces</td><td>Create <code>features/security/app-lock.ts</code>, <code>components/app-lock-screen.tsx</code>; modify <code>app/_layout.tsx</code>, notification config, iOS privacy manifest</td><td>Idle lock, app-switcher shielding, hidden notification content, biometric failure, and recovery pass on iPad</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>Storage choice</summary>
+    <p>Use Expo SQLite with SQLCipher enabled by the native config plugin, plus SecureStore for the database key. The <a href="https://docs.expo.dev/versions/latest/sdk/sqlite/">Expo SQLite documentation</a> is the implementation reference. Never place note or transcript contents in analytics, crash breadcrumbs, or plaintext AsyncStorage.</p>
+  </details>
+
+  <h2>Phase 5 — Venture and work graph <span class="badge todo">Todo</span></h2>
+  <p>Make venture identity explicit, preserve Bob’s planning and execution surfaces on iPad and web, and close the evidence loop without copying task or deployment truth into OODA.</p>
+  <table class="task-table">
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>5.1 Add typed venture-to-external-project mappings in BizPulse</td><td>Companion repo: <code>packages/biz-db/src/pulse-schema.ts</code>, generated migration, <code>packages/biz-api/src/router/linear-insights.ts</code></td><td>Unique active mapping per venture/system; seed from connector config; stale/conflicting mappings remain repairable</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>5.2 Build OODA portfolio projection source</td><td>Create <code>kernel/portfolio-context-source.ts</code>; modify <code>context-sources.ts</code>, <code>api/router/context.ts</code></td><td>Every venture appears including zero-task ventures; source outages return partial receipts rather than empty truth</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>5.3 Enrich BizPulse venture briefs</td><td>Modify <code>context-sources.ts</code>, runner BizPulse client, contract fixtures</td><td>Brief includes thesis, role, lifecycle, objectives, evidence, risks, focus, domain, repo links, notes, freshness, and deep link</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>5.4 Normalize task and execution aliases</td><td>Create <code>kernel/work-lineage.ts</code>; extend <code>external_links</code> contract/projection</td><td>KanBanger task and linked Bob run display once; Bob-only execution remains distinct; workspace isolation proven</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>5.5 Ship venture, Other, and Queue tablet views</td><td>Create <code>components/tablet/VenturePane.tsx</code>, <code>VentureTaskList.tsx</code>, <code>QueuePane.tsx</code>; modify rail models</td><td>Pagination, zero-task ventures, computed Other reasons, repair suggestions, and destination-aware deep links pass</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>5.6 Require approval for task reassignment</td><td>Modify <code>contracts/v1/proposals.ts</code>, <code>kernel/proposals.ts</code>, BizPulse adapter</td><td>Move preview names both old/new mappings; replay creates one mutation; cancellation/repair remain available under kill switch</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>5.7 Preserve Bob execution UI parity in PersonalOS</td><td>Refactor <code>apps/mobile-bob/src/components/tablet/WorkItemPane.tsx</code>, <code>LinkedExecutionRunsCard.tsx</code>, <code>AgentThreadView.tsx</code>, and <code>app/work-items/[workItemId]/workspace.tsx</code>; create <code>apps/ooda-edge/src/components/work/bob-execution-workspace.tsx</code>; modify <code>conversation-workspace.tsx</code></td><td>iPad and web can inspect the same project/work item, plan and task tree, dispatch/retry/cancel a run, follow live output, review artifacts/diffs, and open PR/changeset/build/deployment evidence without losing conversation position</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>5.8 Reconcile execution evidence through task closure</td><td>Modify <code>contracts/v1/events.ts</code>, <code>contracts/v1/integrations.ts</code>, <code>kernel/work-lineage.ts</code>, <code>kernel/context-sources.ts</code>, <code>apps/ooda-runner/src/integrations/external-status-worker.ts</code>, and status-worker tests</td><td>One correlation chain links approved venture/project/task delivery, Bob run, ForgeGraph PR/changeset/build/deployment receipts, Bob terminal outcome, KanBanger closure, and OODA reflection; failed deployment or reopened work reverses the derived projection without erasing history</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>5.9 Prove the cross-client full-loop vertical slice</td><td>Create <code>packages/ooda/src/kernel/__tests__/personal-os-full-loop.integration.test.ts</code>, <code>apps/mobile-bob/.maestro/ooda-personal-os-full-loop.yaml</code>, and <code>apps/ooda-edge/e2e/personal-os-full-loop.spec.ts</code></td><td>Run the same seeded idea from iPad and web through BizPulse, KanBanger, Bob, ForgeGraph, deployment, and closed task; both clients render identical canonical IDs/statuses and retries create no duplicate venture, project, task, run, or delivery</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>Portfolio projection sketch</summary>
+    <pre><code>type VentureWorkProjectionV1 = {
+  ventureId: string;
+  ventureVersion: string;
+  summary: VentureBriefV1;
+  mappings: ExternalProjectLinkV1[];
+  tasks: Array&lt;{
+    sourceSystem: "kanbanger" | "bob";
+    taskId: string;
+    bobWorkItemId?: string;
+    status: string;
+    deepLink: string;
+  }&gt;;
+  sourceState: Array&lt;{ system: string; observedAt: string; partialError?: ProblemV1 }&gt;;
+};</code></pre>
+  </details>
+  <details>
+    <summary>Required PersonalOS full-loop slice</summary>
+    <ol>
+      <li>Start or resume an OODA discussion and approve an opportunity review.</li>
+      <li>Create or link the canonical BizPulse venture and its typed execution-project mapping.</li>
+      <li>Create approved KanBanger project/tasks with OODA source-event and proposal lineage.</li>
+      <li>Open those tasks from the iPad PersonalOS workspace and OODA web; verify Bob’s planning, task-tree, dispatch, live-run, cancellation, retry, artifact, and review controls remain functional.</li>
+      <li>Execute in Bob and correlate every run, commit, PR or ForgeGraph changeset, check, artifact, build, and deployment receipt.</li>
+      <li>Let Bob/KanBanger perform their owned completion transition only after acceptance criteria and required deployment evidence pass; otherwise show an explicit close proposal or repair card.</li>
+      <li>Project the closed task and completed project back into both OODA clients, with a reflection event and deep links to every canonical owner.</li>
+    </ol>
+    <p>The iPad and web clients share contracts and view models, not UI components. OODA never declares a task closed from conversational inference alone, and a successful deployment does not imply acceptance unless the task’s completion policy says it does.</p>
+  </details>
+
+  <h2>Phase 6 — Obsidian Git knowledge <span class="badge todo">Todo</span></h2>
+  <p>Use the private GitHub vault repository as the cross-machine source while preserving Markdown ownership and category-level disclosure.</p>
+  <table class="task-table">
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>6.1 Remove legacy public vault access</td><td>Modify <code>packages/ooda/src/api/router/vault.ts</code> and tests</td><td>Unauthenticated list/read/write/promote all return the versioned auth problem; direct writes cannot bypass proposals</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>6.2 Build isolated Git clone/index service</td><td>Create <code>apps/ooda-runner/src/obsidian/git-vault.ts</code>, <code>index-worker.ts</code>, <code>policy.ts</code>; modify runner config</td><td>Scoped credential, webhook plus periodic reconcile, commit-SHA freshness, clean clone replacement, no agent access</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>6.3 Add policy-partitioned note projections</td><td>Create <code>db/schema/obsidian.ts</code>, migration, <code>kernel/obsidian-context-source.ts</code></td><td>General folders searchable; sensitive metadata-only by default; Daily explicit attach; restricted content never mirrored</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>6.4 Emit exact citations and deep links</td><td>Modify <code>context-packs.ts</code>, <code>events.ts</code>; create Markdown heading/block parser</td><td>Citation resolves to repository blob, path, heading/span, hash, and Obsidian link; stale hash is labeled</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>6.5 Converge on one approved write pipeline</td><td>Modify <code>integrations/obsidian-adapter.ts</code>, runner delivery adapters; retire legacy direct promote routes</td><td>New capture fast-forwards; existing edit checks expected blob; conflict creates repair card; commit includes only approved file/provenance</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>6.6 Mirror GitHub to Gitea asynchronously</td><td>Create mirror status worker and delivery receipt; add Queues repair model</td><td>Mirror lag visible; mirror failure cannot roll back successful canonical write; divergence never force-pushed</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>6.7 Replace the empty mobile vault browser</td><td>Modify <code>use-vault-browser.ts</code>, <code>vault-browser.tsx</code>; add tablet source preview</td><td>Folder/tag/full-text search, Markdown/wiki links, citations, attach-to-turn, sensitivity prompts, offline permitted cache</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>Vault folder policy</summary>
+    <table>
+      <thead><tr><th>Area</th><th>Default index</th><th>Default disclosure</th><th>Writes</th></tr></thead>
+      <tbody>
+        <tr><td>Context, Projects, Captures, ordinary Resources</td><td>Full permitted projection</td><td>Automatic when relevant</td><td>Approved only</td></tr>
+        <tr><td>Areas</td><td>Path/category dependent</td><td>General automatic; sensitive just-in-time</td><td>Approved only</td></tr>
+        <tr><td>Daily</td><td>Metadata only</td><td>Explicit attach per turn/conversation</td><td>No automatic diary mutation</td></tr>
+        <tr><td>Restricted</td><td>No remote mirror</td><td>Denied</td><td>Denied unless policy is deliberately changed</td></tr>
+      </tbody>
+    </table>
+  </details>
+
+  <h2>Phase 7 — Brainstorming and promotion <span class="badge todo">Todo</span></h2>
+  <p>Complete the product loop from unstructured thought to optional, editable, approved commitment.</p>
+  <table class="task-table">
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>7.1 Add conversation lenses and venture scope UI</td><td>Modify <code>chat-screen.tsx</code>, <code>use-ooda-conversation.ts</code>; create <code>components/scope-chip.tsx</code>, <code>lens-picker.tsx</code></td><td>Explore, Challenge, Research, Opportunity, and Plan alter policy/prompt inputs without changing conversation ID</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>7.2 Add opportunity-review host output</td><td>Modify <code>contracts/v1/host.ts</code>, <code>kernel/host-providers.ts</code>, <code>host-turns.ts</code>, provider tests</td><td>Host may suggest Review as opportunity but cannot create a venture or infer approval</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>7.3 Ship editable opportunity and proposal cards</td><td>Create <code>components/opportunity-review-card.tsx</code>; modify <code>proposal-inspector.tsx</code> and models</td><td>Edit, revise in chat, attach, split, merge, incubate, reject, and stale-version conflict all pass</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>7.4 Compare new ideas against the portfolio</td><td>Modify <code>kernel/opportunity-reviews.ts</code>, <code>memory-context-source.ts</code>; add similarity service</td><td>Existing ventures, vault projects, and memory seeds produce explainable merge/spinout/independent suggestions</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>7.5 Decompose long utterances into traceable seeds</td><td>Refactor <code>kernel/memory-capture.ts</code>, <code>memories.ts</code>; use pgvector and entity graph</td><td>Whole utterance preserved; multiple seeds point to exact source span; corrections supersede; forget purges eligible projections</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>7.6 Add closing card, Today, and universal search</td><td>Create mobile/tablet components; expose <code>today</code> and <code>search</code> routers/client methods</td><td>Closing without action is valid; Today caps suggestions at five; search respects source policy and can attach results</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>Progressive opportunity lifecycle</summary>
+    <pre><code>raw thought
+  → problem / audience / hypothesis
+  → similarity + strategic-fit check
+  → optional research or scratch prototype
+  → editable opportunity review
+  → incubate | merge | test | propose | dismiss | kill
+  → explicitly approved BizPulse venture
+  → optional approved Bob / KanBanger work</code></pre>
+    <p>The closing card always allows “do nothing.” Repetition raises retrieval salience; it never creates commitment by itself.</p>
+  </details>
+
+  <h2>Phase 8 — Agent strategy, operations, and rollout <span class="badge todo">Todo</span></h2>
+  <p>Improve visibility and graph-shaped jobs without surrendering OODA’s event, policy, approval, or credential boundaries.</p>
+  <table class="task-table">
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>8.1 Add privacy-scrubbed runner telemetry</td><td>Modify <code>apps/ooda-runner/src/index.ts</code>, workers, adapters; extend canonical job events</td><td>Provider attempts, TTFT, duration, context version/size, tool/node state, usage, cancellation, and cleanup visible without content</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>8.2 Enforce live budgets</td><td>Modify <code>kernel/agent-jobs.ts</code>, <code>agent-job-worker.ts</code>, adapter event handling</td><td>Token/runtime limits stop execution; buffered events cannot renew a cancelled lease; late success cannot overwrite cancellation</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>8.3 Introduce job-local execution strategies</td><td>Create <code>agent-jobs/job-execution-strategy.ts</code>, <code>single-agent-strategy.ts</code>, <code>comparison-strategy.ts</code></td><td>Comparison fans out to explicit providers and reduces results while preserving native runtime receipts</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>8.4 Gate optional LangGraph adoption with evals</td><td>Create <code>agent-jobs/langgraph-strategy.ts</code> only after benchmark; add dependency only then</td><td>Graph strategy beats or matches custom baseline on correctness/resume/latency and never owns approval or canonical history</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>8.5 Build operational control center</td><td>Modify <code>apps/ooda-edge/src/app/health/page.tsx</code>; create tablet Queue health/repair cards</td><td>Providers, source freshness, indexes, jobs, deliveries, dead letters, devices, and rollout gates have scoped repair actions</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>8.6 Create private golden evaluation corpus</td><td>Create <code>packages/ooda/evals/</code> with redacted fixtures and runner</td><td>Voice corrections, retrieval relevance, citations, opportunity review, proposal safety, and provider comparison are regression-scored</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>8.7 Build and install internal TestFlight release</td><td>Modify <code>eas.json</code>, Preflight release record, create <code>apps/mobile-bob/.maestro/ooda-ipad-dogfood.yaml</code></td><td>Signed build installed on actual iPad; native fingerprint, privacy manifest, offline, AirPods, Face ID, and deep links pass</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>8.8 Run staged dogfood and production gates</td><td><code>docs/ooda/ipad-dogfood-runbook.html</code> or operational dashboard artifact</td><td>Seven-day slice gate, then 14-day zero-loss/zero-duplicate/zero-disclosure gate repeating the Phase 5 full loop on both iPad and web against production services</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>Framework boundary</summary>
+    <pre><code>interface JobExecutionStrategy {
+  execute(input: {
+    job: ImmutableClaimedJob;
+    disclosedContext: ContextPackV1;
+    invokeProvider: SubscriptionBackedProviderInvoker;
+    tools: CapabilityFilteredToolManifest;
+    signal: AbortSignal;
+  }): AsyncIterable&lt;NormalizedJobEvent&gt;;
+}</code></pre>
+    <p>OODA continues to own event sequencing, policy, leases, cancellation fencing, proposal approval, delivery idempotency, and dead letters. LangGraph checkpoints are attempt-scoped and disposable. Strands may be evaluated for disposable API-based workers, not standardized as the kernel.</p>
+  </details>
+
+  <h2>Cross-phase TDD and commit discipline</h2>
+  <p>Every independently reviewable task follows the same sequence:</p>
+  <ol>
+    <li>Write the smallest failing unit, contract, integration, or device test.</li>
+    <li>Run it and record the expected failure—not an unrelated setup failure.</li>
+    <li>Implement only enough behavior to pass.</li>
+    <li>Run focused tests, package typecheck, and adjacent security/idempotency tests.</li>
+    <li>Refactor without changing behavior, then re-run.</li>
+    <li>Create one focused changeset/commit and request independent review before the next risky boundary.</li>
+  </ol>
+  <div class="card">
+    <h3>Required phase-boundary commands</h3>
+    <pre><code>pnpm --filter @gmacko/ooda test
+pnpm --filter @gmacko/ooda typecheck
+pnpm --filter @gmacko/ooda-client typecheck
+pnpm --filter @gmacko/ooda-runner test
+pnpm --filter @gmacko/ooda-runner typecheck
+pnpm --filter @bob/mobile test
+pnpm --filter @bob/mobile typecheck
+pnpm --filter @gmacko/ooda-edge typecheck
+pnpm --filter @gmacko/ooda-edge build
+pnpm exec turbo run test --concurrency=1 -- --no-file-parallelism</code></pre>
+    <p class="small">Run the full serialized monorepo suite before landing a phase, not after every two-minute red/green step. Node 24.14.0 and pnpm 10.12.1 are the required toolchain.</p>
+  </div>
+
+  <h2>Verification matrix</h2>
+  <table>
+    <thead><tr><th>Boundary</th><th>Automated proof</th><th>Real-world proof</th><th>Promotion gate</th></tr></thead>
+    <tbody>
+      <tr><td>Local speech</td><td>Engine/state/finalizer tests; privacy network harness</td><td>Actual iPad, airplane mode, AirPods, five-minute capture</td><td>Accuracy, latency, thermal, and no-audio-retention targets met</td></tr>
+      <tr><td>Offline durability</td><td>Encrypted migration, force-quit/reboot, idempotency, conflict fixtures</td><td>Capture while offline, kill app, reboot, reconnect</td><td>Zero lost accepted turns and automatic reconciliation</td></tr>
+      <tr><td>Context policy</td><td>Folder/category, provider-switch, stale-source, disclosure tests</td><td>Inspect exact context pack on tablet</td><td>Zero unauthorized sensitive disclosures</td></tr>
+      <tr><td>External writes</td><td>Proposal version, approval replay, adapter idempotency, timeout reconciliation</td><td>One Obsidian note and one task from conversation</td><td>Proposal, approval, receipt, and deep link for every write</td></tr>
+      <tr><td>Venture graph</td><td>Mapping uniqueness, aliases, Other, partial source outage</td><td>Existing venture and new opportunity sessions</td><td>No duplicate task rows or false canonical links</td></tr>
+      <tr><td>PersonalOS execution loop</td><td>Seeded contract/integration test with one correlation ID and idempotent replay at every boundary</td><td>Complete once from iPad and once from web: OODA discussion → BizPulse venture → KanBanger tasks → Bob execution → ForgeGraph PR/changeset/build/deploy → closed tasks → OODA reflection</td><td>Bob UI parity retained on both clients; canonical owners agree; no duplicate objects; failed or reopened work is represented honestly</td></tr>
+      <tr><td>Agent runtime</td><td>Lease/cancel/budget/sandbox/provider fallback/eval suites</td><td>Research, scratch, comparison, and one durable Bob run</td><td>Failure never loses source turn or escapes capability scope</td></tr>
+      <tr><td>Release</td><td>CI, native fingerprint, privacy manifest, rollout configuration</td><td>Internal TestFlight and 14-day dogfood</td><td>All production success gates sustained</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Production acceptance scenarios</h2>
+  <ul>
+    <li><strong>Existing venture full loop:</strong> select a venture, inspect the brief, speak a question, retrieve a relevant note/task/changeset, create an approved task, operate the Bob plan/run/review UI on iPad and web, observe its PR/changeset/build/deployment in ForgeGraph, close the KanBanger task under its completion policy, and follow every receipt back to the originating conversation.</li>
+    <li><strong>New opportunity:</strong> begin New thought, speak a multi-minute idea, extract multiple seeds, compare against the portfolio, research uncertainty, edit the opportunity review, and either incubate or approve one BizPulse venture.</li>
+    <li><strong>Personal knowledge:</strong> retrieve a permitted vault section with exact citation, approve a new Capture, push one scoped commit, and reconcile the mirror without touching unrelated work.</li>
+    <li><strong>Offline:</strong> open cached history, record and edit locally, queue a turn, force-quit, reboot, reconnect, and observe exactly one durable event and response.</li>
+    <li><strong>Privacy:</strong> attempt to use a sensitive note with a new provider, deny disclosure, verify the excerpt never appears in request logs/events/analytics, and continue with general context.</li>
+    <li><strong>Failure:</strong> kill a provider, runner, source connector, and destination at each commit boundary; show bounded degradation and a repair path without manual database edits.</li>
+  </ul>
+
+  <h2>Risks &amp; mitigations</h2>
+  <table>
+    <thead><tr><th>Risk</th><th>Severity</th><th>Mitigation</th></tr></thead>
+    <tbody>
+      <tr><td>SpeechAnalyzer or embedded engine misses personal jargon or overheats</td><td><span class="badge risk">High</span></td><td>Real-device bakeoff, private corpus, vocabulary corrections, replaceable engine, explicit cloud retry only</td></tr>
+      <tr><td>PersonalOS shell rewrite destabilizes existing Bob task/planning/run flows</td><td><span class="badge risk">High</span></td><td>Explicit Bob capability matrix, pure route-state tests, compatibility redirects, shared contracts/view models, cross-client vertical slice, and legacy Planning retained until parity</td></tr>
+      <tr><td>Vault projection leaks sensitive content</td><td><span class="badge risk">Critical</span></td><td>Path defaults, metadata-only sensitive index, policy receipts, no public routes, purge tests, restricted never mirrored</td></tr>
+      <tr><td>Git automation captures human edits</td><td><span class="badge risk">Critical</span></td><td>Isolated clone, expected blob, exact-file staging, no broad add, conflict repair, canonical/mirror direction</td></tr>
+      <tr><td>Cross-system aliases duplicate tasks or corrupt venture grouping</td><td><span class="badge risk">High</span></td><td>Stable UUIDs, BizPulse-owned mappings, computed Other, confidence suggestions, approved repair</td></tr>
+      <tr><td>Framework creates competing persistence or approval state</td><td><span class="badge risk">High</span></td><td>Job-local strategy interface, attempt-scoped checkpoints, OODA-only canonical events and approvals, eval gate</td></tr>
+      <tr><td>Subscription runtime credentials escape into jobs</td><td><span class="badge risk">Critical</span></td><td>Existing broker/sandbox retained, isolated auth profiles, no API keys in client/events, path/network tests</td></tr>
+      <tr><td>Scope expands before the daily-driver loop works</td><td><span class="badge risk">High</span></td><td>Vertical slice gate before deeper search, agents, parity, themes, or Android</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Rollout order</h2>
+  <ol>
+    <li>Shadow contracts, projections, and source freshness only.</li>
+    <li>Enable the OODA tablet shell for the owner account with text input.</li>
+    <li>Enable SpeechAnalyzer/model setup and local capture; keep cloud retry off.</li>
+    <li>Enable encrypted offline transcript projection and Face ID.</li>
+    <li>Enable read-only venture/task/ForgeGraph and general Obsidian context.</li>
+    <li>Enable private opportunity reviews and editable proposal drafts.</li>
+    <li>Enable approved Obsidian writes; then approved Bob/KanBanger writes.</li>
+    <li>Enable BizPulse venture/mapping writes only after staging idempotency proof and just-in-time credential approval.</li>
+    <li>Complete the Phase 5 full-loop slice from both iPad and web before enabling broader autonomous jobs or retiring any Bob UI route.</li>
+    <li>Enable research/scratch/comparison cards and operational control center.</li>
+    <li>Complete seven-day slice gate, then 14-day replacement dogfood.</li>
+  </ol>
+
+  <h2>Production success gates</h2>
+  <ul>
+    <li>Zero lost accepted turns, duplicate durable objects, or unauthorized disclosures during 14 days.</li>
+    <li>At least 90% of ordinary voice turns accepted without transcript correction on the target iPad.</li>
+    <li>Airplane-mode capture survives force-quit and reboot and reconciles automatically.</li>
+    <li>Every external write has proposal, exact approved version, idempotency key, receipt, and deep link.</li>
+    <li>At least one existing-venture brainstorm and one new-opportunity review produce useful outcomes.</li>
+    <li>At least one approved Obsidian note and one approved Bob/KanBanger task complete without manual database repair.</li>
+    <li>One project completes OODA discussion → approved BizPulse venture → KanBanger tasks → Bob execution → ForgeGraph PR/changeset/build/deployment → policy-valid closed tasks → OODA reflection from both iPad and web.</li>
+    <li>Every Bob capability used by that slice—planning, task tree, dispatch, live run, cancel/retry, artifacts/diff, review, and evidence navigation—remains functional in PersonalOS or has an intentional deep link with preserved return context.</li>
+    <li>The iPad replaces the current general-purpose chat app for routine daily conversation.</li>
+  </ul>
+
+  <h2>Open questions</h2>
+  <div class="callout info">
+    <strong>No unresolved product decisions.</strong> The target is iPadOS 26, local transcription, visual responses, adaptive OODA-first navigation, GitHub-backed Obsidian access, explicit approvals, and canonical system boundaries. The actual iPad model, transcription-engine winner, and final performance numbers are empirical Phase 0/3 findings—not reasons to invent a product decision now.
+  </div>
+
+  <h2>Execution handoff</h2>
+  <p>Start with Phase 0 in a new isolated implementation worktree. Use the executing-plans workflow task by task. The first review checkpoint is after Phase 2: OODA must be the working default iPad surface with text input before native speech dependencies are introduced. The second is after Phase 4: the real device must prove local capture and offline durability before external context writes are enabled. The third is after Phase 5: both iPad and web must complete the same seeded OODA → BizPulse → KanBanger → Bob → ForgeGraph → deployment → closure loop, including Bob UI parity, before legacy routes are retired or broader automation is enabled.</p>
+</main>
+</body>
+</html>
