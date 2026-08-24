@@ -1,7 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { GrokAdapter } from "../grok-adapter";
 import { mapSessionUpdate } from "../grok-acp";
+
+// These suites spawn a real Node subprocess per test (the fake CLIs below) and
+// assert on what happens after it exits. Vitest's 5s default has to cover
+// process spawn, the fake CLI's own delay, and teardown — which is fine on a
+// laptop and marginal on a loaded CI runner, where `ci.yml` already serializes
+// work for memory pressure. That produced a flake on 2026-08-24: the same
+// commit passed on one PR and timed out on another.
+//
+// Raising the ceiling does not weaken what these tests check. A genuine
+// regression here fails an assertion (the temp file is still there, the exit
+// code is wrong, the events are missing), not the clock. Only a true hang hits
+// the timeout, and that is still caught — just later.
+vi.setConfig({ testTimeout: 20_000 });
+
 
 describe("GrokAdapter", () => {
   it("returns correct metadata", () => {
