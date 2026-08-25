@@ -68,16 +68,27 @@
   ],
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", ".cache/**"]
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist/**",
+        ".next/**",
+        ".cache/**"
+      ]
     },
     "dev": {
-      "dependsOn": ["^build"],
+      "dependsOn": [
+        "^build"
+      ],
       "persistent": true,
       "cache": false
     },
     "test": {},
     "lint": {},
     "typecheck": {}
-  }
+  },
+  "globalPassThroughEnv": [
+    "FG_CHECK_EVENTS_PATH"
+  ]
 }
