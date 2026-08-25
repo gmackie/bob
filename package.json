@@ -42,6 +42,7 @@
     ]
   },
   "devDependencies": {
+    "@forgegraph/check-events": "^0.1.4",
     "@forgegraph/oxlint-anti-slop": "^0.1.0",
     "@gmacko/emulate": "^0.5.3",
     "@oxlint/plugins": "1.78.0",
