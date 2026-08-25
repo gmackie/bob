@@ -255,6 +255,17 @@ jobs:
           # failing test names). Best-effort: no stream → no `tests` field.
           TESTS_FIELD=""
           if [ -f "${FG_CHECK_EVENTS_PATH}" ]; then
+            # Diagnostic: what actually reached the shared stream (per-package
+            # run_finished counts). Cheap, and the only way to see stream
+            # collisions or lost packages from a runner we can't attach to.
+            ls -la "${FG_CHECK_EVENTS_PATH}" || true
+            node --input-type=module -e '
+              import { readFileSync } from "node:fs";
+              import { parseCheckEventLine } from "@forgegraph/check-events";
+              const ev = readFileSync(process.env.FG_CHECK_EVENTS_PATH, "utf8").split("\n").map(parseCheckEventLine).filter(Boolean);
+              const fin = ev.filter((e) => e.event === "run_finished").map((e) => `${e.phase}/${e.stream ?? "-"}=${e.counts ? e.counts.passed + "/" + (e.counts.total ?? "?") : e.status}`);
+              console.log(`check-events stream: ${ev.length} events, ${fin.length} run_finished:`, fin.join(" "));
+            ' || true
             TESTS_JSON=$(node --input-type=module -e '
               import { readFileSync } from "node:fs";
               import { parseCheckEventLine, summarizeChecks } from "@forgegraph/check-events";
