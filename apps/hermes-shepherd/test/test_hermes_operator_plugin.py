@@ -444,5 +444,149 @@ class HermesOperatorPluginTests(unittest.TestCase):
         )
 
 
+class HermesUsageJournalTests(unittest.TestCase):
+    RECEIPT = {
+        "schemaVersion": 1,
+        "intent": "capture.receipt",
+        "summary": "Captured in OODA.",
+        "canonicalRef": {"kind": "conversation_event", "id": "event-42"},
+    }
+    SESSION = {
+        "HERMES_SESSION_PLATFORM": "telegram",
+        "HERMES_SESSION_CHAT_ID": "4512",
+        "HERMES_SESSION_MESSAGE_ID": "9918",
+    }
+
+    def _env(self, state_dir, journal):
+        return {
+            "HERMES_BOB_OPERATOR_URL": "https://bob.example.com/api/v1/hermes/operator",
+            "HERMES_BOB_OPERATOR_API_KEY": "bob_test_key",
+            "HERMES_OPERATOR_STATE_DIR": state_dir,
+            **({"HERMES_OPERATOR_USAGE_JOURNAL": journal} if journal else {}),
+        }
+
+    def _read(self, journal):
+        return [json.loads(line) for line in Path(journal).read_text(encoding="utf-8").splitlines()]
+
+    def test_capture_appends_one_digest_only_usage_record(self):
+        plugin = load_plugin()
+        with tempfile.TemporaryDirectory() as state_dir:
+            journal = str(Path(state_dir) / "workflows" / "bob.jsonl")
+            with (
+                patch.dict(plugin.os.environ, self._env(state_dir, journal), clear=True),
+                patch.object(plugin, "_session_env", return_value=self.SESSION),
+                patch.object(plugin, "_utc_now", return_value="2026-08-24T13:30:00Z"),
+                patch.object(plugin, "urlopen", side_effect=lambda *_a, **_k: FakeHttpResponse(self.RECEIPT)),
+            ):
+                plugin.handle_capture("Remember the lab workflow. Contact private@example.com")
+            records = self._read(journal)
+            mode = Path(journal).stat().st_mode & 0o777
+
+        self.assertEqual(mode, 0o600)
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(sorted(record), [
+            "kind", "observedAt", "payload", "projectIdDigest", "provenanceQuality",
+            "recordId", "schemaVersion", "sessionIdDigest", "source",
+        ])
+        self.assertEqual(record["kind"], "hermes_usage")
+        self.assertEqual(record["source"], "bob")
+        self.assertEqual(record["observedAt"], "2026-08-24T13:30:00Z")
+        self.assertRegex(record["recordId"], r"^sha256:[a-f0-9]{64}$")
+        self.assertEqual(record["payload"], {
+            "requestIdDigest": plugin._sha256("telegram:4512:9918"),
+            "intent": "capture",
+            "channel": "telegram",
+            "owner": "ooda",
+            "riskClass": "R1",
+            "outcome": "success",
+            "durationBucket": "<1s",
+            "evidence": "complete",
+        })
+        serialized = json.dumps(record)
+        for forbidden in ("Remember", "private@example.com", "4512", "9918", "event-42"):
+            self.assertNotIn(forbidden, serialized)
+
+    def test_failed_and_blocked_captures_are_recorded_as_such(self):
+        plugin = load_plugin()
+
+        def failing(*_a, **_k):
+            raise URLError("down")
+
+        with tempfile.TemporaryDirectory() as state_dir:
+            journal = str(Path(state_dir) / "bob.jsonl")
+            with (
+                patch.dict(plugin.os.environ, self._env(state_dir, journal), clear=True),
+                patch.object(plugin, "_session_env", return_value=self.SESSION),
+                patch.object(plugin, "_utc_now", return_value="2026-08-24T13:30:00Z"),
+                patch.object(plugin, "urlopen", side_effect=failing),
+            ):
+                plugin.handle_capture("note")
+            with (
+                patch.dict(plugin.os.environ, self._env(state_dir, journal), clear=True),
+                patch.object(plugin, "_session_env", return_value={"HERMES_SESSION_PLATFORM": "telegram"}),
+                patch.object(plugin, "_utc_now", return_value="2026-08-24T13:31:00Z"),
+            ):
+                plugin.handle_capture("note")
+            records = self._read(journal)
+
+        self.assertEqual([r["payload"]["outcome"] for r in records], ["failure", "blocked"])
+        self.assertEqual([r["payload"]["evidence"] for r in records], ["unknown", "unknown"])
+        self.assertNotEqual(records[0]["recordId"], records[1]["recordId"])
+
+    def test_scheduled_intents_record_bob_channel_with_receipt_coverage(self):
+        plugin = load_plugin()
+        receipt = {
+            "schemaVersion": 1,
+            "intent": "close.summary",
+            "summary": "Closed the day.",
+            "canonicalRef": {"kind": "reflection", "id": "r-1"},
+            "freshness": {"coverage": "partial"},
+            "data": {"sections": {"completed": [], "blocked": [], "waiting": [], "captured": [], "tomorrow": []}},
+        }
+        with tempfile.TemporaryDirectory() as state_dir:
+            journal = str(Path(state_dir) / "bob.jsonl")
+            with (
+                patch.dict(plugin.os.environ, self._env(state_dir, journal), clear=True),
+                patch.object(plugin, "_utc_now", return_value="2026-08-24T01:00:00Z"),
+                patch.object(plugin, "urlopen", side_effect=lambda *_a, **_k: FakeHttpResponse(receipt)),
+            ):
+                plugin.handle_scheduled("close")
+            records = self._read(journal)
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["payload"]["intent"], "close")
+        self.assertEqual(records[0]["payload"]["channel"], "bob")
+        self.assertEqual(records[0]["payload"]["owner"], "ooda")
+        self.assertEqual(records[0]["payload"]["riskClass"], "R0")
+        self.assertEqual(records[0]["payload"]["outcome"], "success")
+        self.assertEqual(records[0]["payload"]["evidence"], "partial")
+        self.assertEqual(records[0]["payload"]["requestIdDigest"], plugin._sha256("cron:close:2026-08-24"))
+
+    def test_usage_journal_is_optional_and_never_breaks_the_command(self):
+        plugin = load_plugin()
+        with tempfile.TemporaryDirectory() as state_dir:
+            with (
+                patch.dict(plugin.os.environ, self._env(state_dir, None), clear=True),
+                patch.object(plugin, "_session_env", return_value=self.SESSION),
+                patch.object(plugin, "_utc_now", return_value="2026-08-24T13:30:00Z"),
+                patch.object(plugin, "urlopen", side_effect=lambda *_a, **_k: FakeHttpResponse(self.RECEIPT)),
+            ):
+                result = plugin.handle_capture("note")
+            self.assertEqual(result, "Captured in OODA. [conversation_event:event-42]")
+            self.assertEqual(sorted(p.name for p in Path(state_dir).iterdir()), ["capture-times.json", "capture-times.lock"])
+
+            unwritable = str(Path(state_dir) / "capture-times.json" / "bob.jsonl")
+            with (
+                patch.dict(plugin.os.environ, self._env(state_dir, unwritable), clear=True),
+                patch.object(plugin, "_session_env", return_value=self.SESSION),
+                patch.object(plugin, "_utc_now", return_value="2026-08-24T13:30:00Z"),
+                patch.object(plugin, "urlopen", side_effect=lambda *_a, **_k: FakeHttpResponse(self.RECEIPT)),
+                self.assertLogs("hermes_operator.usage", level="ERROR"),
+            ):
+                result = plugin.handle_capture("note")
+            self.assertEqual(result, "Captured in OODA. [conversation_event:event-42]")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -69,6 +69,9 @@ test("Hermes operator install validates secrets and refuses tool overrides", asy
     script,
     /plugins enable hermes-operator --no-allow-tool-override/,
   );
+  assert.match(script, /hermes-operator-send\.py"\s+\\\n\s+"\$\{SCRIPTS_DIR\}\/hermes-operator-morning-send\.py"/);
+  assert.match(script, /hermes-operator-send\.py"\s+\\\n\s+"\$\{SCRIPTS_DIR\}\/hermes-operator-close-send\.py"/);
+  assert.match(script, /HERMES_OPERATOR_USAGE_JOURNAL=\/home\/bob\/\.local\/state\/skillfleet-workflows\/bob\.jsonl/);
   assert.match(script, /systemctl restart hermes-gateway\.service/);
   assert.match(
     script,
