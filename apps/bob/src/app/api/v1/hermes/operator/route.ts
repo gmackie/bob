@@ -57,6 +57,25 @@ async function postOperator(request: Request): Promise<Response> {
           branchId,
           now: () => new Date(),
         });
+        const skillfleetReader = skillfleetOrigin && skillfleetReadSecret
+            && skillfleetAccessClientId && skillfleetAccessClientSecret
+          ? createSkillfleetBriefReader({
+              origin: skillfleetOrigin,
+              readSecret: skillfleetReadSecret,
+              accessClientId: skillfleetAccessClientId,
+              accessClientSecret: skillfleetAccessClientSecret,
+            })
+          : null;
+        const forgeGraphReader = forgeGraphOrigin && forgeGraphApiKey
+          ? createForgeGraphBriefReader({
+              origin: forgeGraphOrigin,
+              apiKey: forgeGraphApiKey,
+              appSlugs: (process.env.FORGEGRAPH_CONTEXT_APPS
+                ?? "ooda,bob,bizpulse,kanbanger")
+                .split(","),
+              now: () => new Date(),
+            })
+          : null;
         const bobCloseReader = workspaceId
           ? createBobEveningCloseReader({
               now: () => new Date(),
@@ -91,6 +110,10 @@ async function postOperator(request: Request): Promise<Response> {
                     now: () => new Date(),
                     bob: bobCloseReader,
                     ooda: oodaReader,
+                    supportingSources: {
+                      ...(skillfleetReader ? { skillfleet: skillfleetReader } : {}),
+                      ...(forgeGraphReader ? { forgegraph: forgeGraphReader } : {}),
+                    },
                   }),
                 }
               : {}),
@@ -117,29 +140,8 @@ async function postOperator(request: Request): Promise<Response> {
                     }),
                   }
                 : {}),
-              ...(skillfleetOrigin && skillfleetReadSecret
-                  && skillfleetAccessClientId && skillfleetAccessClientSecret
-                ? {
-                    skillfleet: createSkillfleetBriefReader({
-                      origin: skillfleetOrigin,
-                      readSecret: skillfleetReadSecret,
-                      accessClientId: skillfleetAccessClientId,
-                      accessClientSecret: skillfleetAccessClientSecret,
-                    }),
-                  }
-                : {}),
-              ...(forgeGraphOrigin && forgeGraphApiKey
-                ? {
-                    forgegraph: createForgeGraphBriefReader({
-                      origin: forgeGraphOrigin,
-                      apiKey: forgeGraphApiKey,
-                      appSlugs: (process.env.FORGEGRAPH_CONTEXT_APPS
-                        ?? "ooda,bob,bizpulse,kanbanger")
-                        .split(","),
-                      now: () => new Date(),
-                    }),
-                  }
-                : {}),
+              ...(skillfleetReader ? { skillfleet: skillfleetReader } : {}),
+              ...(forgeGraphReader ? { forgegraph: forgeGraphReader } : {}),
             },
           },
         ).createService(auth);
