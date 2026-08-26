@@ -310,7 +310,7 @@ export function createOodaBriefReader(
 
 interface BobEveningCloseReaderDependencies {
   now(): Date;
-  listChanged(): Promise<Array<{
+  listChanged(updatedAfter: string): Promise<Array<{
     id: string;
     identifier?: string;
     title: string;
@@ -326,7 +326,7 @@ export function createBobEveningCloseReader(
     async read() {
       try {
         const date = dependencies.now().toISOString().slice(0, 10);
-        const listed = await dependencies.listChanged();
+        const listed = await dependencies.listChanged(`${date}T00:00:00.000Z`);
         const truncated = listed.length > 100;
         const changed = listed.slice(0, 100)
           .filter((item) => item.updatedAt?.slice(0, 10) === date);

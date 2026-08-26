@@ -47,6 +47,37 @@ function extractSqlParamValues(value: unknown): unknown[] {
   return values;
 }
 
+function extractSqlShape(value: unknown): string {
+  const seen = new WeakSet<object>();
+  const fragments: string[] = [];
+
+  function visit(entry: unknown) {
+    if (entry === null || entry === undefined || typeof entry !== "object") return;
+    if (seen.has(entry)) return;
+    seen.add(entry);
+
+    if (entry.constructor.name === "StringChunk" && "value" in entry) {
+      const chunk = entry.value;
+      if (Array.isArray(chunk)) {
+        for (const value of chunk) if (typeof value === "string") fragments.push(value);
+      }
+    }
+    if ("name" in entry) {
+      const name = entry.name;
+      if (typeof name === "string") fragments.push(name);
+    }
+
+    if (Array.isArray(entry)) {
+      for (const child of entry) visit(child);
+      return;
+    }
+    if ("queryChunks" in entry) visit(entry.queryChunks);
+  }
+
+  visit(value);
+  return fragments.join(" ").replaceAll(/\s+/g, " ").trim();
+}
+
 describe("work item handlers", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -97,6 +128,36 @@ describe("work item handlers", () => {
     expect(extractSqlParamValues(query?.where)).toEqual(
       expect.arrayContaining(DASHBOARD_ACTIVE_SESSION_STATUSES),
     );
+  });
+
+  it("applies an updated-after bound before limiting work item lists", async () => {
+    const updatedAfter = "2026-08-21T00:00:00.000Z";
+    const db = {
+      query: {
+        workItems: {
+          findMany: vi.fn<(args: QueryCallArgs) => Promise<unknown[]>>().mockResolvedValue([]),
+        },
+        workspaceMembers: {
+          findFirst: vi.fn().mockResolvedValue({ id: "member-1" }),
+        },
+        projects: { findMany: vi.fn().mockResolvedValue([]) },
+        chatConversations: { findMany: vi.fn().mockResolvedValue([]) },
+      },
+    };
+
+    await workItemsList(
+      { db: db as unknown as HandlerContext["db"], userId: "user-1" },
+      {
+        workspaceId: "22222222-2222-4222-8222-222222222222",
+        updatedAfter,
+        limit: 101,
+      },
+    );
+
+    const query = db.query.workItems.findMany.mock.calls[0]?.[0];
+    expect(extractSqlParamValues(query?.where)).toContain(updatedAfter);
+    expect(extractSqlShape(query?.where)).toContain("updatedAt >=");
+    expect(query).toMatchObject({ limit: 101 });
   });
 
   it("uses dashboard-active session statuses when linking agents in work item details", async () => {

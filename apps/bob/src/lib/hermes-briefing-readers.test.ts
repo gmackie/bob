@@ -318,6 +318,53 @@ describe("ForgeGraph Hermes briefing reader", () => {
 });
 
 describe("Hermes evening close readers", () => {
+  it("scopes the canonical Bob query to the current UTC day before applying the cap", async () => {
+    let updatedAfter: string | undefined;
+    const reader = createBobEveningCloseReader({
+      now: () => new Date("2026-08-21T22:00:00Z"),
+      listChanged: async (value) => {
+        updatedAfter = value;
+        return [];
+      },
+    });
+
+    await reader.read();
+
+    expect(updatedAfter).toBe("2026-08-21T00:00:00.000Z");
+  });
+
+  it("does not let historical rows crowd a current-day change out of the capped query", async () => {
+    const rows = [
+      ...Array.from({ length: 101 }, (_, index) => ({
+        id: `old-${index}`,
+        title: `Old work ${index}`,
+        status: "completed",
+        updatedAt: "2026-08-20T18:00:00Z",
+      })),
+      {
+        id: "current-1",
+        identifier: "BOB-23",
+        title: "Current completion",
+        status: "completed",
+        updatedAt: "2026-08-21T18:00:00Z",
+      },
+    ];
+    const reader = createBobEveningCloseReader({
+      now: () => new Date("2026-08-21T22:00:00Z"),
+      listChanged: async (updatedAfter) => rows
+        .filter((item) => item.updatedAt >= updatedAfter)
+        .slice(0, 101),
+    });
+
+    await expect(reader.read()).resolves.toMatchObject({
+      completed: [{
+        label: "COMPLETED · BOB-23 · Current completion",
+        canonicalRef: { kind: "work-item", id: "current-1" },
+      }],
+      gaps: [],
+    });
+  });
+
   it("categorizes only today's Bob work-item changes as canonical evidence", async () => {
     const reader = createBobEveningCloseReader({
       now: () => new Date("2026-08-21T22:00:00Z"),

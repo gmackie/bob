@@ -79,11 +79,12 @@ async function postOperator(request: Request): Promise<Response> {
         const bobCloseReader = workspaceId
           ? createBobEveningCloseReader({
               now: () => new Date(),
-              listChanged: () => workItemsList(
+              listChanged: (updatedAfter) => workItemsList(
                 { db, userId: auth.userId },
                 {
                   workspaceId,
                   statuses: ["completed", "done", "blocked", "in_review", "pending"],
+                  updatedAfter,
                   limit: 101,
                 },
               ),
