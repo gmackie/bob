@@ -4,6 +4,10 @@ import {
   type HermesBriefSnapshot,
   type HermesEveningClose,
 } from "./hermes-briefing";
+import {
+  HERMES_BRIEFING_SOURCE_TIMEOUT_MS,
+  readHermesBriefingSource,
+} from "./hermes-briefing-timeout";
 
 export const HERMES_ACTIVE_BOB_WORK_STATUSES = [
   "blocked",
@@ -361,16 +365,76 @@ interface HermesEveningCloseReaderDependencies {
       gaps: string[];
     }>;
   };
+  supportingSources?: Partial<Record<
+    "skillfleet" | "forgegraph",
+    { read(): Promise<HermesBriefSnapshot> }
+  >>;
+  sourceTimeoutMs?: number;
+}
+
+const HERMES_EVENING_SUPPORTING_SOURCES = ["skillfleet", "forgegraph"] as const;
+const HERMES_EVENING_MAX_SOURCE_AGE_MS = 15 * 60 * 1_000;
+const HERMES_EVENING_MAX_FUTURE_SKEW_MS = 5 * 60 * 1_000;
+
+async function readEveningSupportingGap(
+  source: (typeof HERMES_EVENING_SUPPORTING_SOURCES)[number],
+  reader: { read(): Promise<HermesBriefSnapshot> } | undefined,
+  timeoutMs: number,
+  referenceTimeMs: number,
+): Promise<string[]> {
+  if (!reader) return [`${source} did not report`];
+  const snapshot = await readHermesBriefingSource(() => reader.read(), timeoutMs);
+  if (!snapshot) return [`${source} did not report`];
+  if (snapshot.source !== source || snapshot.coverage === "unknown") {
+    return [`${source} did not report`];
+  }
+  const observedAtMs = Date.parse(snapshot.observedAt ?? "");
+  if (
+    !Number.isFinite(observedAtMs)
+    || observedAtMs < referenceTimeMs - HERMES_EVENING_MAX_SOURCE_AGE_MS
+    || observedAtMs > referenceTimeMs + HERMES_EVENING_MAX_FUTURE_SKEW_MS
+  ) {
+    return [`${source} did not report current evidence`];
+  }
+  if (snapshot.coverage === "partial") {
+    return [`${source} reported partial coverage`];
+  }
+  return [];
 }
 
 export function createHermesEveningCloseReader(
   dependencies: HermesEveningCloseReaderDependencies,
 ): { read(): Promise<HermesEveningClose> } {
+  const sourceTimeoutMs = dependencies.sourceTimeoutMs
+    ?? HERMES_BRIEFING_SOURCE_TIMEOUT_MS;
+  if (!Number.isSafeInteger(sourceTimeoutMs) || sourceTimeoutMs < 1) {
+    throw new Error("Hermes close source timeout must be a positive integer");
+  }
   return {
     async read() {
-      const [bob, ooda] = await Promise.all([
-        dependencies.bob.read(),
-        dependencies.ooda.readClose(),
+      const generatedAt = dependencies.now();
+      const [bob, ooda, supportingGaps] = await Promise.all([
+        readHermesBriefingSource(() => dependencies.bob.read(), sourceTimeoutMs)
+          .then((result) => result ?? {
+            completed: [],
+            blocked: [],
+            waiting: [],
+            gaps: ["bob did not report"],
+          }),
+        readHermesBriefingSource(() => dependencies.ooda.readClose(), sourceTimeoutMs)
+          .then((result) => result ?? {
+            captured: [],
+            tomorrow: [],
+            gaps: ["ooda did not report"],
+          }),
+        Promise.all(HERMES_EVENING_SUPPORTING_SOURCES.map((source) =>
+          readEveningSupportingGap(
+            source,
+            dependencies.supportingSources?.[source],
+            sourceTimeoutMs,
+            generatedAt.getTime(),
+          )))
+          .then((gaps) => gaps.flat()),
       ]);
       return buildHermesEveningClose(
         {
@@ -380,12 +444,11 @@ export function createHermesEveningCloseReader(
           captured: ooda.captured,
           tomorrow: ooda.tomorrow,
         },
-        dependencies.now(),
+        generatedAt,
         [
           ...bob.gaps,
           ...ooda.gaps,
-          "skillfleet did not report",
-          "forgegraph did not report",
+          ...supportingGaps,
         ],
       );
     },

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createBobWorkBriefReader,
@@ -372,5 +372,243 @@ describe("Hermes evening close readers", () => {
         tomorrow: [{ canonicalRef: { kind: "proposal", id: "proposal-1" }, proposed: true }],
       },
     });
+  });
+
+  it("omits supporting-source gaps when Skillfleet and ForgeGraph report complete coverage", async () => {
+    const reader = createHermesEveningCloseReader({
+      now: () => new Date("2026-08-21T22:00:00Z"),
+      bob: { read: async () => ({ completed: [], blocked: [], waiting: [], gaps: [] }) },
+      ooda: { readClose: async () => ({ captured: [], tomorrow: [], gaps: [] }) },
+      supportingSources: {
+        skillfleet: { read: async () => ({
+          source: "skillfleet",
+          observedAt: "2026-08-21T21:59:00.000Z",
+          coverage: "complete",
+          total: 12,
+          items: [],
+        }) },
+        forgegraph: { read: async () => ({
+          source: "forgegraph",
+          observedAt: "2026-08-21T21:59:00.000Z",
+          coverage: "complete",
+          total: 4,
+          items: [],
+        }) },
+      },
+    });
+
+    await expect(reader.read()).resolves.toMatchObject({
+      kind: "evening",
+      gaps: [],
+    });
+  });
+
+  it("preserves precise gaps for partial and rejected supporting evidence", async () => {
+    const reader = createHermesEveningCloseReader({
+      now: () => new Date("2026-08-21T22:00:00Z"),
+      bob: { read: async () => ({ completed: [], blocked: [], waiting: [], gaps: [] }) },
+      ooda: { readClose: async () => ({ captured: [], tomorrow: [], gaps: [] }) },
+      supportingSources: {
+        skillfleet: { read: async () => ({
+          source: "skillfleet",
+          observedAt: "2026-08-21T21:59:00.000Z",
+          coverage: "partial",
+          total: 12,
+          items: [],
+        }) },
+        forgegraph: { read: async () => {
+          throw new Error("private upstream failure");
+        } },
+      },
+    });
+
+    await expect(reader.read()).resolves.toMatchObject({
+      gaps: [
+        "skillfleet reported partial coverage",
+        "forgegraph did not report",
+      ],
+    });
+  });
+
+  it.each([
+    { source: "forgegraph" as const, coverage: "complete" as const },
+    { source: "skillfleet" as const, coverage: "unknown" as const },
+  ])("fails closed for invalid Skillfleet evidence: $source/$coverage", async (snapshot) => {
+    const reader = createHermesEveningCloseReader({
+      now: () => new Date("2026-08-21T22:00:00Z"),
+      bob: { read: async () => ({ completed: [], blocked: [], waiting: [], gaps: [] }) },
+      ooda: { readClose: async () => ({ captured: [], tomorrow: [], gaps: [] }) },
+      supportingSources: {
+        skillfleet: { read: async () => ({
+          ...snapshot,
+          observedAt: "2026-08-21T21:59:00.000Z",
+          total: 12,
+          items: [],
+        }) },
+        forgegraph: { read: async () => ({
+          source: "forgegraph",
+          observedAt: "2026-08-21T21:59:00.000Z",
+          coverage: "complete",
+          total: 4,
+          items: [],
+        }) },
+      },
+    });
+
+    await expect(reader.read()).resolves.toMatchObject({
+      gaps: ["skillfleet did not report"],
+    });
+  });
+
+  it.each([
+    "2026-08-20T21:59:00.000Z",
+    "not-a-timestamp",
+    "2026-08-22T22:00:00.000Z",
+  ])("fails closed for non-current supporting evidence: %s", async (observedAt) => {
+    const reader = createHermesEveningCloseReader({
+      now: () => new Date("2026-08-21T22:00:00Z"),
+      bob: { read: async () => ({ completed: [], blocked: [], waiting: [], gaps: [] }) },
+      ooda: { readClose: async () => ({ captured: [], tomorrow: [], gaps: [] }) },
+      supportingSources: {
+        skillfleet: { read: async () => ({
+          source: "skillfleet",
+          observedAt,
+          coverage: "complete",
+          total: 12,
+          items: [],
+        }) },
+        forgegraph: { read: async () => ({
+          source: "forgegraph",
+          observedAt: "2026-08-21T21:59:00.000Z",
+          coverage: "complete",
+          total: 4,
+          items: [],
+        }) },
+      },
+    });
+
+    await expect(reader.read()).resolves.toMatchObject({
+      gaps: ["skillfleet did not report current evidence"],
+    });
+  });
+
+  it("rejects a non-positive supporting-source timeout", () => {
+    expect(() => createHermesEveningCloseReader({
+      now: () => new Date("2026-08-21T22:00:00Z"),
+      bob: { read: async () => ({ completed: [], blocked: [], waiting: [], gaps: [] }) },
+      ooda: { readClose: async () => ({ captured: [], tomorrow: [], gaps: [] }) },
+      sourceTimeoutMs: 0,
+    })).toThrow("Hermes close source timeout must be a positive integer");
+  });
+
+  it("starts all close source reads before any source settles", async () => {
+    vi.useFakeTimers();
+    const started: string[] = [];
+    const neverSettles = (source: string) => {
+      started.push(source);
+      return new Promise<never>(() => undefined);
+    };
+    try {
+      const reader = createHermesEveningCloseReader({
+        now: () => new Date("2026-08-21T22:00:00Z"),
+        bob: { read: () => neverSettles("bob") },
+        ooda: { readClose: () => neverSettles("ooda") },
+        sourceTimeoutMs: 10,
+        supportingSources: {
+          skillfleet: { read: () => neverSettles("skillfleet") },
+          forgegraph: { read: () => neverSettles("forgegraph") },
+        },
+      });
+
+      const pending = reader.read();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect([...started].sort()).toEqual([
+        "bob",
+        "forgegraph",
+        "ooda",
+        "skillfleet",
+      ]);
+
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(pending).resolves.toMatchObject({
+        gaps: [
+          "bob did not report",
+          "ooda did not report",
+          "skillfleet did not report",
+          "forgegraph did not report",
+        ],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("bounds an unresponsive supporting source and names only its evidence gap", async () => {
+    vi.useFakeTimers();
+    try {
+      const reader = createHermesEveningCloseReader({
+        now: () => new Date("2026-08-21T22:00:00Z"),
+        bob: { read: async () => ({ completed: [], blocked: [], waiting: [], gaps: [] }) },
+        ooda: { readClose: async () => ({ captured: [], tomorrow: [], gaps: [] }) },
+        sourceTimeoutMs: 10,
+        supportingSources: {
+          skillfleet: { read: () => new Promise(() => undefined) },
+          forgegraph: { read: async () => ({
+            source: "forgegraph",
+            observedAt: "2026-08-21T21:59:00.000Z",
+            coverage: "complete",
+            total: 4,
+            items: [],
+          }) },
+        },
+      });
+
+      const pending = reader.read();
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(pending).resolves.toMatchObject({
+        gaps: ["skillfleet did not report"],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("bounds unresponsive primary close sources and preserves their evidence gaps", async () => {
+    vi.useFakeTimers();
+    try {
+      const reader = createHermesEveningCloseReader({
+        now: () => new Date("2026-08-21T22:00:00Z"),
+        bob: { read: () => new Promise(() => undefined) },
+        ooda: { readClose: async () => {
+          throw new Error("private upstream failure");
+        } },
+        sourceTimeoutMs: 10,
+        supportingSources: {
+          skillfleet: { read: async () => ({
+            source: "skillfleet",
+            observedAt: "2026-08-21T21:59:00.000Z",
+            coverage: "complete",
+            total: 12,
+            items: [],
+          }) },
+          forgegraph: { read: async () => ({
+            source: "forgegraph",
+            observedAt: "2026-08-21T21:59:00.000Z",
+            coverage: "complete",
+            total: 4,
+            items: [],
+          }) },
+        },
+      });
+
+      const pending = reader.read();
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(pending).resolves.toMatchObject({
+        gaps: ["bob did not report", "ooda did not report"],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
