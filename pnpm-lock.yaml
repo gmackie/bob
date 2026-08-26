@@ -1048,8 +1048,8 @@ importers:
   apps/ooda-runner:
     dependencies:
       '@forgegraph/check-events':
-        specifier: ^0.1.4
-        version: 0.1.4
+        specifier: ^0.1.7
+        version: 0.1.7
       '@gmacko/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -4160,8 +4160,8 @@ packages:
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
 
-  '@forgegraph/check-events@0.1.4':
-    resolution: {integrity: sha512-/GPC2BwTG1eNy1YTv4XRx1WtCdF6xuBacv1tH8uOnKYpdVtJbm8blbIpQvyqEOpizG4B4dxIkNbzNQdTNLVEhQ==}
+  '@forgegraph/check-events@0.1.7':
+    resolution: {integrity: sha512-5mWo5j1MNKKVa3ObbEBhk9RZGquoAjtUMATPJ9vJj1lwYQaJsgKR7m1tlm/oxdEG35cTJiIH2DYUwH1fWx3dvg==}
     hasBin: true
 
   '@forgegraph/oxlint-anti-slop@0.1.0':
@@ -17262,7 +17262,7 @@ snapshots:
 
   '@floating-ui/utils@0.2.11': {}
 
-  '@forgegraph/check-events@0.1.4': {}
+  '@forgegraph/check-events@0.1.7': {}
 
   '@forgegraph/oxlint-anti-slop@0.1.0(@oxlint/plugins@1.78.0)':
     dependencies:
