@@ -1,12 +1,12 @@
 /** The slice of ChildProcess this needs — keeps it testable without a real spawn. */
-type KillableChild = {
+interface KillableChild {
   pid?: number;
   kill(signal: NodeJS.Signals): unknown;
-};
+}
 
-type KillDeps = {
+interface KillDeps {
   kill: (pid: number, signal: NodeJS.Signals) => unknown;
-};
+}
 
 /**
  * Signals an agent process and everything it started.
@@ -27,7 +27,9 @@ type KillDeps = {
 export function killProcessTree(
   child: KillableChild,
   signal: NodeJS.Signals,
-  deps: KillDeps = { kill: process.kill },
+  // Wrapped rather than passed bare: `process.kill` detached from `process`
+  // loses its `this`, which is what unbound-method flags.
+  deps: KillDeps = { kill: (pid, sig) => process.kill(pid, sig) },
 ): void {
   if (!child.pid) return;
 
