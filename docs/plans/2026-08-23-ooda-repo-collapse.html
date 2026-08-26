@@ -316,7 +316,7 @@
 <header class="hero">
   <div class="wrap">
     <p class="kicker">Consolidation survey · gmackie/bob</p>
-    <h1>Collapse OODA into one tree<span class="badge">Merged</span></h1>
+    <h1>Collapse OODA into one tree<span class="badge">Done</span></h1>
     <p class="lede">The merge already happened in one direction. Finish it: make the Bob monorepo a strict superset, retire the two superseded repos, and hold the product boundary with package walls instead of a second git remote.</p>
     <div class="meta">
       <span>2026-08-23</span>
@@ -535,22 +535,22 @@
           <td class="id">2.1</td>
           <td><strong>Kill the ghost deployment.</strong> Retire the <span class="p">ooda</span> app record and its stages in ForgeGraph; delete the stack files and app config from the standalone repo so no copy of the definition survives.</td>
           <td><span class="p">ooda/.forgegraph.yaml</span><span class="p">ooda/stacks/production.stack.yaml</span><span class="p">ooda/stacks/staging.stack.yaml</span></td>
-          <td><span class="p">forge app list</span> no longer offers <span class="p">ooda</span>; <span class="p">forge route list</span> shows the domain served only by the edge worker; the live site still answers</td>
-          <td><span class="st manual">files done · record needs you</span></td>
+          <td>Stack files and <span class="p">.forgegraph.yaml</span> deleted and pushed. The app record is marked <span class="p">RETIRED … DO NOT DEPLOY</span> rather than deleted: <span class="p">forge app delete</span> returns a server 500, and the record holds <strong>9 production secrets</strong> whose only other copy is the runner node's <span class="p">.env</span>. Deleting it would destroy the sole backup. See <span class="p">docs/architecture/product-boundary.md</span>.</td>
+          <td><span class="st done">done · record kept deliberately</span></td>
         </tr>
         <tr>
           <td class="id">2.2</td>
           <td><strong>Archive the standalone repo.</strong> Tag the tip <span class="p">pre-archive</span>, replace the README with a pointer to <span class="p">bob/packages/ooda</span> and the parity report, then mark the repo archived. Archive, never delete — the history is the audit trail behind the parity claim.</td>
           <td><span class="p">ooda/README.md</span> · repo settings</td>
-          <td>Tag pushed and resolvable; README names the fold path; repo is read-only</td>
-          <td><span class="st manual">prepped · push+archive needs you</span></td>
+          <td>Pushed (<span class="p">3ec612a</span>), tagged <span class="p">pre-archive</span>, repo archived and read-only. Verified: stack files return 404 on the remote.</td>
+          <td><span class="st done">done</span></td>
         </tr>
         <tr>
           <td class="id">2.3</td>
           <td><strong>Archive <span class="p">bob-cli</span> — STOPPED, the premise was wrong.</strong> <span class="p">apps/desktop-bob</span> is an active consumer: <span class="p">scripts/build-daemon.mjs</span> cross-compiles <span class="p">github.com/blder/bob</span> for five targets into <span class="p">resources/bin/</span>, two darwin binaries are checked into git, <span class="p">electron-builder.yml</span> bundles that directory, and <span class="p">main.ts:207</span> spawns it on startup. <span class="p">ooda-runner</span> replaced bob-cli <em>server-side only</em>. Archiving would strand the desktop daemon.</td>
           <td><span class="p">apps/desktop-bob/scripts/build-daemon.mjs</span><span class="p">apps/desktop-bob/electron-builder.yml</span><span class="p">apps/desktop-bob/src/main.ts</span></td>
-          <td>Blocked on resolving the desktop daemon question — see the sharpened Go/Node entry in open questions</td>
-          <td><span class="st blocked">blocked</span></td>
+          <td><strong>Resolved as a decision, not a task:</strong> keep both daemons. The overlap is the session-claiming role, not the execution engine, and the two deployment shapes differ. Recorded in <span class="p">docs/architecture/host-daemon.md</span>. <span class="p">bob-cli</span> stays unarchived.</td>
+          <td><span class="st done">resolved — keep both</span></td>
         </tr>
         <tr>
           <td class="id">2.4</td>
@@ -694,13 +694,49 @@ pnpm exec turbo run test --concurrency=1 -- --no-file-parallelism</code></pre>
 </section>
 
 <section id="open">
-  <h2><span class="ph">05</span>Open questions</h2>
+  <h2><span class="ph">05</span>Decisions, once open</h2>
   <div class="col">
+    <p>All three questions this plan left open were answered during execution. None turned out to be a task; each was a judgement recorded as a document.</p>
     <ul class="plain">
-      <li><strong>Is anyone else working in the standalone repo?</strong> The April note said the OODA work was happening in parallel. This gates Phase 2 and nothing else — worth answering before starting, cheap to answer.</li>
-      <li><strong>Go or Node for the host daemon?</strong> Node won by accretion: the gateway client grew inside the runner because the adapters, job protocol and contracts were already there, and splitting it out means maintaining the session protocol twice. Go buys a single static binary with no runtime dependency — which only matters if the daemon ships to other people's machines. That makes it downstream of the multi-tenancy question, not an independent call.</li>
-      <li><strong>Does the public multi-tenant platform change the packaging answer?</strong> If OODA is meant to ship as a tenant-facing product rather than an internal tool, the packaging question is different — and it is the same question that decides the one above.</li>
-      <li><strong>Does the OODA schema stay separate inside the shared database?</strong> Phase 8B (merging OODA's tables into the core schema with tenant FKs) was planned in April and never landed. It is out of scope here, but leaving it undecided indefinitely is how the next fold starts.</li>
+      <li><strong>Host daemon: keep both.</strong> Node-ifying the desktop daemon means packaging a second Node runtime into Electron's <span class="p">extraResources</span> instead of a ~10&nbsp;MB static binary. Go-ifying the server daemon means maintaining the session protocol, adapter interface and contract types twice, forever, for a single-binary property worthless on a host we already control. The overlap is shallow — session-claiming, not the execution engine. Flips only if the daemon ships to machines we do not control, which makes it downstream of the <span class="p">apps/blder</span> multi-tenancy question. → <span class="p">docs/architecture/host-daemon.md</span></li>
+      <li><strong>The <span class="p">ooda</span> app record: leave it.</strong> Its purpose changed rather than expired — it is now the credential store of record for the runner node, and archiving the git repo does not affect secret access. Migrating the nine secrets buys nothing but the risk of handling live credentials to change a label. → <span class="p">docs/architecture/product-boundary.md</span></li>
+      <li><strong>The competing branch: superseded, not discarded.</strong> PR #142 was closed and all three of its commits ported, with three corrections it did not have. The branch is tagged <span class="p">superseded/skillfleet-workflow-journal</span> rather than deleted, because it had been rewritten past the head its PR displayed — so the PR diff is not a faithful record of what it contained.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="uncovered">
+  <h2><span class="ph">06</span>What execution uncovered</h2>
+  <div class="col">
+    <p>The collapse itself was five commits. Eight more shipped because checks caught things the work had not asked about — worth recording, because in every case the finding came from a verification step rather than from writing code.</p>
+  </div>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>PR</th><th>What it fixed</th><th>What surfaced it</th></tr></thead>
+      <tbody>
+        <tr><td class="id">#159</td><td>Bob journal records routed into the OODA journal, where the collector silently discards them on source mismatch</td><td>Auditing worktrees revealed #142's branch had moved past its PR head</td></tr>
+        <tr><td class="id">#160</td><td><span class="p">@bob/api</span> lint — 13 errors blocking <em>every</em> deploy in the repo</td><td>Checking CI before merging</td></tr>
+        <tr><td class="id">#161</td><td>An Approved 58-work-package plan surviving only in an unreferenced commit <span class="p">git gc</span> would prune</td><td>Auditing worktrees before deleting them</td></tr>
+        <tr><td class="id">#162</td><td>Skipped deploy jobs reporting <em>success</em>, so a blocked deploy was invisible</td><td>Master could not ship for ~5 hours with no signal</td></tr>
+        <tr><td class="id">#163</td><td>Twelve subprocess-spawning tests with no explicit timeout</td><td>A docs-only PR failing on a 5s timeout</td></tr>
+        <tr><td class="id">#164</td><td>Two local commits stranded unpushed on local master</td><td>Comparing local against the remote at merge time</td></tr>
+        <tr><td class="id">#165</td><td>One package's lint error blocking every deploy; the closure is 33 packages and <span class="p">@bob/mobile</span> is not in it</td><td>Three repo-wide deploy blocks in 24 hours</td></tr>
+        <tr><td class="id">#166</td><td>The last unported commit from #142's branch</td><td>Auditing worktrees</td></tr>
+        <tr><td class="id">FG&nbsp;#433</td><td>Cancelled and skipped CI runs reported as hard failures, contradicting the attestation engine two statements below</td><td>A phantom red on a docs-only PR whose logs did not exist</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout warn">
+    <p class="ct">Two mistakes worth recording</p>
+    <p><strong>A PR was closed on a stale diff.</strong> #142's branch had been rewritten after its PR opened, so three commits were invisible in the diff under review — one of which had already fixed a bug that then shipped. Reviewing the <em>branch</em> rather than the PR view is what caught it, four PRs later.</p>
+    <p><strong>Two tests passed without testing anything.</strong> Both were caught by deliberately reverting the fix and checking the test went red. One asserted a config took effect when it was silently ignorable; the other could not distinguish the fixed code from the broken code at all. A green test is not evidence until it has been seen to fail.</p>
+  </div>
+  <div class="col">
+    <h3>Still open, no owner</h3>
+    <ul class="plain">
+      <li><strong>CI log retention.</strong> <span class="p">forge ci logs</span> returned "log file not found" for three separate runs that needed diagnosis. ForgeGraph has a <span class="p">fix/ci-logs-cross-repo</span> branch in flight.</li>
+      <li><strong>Runner memory pressure.</strong> Documented in <span class="p">ci.yml</span>: concurrent tsc is OOM-killed, concurrent eslint drove load average to 150. It is why the deploy gate reads cached summaries instead of the obvious parallel design.</li>
+      <li><strong>The gate's deny path is unproven in CI.</strong> Eight unit tests cover it and both deploys running proves the allow direction, but no real closure dependency has failed yet. Fails closed, so the risk is a blocked deploy rather than a bad one.</li>
     </ul>
   </div>
 </section>
