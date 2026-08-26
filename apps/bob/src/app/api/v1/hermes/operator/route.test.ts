@@ -82,9 +82,15 @@ describe("Hermes operator route composition", () => {
     const workReader = { read: vi.fn() };
     const usage = { record: vi.fn() };
     let runtimeDependencies: Record<string, unknown> | undefined;
+    let bobCloseDependencies: {
+      listChanged(updatedAfter: string): Promise<unknown>;
+    } | undefined;
 
     mocks.createOodaBriefReader.mockReturnValue(oodaReader);
-    mocks.createBobEveningCloseReader.mockReturnValue(bobCloseReader);
+    mocks.createBobEveningCloseReader.mockImplementation((dependencies) => {
+      bobCloseDependencies = dependencies as typeof bobCloseDependencies;
+      return bobCloseReader;
+    });
     mocks.createSkillfleetBriefReader.mockReturnValue(skillfleetReader);
     mocks.createForgeGraphBriefReader.mockReturnValue(forgeGraphReader);
     mocks.createHermesEveningCloseReader.mockReturnValue(closeReader);
@@ -135,5 +141,14 @@ describe("Hermes operator route composition", () => {
         forgegraph: forgeGraphReader,
       },
     });
+    await bobCloseDependencies?.listChanged("2026-08-21T00:00:00.000Z");
+    expect(mocks.workItemsList).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "owner-1" }),
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+        updatedAfter: "2026-08-21T00:00:00.000Z",
+        limit: 101,
+      }),
+    );
   });
 });
