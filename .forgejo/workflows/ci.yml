@@ -321,7 +321,10 @@ jobs:
     # fine and the deploy simply never happened. The guard step below
     # keeps the same safety property — no deploy on red — but says so.
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
+    # Cloudflare deploys need a runner with a healthy, direct DNS/egress path.
+    # Keep them off the general CI pool so a degraded node cannot consume
+    # Wrangler's request timeout before it reaches the API.
+    runs-on: forgegraph-worker
     steps:
       - name: Refuse to deploy when a dependency of this app failed
         if: needs.ci.outputs.deployable != 'true'
@@ -365,7 +368,7 @@ jobs:
     # fine and the deploy simply never happened. The guard step below
     # keeps the same safety property — no deploy on red — but says so.
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
+    runs-on: forgegraph-worker
     steps:
       - name: Refuse to deploy when a dependency of this app failed
         if: needs.ci.outputs.deployable != 'true'
