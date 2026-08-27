@@ -28,3 +28,6 @@ packages/research-backend/.venv/
 
 # Preflight local build metadata
 .preflight/
+
+# check-events v2 stream + CTRF (CI + agent worktrees)
+.fg/

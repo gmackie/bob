@@ -5,12 +5,21 @@ from pathlib import Path
 
 RECONCILER_PATH = Path(__file__).parents[1] / "ops" / "reconcile-hermes-operator.py"
 JOB_RUNNER_PATH = Path(__file__).parents[1] / "ops" / "hermes-operator-job.py"
+SEND_WRAPPER_PATH = Path(__file__).parents[1] / "ops" / "hermes-operator-send.py"
 
 
 def load_reconciler():
     spec = importlib.util.spec_from_file_location(
         "reconcile_hermes_operator", RECONCILER_PATH
     )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_send_wrapper():
+    spec = importlib.util.spec_from_file_location("hermes_operator_send", SEND_WRAPPER_PATH)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
@@ -52,16 +61,16 @@ class HermesOperatorReconciliationTests(unittest.TestCase):
                     "name": "bob:operator:morning",
                     "prompt": "",
                     "schedule": "0 8 * * *",
-                    "deliver": "telegram",
-                    "script": "hermes-operator-today.py",
+                    "deliver": "local",
+                    "script": "hermes-operator-morning-send.py",
                     "no_agent": True,
                 },
                 {
                     "name": "bob:operator:evening",
                     "prompt": "",
                     "schedule": "0 18 * * *",
-                    "deliver": "telegram",
-                    "script": "hermes-operator-close.py",
+                    "deliver": "local",
+                    "script": "hermes-operator-close-send.py",
                     "no_agent": True,
                 },
             ],
@@ -131,6 +140,64 @@ class HermesOperatorReconciliationTests(unittest.TestCase):
 
         self.assertEqual(calls, ["today", "close"])
         self.assertEqual(output, ["receipt:today", "receipt:close"])
+
+    def test_send_wrapper_delivers_the_assembled_brief_through_the_operator_profile(self):
+        wrapper = load_send_wrapper()
+        loaded = []
+        sent = []
+        emitted = []
+
+        class Job:
+            @staticmethod
+            def run_job(entrypoint, emit):
+                emit(f"brief for {entrypoint}")
+
+        def load_job(path):
+            loaded.append(path.name)
+            return Job
+
+        wrapper.run_wrapper(
+            "/home/bob/.hermes/scripts/hermes-operator-morning-send.py",
+            load_job=load_job, send=sent.append, emit=emitted.append,
+        )
+        wrapper.run_wrapper(
+            "/home/bob/.hermes/scripts/hermes-operator-close-send.py",
+            load_job=load_job, send=sent.append, emit=emitted.append,
+        )
+
+        self.assertEqual(loaded, ["hermes-operator-today.py", "hermes-operator-close.py"])
+        self.assertEqual(sent, ["brief for hermes-operator-today.py", "brief for hermes-operator-close.py"])
+        self.assertEqual(emitted, sent)
+
+    def test_send_wrapper_stays_silent_for_empty_output_and_fails_on_send_error(self):
+        wrapper = load_send_wrapper()
+
+        class Empty:
+            @staticmethod
+            def run_job(entrypoint, emit):
+                return None
+
+        sent = []
+        wrapper.run_wrapper(
+            "/x/hermes-operator-morning-send.py", load_job=lambda _: Empty, send=sent.append, emit=sent.append,
+        )
+        self.assertEqual(sent, [])
+
+        class Brief:
+            @staticmethod
+            def run_job(entrypoint, emit):
+                emit("brief")
+
+        def failing_send(_body):
+            raise RuntimeError("telegram rejected")
+
+        with self.assertRaises(RuntimeError):
+            wrapper.run_wrapper(
+                "/x/hermes-operator-close-send.py", load_job=lambda _: Brief, send=failing_send, emit=sent.append,
+            )
+        self.assertEqual(sent, [])
+        with self.assertRaises(RuntimeError):
+            wrapper.run_wrapper("/x/unknown.py", load_job=lambda _: Brief, send=sent.append, emit=sent.append)
 
 
 if __name__ == "__main__":

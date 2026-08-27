@@ -8,6 +8,7 @@
  * Run: BOB_API_KEY=... BOB_WORKSPACE_ID=... GATEWAY_WS_URL=ws://... node daemon/index.js
  */
 import { execFile, spawn } from "node:child_process";
+import { killProcessTree } from "./process-tree";
 import type { ChildProcess } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -636,6 +637,11 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
     const child = spawn(command, args, {
       cwd: workDir,
       stdio: ["ignore", "pipe", "pipe"],
+      // Its own process group, so killing the session can signal everything
+      // the agent started rather than just the agent. Without this, `pnpm run
+      // lint` → `turbo` → `eslint` outlived every kill and piled up: 45 such
+      // orphans on hetzner-bob, load average 42, node dropped from the fleet.
+      detached: true,
       env: {
         ...buildProviderEnvironment(providerId, process.env),
         CI: "true",
@@ -733,9 +739,9 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
     // Safety timeout — 30 minutes max per task
     const timeout = setTimeout(() => {
       console.warn(`[executor] Session ${sessionId} timed out, killing agent`);
-      child.kill("SIGTERM");
+      killProcessTree(child, "SIGTERM");
       setTimeout(() => {
-        if (!child.killed) child.kill("SIGKILL");
+        if (!child.killed) killProcessTree(child, "SIGKILL");
       }, 5000);
     }, 30 * 60 * 1000);
 
@@ -977,7 +983,7 @@ function gracefulShutdown(): void {
   for (const [sessionId, child] of activeSessions) {
     console.log(`[executor] Interrupting session ${sessionId}`);
     send({ type: "session_status", sessionId, status: "interrupted" });
-    child.kill("SIGTERM");
+    killProcessTree(child, "SIGTERM");
   }
 
   if (ws) {

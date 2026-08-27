@@ -5,7 +5,7 @@
  * Phase 7B-4D-beta Task 9.
  */
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, isNull, or, sql } from "@bob/db";
+import { and, desc, eq, gte, isNull, or, sql } from "@bob/db";
 import { inArray } from "@bob/db";
 import type { Db } from "@bob/db/client";
 import {
@@ -161,6 +161,7 @@ export async function workItemsList(
     kind?: WorkItemKind;
     status?: string;
     statuses?: string[];
+    updatedAfter?: string;
     limit?: number;
   },
 ) {
@@ -184,6 +185,9 @@ export async function workItemsList(
         : input.status
           ? eq(workItems.status, input.status)
           : undefined,
+      input.updatedAfter
+        ? gte(workItems.updatedAt, input.updatedAfter)
+        : undefined,
     ),
     orderBy: [workItems.queueSortOrder, desc(workItems.updatedAt)],
     limit: input.limit,

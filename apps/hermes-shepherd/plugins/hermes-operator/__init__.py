@@ -1,8 +1,11 @@
 """Native Hermes commands for Bob's operator plane."""
 
+import hashlib
 import json
+import logging
 import os
 import fcntl
+import time
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,6 +48,86 @@ def _session_env() -> dict[str, str]:
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+_USAGE_POLICY = {
+    "today": ("bob", "R0"),
+    "capture": ("ooda", "R1"),
+    "research": ("ooda", "R1"),
+    "work": ("bob", "R2"),
+    "approve": ("bob", "R3"),
+    "status": ("bob", "R0"),
+    "fleet": ("skillfleet", "R0"),
+    "close": ("ooda", "R0"),
+    "stop": ("bob", "R3"),
+}
+_log = logging.getLogger("hermes_operator.usage")
+
+
+def _sha256(value: str) -> str:
+    return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _duration_bucket(seconds: float) -> str:
+    if seconds < 1:
+        return "<1s"
+    if seconds < 10:
+        return "1-10s"
+    if seconds < 60:
+        return "10-60s"
+    if seconds < 300:
+        return "1-5m"
+    return ">5m"
+
+
+def build_usage_record(*, request_id: str, intent: str, channel: str, outcome: str,
+                       duration_seconds: float, evidence: str, observed_at: str) -> dict:
+    """Privacy-safe hermes_usage journal record: digests and categories only."""
+    owner, risk_class = _USAGE_POLICY[intent]
+    identity = "\0".join(("hermes-usage", request_id, intent, outcome, observed_at))
+    return {
+        "schemaVersion": 1,
+        "recordId": _sha256(identity),
+        "source": "bob",
+        "observedAt": observed_at,
+        "sessionIdDigest": None,
+        "projectIdDigest": None,
+        "provenanceQuality": "direct",
+        "kind": "hermes_usage",
+        "payload": {
+            "requestIdDigest": _sha256(request_id),
+            "intent": intent,
+            "channel": channel,
+            "owner": owner,
+            "riskClass": risk_class,
+            "outcome": outcome,
+            "durationBucket": _duration_bucket(duration_seconds),
+            "evidence": evidence,
+        },
+    }
+
+
+def record_usage(**fields) -> None:
+    """Append one hermes_usage record to the Skillfleet workflow journal, if configured.
+
+    A journaling failure never changes the operator's result; it is logged so the
+    daily reconciliation can surface it as an evidence gap instead of hiding it.
+    """
+    journal = os.environ.get("HERMES_OPERATOR_USAGE_JOURNAL")
+    if not journal:
+        return
+    try:
+        record = build_usage_record(observed_at=_utc_now(), **fields)
+        path = Path(journal)
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        line = json.dumps(record, separators=(",", ":")) + "\n"
+        with path.open("a", encoding="utf-8") as handle:
+            os.chmod(path, 0o600)
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            handle.write(line)
+            handle.flush()
+    except Exception:
+        _log.exception("hermes_usage journal append failed")
 
 
 def _capture_occurred_at(request_id: str) -> str:
@@ -145,9 +228,12 @@ def handle_capture(raw_args: str) -> str:
     chat_id = session.get("HERMES_SESSION_CHAT_ID")
     message_id = session.get("HERMES_SESSION_MESSAGE_ID")
     if platform != "telegram" or not chat_id or not message_id:
+        record_usage(request_id=f"{platform or 'unknown'}:missing-context", intent="capture",
+                     channel="telegram", outcome="blocked", duration_seconds=0, evidence="unknown")
         return "Capture unavailable: stable Telegram message context is missing."
+    request_id = f"{platform}:{chat_id}:{message_id}"
+    started = time.monotonic()
     try:
-        request_id = f"{platform}:{chat_id}:{message_id}"
         body = {
             "schemaVersion": 1,
             "requestId": request_id,
@@ -169,8 +255,12 @@ def handle_capture(raw_args: str) -> str:
             or not isinstance(canonical_ref.get("id"), str)
         ):
             raise ValueError("invalid capture receipt")
+        record_usage(request_id=request_id, intent="capture", channel="telegram", outcome="success",
+                     duration_seconds=time.monotonic() - started, evidence="complete")
         return f"{summary} [conversation_event:{canonical_ref['id']}]"
     except Exception:
+        record_usage(request_id=request_id, intent="capture", channel="telegram", outcome="failure",
+                     duration_seconds=time.monotonic() - started, evidence="unknown")
         return "Capture failed: Bob operator service is unavailable. Please retry."
 
 
@@ -191,6 +281,7 @@ def handle_scheduled(intent: str) -> str:
         "occurredAt": occurred_at,
         "payload": {},
     }
+    started = time.monotonic()
     try:
         receipt = _post_operator(body)
         canonical_ref = receipt["canonicalRef"]
@@ -246,8 +337,12 @@ def handle_scheduled(intent: str) -> str:
         gaps = data.get("gaps", [])
         if isinstance(gaps, list) and gaps and all(isinstance(gap, str) for gap in gaps):
             lines.append(f"Gaps: {', '.join(_one_line(gap) for gap in gaps[:8])}")
+        record_usage(request_id=body["requestId"], intent=intent, channel="bob", outcome="success",
+                     duration_seconds=time.monotonic() - started, evidence=coverage)
         return "\n".join(lines)
     except Exception as error:
+        record_usage(request_id=body["requestId"], intent=intent, channel="bob", outcome="failure",
+                     duration_seconds=time.monotonic() - started, evidence="unknown")
         raise RuntimeError("Bob operator service is unavailable") from error
 
 
