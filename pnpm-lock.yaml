@@ -97,8 +97,8 @@ importers:
   .:
     devDependencies:
       '@forgegraph/check-events':
-        specifier: ^0.1.6
-        version: 0.1.6
+        specifier: ^0.1.7
+        version: 0.1.7
       '@forgegraph/oxlint-anti-slop':
         specifier: ^0.1.0
         version: 0.1.0(@oxlint/plugins@1.78.0)
@@ -1054,8 +1054,8 @@ importers:
   apps/ooda-runner:
     dependencies:
       '@forgegraph/check-events':
-        specifier: ^0.1.2
-        version: 0.1.2
+        specifier: ^0.1.7
+        version: 0.1.7
       '@gmacko/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -4166,12 +4166,8 @@ packages:
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
 
-  '@forgegraph/check-events@0.1.2':
-    resolution: {integrity: sha512-l4QUZCYHmsn4v9eKtJ0MkXxk+0Zu2DZ0B13vUOMYQPswDfkVcRj44pK15TlUd5vDngOGsmUWRnrNB5JI1+S3XA==}
-    hasBin: true
-
-  '@forgegraph/check-events@0.1.6':
-    resolution: {integrity: sha512-zV0o/vrr11/mFB7ubDD0Drs9lRJrdG4DBq25XKExWPF1Lf2UhzxLJS0SZIver31MEuUa4L4UeKCkPBBuGWK1MA==}
+  '@forgegraph/check-events@0.1.7':
+    resolution: {integrity: sha512-5mWo5j1MNKKVa3ObbEBhk9RZGquoAjtUMATPJ9vJj1lwYQaJsgKR7m1tlm/oxdEG35cTJiIH2DYUwH1fWx3dvg==}
     hasBin: true
 
   '@forgegraph/oxlint-anti-slop@0.1.0':
@@ -17389,9 +17385,7 @@ snapshots:
 
   '@floating-ui/utils@0.2.11': {}
 
-  '@forgegraph/check-events@0.1.2': {}
-
-  '@forgegraph/check-events@0.1.6': {}
+  '@forgegraph/check-events@0.1.7': {}
 
   '@forgegraph/oxlint-anti-slop@0.1.0(@oxlint/plugins@1.78.0)':
     dependencies:

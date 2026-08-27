@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@forgegraph/check-events": "^0.1.2",
+    "@forgegraph/check-events": "^0.1.7",
     "@gmacko/core": "workspace:*",
     "@gmacko/ooda": "workspace:*",
     "@trpc/client": "catalog:",

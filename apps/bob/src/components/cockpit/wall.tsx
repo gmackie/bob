@@ -323,6 +323,15 @@ export function PrPipelines({ status, ops }: { status: CockpitStatus; ops: Cockp
 }
 
 function PrRow({ pr, parked, ops }: { pr: CockpitPr; parked?: boolean; ops: CockpitActions | null }) {
+  // check-events v2 drift: the producing agent's own verification and the
+  // ForgeGraph CI verdict for the same head settled on OPPOSITE outcomes —
+  // the env-drift/flake signal. Judged only on settled evidence: a pending
+  // fgCi or an absent agentCheck yields no marker.
+  const localPassed = pr.agentCheck ? pr.agentCheck.status === "passed" : null;
+  const ciFailed = pr.fgCi?.status === "fail" || pr.stages.ci === "failed";
+  const ciPassed = pr.fgCi?.status === "pass" || (pr.fgCi == null && pr.stages.ci === "done");
+  const drift =
+    localPassed != null && ((localPassed && ciFailed) || (!localPassed && ciPassed));
   return (
     <div className={`rounded border px-2 py-1.5 ${parked ? "border-amber-500/30 bg-amber-500/[.04]" : "border-white/10 bg-white/[.03]"}`}>
       <div className="flex items-baseline gap-2 text-xs">
@@ -351,6 +360,18 @@ function PrRow({ pr, parked, ops }: { pr: CockpitPr; parked?: boolean; ops: Cock
         )}
       </div>
       {pr.fgCi && pr.fgCi.status !== "none" && <FgCiStrip ci={pr.fgCi} />}
+      {drift && pr.agentCheck && (
+        <div className="mt-1 rounded border border-dashed border-amber-500/50 px-1.5 py-0.5 font-mono text-[10px] text-amber-300/90">
+          ⚠ drift · {localPassed ? "agent checks passed → CI failed" : "agent checks failed → CI green"}
+          {(() => {
+            const names = pr.agentCheck.phases.flatMap((p) => p.failures.map((f) => f.name));
+            return !localPassed && names.length > 0 ? (
+              <span className="text-red-300/80"> · {names.slice(0, 2).join(" · ")}</span>
+            ) : null;
+          })()}
+          <span className="text-white/35"> · likely env or flake — compare toolchain evidence</span>
+        </div>
+      )}
     </div>
   );
 }
