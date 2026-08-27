@@ -347,7 +347,10 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm exec vinext deploy
+        # Wrangler occasionally reaches Cloudflare but times out waiting for its
+        # API response. Retry only that exact transient; configuration, auth,
+        # build, and other deploy failures still fail on the first attempt.
+        run: ../../scripts/retry-cloudflare-command.sh pnpm exec vinext deploy
 
   # OODA is promoted independently from the Bob web worker and only after the
   # guarded database bootstrap has completed. The repository secret is a
@@ -399,4 +402,4 @@ jobs:
           test -n "${RESEARCH_SERVICE_TOKEN}"
           printf '%s' "${FORGEGRAPH_API_KEY}" | pnpm exec wrangler secret put FORGEGRAPH_API_KEY --name ooda-blder-bot
           printf '%s' "${RESEARCH_SERVICE_TOKEN}" | pnpm exec wrangler secret put RESEARCH_SERVICE_TOKEN --name ooda-blder-bot
-          pnpm exec vinext deploy
+          ../../scripts/retry-cloudflare-command.sh pnpm exec vinext deploy
