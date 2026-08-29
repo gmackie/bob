@@ -18,7 +18,9 @@ DEPLOY_STAGE="${REPO_ROOT}/.deploy/execution-daemon"
 rm -rf "${DEPLOY_STAGE}"
 mkdir -p "${DEPLOY_STAGE}/dist/daemon"
 
-cp apps/bob-execution/dist/daemon/index.js "${DEPLOY_STAGE}/dist/daemon/"
+# Copy the whole build dir: the daemon and agent-health share a tsup chunk,
+# so copying index.js alone leaves a dangling import at runtime.
+cp apps/bob-execution/dist/daemon/*.js "${DEPLOY_STAGE}/dist/daemon/"
 cp apps/bob-execution/bob-execution.service "${DEPLOY_STAGE}/"
 
 cat > "${DEPLOY_STAGE}/package.json" << 'PKGJSON'

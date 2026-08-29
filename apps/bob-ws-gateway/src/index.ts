@@ -231,6 +231,76 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Browser-driven agent re-authentication. Triggering a login mutates the
+  // host's credential files, so it is gated on the workspace OWNER: an api key
+  // scoped to some other user must not be able to start a sign-in on a host it
+  // does not own, nor read the verification link that comes back.
+  if (req.method === "POST" && req.url === "/internal/agent-auth") {
+    const bearer = bearerFrom(req.headers.authorization);
+    const principal = bearer ? await validateInternalBearer(bearer) : null;
+    if (!principal) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+    const body = await readJsonBody(req) as {
+      workspaceId?: string;
+      action?: "start" | "code" | "cancel";
+      requestId?: string;
+      provider?: string;
+      value?: string;
+    } | null;
+    if (!body?.workspaceId || !body?.action || !body?.requestId) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing workspaceId, action, or requestId" }));
+      return;
+    }
+
+    const ownerId = await workspaceOwnerId(body.workspaceId);
+    if (!ownerId || !principalMayActAs(principal, ownerId)) {
+      auditInternal(principal, "internal.denied", {
+        endpoint: "agent-auth",
+        workspaceId: body.workspaceId,
+      });
+      res.writeHead(403, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Forbidden: not this workspace's owner" }));
+      return;
+    }
+
+    const providers = ["claude", "codex", "grok", "cursor-agent"] as const;
+    let message;
+    if (body.action === "start") {
+      const provider = providers.find((p) => p === body.provider);
+      if (!provider) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unknown provider" }));
+        return;
+      }
+      message = { type: "agent_auth_start" as const, requestId: body.requestId, provider };
+    } else if (body.action === "code") {
+      if (!body.value) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Missing value" }));
+        return;
+      }
+      message = { type: "agent_auth_input" as const, requestId: body.requestId, value: body.value };
+    } else {
+      message = { type: "agent_auth_cancel" as const, requestId: body.requestId };
+    }
+
+    // Audit the action, never the code itself.
+    auditInternal(principal, "internal.agent_auth", {
+      workspaceId: body.workspaceId,
+      action: body.action,
+      provider: body.provider,
+    });
+
+    const delivered = relay.requestAgentAuth(body.workspaceId, message);
+    res.writeHead(delivered ? 200 : 503, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(delivered ? { ok: true } : { error: "Host daemon is not connected" }));
+    return;
+  }
+
   if (req.method === "POST" && req.url === "/internal/session-stop") {
     const bearer = bearerFrom(req.headers.authorization);
     const principal = bearer ? await validateInternalBearer(bearer) : null;

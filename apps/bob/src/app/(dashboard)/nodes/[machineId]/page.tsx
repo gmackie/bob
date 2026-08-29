@@ -8,6 +8,7 @@ import { cn } from "@gmacko/core/ui";
 import { Badge } from "@gmacko/core/ui/badge";
 import { Card } from "@gmacko/core/ui/card";
 
+import { AgentCredentials } from "~/components/nodes/agent-credentials";
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { useTRPC } from "~/trpc/react";
 
@@ -227,6 +228,10 @@ export default function NodeDetailPage({
                 Last seen {formatRelative(workspace.lastHeartbeat)}
               </p>
             </div>
+
+            {/* Agent credentials: view auth/credit state and re-authenticate
+                from here rather than SSHing to the host. */}
+            <AgentCredentials workspaceId={workspace.id} />
 
             {/* Workspace info */}
             <Card className="p-4 space-y-3">

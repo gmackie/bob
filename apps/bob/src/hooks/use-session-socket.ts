@@ -13,6 +13,8 @@ import {
   type SessionEventType,
   type WorkspaceSessionInfo,
   type HostSnapshotWire,
+  type ServerAgentAuthPrompt,
+  type ServerAgentAuthResult,
 } from "@bob/ws";
 
 // Re-export types that consumers depend on
@@ -61,6 +63,8 @@ interface UseSessionSocketOptions {
   onStatusChange?: (sessionId: string, status: SessionStatus) => void;
   onWorkspaceSnapshot?: (sessions: WorkspaceSessionInfo[]) => void;
   onHostSnapshot?: (workspaceId: string, snapshot: HostSnapshotWire) => void;
+  onAgentAuthPrompt?: (message: ServerAgentAuthPrompt) => void;
+  onAgentAuthResult?: (message: ServerAgentAuthResult) => void;
   onWorkspaceStatusChanged?: (info: ServerSessionStatusChanged) => void;
   onWorkspaceEvent?: (message: ServerWorkspaceInvalidation) => void;
   onConnectionChange?: (state: ConnectionState) => void;
@@ -74,6 +78,8 @@ export function useSessionSocket({
   onStatusChange,
   onWorkspaceSnapshot,
   onHostSnapshot,
+  onAgentAuthPrompt,
+  onAgentAuthResult,
   onWorkspaceStatusChanged,
   onWorkspaceEvent,
   onConnectionChange,
@@ -96,6 +102,8 @@ export function useSessionSocket({
   const onStatusChangeRef = useRef(onStatusChange);
   const onWorkspaceSnapshotRef = useRef(onWorkspaceSnapshot);
   const onHostSnapshotRef = useRef(onHostSnapshot);
+  const onAgentAuthPromptRef = useRef(onAgentAuthPrompt);
+  const onAgentAuthResultRef = useRef(onAgentAuthResult);
   const onWorkspaceStatusChangedRef = useRef(onWorkspaceStatusChanged);
   const onWorkspaceEventRef = useRef(onWorkspaceEvent);
   const onConnectionChangeRef = useRef(onConnectionChange);
@@ -103,6 +111,8 @@ export function useSessionSocket({
   onStatusChangeRef.current = onStatusChange;
   onWorkspaceSnapshotRef.current = onWorkspaceSnapshot;
   onHostSnapshotRef.current = onHostSnapshot;
+  onAgentAuthPromptRef.current = onAgentAuthPrompt;
+  onAgentAuthResultRef.current = onAgentAuthResult;
   onWorkspaceStatusChangedRef.current = onWorkspaceStatusChanged;
   onWorkspaceEventRef.current = onWorkspaceEvent;
   onConnectionChangeRef.current = onConnectionChange;
@@ -148,6 +158,12 @@ export function useSessionSocket({
       },
       onHostSnapshot: (workspaceId: string, snapshot: HostSnapshotWire) => {
         onHostSnapshotRef.current?.(workspaceId, snapshot);
+      },
+      onAgentAuthPrompt: (message: ServerAgentAuthPrompt) => {
+        onAgentAuthPromptRef.current?.(message);
+      },
+      onAgentAuthResult: (message: ServerAgentAuthResult) => {
+        onAgentAuthResultRef.current?.(message);
       },
       onWorkspaceEvent: (message: ServerWorkspaceInvalidation) => {
         onWorkspaceEventRef.current?.(message);

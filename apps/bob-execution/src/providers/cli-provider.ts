@@ -1,4 +1,6 @@
 import type { ProviderCapabilities, ProviderHealthSnapshot, ProviderId } from "./contract.js";
+import type { CreditState } from "./credit.js";
+import { redactDetail } from "./credit.js";
 
 export interface CommandResult {
   code: number;
@@ -41,10 +43,19 @@ const capabilities: Record<ProviderId, ProviderCapabilities> = {
   },
 };
 
+/**
+ * Probe a provider CLI.
+ *
+ * The probe establishes *auth* only. It cannot establish *credit*: `grok models`
+ * exits 0 on an authenticated account with an exhausted balance, which is why
+ * the 2026-08-29 outage reported a healthy agent that 402'd on every dispatch.
+ * Credit arrives via `credit`, latched from real run outcomes by CreditLatch.
+ */
 export async function probeCliProvider(
   provider: ProviderId,
   run: RunCommand,
   now = new Date(),
+  credit: CreditState = { latched: false },
 ): Promise<ProviderHealthSnapshot> {
   const command = providerCommands[provider];
   const base = { provider, command, capabilities: capabilities[provider], checkedAt: now.toISOString() };
@@ -56,6 +67,8 @@ export async function probeCliProvider(
     }
     const auth = await run(command, authArgs[provider]);
     if (auth.code !== 0) {
+      // Auth outranks credit: an unreachable account cannot spend a balance,
+      // and "sign in" is the correct next action either way.
       return {
         ...base,
         installed: true,
@@ -63,6 +76,18 @@ export async function probeCliProvider(
         version: version.stdout.trim() || undefined,
         status: "unauthenticated",
         error: "authentication probe failed",
+        detail: redactDetail(`${auth.stderr}\n${auth.stdout}`) || undefined,
+      };
+    }
+    if (credit.latched) {
+      return {
+        ...base,
+        installed: true,
+        authenticated: true,
+        version: version.stdout.trim() || undefined,
+        status: "no_credit",
+        error: "provider reported an exhausted balance",
+        detail: credit.detail,
       };
     }
     return {
