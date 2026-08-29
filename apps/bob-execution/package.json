@@ -8,7 +8,8 @@
     "./runtime": "./src/runtime/index.ts",
     "./runtime/planningControl": "./src/runtime/planningControl.ts",
     "./runtime/taskExecutor": "./src/runtime/taskExecutor.ts",
-    "./planning/smolAgentReviewProfile": "./src/planning/smolAgentReviewProfile.ts"
+    "./planning/smolAgentReviewProfile": "./src/planning/smolAgentReviewProfile.ts",
+    "./providers": "./src/providers/index.ts"
   },
   "scripts": {
     "lint": "eslint --flag unstable_native_nodejs_ts_config",

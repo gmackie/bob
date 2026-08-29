@@ -1053,6 +1053,9 @@ importers:
 
   apps/ooda-runner:
     dependencies:
+      '@bob/execution':
+        specifier: workspace:*
+        version: link:../bob-execution
       '@forgegraph/check-events':
         specifier: ^0.1.7
         version: 0.1.7
