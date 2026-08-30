@@ -102,6 +102,12 @@ jobs:
       - name: Validate the deployable gate
         run: node --test scripts/verify-ci-deployable-gate.test.mjs
 
+      # Drives the real reaper against real dirs and real processes. The bug it
+      # guards was entirely in what the script did to the OS, so this must run
+      # on a Linux runner where the /proc path is the one exercised.
+      - name: Validate the worktree reaper
+        run: node --test scripts/worktree-reap.test.mjs
+
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
 
       - name: Typecheck

@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# bob-worktree-reap — remove stale agent-dispatch worktrees (regenerable
+# scratch) older than N days so ~/.bob never refills. Prunes git refs.
+#
+# Retired into the repo on 2026-08-30. It previously lived only at
+# /home/bob/bin/bob-worktree-reap on hetzner-bob, so the bug below was
+# invisible to every test and review in this repo.
+#
+# THE BUG IT NOW FIXES
+# The old version deleted the worktree directory and left whatever was running
+# inside it alone. Its safety note — "an active dispatch's worktree has a
+# recent mtime and is never reaped" — had the failure mode exactly backwards:
+# a HUNG dispatch stops touching files, so its mtime goes stale, so it is
+# precisely the hung ones that get reaped out from under a live process tree.
+#
+# One dispatch (refresh-stale-kb-entries-for-latchflow) leaked 73 pnpm
+# lint/typecheck processes that way. They reparented to init, span against a
+# deleted cwd for four days, and drove hetzner-bob to a load average of 90 on
+# 8 cores — which broke Forgejo CI on that runner, since it could no longer
+# fork a thread.
+#
+# So: kill what lives in a worktree before removing it.
+set -u
+DAYS="${1:-3}"
+# Overridable so the tests can drive the real script against a temp tree.
+WT="${BOB_WORKTREE_ROOT:-/home/bob/.bob/worktrees}"
+[ -d "$WT" ] || exit 0
+
+count_worktrees() {
+  find "$WT" -mindepth 2 -maxdepth 4 -type d -name 'bob-*' 2>/dev/null | wc -l
+}
+
+# Every process whose cwd is at or below $1.
+#
+# Prefers /proc, which is what the deploy target has: it sees a process
+# regardless of who started it or how it was reparented, and the leaked ones
+# had been adopted by init and matched no process group or session we still
+# held. Falls back to lsof on hosts without /proc (macOS dev machines) so the
+# tests exercise the real script rather than a Linux-only stub.
+pids_under() {
+  local dir="$1" pid cwd
+  if [ -d /proc/1 ]; then
+    for pid in $(ls /proc 2>/dev/null | grep -E '^[0-9]+$'); do
+      [ "$pid" = "$$" ] && continue
+      cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null) || continue
+      case "$cwd" in
+        "$dir"|"$dir"/*) echo "$pid" ;;
+      esac
+    done
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -t -a -d cwd +D "$dir" 2>/dev/null | grep -v "^$$\$"
+  fi
+}
+
+reap_one() {
+  local wt="$1" pids
+  pids=$(pids_under "$wt")
+  if [ -n "$pids" ]; then
+    echo "[bob-worktree-reap] killing $(echo "$pids" | wc -w | tr -d ' ') process(es) in $wt"
+    # TERM first so a well-behaved child can flush and exit; KILL for the rest.
+    # shellcheck disable=SC2086
+    kill -TERM $pids 2>/dev/null
+    sleep 2
+    pids=$(pids_under "$wt")
+    # shellcheck disable=SC2086
+    [ -n "$pids" ] && kill -KILL $pids 2>/dev/null
+    sleep 1
+  fi
+  rm -rf "$wt" 2>/dev/null
+}
+
+before=$(count_worktrees)
+
+# Collect first, then act: rm -rf inside a find -exec while also killing
+# processes makes the traversal race against its own deletions.
+stale=$(find "$WT" -mindepth 2 -maxdepth 4 -type d -name 'bob-*' -mtime +"$DAYS" -prune 2>/dev/null)
+if [ -n "$stale" ]; then
+  while IFS= read -r wt; do
+    [ -n "$wt" ] && reap_one "$wt"
+  done <<< "$stale"
+fi
+
+for r in /root/dev/*/; do
+  [ -e "${r}.git" ] && git -C "$r" worktree prune 2>/dev/null
+done
+
+after=$(count_worktrees)
+echo "[bob-worktree-reap] $((before-after)) stale worktrees removed (>${DAYS}d); $after remain"
