@@ -6,6 +6,8 @@
  */
 import { createHash, randomBytes } from "crypto";
 import { and, eq, isNull, sql } from "@bob/db";
+
+import { normalizeApiKeyPermissions } from "./api-key-permissions.js";
 import {
   apiKeys,
   gitProviderConnections,
@@ -106,7 +108,13 @@ export async function settingsEdgeListApiKeys(
     orderBy: (keys, { desc }) => [desc(keys.createdAt)],
   });
 
-  return keys;
+  // `permissions` is an unconstrained JSON column with more than one shape in
+  // production. Normalise here so a single legacy row cannot fail the encode
+  // for the entire list. See ./api-key-permissions.ts.
+  return keys.map((key) => ({
+    ...key,
+    permissions: normalizeApiKeyPermissions(key.permissions),
+  }));
 }
 
 export async function settingsEdgeCreateApiKey(

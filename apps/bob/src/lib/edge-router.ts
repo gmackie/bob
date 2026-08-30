@@ -11,6 +11,7 @@
 
 import type { TRPCRouterRecord } from "@trpc/server";
 
+import { agentAuthRouter } from "@bob/api/router/agentAuth";
 import { agentRunRouter } from "@bob/api/router/agentRun";
 import { authRouter } from "@bob/api/router/auth";
 import { cockpitRouter } from "@bob/api/router/cockpit";
@@ -18,6 +19,7 @@ import { cookiesRouter } from "@bob/api/router/cookies";
 import { checkpointRouter } from "@bob/api/router/checkpoint";
 import { chatRouter } from "@bob/api/router/chat";
 import { dispatchRouter } from "@bob/api/router/dispatch";
+import { dispatchControlRouter } from "@bob/api/router/dispatchControl";
 import { eventRouter } from "@bob/api/router/event";
 import { featureBranchRouter } from "@bob/api/router/featureBranch";
 import { forgegraphRouter } from "@bob/api/router/forgegraph";
@@ -55,6 +57,9 @@ import { createTRPCRouter } from "@bob/api/trpc";
 
 const edgeRouterRecord = {
   activity: activityRouter,
+  // Both are edge-safe: they authorise the caller, then relay to the
+  // ws-gateway over fetch. Neither touches a Node-only API.
+  agentAuth: agentAuthRouter,
   agentRun: agentRunRouter,
   artifact: artifactRouter,
   auth: authRouter,
@@ -64,6 +69,7 @@ const edgeRouterRecord = {
   comment: commentRouter,
   cookies: cookiesRouter,
   dispatch: dispatchRouter,
+  dispatchControl: dispatchControlRouter,
   event: eventRouter,
   featureBranch: featureBranchRouter,
   filesystem: filesystemRouter,

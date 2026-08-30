@@ -7,10 +7,12 @@
 // auto-break the contract — any drift surfaces as a Schema mismatch
 // caught in tests.
 //
-// Timestamps use `Schema.DateTimeUtcFromString` (verified present at
+// Timestamps use `WireTimestamp` (verified present at
 // `effect/dist/Schema.d.ts:5944`). On the wire they travel as ISO-8601
 // strings; after decode they become `DateTimeUtc`.
 import { Schema } from "effect";
+
+import { WireTimestamp } from "./wire-timestamp.js";
 
 // Mirror of @gmacko/rpc/context::CurrentUserShape as a wire schema.
 // Roles mirror @gmacko/validators::TenantMemberRole.
@@ -35,10 +37,10 @@ export const ApiKeyListItemSchema = Schema.Struct({
   name: Schema.String,
   keyPrefix: Schema.String,
   permissions: Schema.Array(Schema.Literals(["read", "write", "admin"])),
-  createdAt: Schema.DateTimeUtcFromString,
-  revokedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
-  lastUsedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
-  expiresAt: Schema.NullOr(Schema.DateTimeUtcFromString),
+  createdAt: WireTimestamp,
+  revokedAt: Schema.NullOr(WireTimestamp),
+  lastUsedAt: Schema.NullOr(WireTimestamp),
+  expiresAt: Schema.NullOr(WireTimestamp),
 });
 export type ApiKeyListItemWire = typeof ApiKeyListItemSchema.Type;
 
@@ -73,6 +75,6 @@ export const DeviceFlowStartResultSchema = Schema.Struct({
   deviceCode: Schema.String,
   userCode: Schema.String,
   verificationUri: Schema.String,
-  expiresAt: Schema.DateTimeUtcFromString,
+  expiresAt: WireTimestamp,
 });
 export type DeviceFlowStartResultWire = typeof DeviceFlowStartResultSchema.Type;

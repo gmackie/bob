@@ -95,7 +95,13 @@ const BobRpcGroup = RpcGroup.make(HealthRpc)
  * The factory is called per-request (it's cheap — just creates closures) so
  * the captured `ctx.userId` is always the authenticated user for that request.
  */
-function liftHandlers<
+/**
+ * Exported for tests. The calling convention below is the whole reason this is
+ * testable: getting it wrong breaks every RPC procedure at once, and the
+ * `as unknown as Parameters<...>` casts on each `toLayer` call mean TypeScript
+ * cannot catch it.
+ */
+export function liftHandlers<
   H extends Record<string, (input: never) => Effect.Effect<unknown, unknown, unknown>>,
 >(
   factory: (ctx: HandlerContext) => H,
@@ -129,7 +135,16 @@ function liftHandlers<
           // is a real invariant check, not an expected runtime path.
           throw new Error(`liftHandlers: handler "${key}" missing at request time`);
         }
-        return yield* handler(input);
+        // Effect calls us as `(payload, options)` — see Effect's own
+        // `ToHandlerFn`. Bob's handlers are written as `({ payload })`, so
+        // wrap here rather than in all 333 of them. Without this wrap a
+        // `Schema.Void` payload arrives as `undefined` and every handler
+        // throws "Cannot destructure property 'payload' of 'undefined'",
+        // which the server returns as a 200 + Defect body — a blank UI with
+        // nothing logged. The `as unknown as Parameters<...>` casts on each
+        // `toLayer` call mean TypeScript cannot catch this; the test in
+        // __tests__/rpc-handler-calling-convention.test.ts does.
+        return yield* handler({ payload: input } as never);
       });
   }
   return lifted as { [K in keyof H]: (input: never) => Effect.Effect<unknown, unknown, unknown> };
