@@ -21,6 +21,7 @@ import {
 import { bobRunReporterFromEnv, type BobRunReporter } from "./bob-run-reporter";
 import { AgentCredentials } from "./agent-credentials.js";
 import { DispatchControl } from "./dispatch-control.js";
+import { releaseBranchFromStaleWorktrees } from "./worktree-prepare.js";
 import { EventBuffer } from "./event-buffer";
 import {
   adoptSupervisedRun,
@@ -1226,6 +1227,19 @@ export class BobGatewayConnector {
       await this.git(repoPath, ["worktree", "remove", "--force", wtPath]).catch(() => {});
       rmSync(wtPath, { recursive: true, force: true });
     }
+
+    // Clearing wtPath is not enough: git refuses `worktree add -B <branch>`
+    // when ANY other worktree claims that branch, and the claim outlives the
+    // directory. A leftover repair worktree held one work item's branch on
+    // 2026-08-30 and every dispatch failed — 17 runs across all four agents,
+    // none of which could have fixed it.
+    await releaseBranchFromStaleWorktrees(
+      (cwd, args) => this.git(cwd, args),
+      repoPath,
+      branch,
+      wtPath,
+    );
+
     mkdirSync(dirname(wtPath), { recursive: true });
 
     // Prefer forking from origin/<base>; fall back to the local base branch.
