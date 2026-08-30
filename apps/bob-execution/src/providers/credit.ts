@@ -18,7 +18,12 @@
 import type { ProviderId } from "./contract.js";
 import type { CreditStore } from "./credit-store.js";
 
-export type RunFailureKind = "no_credit" | "auth" | "other";
+/**
+ * How a failed run disqualifies an agent. The kinds are separate because the
+ * REMEDIES are separate: top up, sign in, or wait. Collapsing them sends the
+ * operator at the wrong one.
+ */
+export type RunFailureKind = "no_credit" | "auth" | "rate_limited" | "other";
 
 /**
  * Credit/billing exhaustion. Ordered most- to least-specific; `payment
@@ -52,14 +57,27 @@ const AUTH_PATTERNS: RegExp[] = [
   /not logged in/i,
   /please (log|sign) ?in/i,
   /oauth/i,
+  // The exact strings observed on 2026-08-30.
+  /authentication required/i,
+  /please run '[^']*login'/i,
+  /set [A-Z_]*API_KEY/,
 ];
 
 /**
- * Transient throttling. Checked BEFORE credit patterns: a 429 is not an
- * exhausted balance, and latching one would strand a healthy agent behind a
- * "Top up" button that fixes nothing.
+ * Throttling. Checked BEFORE credit patterns: a 429 is not an exhausted
+ * balance, and latching one as credit would strand a healthy agent behind a
+ * "Top up" button that fixes nothing. It IS reported, though — claude's weekly
+ * cap ("You've hit your weekly limit · resets 3pm (UTC)") blocks dispatch just
+ * as hard as a dead credential, and showing "Ready" through it is what left
+ * 20 runs failing against agents the page called healthy.
  */
-const RATE_LIMIT_PATTERNS: RegExp[] = [/\b429\b/, /rate ?limit/i, /too many requests/i];
+const RATE_LIMIT_PATTERNS: RegExp[] = [
+  /\b429\b/,
+  /rate[ _]?limit/i,
+  /too many requests/i,
+  /weekly limit/i,
+  /usage limit reached/i,
+];
 
 function matches(patterns: RegExp[], text: string): boolean {
   return patterns.some((pattern) => pattern.test(text));
@@ -74,7 +92,7 @@ export interface RunOutcome {
 export function classifyRunFailure(outcome: RunOutcome): RunFailureKind {
   if (outcome.code === 0) return "other";
   const text = `${outcome.stderr ?? ""}\n${outcome.stdout ?? ""}`;
-  if (matches(RATE_LIMIT_PATTERNS, text)) return "other";
+  if (matches(RATE_LIMIT_PATTERNS, text)) return "rate_limited";
   if (matches(CREDIT_PATTERNS, text)) return "no_credit";
   if (matches(AUTH_PATTERNS, text)) return "auth";
   return "other";
@@ -117,26 +135,44 @@ export interface CreditState {
   detail?: string;
 }
 
-export class CreditLatch {
-  private readonly state = new Map<ProviderId, { detail: string; at: string }>();
+/** What a run outcome most recently proved about a provider. */
+export interface LatchedOutcome {
+  /** Undefined means nothing is latched — the probe's verdict stands. */
+  kind?: Exclude<RunFailureKind, "other">;
+  detail?: string;
+  at?: string;
+}
+
+/**
+ * What real runs have proved about each provider, on top of what the probe can
+ * see. A probe cannot detect an exhausted balance, a revoked token that still
+ * has a local session file, or a weekly cap — only an actual run reveals those.
+ */
+export class RunOutcomeLatch {
+  private readonly state = new Map<ProviderId, Required<LatchedOutcome>>();
 
   /**
    * `store` makes the latch durable and cross-process. Omit it for pure unit
-   * work; the daemon and the runner both pass a FileCreditStore pointed at the
-   * same path so they cannot disagree about a provider.
+   * work; the daemon, the runner and the health CLI all pass a FileCreditStore
+   * pointed at the same path so they cannot disagree about a provider.
    */
   constructor(private readonly store?: CreditStore) {
     // The state file is operator-editable and may predate a schema change, so
-    // validate the shape rather than trusting the declared type.
+    // validate the shape rather than trusting the declared type. Entries
+    // written before kinds existed recorded only credit failures.
     const stored: unknown = this.store?.read() ?? {};
     for (const [provider, value] of Object.entries(stored as Record<string, unknown>)) {
-      const record = value as { detail?: unknown; at?: unknown } | null;
-      if (record && typeof record.detail === "string") {
-        this.state.set(provider as ProviderId, {
-          detail: record.detail,
-          at: typeof record.at === "string" ? record.at : "",
-        });
-      }
+      const record = value as { detail?: unknown; at?: unknown; kind?: unknown } | null;
+      if (!record || typeof record.detail !== "string") continue;
+      const kind =
+        record.kind === "auth" || record.kind === "rate_limited" || record.kind === "no_credit"
+          ? record.kind
+          : "no_credit";
+      this.state.set(provider as ProviderId, {
+        kind,
+        detail: record.detail,
+        at: typeof record.at === "string" ? record.at : "",
+      });
     }
   }
 
@@ -145,17 +181,20 @@ export class CreditLatch {
   }
 
   /**
-   * Feed every dispatch outcome through here. A credit failure latches; a
-   * success clears; anything else leaves the latch untouched (a network blip
-   * while broke must not look like recovery).
+   * Feed every dispatch outcome through here. A success clears the latch; a
+   * recognised failure records WHICH kind, so the UI can offer the matching
+   * remedy. Anything unrecognised leaves the latch untouched — a network blip
+   * must not be reported as a credential problem.
    */
   noteRunOutcome(provider: ProviderId, outcome: RunOutcome, now = new Date()): void {
     if (outcome.code === 0) {
       if (this.state.delete(provider)) this.persist();
       return;
     }
-    if (classifyRunFailure(outcome) !== "no_credit") return;
+    const kind = classifyRunFailure(outcome);
+    if (kind === "other") return;
     this.state.set(provider, {
+      kind,
       detail: redactDetail(`${outcome.stderr ?? ""}\n${outcome.stdout ?? ""}`),
       at: now.toISOString(),
     });
@@ -163,12 +202,20 @@ export class CreditLatch {
   }
 
   /**
-   * Re-authentication explicitly does NOT clear the latch. Kept as a named
-   * no-op so the auth path reads as a deliberate decision rather than an
-   * omission someone later "fixes".
+   * Signing in clears an AUTH latch — that is exactly the remedy for one. It
+   * deliberately does NOT clear credit or a rate limit: re-authenticating buys
+   * no credit and resets no quota, and clearing there is what made the UI say
+   * "sign in" when it should have said "top up".
    */
-  noteAuthSuccess(_provider: ProviderId): void {
-    // Intentionally empty. See module docblock.
+  noteAuthSuccess(provider: ProviderId): void {
+    if (this.state.get(provider)?.kind === "auth" && this.state.delete(provider)) {
+      this.persist();
+    }
+  }
+
+  get(provider: ProviderId): LatchedOutcome {
+    const entry = this.state.get(provider);
+    return entry ? { kind: entry.kind, detail: entry.detail, at: entry.at } : {};
   }
 
   isLatched(provider: ProviderId): boolean {
@@ -177,11 +224,6 @@ export class CreditLatch {
 
   detail(provider: ProviderId): string | undefined {
     return this.state.get(provider)?.detail;
-  }
-
-  get(provider: ProviderId): CreditState {
-    const entry = this.state.get(provider);
-    return entry ? { latched: true, detail: entry.detail } : { latched: false };
   }
 
   clear(provider: ProviderId): void {
@@ -193,3 +235,6 @@ export class CreditLatch {
     return this.state.get(provider)?.at;
   }
 }
+
+/** @deprecated Name kept so existing imports keep working. */
+export const CreditLatch = RunOutcomeLatch;

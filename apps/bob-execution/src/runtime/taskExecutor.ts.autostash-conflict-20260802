@@ -1,0 +1,1112 @@
+import { and, desc, eq } from "@bob/db";
+import { db } from "@bob/db/client";
+import {
+  chatConversations,
+  chatMessages,
+  forgeRevisions,
+  forgeRunEvents,
+  repositories,
+  runLifecycleEvents,
+  taskRuns,
+} from "@bob/db/schema";
+import { buildBobExternalTaskMetadata } from "./externalTaskMetadata.js";
+import { applySnapshotToTask, snapshotTaskFromProvider } from "./providerSnapshot.js";
+import {
+  buildT3ThreadCreateCommand,
+  buildT3ThreadTurnStartCommand,
+  dispatchTaskToT3Code,
+  getT3DispatchRuntimeConfig,
+} from "./t3DispatchClient.js";
+
+function readGlobalString(key: string): string | undefined {
+  const value = (globalThis as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function getGatewayUrl(): string {
+  return readGlobalString("GATEWAY_URL") ?? process.env.GATEWAY_URL ?? "http://localhost:3002";
+}
+
+function getNudgeSecret(): string | undefined {
+  return readGlobalString("NUDGE_SHARED_SECRET") ?? process.env.NUDGE_SHARED_SECRET;
+}
+
+function getExecutionBackend(): "gateway" | "t3code" {
+  const backend =
+    readGlobalString("BOB_EXECUTION_BACKEND") ?? process.env.BOB_EXECUTION_BACKEND;
+  return backend === "t3code" ? "t3code" : "gateway";
+}
+
+function resolveExecutionBackend(): "gateway" | "t3code" {
+  const configuredBackend = getExecutionBackend();
+  if (configuredBackend === "t3code") {
+    return "t3code";
+  }
+
+  return getT3DispatchRuntimeConfig() ? "t3code" : "gateway";
+}
+
+export interface PlanningTask {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string | null;
+  workspaceId: string;
+  projectId: string;
+  assigneeId: string | null;
+  labels: string[];
+  priority: number;
+  url?: string;
+  externalId?: string | null;
+  externalProvider?: string | null;
+  linearWebBaseUrl?: string | null;
+  repository?: {
+    id?: string;
+    fullName?: string;
+    url?: string;
+    defaultBranch?: string;
+  };
+}
+
+export interface TaskExecutionResult {
+  taskRunId: string;
+  sessionId: string;
+  worktreeId: string | null;
+  branch: string;
+  status: "starting" | "running" | "blocked" | "failed";
+  blockedReason?: string;
+}
+
+export interface IssueContextFieldChange {
+  field:
+    | "title"
+    | "description"
+    | "priority"
+    | "assigneeId"
+    | "projectId"
+    | "parentId"
+    | "epicId";
+  from: string | null;
+  to: string | null;
+}
+
+function expectInsertedRow<T>(row: T | undefined, message: string): T {
+  if (!row) {
+    throw new Error(message);
+  }
+
+  return row;
+}
+
+export async function gatewayRequest(
+  userId: string,
+  endpoint: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  const gatewayUrl = getGatewayUrl();
+  const nudgeSecret = getNudgeSecret();
+
+  // Route /session/send through ws-gateway's /internal/session-send
+  if (endpoint === "/session/send" && nudgeSecret) {
+    const response = await fetch(`${gatewayUrl}/internal/session-send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${nudgeSecret}`,
+      },
+      body: JSON.stringify({
+        userId,
+        sessionId: body.sessionId,
+        message: body.message,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Gateway session-send error: ${error}`);
+    }
+
+    return response.json();
+  }
+
+  // Fallback for other endpoints (shouldn't happen in current code)
+  const response = await fetch(`${gatewayUrl}${endpoint}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, ...body }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Gateway error: ${error}`);
+  }
+
+  return response.json();
+}
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50);
+}
+
+function generateBranchName(task: PlanningTask): string {
+  const slug = slugify(task.title);
+  return `bob/${task.identifier}/${slug}`;
+}
+
+export async function findRepositoryForTask(
+  userId: string,
+  task: PlanningTask,
+): Promise<{ repositoryId: string; path: string; mainBranch: string } | null> {
+  const repos = await db.query.repositories.findMany({
+    where: eq(repositories.userId, userId),
+  });
+
+  if (repos.length === 0) return null;
+
+  if (task.repository?.id) {
+    const exactMatch = repos.find(
+      (repo: typeof repositories.$inferSelect) => repo.id === task.repository?.id,
+    );
+    if (exactMatch) {
+      return {
+        repositoryId: exactMatch.id,
+        path: exactMatch.path,
+        mainBranch: exactMatch.mainBranch,
+      };
+    }
+  }
+
+  if (task.repository?.fullName) {
+    const [owner, name] = task.repository.fullName.split("/");
+    const fullNameMatch = repos.find(
+      (repo: typeof repositories.$inferSelect) =>
+        repo.remoteOwner === owner && repo.remoteName === name,
+    );
+    if (fullNameMatch) {
+      return {
+        repositoryId: fullNameMatch.id,
+        path: fullNameMatch.path,
+        mainBranch: fullNameMatch.mainBranch,
+      };
+    }
+  }
+
+  const projectMappedRepo = repos.find(
+    (repo: typeof repositories.$inferSelect) =>
+      repo.planningProjectId === task.projectId,
+  );
+  if (projectMappedRepo) {
+    return {
+      repositoryId: projectMappedRepo.id,
+      path: projectMappedRepo.path,
+      mainBranch: projectMappedRepo.mainBranch,
+    };
+  }
+
+  if (repos.length === 1) {
+    const repo = repos[0];
+    if (!repo) {
+      return null;
+    }
+    return {
+      repositoryId: repo.id,
+      path: repo.path,
+      mainBranch: repo.mainBranch,
+    };
+  }
+
+  for (const label of task.labels) {
+    const normalizedLabel = label.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const matchingRepo = repos.find((repo: typeof repositories.$inferSelect) => {
+      const normalizedName = repo.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+      return (
+        normalizedName.includes(normalizedLabel) ||
+        normalizedLabel.includes(normalizedName)
+      );
+    });
+    if (matchingRepo) {
+      return {
+        repositoryId: matchingRepo.id,
+        path: matchingRepo.path,
+        mainBranch: matchingRepo.mainBranch,
+      };
+    }
+  }
+
+  // No confident match. Do NOT fall back to an arbitrary repo — an autonomous
+  // driver (auto-drain) would otherwise run a Linear task against a random
+  // codebase. Return null so executeTask marks the run blocked ("No repository
+  // found"), surfacing it for the operator to map project→repo. A user with a
+  // single repo is handled above; the arbitrary-first-repo fallback was only
+  // ever safe for that case.
+  return null;
+}
+
+export async function executeTask(
+  userId: string,
+  task: PlanningTask,
+  options?: {
+    contextPreamble?: string;
+    agentType?: string;
+    planningProvider?: string;
+    // Persona to run under. personaId is recorded on the session; personaMetadata
+    // (model / systemPrompt / allowedTools / autonomyLevel) is read by the
+    // gateway → daemon and applied to the agent command at execution time.
+    personaId?: string;
+    personaMetadata?: Record<string, unknown> | null;
+  },
+): Promise<TaskExecutionResult> {
+  // Resolve the planning provider and snapshot fresh task details.
+  // This ensures the executor works with the latest title/description/labels
+  // from the upstream source (Linear, internal work items, etc.).
+  const providerResult = await snapshotTaskFromProvider(task, options?.planningProvider);
+  const resolvedProvider = providerResult.provider;
+
+  if (providerResult.snapshot) {
+    applySnapshotToTask(task, providerResult.snapshot);
+  } else if (providerResult.error) {
+    console.warn(
+      `[taskExecutor] Provider snapshot failed (provider=${resolvedProvider}): ${providerResult.error}. Proceeding with caller-supplied task details.`,
+    );
+  }
+
+  const repoInfo = await findRepositoryForTask(userId, task);
+
+  if (!repoInfo) {
+    const [taskRun] = await db
+      .insert(taskRuns)
+      .values({
+        userId,
+        workItemId: task.id,
+        workItemIdentifierSnapshot: task.identifier,
+        planningWorkspaceId: task.workspaceId,
+        planningItemId: task.id,
+        planningItemIdentifier: task.identifier,
+        planningProvider: resolvedProvider,
+        status: "blocked",
+        blockedReason: "No repository found for this task",
+      })
+      .returning();
+    const insertedTaskRun = expectInsertedRow(
+      taskRun,
+      "Failed to create blocked task run",
+    );
+
+    return {
+      taskRunId: insertedTaskRun.id,
+      sessionId: "",
+      worktreeId: null,
+      branch: "",
+      status: "blocked",
+      blockedReason: "No repository found for this task",
+    };
+  }
+
+  const branch = generateBranchName(task);
+  const selectedAgent = options?.agentType ?? "opencode";
+  const executionBackend = resolveExecutionBackend();
+  const t3RuntimeConfig =
+    executionBackend === "t3code" ? getT3DispatchRuntimeConfig() : null;
+  if (executionBackend === "t3code" && !t3RuntimeConfig) {
+    throw new Error(
+      "BOB_EXECUTION_BACKEND=t3code requires T3CODE_SERVER_URL, T3CODE_PROJECT_ID, T3CODE_MODEL_INSTANCE_ID, and T3CODE_MODEL",
+    );
+  }
+
+  // Create session and task run in DB. The daemon handles git ops
+  // (worktree creation, branch checkout, credential setup) when it
+  // receives the session_available nudge.
+  const [session] = await db
+    .insert(chatConversations)
+    .values({
+      userId,
+      repositoryId: repoInfo.repositoryId,
+      workingDirectory: repoInfo.path,
+      agentType: selectedAgent,
+      title: `${task.identifier}: ${task.title}`,
+      status: "pending",
+      workItemId: task.id,
+      workItemIdentifierSnapshot: task.identifier,
+      gitBranch: branch,
+      planningTaskId: task.id,
+      personaId: options?.personaId ?? null,
+      personaMetadata: options?.personaMetadata ?? null,
+    })
+    .returning();
+  const insertedSession = expectInsertedRow(
+    session,
+    "Failed to create task session",
+  );
+
+  const [taskRun] = await db
+    .insert(taskRuns)
+    .values({
+      userId,
+      workItemId: task.id,
+      workItemIdentifierSnapshot: task.identifier,
+      planningWorkspaceId: task.workspaceId,
+      planningItemId: task.id,
+      planningItemIdentifier: task.identifier,
+      planningProvider: resolvedProvider,
+      sessionId: insertedSession.id,
+      repositoryId: repoInfo.repositoryId,
+      status: "starting",
+      branch,
+    })
+    .returning();
+  const insertedTaskRun = expectInsertedRow(
+    taskRun,
+    "Failed to create starting task run",
+  );
+  const externalTask = buildBobExternalTaskMetadata({
+    task,
+    planningProvider: resolvedProvider,
+    taskRunId: insertedTaskRun.id,
+  });
+
+  if (executionBackend === "t3code" && t3RuntimeConfig) {
+    try {
+      const threadCreateCommand = buildT3ThreadCreateCommand({
+        task,
+        taskRunId: insertedTaskRun.id,
+        branch,
+        workingDirectory: repoInfo.path,
+        baseBranch: repoInfo.mainBranch,
+        externalTask,
+        config: t3RuntimeConfig,
+      });
+      const turnStartCommand = buildT3ThreadTurnStartCommand({
+        task,
+        taskRunId: insertedTaskRun.id,
+        threadId: threadCreateCommand.threadId,
+        branch,
+        workingDirectory: repoInfo.path,
+        baseBranch: repoInfo.mainBranch,
+        externalTask,
+        config: t3RuntimeConfig,
+      });
+      await dispatchTaskToT3Code({
+        serverUrl: t3RuntimeConfig.serverUrl,
+        authToken: t3RuntimeConfig.authToken,
+        commands: [threadCreateCommand, turnStartCommand],
+      });
+    } catch (err) {
+      await db
+        .update(taskRuns)
+        .set({
+          status: "failed",
+          blockedReason: err instanceof Error ? err.message : String(err),
+        })
+        .where(eq(taskRuns.id, insertedTaskRun.id));
+      throw err;
+    }
+  } else {
+    // Nudge ws-gateway so the daemon picks up the session immediately.
+    // Same pattern as planSession.start — best-effort, daemon will also
+    // discover pending sessions on reconnect.
+    const gatewayUrl = getGatewayUrl();
+    const nudgeSecret = getNudgeSecret();
+    if (nudgeSecret) {
+      try {
+        await fetch(`${gatewayUrl}/internal/nudge`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${nudgeSecret}`,
+          },
+          body: JSON.stringify({
+            sessionId: insertedSession.id,
+            workspaceId: task.workspaceId,
+            workingDirectory: repoInfo.path,
+            agentType: selectedAgent,
+            title: `${task.identifier}: ${task.title}`,
+            sessionType: "execution",
+            description: task.description ?? undefined,
+            identifier: task.identifier,
+            branch,
+            externalTask,
+          }),
+        });
+      } catch (err) {
+        console.warn("[taskExecutor] nudge failed:", err);
+      }
+    }
+  }
+
+  // Fire-and-forget: write run_started lifecycle event
+  void db.insert(runLifecycleEvents).values({
+    taskRunId: insertedTaskRun.id,
+    workItemId: task.id,
+    sessionId: insertedSession.id,
+    eventType: "run_started",
+    phase: "execute",
+    metadata: {
+      agentType: selectedAgent,
+      branch,
+      taskIdentifier: task.identifier,
+      externalTask,
+    },
+  }).catch((err: unknown) =>
+    console.warn("[taskExecutor] Failed to write run_started lifecycle event:", err),
+  );
+
+  // Report to ForgeGraph (fire and forget)
+  void reportForgeGraphCreated(db, {
+    id: insertedTaskRun.id,
+    repositoryId: repoInfo.repositoryId,
+    branch,
+    planningItemId: task.id,
+    workItemId: task.id,
+  });
+
+  return {
+    taskRunId: insertedTaskRun.id,
+    sessionId: insertedSession.id,
+    worktreeId: null,
+    branch,
+    status: "starting",
+  };
+}
+
+export interface ReviewDispatchInput {
+  /** Bob's pullRequests.id (uuid) for the PR to review. */
+  pullRequestId: string;
+  /** Bob's repositories.id (uuid) — resolves the runner checkout + workspace. */
+  repositoryId: string;
+  remoteOwner: string;
+  remoteName: string;
+  number: number;
+  /** e.g. https://git.forgegraf.com — null for github.com. */
+  instanceUrl: string | null;
+  /** Head commit SHA — the review is bound to this so a re-push re-triggers. */
+  headSha: string;
+  headBranch: string | null;
+  title: string;
+  body: string | null;
+  /**
+   * Token the agent posts its review with. MUST be a DIFFERENT identity than
+   * the PR author — the git host rejects "review your own pull request", and
+   * every Bob PR is authored by the runner's own account. This is the dedicated
+   * reviewer bot's token (BOB_REVIEW_FORGEJO_TOKEN). Without it, the agent can
+   * still review but cannot post a verdict.
+   */
+  reviewToken?: string;
+}
+
+export interface ReviewDispatchResult {
+  sessionId: string;
+  taskRunId: string;
+}
+
+/**
+ * Build the reviewer prompt handed to the runner agent. The agent reviews the
+ * PR and posts a NATIVE git-host review (APPROVE / REQUEST_CHANGES) bound to the
+ * head SHA — which the auto-merge reaper then reads to gate the merge. No
+ * metered model API is involved: the agent runs on the runner under its own
+ * subscription-authed CLI, exactly like every other Bob task.
+ */
+function buildPrReviewPrompt(
+  input: ReviewDispatchInput,
+  baseBranch: string,
+): string {
+  const host = input.instanceUrl ?? "https://github.com";
+  const api = `${host}/api/v1/repos/${input.remoteOwner}/${input.remoteName}`;
+  // The reviewer token is a DIFFERENT identity than the PR author (the git host
+  // rejects self-reviews). It's embedded here because /internal/nudge carries no
+  // env channel; scope is limited (repo write on an internal instance).
+  const tokenLine = input.reviewToken
+    ? `A reviewer token is provided. Use it verbatim as $TOKEN (do not print it): TOKEN=${input.reviewToken}`
+    : "No reviewer token was provided — you will not be able to post the review; report that and stop.";
+  return [
+    `You are reviewing pull request #${input.number} in ${input.remoteOwner}/${input.remoteName}.`,
+    `PR title: ${input.title}`,
+    input.body ? `PR description:\n${input.body}` : "PR description: (none)",
+    "",
+    "## Reviewer token",
+    tokenLine,
+    "",
+    "## What to do",
+    "1. Read the PR diff and enough of the surrounding code to judge it. Fetch the diff with:",
+    `   curl -s -H "Authorization: token $TOKEN" "${api}/pulls/${input.number}.diff"`,
+    `   (also available: git fetch origin ${input.headBranch ?? `pull/${input.number}/head`} && git diff origin/${baseBranch}...FETCH_HEAD)`,
+    "2. Assess correctness, safety, completeness for the PR's stated intent, obvious bugs, and test gaps.",
+    "3. Submit your verdict AS A GIT-HOST REVIEW bound to the head commit:",
+    `   curl -s -X POST -H "Authorization: token $TOKEN" -H "Content-Type: application/json" \\`,
+    `     "${api}/pulls/${input.number}/reviews" \\`,
+    `     -d '{"event":"APPROVED"|"REQUEST_CHANGES","commit_id":"${input.headSha}","body":"<concise assessment>"}'`,
+    "   Use event APPROVED only if the change is correct, safe, and complete; otherwise REQUEST_CHANGES.",
+    "   Confirm the POST returned a review object (an id + your state); if it errored, report the error verbatim.",
+    "",
+    "## Hard rules",
+    "- Do NOT commit, push, or open/modify any pull request. Review only.",
+    "- Make no changes to the working tree. Your only side effect is the single review POST above.",
+    `- The review MUST include "commit_id":"${input.headSha}" so it binds to the current head.`,
+    "- Never print or echo the reviewer token.",
+  ].join("\n");
+}
+
+/**
+ * Dispatch a PR code review to a runner agent (subscription-authed CLI — NOT a
+ * metered model API). Mirrors executeTask's proven session-create + /internal/
+ * nudge path, but the agent's job is to review an existing PR and post a
+ * git-host review verdict rather than implement a task. The auto-merge reaper
+ * reads that verdict on a later pass to decide the merge.
+ *
+ * Returns null (and dispatches nothing) if the repo can't be resolved or has no
+ * workspace — the caller logs a skip.
+ */
+export async function dispatchReviewSession(
+  userId: string,
+  input: ReviewDispatchInput,
+  agentType = "codex",
+): Promise<ReviewDispatchResult | null> {
+  const repo = await db.query.repositories.findFirst({
+    where: eq(repositories.id, input.repositoryId),
+  });
+  if (!repo?.workspaceId || !repo.path) return null;
+
+  const workspaceId = repo.workspaceId;
+  const workingDirectory = repo.path;
+  const baseBranch = repo.mainBranch || "main";
+  // A throwaway branch for the worktree — the agent never commits to it, and it
+  // is deliberately NOT the PR head branch (a `-B` checkout would reset it). The
+  // unique suffix avoids a `git worktree add -B` collision with a leftover
+  // worktree from an earlier attempt at the same head SHA.
+  const uniq = crypto.randomUUID().slice(0, 8);
+  const reviewBranch = `bob/review/${input.remoteName}-${input.number}-${input.headSha.slice(0, 8)}-${uniq}`;
+  const identifier = `review-${input.remoteName}#${input.number}`;
+  const title = `Review: ${input.remoteOwner}/${input.remoteName}#${input.number}`;
+
+  const [session] = await db
+    .insert(chatConversations)
+    .values({
+      userId,
+      repositoryId: input.repositoryId,
+      workingDirectory,
+      agentType,
+      title,
+      status: "pending",
+      gitBranch: reviewBranch,
+      sessionType: "execution",
+      planningWorkspaceId: workspaceId,
+    })
+    .returning();
+  const insertedSession = expectInsertedRow(
+    session,
+    "Failed to create review session",
+  );
+
+  const [taskRun] = await db
+    .insert(taskRuns)
+    .values({
+      userId,
+      planningWorkspaceId: workspaceId,
+      planningItemId: input.pullRequestId,
+      planningItemIdentifier: identifier,
+      planningProvider: "internal",
+      sessionId: insertedSession.id,
+      repositoryId: input.repositoryId,
+      status: "starting",
+      branch: reviewBranch,
+      runPhase: "review",
+      pullRequestId: input.pullRequestId,
+      workItemIdentifierSnapshot: identifier,
+    })
+    .returning();
+  const insertedTaskRun = expectInsertedRow(
+    taskRun,
+    "Failed to create review task run",
+  );
+
+  const description = buildPrReviewPrompt(input, baseBranch);
+  const gatewayUrl = getGatewayUrl();
+  const nudgeSecret = getNudgeSecret();
+  if (nudgeSecret) {
+    try {
+      await fetch(`${gatewayUrl}/internal/nudge`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${nudgeSecret}`,
+        },
+        body: JSON.stringify({
+          sessionId: insertedSession.id,
+          workspaceId,
+          workingDirectory,
+          agentType,
+          title,
+          sessionType: "execution",
+          description,
+          identifier,
+          branch: reviewBranch,
+        }),
+      });
+    } catch (err) {
+      console.warn("[reviewDispatch] nudge failed:", err);
+    }
+  }
+
+  return {
+    sessionId: insertedSession.id,
+    taskRunId: insertedTaskRun.id,
+  };
+}
+
+/** Why an open PR is blocked from merging — drives the repair prompt's focus. */
+export type RepairReason = "ci-failure" | "conflict" | "changes-requested";
+
+export interface RepairDispatchInput {
+  /** Bob's pullRequests.id (uuid) for the PR to repair. */
+  pullRequestId: string;
+  /** Bob's repositories.id (uuid) — resolves the runner checkout + workspace. */
+  repositoryId: string;
+  remoteOwner: string;
+  remoteName: string;
+  number: number;
+  /** e.g. https://git.forgegraf.com — null for github.com. */
+  instanceUrl: string | null;
+  /** Head commit SHA the repair targets (used to de-dupe one repair per head). */
+  headSha: string;
+  /** The PR's head branch — REQUIRED: the fix is committed and pushed to it. */
+  headBranch: string;
+  title: string;
+  body: string | null;
+  /** What's blocking the merge — focuses the agent (fix CI / resolve conflict). */
+  reason: RepairReason;
+  /** The reviewer's REQUEST_CHANGES body, when reason is "changes-requested". */
+  requestedChangesBody?: string | null;
+}
+
+export interface RepairDispatchResult {
+  sessionId: string;
+  taskRunId: string;
+}
+
+/**
+ * Build the repair prompt handed to the runner agent. Unlike the reviewer (which
+ * only reads and posts a verdict), the repair agent CHECKS OUT the PR's head
+ * branch, fixes what blocks the merge (CI failures / merge conflicts / requested
+ * changes), and pushes back to the SAME branch so the existing PR updates and CI
+ * re-runs. It pushes as the PR author using the checkout's own origin
+ * credentials — no separate token, and no new PR.
+ */
+function buildPrRepairPrompt(
+  input: RepairDispatchInput,
+  baseBranch: string,
+): string {
+  const reasonLine =
+    input.reason === "conflict"
+      ? `This PR has a MERGE CONFLICT with ${baseBranch}. Resolving it is the priority.`
+      : input.reason === "changes-requested"
+        ? "The reviewer requested changes on this PR. Address them and make CI pass."
+        : "This PR's CI is FAILING. Make it pass.";
+  const lines = [
+    `You are fixing pull request #${input.number} in ${input.remoteOwner}/${input.remoteName} so it can merge.`,
+    `PR title: ${input.title}`,
+    input.body ? `PR description:\n${input.body}` : "PR description: (none)",
+    "",
+    "## Why it's blocked",
+    reasonLine,
+  ];
+  if (input.reason === "changes-requested" && input.requestedChangesBody) {
+    lines.push("", "Reviewer feedback:", input.requestedChangesBody);
+  }
+  lines.push(
+    "",
+    "## ⚠️ CRITICAL — read first",
+    `This is NOT a "create a branch and open a PR" task. You are fixing an EXISTING pull request IN PLACE by adding a commit to its OWN branch (${input.headBranch}) and pushing that branch. If you have a GitHub/PR skill or habit that says to create a new branch and open a PR, IGNORE it entirely here.`,
+    `Do NOT run \`git worktree add\`, \`git checkout -b <newname>\`, \`git switch -c\`, or \`git branch <newname>\`. Do NOT create /tmp worktrees. Do NOT open a PR. Your commit MUST land on \`${input.headBranch}\` and be pushed to origin, or it is worthless (an unpushed commit on a side branch is the #1 way repairs silently fail).`,
+    "",
+    "## What to do",
+    `1. Get onto the PR's head branch in THIS worktree (do not make a new one):`,
+    `   git fetch origin ${input.headBranch}`,
+    `   git checkout ${input.headBranch} || git checkout -b ${input.headBranch} origin/${input.headBranch}`,
+    `   Confirm with \`git branch --show-current\` that you are on ${input.headBranch} before editing.`,
+    `2. If there is a conflict with the base, merge it in and resolve every conflict (keep both the PR's intent and the base changes):`,
+    `   git fetch origin ${baseBranch} && git merge --no-edit origin/${baseBranch}`,
+    `3. Install deps (NOT --frozen-lockfile — if package.json changed, let it update pnpm-lock.yaml and commit the lockfile):`,
+    `   pnpm install`,
+    `4. Make CI pass. Run each and fix the real cause of any failure:`,
+    `   pnpm typecheck`,
+    `   pnpm lint`,
+    `   pnpm test`,
+<<<<<<< Updated upstream
+    `5. ONLY IF you made a real change that addresses the failure, commit it ON ${input.headBranch} (the branch you are already on — do NOT switch or create a branch) and push so the existing PR updates and CI re-runs:`,
+=======
+    `5. ONLY IF you made a real change that addresses the failure, commit and push to the SAME branch so the existing PR updates and CI re-runs:`,
+>>>>>>> Stashed changes
+    `   git add -A && git commit -m "fix: resolve merge blockers for #${input.number}"`,
+    `   git push origin HEAD:${input.headBranch}`,
+    `6. VERIFY the push landed (this is the whole point): after pushing, run`,
+    `   git rev-parse HEAD  and  git ls-remote origin ${input.headBranch}`,
+    `   and confirm they match. If your commit is not on the remote ${input.headBranch}, the repair FAILED — fix the push, do not stop until the remote head matches your commit.`,
+    "",
+    "## Hard rules",
+    `- Commit ONLY on ${input.headBranch} (already checked out). NEVER create a new branch/worktree, NEVER \`git worktree add\`/\`checkout -b\`/\`switch -c\`. Do NOT open a new PR, do NOT close this one, do NOT touch ${baseBranch} or any other branch. An unpushed fix on a side branch is a silent failure — the most common way repairs are wasted.`,
+    "- Do NOT delete tests, weaken assertions, or disable typecheck/lint to go green — fix the real cause.",
+    "- Do NOT force-push or reset the branch. Only add commits on top.",
+    "- The push uses the checkout's existing origin credentials — do not add or print any token.",
+    "- NEVER push an EMPTY commit. If `git status` shows no staged change (the branch already had the fix, or you couldn't fix it), do NOT commit or push — just report what's blocking and stop. An empty commit changes the head SHA, which needlessly re-triggers review+repair with no progress.",
+    "- If you genuinely cannot fix it (needs external secrets, a deploy/wrangler/Node-version issue, or the failure is unrelated to the code), stop and explain rather than making unrelated or empty changes.",
+  );
+  return lines.join("\n");
+}
+
+/**
+ * Dispatch a PR *repair* to a runner agent (subscription-authed CLI — NOT a
+ * metered model API). Mirrors dispatchReviewSession, but the agent checks out the
+ * PR head branch, fixes the merge blockers (CI / conflict / requested changes),
+ * and pushes back to the same branch — closing the review→repair→merge loop so
+ * the pipeline converges instead of accumulating un-mergeable reviewed PRs.
+ *
+ * Returns null (dispatches nothing) if the repo can't be resolved or has no
+ * workspace — the caller logs a skip.
+ */
+export async function dispatchRepairSession(
+  userId: string,
+  input: RepairDispatchInput,
+  agentType = "codex",
+): Promise<RepairDispatchResult | null> {
+  const repo = await db.query.repositories.findFirst({
+    where: eq(repositories.id, input.repositoryId),
+  });
+  if (!repo?.workspaceId || !repo.path) return null;
+
+  const workspaceId = repo.workspaceId;
+  const workingDirectory = repo.path;
+  const baseBranch = repo.mainBranch || "main";
+  // A throwaway branch for the worktree — the agent switches to the PR head
+  // branch itself (a `-B` checkout on the head branch would reset it to base).
+  // The unique suffix avoids a `git worktree add -B` collision with a leftover
+  // worktree from an earlier attempt.
+  const uniq = crypto.randomUUID().slice(0, 8);
+  const workBranch = `bob/repair/${input.remoteName}-${input.number}-${input.headSha.slice(0, 8)}-${uniq}`;
+  // Identifier encodes the head SHA so the reaper can de-dupe to one repair per
+  // head commit (a successful repair changes the head SHA, unblocking a retry).
+  const identifier = `repair-${input.remoteName}#${input.number}@${input.headSha.slice(0, 8)}`;
+  const title = `Repair: ${input.remoteOwner}/${input.remoteName}#${input.number}`;
+
+  const [session] = await db
+    .insert(chatConversations)
+    .values({
+      userId,
+      repositoryId: input.repositoryId,
+      workingDirectory,
+      agentType,
+      title,
+      status: "pending",
+      gitBranch: workBranch,
+      sessionType: "execution",
+      planningWorkspaceId: workspaceId,
+    })
+    .returning();
+  const insertedSession = expectInsertedRow(
+    session,
+    "Failed to create repair session",
+  );
+
+  const [taskRun] = await db
+    .insert(taskRuns)
+    .values({
+      userId,
+      planningWorkspaceId: workspaceId,
+      planningItemId: input.pullRequestId,
+      planningItemIdentifier: identifier,
+      planningProvider: "internal",
+      sessionId: insertedSession.id,
+      repositoryId: input.repositoryId,
+      status: "starting",
+      branch: workBranch,
+      runPhase: "repair",
+      pullRequestId: input.pullRequestId,
+      workItemIdentifierSnapshot: identifier,
+    })
+    .returning();
+  const insertedTaskRun = expectInsertedRow(
+    taskRun,
+    "Failed to create repair task run",
+  );
+
+  const description = buildPrRepairPrompt(input, baseBranch);
+  const gatewayUrl = getGatewayUrl();
+  const nudgeSecret = getNudgeSecret();
+  if (nudgeSecret) {
+    try {
+      await fetch(`${gatewayUrl}/internal/nudge`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${nudgeSecret}`,
+        },
+        body: JSON.stringify({
+          sessionId: insertedSession.id,
+          workspaceId,
+          workingDirectory,
+          agentType,
+          title,
+          sessionType: "execution",
+          description,
+          identifier,
+          branch: workBranch,
+        }),
+      });
+    } catch (err) {
+      console.warn("[repairDispatch] nudge failed:", err);
+    }
+  }
+
+  return {
+    sessionId: insertedSession.id,
+    taskRunId: insertedTaskRun.id,
+  };
+}
+
+export async function markTaskBlocked(
+  taskRunId: string,
+  reason: string,
+): Promise<void> {
+  const [updated] = await db
+    .update(taskRuns)
+    .set({
+      status: "blocked",
+      blockedReason: reason,
+    })
+    .where(and(eq(taskRuns.id, taskRunId), eq(taskRuns.status, "running")))
+    .returning({ sessionId: taskRuns.sessionId });
+
+  if (updated?.sessionId) {
+    await db
+      .update(chatConversations)
+      .set({ blockedReason: reason })
+      .where(eq(chatConversations.id, updated.sessionId));
+  }
+}
+
+export async function resumeBlockedTask(
+  taskRunId: string,
+  additionalContext?: string,
+): Promise<void> {
+  const [updated] = await db
+    .update(taskRuns)
+    .set({
+      status: "running",
+      blockedReason: null,
+    })
+    .where(and(eq(taskRuns.id, taskRunId), eq(taskRuns.status, "blocked")))
+    .returning({ sessionId: taskRuns.sessionId, userId: taskRuns.userId });
+
+  if (!updated?.sessionId) {
+    return;
+  }
+
+  await db
+    .update(chatConversations)
+    .set({ blockedReason: null })
+    .where(eq(chatConversations.id, updated.sessionId));
+
+  if (additionalContext) {
+    try {
+      await gatewayRequest(updated.userId, "/session/send", {
+        sessionId: updated.sessionId,
+        message: additionalContext,
+      });
+    } catch (error) {
+      console.error("Failed to send context to session:", error);
+    }
+  }
+}
+
+export async function completeTask(taskRunId: string): Promise<void> {
+  await db
+    .update(taskRuns)
+    .set({
+      status: "completed",
+      completedAt: new Date().toISOString(),
+    })
+    .where(eq(taskRuns.id, taskRunId));
+}
+
+export async function getTaskRunByPlanningItemId(
+  planningItemId: string,
+): Promise<typeof taskRuns.$inferSelect | null> {
+  const taskRun = await db.query.taskRuns.findFirst({
+    where: and(
+      eq(taskRuns.planningItemId, planningItemId),
+      eq(taskRuns.status, "blocked"),
+    ),
+    orderBy: desc(taskRuns.createdAt),
+  });
+
+  return taskRun ?? null;
+}
+
+export async function getLatestTaskRunByPlanningItemId(
+  planningItemId: string,
+): Promise<typeof taskRuns.$inferSelect | null> {
+  const taskRun = await db.query.taskRuns.findFirst({
+    where: eq(taskRuns.planningItemId, planningItemId),
+    orderBy: desc(taskRuns.createdAt),
+  });
+
+  return taskRun ?? null;
+}
+
+export function buildIssueContextUpdateMessage(
+  issueIdentifier: string,
+  changes: IssueContextFieldChange[],
+): string {
+  const lines = [
+    `Issue context update for ${issueIdentifier}:`,
+    "",
+    "Apply these updated requirements before continuing:",
+    "",
+    ...changes.map((change) => {
+      const fromValue = change.from ?? "(empty)";
+      const toValue = change.to ?? "(empty)";
+      return `- ${change.field}: ${fromValue} -> ${toValue}`;
+    }),
+  ];
+
+  return lines.join("\n");
+}
+
+async function appendUserContextMessage(sessionId: string, message: string) {
+  await db.insert(chatMessages).values({
+    conversationId: sessionId,
+    role: "user",
+    content: message,
+  });
+}
+
+export async function forwardIssueContextUpdate(
+  issueIdentifier: string,
+  taskRunId: string,
+  changes: IssueContextFieldChange[],
+): Promise<void> {
+  const taskRun = await db.query.taskRuns.findFirst({
+    where: eq(taskRuns.id, taskRunId),
+  });
+
+  if (!taskRun?.sessionId) {
+    return;
+  }
+
+  const message = buildIssueContextUpdateMessage(issueIdentifier, changes);
+  await appendUserContextMessage(taskRun.sessionId, message);
+  await gatewayRequest(taskRun.userId, "/session/send", {
+    sessionId: taskRun.sessionId,
+    message,
+  });
+}
+
+export async function supersedeAndRestartTask(
+  taskRunId: string,
+  task: PlanningTask,
+  changes: IssueContextFieldChange[],
+): Promise<TaskExecutionResult | null> {
+  const taskRun = await db.query.taskRuns.findFirst({
+    where: eq(taskRuns.id, taskRunId),
+  });
+
+  if (!taskRun) {
+    return null;
+  }
+
+  const reason =
+    "Superseded by planning issue context update requiring a fresh run";
+
+  // Create the new task run FIRST — if this fails, the old task keeps its
+  // current status rather than being orphaned with no replacement.
+  const result = await executeTask(taskRun.userId, task, {
+    contextPreamble: [
+      reason,
+      "",
+      "Updated issue fields:",
+      ...changes.map((change) => {
+        const fromValue = change.from ?? "(empty)";
+        const toValue = change.to ?? "(empty)";
+        return `- ${change.field}: ${fromValue} -> ${toValue}`;
+      }),
+      "",
+      `Previous Bob run branch: ${taskRun.branch ?? "(unknown)"}`,
+    ].join("\n"),
+  });
+
+  // Only mark the old task as failed after the new one is successfully created.
+  await db
+    .update(taskRuns)
+    .set({
+      status: "failed",
+      blockedReason: reason,
+      completedAt: new Date().toISOString(),
+    })
+    .where(eq(taskRuns.id, taskRunId));
+
+  if (taskRun.sessionId) {
+    await db
+      .update(chatConversations)
+      .set({
+        status: "stopped",
+        blockedReason: reason,
+        statusMessage: reason,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(chatConversations.id, taskRun.sessionId));
+  }
+
+  return result;
+}
+
+/** Fire-and-forget: create a ForgeGraph revision + "created" event for a new task run. */
+async function reportForgeGraphCreated(
+  database: typeof db,
+  taskRun: {
+    id: string;
+    repositoryId: string | null;
+    branch: string | null;
+    forgegraphRevisionId?: string | null;
+    planningItemId: string;
+    workItemId?: string | null;
+  },
+): Promise<void> {
+  try {
+    if (!taskRun.repositoryId) return;
+
+    // Prefer the VCS-specific revision ID (commit SHA or jj change ID), fall back to branch name
+    const revId = taskRun.forgegraphRevisionId ?? taskRun.branch ?? taskRun.id;
+
+    const [revision] = await database
+      .insert(forgeRevisions)
+      .values({
+        repoId: taskRun.repositoryId,
+        revId,
+        taskId: taskRun.workItemId ?? null,
+        taskRunId: taskRun.id,
+        branch: taskRun.branch,
+      })
+      .onConflictDoUpdate({
+        target: [forgeRevisions.repoId, forgeRevisions.revId],
+        set: { taskRunId: taskRun.id, branch: taskRun.branch },
+      })
+      .returning();
+
+    if (!revision) return;
+
+    await database.insert(forgeRunEvents).values({
+      runId: taskRun.id,
+      repoId: taskRun.repositoryId,
+      revisionId: revision.id,
+      eventType: "created",
+      taskId: taskRun.workItemId ?? null,
+    });
+
+    console.log(`[forgegraph] Reported 'created' for task run ${taskRun.id}`);
+  } catch (err) {
+    console.error(`[forgegraph] Failed to report 'created' for ${taskRun.id}:`, err);
+  }
+}

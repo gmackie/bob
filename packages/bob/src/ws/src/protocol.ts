@@ -58,8 +58,19 @@ export interface ProviderHealthWire {
   installed: boolean;
   authenticated: boolean;
   version?: string;
-  /** `no_credit` = authenticated but out of balance; latched from run outcomes. */
-  status: "ready" | "unavailable" | "unauthenticated" | "degraded" | "no_credit";
+  /**
+   * Latched from real run outcomes, because the probe is only an estimate:
+   * `no_credit` = authenticated but out of balance; `rate_limited` = a quota
+   * or rate cap (claude's weekly limit blocks dispatch just as hard, and
+   * reporting Ready through it left 20 runs failing against "healthy" agents).
+   */
+  status:
+    | "ready"
+    | "unavailable"
+    | "unauthenticated"
+    | "degraded"
+    | "no_credit"
+    | "rate_limited";
   capabilities: ProviderCapabilityWire;
   checkedAt: string;
   error?: string;

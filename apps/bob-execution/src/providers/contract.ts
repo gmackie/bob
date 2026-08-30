@@ -44,7 +44,12 @@ export interface ProviderHealthSnapshot {
    * `no_credit` means authenticated but out of balance. It cannot be probed
    * — it is latched from real dispatch outcomes. See providers/credit.ts.
    */
-  status: "ready" | "unavailable" | "unauthenticated" | "degraded" | "no_credit";
+  /**
+   * `rate_limited` is a real dispatch blocker with its own remedy (wait), not
+   * a flavour of no_credit — claude's weekly cap stopped every run while the
+   * page said Ready.
+   */
+  status: "ready" | "unavailable" | "unauthenticated" | "degraded" | "no_credit" | "rate_limited";
   capabilities: ProviderCapabilities;
   checkedAt: string;
   error?: string;

@@ -31,11 +31,14 @@ describe("classifyRunFailure", () => {
   });
 
   it("does NOT treat a rate limit as no_credit", () => {
-    // Latching no_credit on a transient 429 would strand a healthy agent
-    // behind a "Top up" button that fixes nothing.
+    // Latching no_credit on a rate limit would strand a healthy agent behind a
+    // "Top up" button that fixes nothing. Since 2026-08-30 it is reported as
+    // its own kind rather than swallowed: claude's weekly cap blocks dispatch
+    // just as hard as a dead credential, and reporting "Ready" through it left
+    // 20 runs failing against agents the node page called healthy.
     expect(
       classifyRunFailure({ code: 1, stderr: "429 Too Many Requests: rate limit exceeded" }),
-    ).toBe("other");
+    ).toBe("rate_limited");
   });
 
   it("treats an ordinary non-zero exit as other", () => {
@@ -125,11 +128,16 @@ describe("CreditLatch", () => {
     expect(latch.isLatched("claude")).toBe(false);
   });
 
-  it("does not latch on auth failures — those are the probe's job", () => {
+  it("latches auth failures, because the probe demonstrably misses them", () => {
+    // Changed 2026-08-30. This used to expect no latch, on the theory that
+    // auth was the probe's job. It is not reliable at it: codex probed Ready
+    // while every run died on `401 Unauthorized`, and cursor probed Ready
+    // while every run died on "Authentication required". A run outcome is
+    // proof; the probe is an estimate.
     const latch = new CreditLatch();
     latch.noteRunOutcome("codex", { code: 1, stderr: "OAuth token revoked — re-login required" });
 
-    expect(latch.isLatched("codex")).toBe(false);
+    expect(latch.get("codex").kind).toBe("auth");
   });
 });
 

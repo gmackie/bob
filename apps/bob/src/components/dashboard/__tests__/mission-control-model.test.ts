@@ -170,4 +170,68 @@ describe("dispatch pause derivation", () => {
     // be running, so it must stay undefined.
     expect(buildHostMissionControl(base, at).dispatchRunning).toBeUndefined();
   });
+
+  it("offers a different remedy for each way an agent can be disqualified", () => {
+    // 2026-08-30: all four agents were failing for four different reasons and
+    // the page called three of them Ready. Once the states are distinguished,
+    // the remedies must be too — top up, sign in, or wait. Showing "Sign in"
+    // for an exhausted balance is how an operator loops on the wrong action.
+    const at = new Date("2026-08-30T16:00:00.000Z");
+    const host = (status: string) =>
+      buildHostMissionControl(
+        {
+          schemaVersion: 1 as const,
+          hostId: "hetzner-bob",
+          daemonVersion: "dev",
+          queueDepth: 0,
+          checkedAt: "2026-08-30T16:00:00.000Z",
+          providers: [
+            {
+              provider: "grok",
+              command: "grok",
+              installed: true,
+              authenticated: true,
+              status,
+              checkedAt: "2026-08-30T16:00:00.000Z",
+              capabilities: { cancel: true, resume: false, approval: true },
+            },
+          ],
+        } as never,
+        at,
+      ).providers[0];
+
+    expect(host("no_credit")).toMatchObject({ statusLabel: "Out of credit", remedy: "top_up" });
+    expect(host("unauthenticated")).toMatchObject({ remedy: "sign_in" });
+    expect(host("rate_limited")).toMatchObject({ statusLabel: "Rate limited", remedy: "wait" });
+    // Ready must offer no remedy at all.
+    expect(host("ready").remedy).toBeNull();
+  });
+
+  it("pauses dispatch when every agent is rate limited", () => {
+    // A spent quota blocks dispatch as hard as a dead credential; treating it
+    // as healthy is what kept the runner claiming work it could not do.
+    const model = buildHostMissionControl(
+      {
+        schemaVersion: 1 as const,
+        hostId: "hetzner-bob",
+        daemonVersion: "dev",
+        queueDepth: 0,
+        checkedAt: "2026-08-30T16:00:00.000Z",
+        providers: [
+          {
+            provider: "claude",
+            command: "claude",
+            installed: true,
+            authenticated: true,
+            status: "rate_limited",
+            checkedAt: "2026-08-30T16:00:00.000Z",
+            capabilities: { cancel: true, resume: false, approval: true },
+          },
+        ],
+      } as never,
+      new Date("2026-08-30T16:00:00.000Z"),
+    );
+
+    expect(model.dispatchPaused).toBe(true);
+  });
 });
