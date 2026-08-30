@@ -5,7 +5,12 @@ import { makeInvoke, type RpcMethod } from "./internal/invoke.js";
 
 export interface ProjectsClient extends Record<string, unknown> {
   readonly create: RpcMethod;
-  readonly list: () => Promise<unknown>;
+  /**
+   * Scoped to a workspace — the handler gates access on `workspaceId` before
+   * querying. Taking no argument here sent an empty payload, so the handler
+   * crashed on `input.workspaceId` and the workspaces view stayed blank.
+   */
+  readonly list: (input: { readonly workspaceId: string }) => Promise<unknown>;
   readonly get: RpcMethod;
   readonly getBySlug: RpcMethod;
   readonly delete: RpcMethod;
@@ -60,7 +65,7 @@ export const makeProjectsClient = (runtime: ClientRuntime): ProjectsClient => {
 
   return {
     create: (input) => invoke("projects.create", input),
-    list: () => invoke("projects.list"),
+    list: (input) => invoke("projects.list", input),
     get: (input) => invoke("projects.get", input),
     getBySlug: (input) => invoke("projects.getBySlug", input),
     delete: (input) => invoke("projects.delete", input),

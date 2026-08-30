@@ -13,9 +13,23 @@ import type { HandlerContext } from "./context.js";
 /**
  * Wraps an async handler function into an Effect value.
  *
- * On success the Effect resolves with the handler's return value.
- * On failure any `TRPCError` is mapped to the corresponding Bob tagged
- * error via `mapTrpcError`; unknown errors become `BobConflictError`.
+ * On success the Effect resolves with the handler's return value. A
+ * `TRPCError` is mapped to the corresponding Bob tagged error via
+ * `mapTrpcError` — those are declared by the contracts, so they stay typed
+ * failures.
+ *
+ * Anything else DIES rather than failing. Most Rpc definitions declare no
+ * error at all (`ProjectsListRpc` is payload + success only), so their error
+ * channel is just the middleware's `UnauthorizedError | TenantNotSelectedError`.
+ * Mapping an unknown error to a Bob tagged error made it unencodable, and the
+ * server answered with
+ *
+ *   Expected UnauthorizedError | TenantNotSelectedError,
+ *   got BobConflictError({"_tag":"BobConflictError"})
+ *
+ * which erased the real cause. A defect is not subject to the declared
+ * channel, so the actual message reaches the client and the failure is
+ * diagnosable instead of anonymous.
  */
 export function wrapHandler<I, O>(
   fn: (ctx: HandlerContext, input: I) => Promise<O>,
@@ -25,17 +39,23 @@ export function wrapHandler<I, O>(
 ) {
   return Effect.tryPromise({
     try: () => fn(ctx, input),
-    catch: (error) => {
-      if (error instanceof TRPCError) {
-        if (error.code === "NOT_FOUND") {
-          return mapTrpcError("NOT_FOUND", {
-            entity: entityName,
-            id: "unknown",
-          });
-        }
-        return mapTrpcError(error.code, { message: error.message });
-      }
-      return mapTrpcError("INTERNAL_SERVER_ERROR", { message: String(error) });
-    },
-  });
+    // Keep the raw error; the branch below decides fail-vs-die.
+    catch: (error) => error,
+  }).pipe(
+    Effect.catch((error) =>
+      error instanceof TRPCError
+        ? Effect.fail(
+            error.code === "NOT_FOUND"
+              ? mapTrpcError("NOT_FOUND", { entity: entityName, id: "unknown" })
+              : mapTrpcError(error.code, { message: error.message }),
+          )
+        : // Undeclared by every contract — see the note above. A defect is not
+          // subject to the declared error channel, so the real cause survives.
+          Effect.die(
+            error instanceof Error
+              ? error
+              : new Error(`${entityName}: ${String(error)}`),
+          ),
+    ),
+  );
 }

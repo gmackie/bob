@@ -6,6 +6,8 @@
 
 import { Schema } from "effect";
 
+import { WireTimestamp } from "./wire-timestamp.js";
+
 export const ChatAttachmentSchema = Schema.Struct({
   id: Schema.String,
   messageId: Schema.String,
@@ -16,7 +18,7 @@ export const ChatAttachmentSchema = Schema.Struct({
   width: Schema.NullOr(Schema.Number),
   height: Schema.NullOr(Schema.Number),
   sizeBytes: Schema.NullOr(Schema.Number),
-  createdAt: Schema.Date,
+  createdAt: WireTimestamp,
 });
 export type ChatAttachmentWire = Schema.Schema.Type<
   typeof ChatAttachmentSchema

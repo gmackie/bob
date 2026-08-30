@@ -1,5 +1,7 @@
 import { Schema } from "effect";
 
+import { WireTimestamp } from "./wire-timestamp.js";
+
 export const MessageRole = Schema.Literals(["user", "assistant", "system"]);
 
 export const Message = Schema.Struct({
@@ -10,7 +12,7 @@ export const Message = Schema.Struct({
   role: MessageRole,
   content: Schema.String,
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.withDecodingDefault(() => ({}))),
-  createdAt: Schema.Date,
+  createdAt: WireTimestamp,
 });
 export type Message = typeof Message.Type;
 

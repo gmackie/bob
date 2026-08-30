@@ -4,6 +4,8 @@
 // API keys), config root browsing, and ForgeGraph connection status.
 import { Schema } from "effect";
 
+import { WireTimestamp } from "./wire-timestamp.js";
+
 // --- Enums ------------------------------------------------------------------
 
 export const ThemeEnum = Schema.Literals(["light", "dark", "system"]);
@@ -31,8 +33,8 @@ export const UserPreferencesSchema = Schema.Struct({
   emailNotifications: Schema.optional(Schema.Boolean),
   pushNotifications: Schema.optional(Schema.Boolean),
   timezone: Schema.optional(Schema.NullOr(Schema.String)),
-  createdAt: Schema.optional(Schema.DateTimeUtc),
-  updatedAt: Schema.optional(Schema.DateTimeUtc),
+  createdAt: Schema.optional(WireTimestamp),
+  updatedAt: Schema.optional(WireTimestamp),
 });
 export type UserPreferencesWire = typeof UserPreferencesSchema.Type;
 
@@ -42,10 +44,14 @@ export const SettingsApiKeySchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   keyPrefix: Schema.String,
-  permissions: Schema.Array(Schema.Literals(["read", "write", "delete", "admin"])),
-  lastUsedAt: Schema.NullOr(Schema.DateTimeUtc),
-  expiresAt: Schema.NullOr(Schema.DateTimeUtc),
-  createdAt: Schema.DateTimeUtc,
+  // `api_keys.permissions` is an unconstrained JSON column and production
+  // holds scopes beyond this set (e.g. "daemon") plus a legacy
+  // `{"scopes":[...]}` shape. A literal union here made every real listing
+  // fail to encode; the handler normalises, this stays honest about the column.
+  permissions: Schema.Array(Schema.String),
+  lastUsedAt: Schema.NullOr(WireTimestamp),
+  expiresAt: Schema.NullOr(WireTimestamp),
+  createdAt: WireTimestamp,
 });
 export type SettingsApiKeyWire = typeof SettingsApiKeySchema.Type;
 
@@ -82,6 +88,6 @@ export type ConfigFileWire = typeof ConfigFileSchema.Type;
 export const ForgeGraphConnectionSchema = Schema.Struct({
   id: Schema.String,
   providerUsername: Schema.NullOr(Schema.String),
-  createdAt: Schema.optional(Schema.DateTimeUtc),
+  createdAt: Schema.optional(WireTimestamp),
 });
 export type ForgeGraphConnectionWire = typeof ForgeGraphConnectionSchema.Type;

@@ -1,5 +1,7 @@
 import { Schema } from "effect";
 
+import { WireTimestamp } from "./wire-timestamp.js";
+
 export const PersonaSourceEnum = Schema.Literals(["repo", "ui"]);
 export type PersonaSource = Schema.Schema.Type<typeof PersonaSourceEnum>;
 
@@ -27,8 +29,8 @@ export const AgentPersonaSchema = Schema.Struct({
   source: PersonaSourceEnum,
   active: Schema.Boolean,
   metadata: Schema.Record(Schema.String, Schema.Unknown),
-  createdAt: Schema.Date,
-  updatedAt: Schema.Date,
+  createdAt: WireTimestamp,
+  updatedAt: WireTimestamp,
 });
 export type AgentPersonaWire = Schema.Schema.Type<typeof AgentPersonaSchema>;
 

@@ -13,6 +13,8 @@
 //   - Cookie import uses a separate `cookies` input array schema
 //     mirroring the Bob extension/CLI import flow.
 import { Schema } from "effect";
+
+import { WireTimestamp } from "../schemas/wire-timestamp.js";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
 import {
@@ -72,7 +74,7 @@ export const SettingsCreateApiKeyRpc = Rpc.make("settings.createApiKey", {
     name: Schema.String,
     keyPrefix: Schema.String,
     permissions: Schema.Array(Schema.Literals(["read", "write", "delete", "admin"])),
-    expiresAt: Schema.NullOr(Schema.DateTimeUtc),
+    expiresAt: Schema.NullOr(WireTimestamp),
     key: Schema.String, // plaintext — returned exactly once at creation
   }),
 });

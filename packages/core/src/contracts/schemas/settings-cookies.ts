@@ -5,6 +5,8 @@
 // only `getForSession` returns decrypted values (scoped to an approved session).
 import { Schema } from "effect";
 
+import { WireTimestamp } from "./wire-timestamp.js";
+
 // --- Enums ------------------------------------------------------------------
 
 export const CookieSameSiteEnum = Schema.Literals(["Strict", "Lax", "None"]);
@@ -30,7 +32,7 @@ export const CookieDomainSchema = Schema.Struct({
   domain: Schema.String,
   count: Schema.Number,
   source: Schema.NullOr(Schema.String),
-  lastUpdated: Schema.NullOr(Schema.DateTimeUtc),
+  lastUpdated: Schema.NullOr(WireTimestamp),
 });
 export type CookieDomainWire = typeof CookieDomainSchema.Type;
 

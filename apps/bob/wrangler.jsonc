@@ -35,8 +35,6 @@
     "HERMES_ORIGIN_URL": "https://claude.gmac.io",
     "HERMES_OPERATOR_USER_IDS": "tkE66fMc4mevdYYjtq78ALErJ7QnhAge",
     "NODE_ENV": "production",
-    "BOB_AUTH_BYPASS": "true",
-    "BOB_AUTH_BYPASS_USER_ID": "tkE66fMc4mevdYYjtq78ALErJ7QnhAge",
     "BOB_AUTO_DRAIN_ENABLED": "true",
     "BOB_AUTO_DRAIN_CONCURRENCY": "4",
     "BOB_AUTO_DRAIN_DAILY_CAP": "40",

@@ -3,6 +3,8 @@
 // as defined in Bob's `SessionSecretService`.
 import { Schema } from "effect";
 
+import { WireTimestamp } from "./wire-timestamp.js";
+
 import { SessionSecretPolicySchema } from "./secrets.js";
 
 // --- Enums ------------------------------------------------------------------
@@ -43,8 +45,8 @@ export const SessionSecretSchema = Schema.Struct({
   projectId: Schema.optional(Schema.NullOr(Schema.String)),
   workspaceId: Schema.optional(Schema.NullOr(Schema.String)),
   externalRef: Schema.optional(Schema.NullOr(Schema.String)),
-  createdAt: Schema.optional(Schema.Date),
-  updatedAt: Schema.optional(Schema.Date),
+  createdAt: Schema.optional(WireTimestamp),
+  updatedAt: Schema.optional(WireTimestamp),
 });
 export type SessionSecretWire = typeof SessionSecretSchema.Type;
 
