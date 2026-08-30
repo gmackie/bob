@@ -56,6 +56,10 @@ export function buildHostMissionControl(snapshot: HostSnapshotWire, now = new Da
   return {
     dispatchPaused,
     blockedProviders: blocked.map((p) => p.provider),
+    // Whether the host's task runner process is up, as systemd reports it.
+    // Stays undefined for daemons that predate dispatch control — the Start
+    // control keys off this, and "unknown" must not render as "stopped".
+    dispatchRunning: snapshot.dispatchRunning,
     hostId: snapshot.hostId,
     daemonVersion: snapshot.daemonVersion,
     statusLabel: online ? "Online" : "Stale",

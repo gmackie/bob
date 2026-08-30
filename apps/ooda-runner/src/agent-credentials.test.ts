@@ -96,4 +96,35 @@ describe("AgentCredentials", () => {
   it("ignores a code for an unknown request", () => {
     expect(() => creds.submitCode("nope", "ABCD")).not.toThrow();
   });
+
+  it("reports whether the host's task runner is running", async () => {
+    const withDispatch = new AgentCredentials({
+      hostId: "test-host",
+      daemonVersion: "test",
+      send: (msg) => sent.push(msg),
+      queueDepth: () => 0,
+      run: () => Promise.resolve({ code: 0, stdout: "ok", stderr: "" }),
+      dispatchRunning: () => Promise.resolve(true),
+    });
+
+    expect((await withDispatch.hostSnapshot()).dispatchRunning).toBe(true);
+    withDispatch.shutdown();
+  });
+
+  it("leaves dispatchRunning undefined when the state cannot be read", async () => {
+    // Undefined must mean "unknown", not "stopped" — the UI offers a Start
+    // button off this field, and guessing "stopped" would invite an operator
+    // to start a runner that is already up.
+    const withFailure = new AgentCredentials({
+      hostId: "test-host",
+      daemonVersion: "test",
+      send: (msg) => sent.push(msg),
+      queueDepth: () => 0,
+      run: () => Promise.resolve({ code: 0, stdout: "ok", stderr: "" }),
+      dispatchRunning: () => Promise.reject(new Error("systemd unreachable")),
+    });
+
+    expect((await withFailure.hostSnapshot()).dispatchRunning).toBeUndefined();
+    withFailure.shutdown();
+  });
 });

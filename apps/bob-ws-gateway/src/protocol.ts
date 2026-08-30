@@ -60,6 +60,10 @@ export {
   type ClientAgentAuthPrompt,
   type ClientAgentAuthResult,
   type AgentAuthProvider,
+  type DispatchAction,
+  type ServerDispatchControl,
+  type ServerDispatchState,
+  type ClientDispatchState,
 
   // Codec
   parseClientMessage,

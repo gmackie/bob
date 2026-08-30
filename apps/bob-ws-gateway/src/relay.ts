@@ -26,6 +26,7 @@ import {
   type SessionStatus,
   type HostSnapshotWire,
   type ServerAgentAuthStart,
+  type ServerDispatchControl,
   type ServerAgentAuthInput,
   type ServerAgentAuthCancel,
   type SessionPresenceParticipant,
@@ -778,6 +779,21 @@ export class Relay {
             provider: msg.provider,
             ok: msg.ok,
             status: msg.status,
+            detail: msg.detail,
+          });
+        }
+        return;
+      // Same daemon-only guard as the auth prompts above: a browser forging a
+      // dispatch_state could tell the whole workspace the runner is up when it
+      // is not, which is precisely the lie the breaker exists to prevent.
+      case "dispatch_state":
+        if (conn.kind === "daemon" && conn.workspaceId) {
+          this.broadcastToWorkspace(conn.workspaceId, {
+            type: "dispatch_state",
+            workspaceId: conn.workspaceId,
+            requestId: msg.requestId,
+            ok: msg.ok,
+            running: msg.running,
             detail: msg.detail,
           });
         }
@@ -2678,6 +2694,19 @@ export class Relay {
     workspaceId: string,
     msg: ServerAgentAuthStart | ServerAgentAuthInput | ServerAgentAuthCancel,
   ): boolean {
+    const daemon = this.daemonByWorkspace.get(workspaceId);
+    if (!daemon) return false;
+    this.send(daemon, msg);
+    return true;
+  }
+
+  /**
+   * Server → daemon: start or stop the host's task runner.
+   *
+   * Returns false when no daemon is connected, so the caller can say "host
+   * offline" instead of leaving the operator watching a spinner.
+   */
+  requestDispatchControl(workspaceId: string, msg: ServerDispatchControl): boolean {
     const daemon = this.daemonByWorkspace.get(workspaceId);
     if (!daemon) return false;
     this.send(daemon, msg);

@@ -60,6 +60,13 @@ export interface AgentCredentialsOptions {
    * state and on network timing.
    */
   run?: typeof runCommand;
+  /**
+   * Whether the host's standalone task runner process is up. Optional because
+   * the credential surface is useful without dispatch control; when it throws
+   * the snapshot reports `undefined` rather than guessing, since the UI offers
+   * a Start button off this field.
+   */
+  dispatchRunning?: () => Promise<boolean>;
 }
 
 export class AgentCredentials {
@@ -152,7 +159,18 @@ export class AgentCredentials {
       queueDepth: this.opts.queueDepth(),
       checkedAt: new Date().toISOString(),
       providers: this.providerSnapshot,
+      dispatchRunning: await this.readDispatchRunning(),
     };
+  }
+
+  /** Undefined means "we could not tell", never "stopped". */
+  private async readDispatchRunning(): Promise<boolean | undefined> {
+    if (!this.opts.dispatchRunning) return undefined;
+    try {
+      return await this.opts.dispatchRunning();
+    } catch {
+      return undefined;
+    }
   }
 
   private async pushFreshSnapshot(): Promise<void> {

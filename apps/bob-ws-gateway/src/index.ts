@@ -301,6 +301,64 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Start or stop the host's standalone task runner.
+  //
+  // Same owner gate as agent-auth: this starts a process that claims work and
+  // spends money on the owner's account, so an api key scoped to another user
+  // must not reach it. The unit itself is a constant in the daemon — nothing
+  // here names a systemd unit.
+  if (req.method === "POST" && req.url === "/internal/dispatch-control") {
+    const bearer = bearerFrom(req.headers.authorization);
+    const principal = bearer ? await validateInternalBearer(bearer) : null;
+    if (!principal) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+    const body = await readJsonBody(req) as {
+      workspaceId?: string;
+      action?: string;
+      requestId?: string;
+    } | null;
+    if (!body?.workspaceId || !body?.requestId) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing workspaceId or requestId" }));
+      return;
+    }
+
+    const action = (["start", "stop"] as const).find((a) => a === body.action);
+    if (!action) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Unknown action" }));
+      return;
+    }
+
+    const ownerId = await workspaceOwnerId(body.workspaceId);
+    if (!ownerId || !principalMayActAs(principal, ownerId)) {
+      auditInternal(principal, "internal.denied", {
+        endpoint: "dispatch-control",
+        workspaceId: body.workspaceId,
+      });
+      res.writeHead(403, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Forbidden: not this workspace's owner" }));
+      return;
+    }
+
+    auditInternal(principal, "internal.dispatch_control", {
+      workspaceId: body.workspaceId,
+      action,
+    });
+
+    const delivered = relay.requestDispatchControl(body.workspaceId, {
+      type: "dispatch_control",
+      requestId: body.requestId,
+      action,
+    });
+    res.writeHead(delivered ? 200 : 503, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(delivered ? { ok: true } : { error: "Host daemon is not connected" }));
+    return;
+  }
+
   if (req.method === "POST" && req.url === "/internal/session-stop") {
     const bearer = bearerFrom(req.headers.authorization);
     const principal = bearer ? await validateInternalBearer(bearer) : null;

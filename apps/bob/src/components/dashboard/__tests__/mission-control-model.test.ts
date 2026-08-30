@@ -147,4 +147,27 @@ describe("dispatch pause derivation", () => {
   it("does not pause when the host reports no providers at all", () => {
     expect(buildHostMissionControl(withProviders([])).dispatchPaused).toBe(false);
   });
+
+  it("passes the host's dispatch-running state through for the UI control", () => {
+    const base = {
+      schemaVersion: 1 as const,
+      hostId: "hetzner-bob",
+      daemonVersion: "dev",
+      queueDepth: 0,
+      checkedAt: "2026-07-11T18:00:00.000Z",
+      providers: [],
+    };
+    const at = new Date("2026-07-11T18:00:30.000Z");
+
+    expect(buildHostMissionControl({ ...base, dispatchRunning: true }, at).dispatchRunning).toBe(
+      true,
+    );
+    expect(buildHostMissionControl({ ...base, dispatchRunning: false }, at).dispatchRunning).toBe(
+      false,
+    );
+    // A daemon that predates dispatch control sends no field at all. Reporting
+    // that as "stopped" would offer a Start button for a runner that may well
+    // be running, so it must stay undefined.
+    expect(buildHostMissionControl(base, at).dispatchRunning).toBeUndefined();
+  });
 });

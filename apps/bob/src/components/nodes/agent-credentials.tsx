@@ -20,7 +20,13 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Badge } from "@gmacko/core/ui/badge";
 import { Card } from "@gmacko/core/ui/card";
 import { cn } from "@gmacko/core/ui";
-import type { HostSnapshotWire, ServerAgentAuthPrompt, ServerAgentAuthResult } from "@bob/ws";
+import type {
+  HostSnapshotWire,
+  ServerAgentAuthPrompt,
+  ServerAgentAuthResult,
+  ServerDispatchState,
+  DispatchAction,
+} from "@bob/ws";
 
 import { useSessionSocket } from "~/hooks/use-session-socket";
 import { useTRPC } from "~/trpc/react";
@@ -35,6 +41,11 @@ const PROVIDER_INSTALL_HINTS: Record<string, string> = {
   grok: "see grok CLI install docs",
   "cursor-agent": "see Cursor CLI install docs",
 };
+
+type DispatchUi =
+  | { kind: "idle"; running?: boolean }
+  | { kind: "pending"; action: DispatchAction }
+  | { kind: "error"; detail: string };
 
 type Phase =
   | { kind: "idle" }
@@ -68,6 +79,11 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
   const [hostSnapshot, setHostSnapshot] = useState<HostSnapshotWire | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [codeInput, setCodeInput] = useState("");
+  /**
+   * Local echo for the runner control. `running` is only set from a confirmed
+   * dispatch_state; until one arrives the host snapshot is the source of truth.
+   */
+  const [dispatch, setDispatch] = useState<DispatchUi>({ kind: "idle" });
 
   const { data: gatewayInfo } = useQuery(
     trpc.session.getGatewayWebSocketUrl.queryOptions(undefined, {
@@ -93,6 +109,14 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
     });
   }, []);
 
+  const onDispatchState = useCallback((msg: ServerDispatchState) => {
+    setDispatch(
+      msg.ok
+        ? { kind: "idle", running: msg.running }
+        : { kind: "error", detail: msg.detail ?? "Could not change the runner" },
+    );
+  }, []);
+
   const onAgentAuthResult = useCallback((msg: ServerAgentAuthResult) => {
     setPhase((current) => {
       const requestId = "requestId" in current ? current.requestId : null;
@@ -108,6 +132,7 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
     onHostSnapshot: (_ws, snapshot) => setHostSnapshot(snapshot),
     onAgentAuthPrompt,
     onAgentAuthResult,
+    onDispatchState,
   });
 
   useEffect(() => {
@@ -118,6 +143,7 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
   const startMutation = useMutation(trpc.agentAuth.start.mutationOptions({}));
   const codeMutation = useMutation(trpc.agentAuth.submitCode.mutationOptions({}));
   const cancelMutation = useMutation(trpc.agentAuth.cancel.mutationOptions({}));
+  const dispatchMutation = useMutation(trpc.dispatchControl.set.mutationOptions({}));
 
   const host = useMemo(
     () => (hostSnapshot ? buildHostMissionControl(hostSnapshot) : null),
@@ -149,6 +175,21 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
       cancelMutation.mutate({ workspaceId, requestId: phase.requestId });
     }
     setPhase({ kind: "idle" });
+  };
+
+  // Confirmed state wins; fall back to the host snapshot, and leave it unknown
+  // when neither says. A daemon that predates dispatch control reports nothing.
+  const runnerRunning = dispatch.kind === "idle" ? (dispatch.running ?? host?.dispatchRunning) : host?.dispatchRunning;
+
+  const setDispatchAction = (action: DispatchAction) => {
+    const requestId = crypto.randomUUID();
+    setDispatch({ kind: "pending", action });
+    dispatchMutation.mutate(
+      { workspaceId, action, requestId },
+      {
+        onError: (error) => setDispatch({ kind: "error", detail: error.message }),
+      },
+    );
   };
 
   if (!hostSnapshot) {
@@ -188,6 +229,50 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
           dispatch anyway.
         </div>
       ) : null}
+
+      {/* The runner is a separate process that polls Linear directly and holds
+          no connection to Bob, so a stopped one could previously only be
+          restarted over SSH — the same wall this card exists to remove. */}
+      {runnerRunning === undefined ? null : (
+        <div
+          className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border px-3 py-2"
+          data-testid="dispatch-runner-control"
+        >
+          <span className="font-medium">Task runner</span>
+          <Badge
+            className={cn(
+              "text-xs",
+              runnerRunning
+                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                : "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300",
+            )}
+          >
+            {runnerRunning ? "Running" : "Stopped"}
+          </Badge>
+          <div className="ml-auto">
+            <button
+              type="button"
+              disabled={dispatch.kind === "pending"}
+              onClick={() => setDispatchAction(runnerRunning ? "stop" : "start")}
+              className={cn(
+                "rounded-md px-3 py-1 text-xs font-medium disabled:opacity-50",
+                runnerRunning
+                  ? "border border-border hover:bg-muted"
+                  : "bg-primary text-primary-foreground hover:opacity-90",
+              )}
+            >
+              {dispatch.kind === "pending"
+                ? "Working…"
+                : runnerRunning
+                  ? "Stop"
+                  : "Start"}
+            </button>
+          </div>
+          {dispatch.kind === "error" ? (
+            <p className="w-full text-xs text-red-700 dark:text-red-400">{dispatch.detail}</p>
+          ) : null}
+        </div>
+      )}
 
       <div className="mt-3 space-y-2">
         {providers.map((provider) => (

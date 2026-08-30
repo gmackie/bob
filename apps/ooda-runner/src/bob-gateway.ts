@@ -20,6 +20,7 @@ import {
 } from "@gmacko/core/skillfleet-bridge";
 import { bobRunReporterFromEnv, type BobRunReporter } from "./bob-run-reporter";
 import { AgentCredentials } from "./agent-credentials.js";
+import { DispatchControl } from "./dispatch-control.js";
 import { EventBuffer } from "./event-buffer";
 import {
   adoptSupervisedRun,
@@ -222,6 +223,7 @@ type ServerMessage =
   | { type: "agent_auth_start"; requestId: string; provider: string }
   | { type: "agent_auth_input"; requestId: string; value: string }
   | { type: "agent_auth_cancel"; requestId: string }
+  | { type: "dispatch_control"; requestId: string; action: "start" | "stop" }
   | { type: string };
 
 export class BobGatewayConnector {
@@ -232,6 +234,7 @@ export class BobGatewayConnector {
    * declared below this point.
    */
   private readonly credentials: AgentCredentials;
+  private readonly dispatch: DispatchControl;
   /**
    * Last few KB of each run's output, kept only until the run ends. Needed
    * because a provider's billing error (the 402 that went undetected for
@@ -279,11 +282,13 @@ export class BobGatewayConnector {
       process.env.BOB_RUNNER_BUFFER_DIR ??
         join(homedir(), ".bob-runner", "event-buffer"),
     );
+    this.dispatch = new DispatchControl({ send: (msg) => this.send(msg as never) });
     this.credentials = new AgentCredentials({
       hostId: this.hostId,
       daemonVersion: process.env.BOB_RUNNER_VERSION ?? "dev",
       send: (msg) => this.send(msg as never),
       queueDepth: () => this.activeSessions.size,
+      dispatchRunning: () => this.dispatch.isRunning(),
     });
   }
 
@@ -765,6 +770,16 @@ export class BobGatewayConnector {
       case "agent_auth_cancel": {
         const m = msg as { requestId: string };
         this.credentials.cancelAuth(m.requestId);
+        break;
+      }
+      case "dispatch_control": {
+        const m = msg as { requestId: string; action: "start" | "stop" };
+        void this.dispatch.apply(m.requestId, m.action).catch((error: unknown) => {
+          console.error(
+            "[bob-gw] dispatch control failed:",
+            error instanceof Error ? error.message : error,
+          );
+        });
         break;
       }
       case "event_ack": {

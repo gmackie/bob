@@ -74,6 +74,12 @@ export interface HostSnapshotWire {
   queueDepth: number;
   checkedAt: string;
   providers: ProviderHealthWire[];
+  /**
+   * Whether the host's standalone task runner process is up, as systemd
+   * reports it. Absent from daemons that predate dispatch control, which is
+   * why the UI must treat `undefined` as "unknown" rather than "stopped".
+   */
+  dispatchRunning?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -530,6 +536,49 @@ export interface ClientAgentAuthResult {
   detail?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Dispatch control.
+//
+// The circuit breaker keeps a *running* task runner from claiming work against
+// dead agents and lifts itself once one is healthy. A runner stopped at the
+// systemd level is a different problem: bob-task-runner polls Linear directly
+// and holds no connection to Bob, so nothing in the UI could reach it and
+// "SSH in and run systemctl" was the only way back.
+//
+// ooda-runner holds the gateway socket on the same host, so it relays the
+// control. The unit it may touch is a constant in the daemon, never a field
+// here — a unit name on the wire would make a forged frame root-level command
+// execution.
+// ---------------------------------------------------------------------------
+
+export type DispatchAction = "start" | "stop";
+
+/** Server → daemon: start or stop the host's task runner. */
+export interface ServerDispatchControl {
+  type: "dispatch_control";
+  requestId: string;
+  action: DispatchAction;
+}
+
+/** Daemon → server: the runner's state after an action, as systemd reports it. */
+export interface ClientDispatchState {
+  type: "dispatch_state";
+  requestId: string;
+  ok: boolean;
+  running: boolean;
+  detail?: string;
+}
+
+/** Server → UI: relayed from the daemon. */
+export interface ServerDispatchState {
+  type: "dispatch_state";
+  workspaceId: string;
+  requestId: string;
+  ok: boolean;
+  running: boolean;
+  detail?: string;
+}
+
 export interface SessionPresenceParticipant {
   userId: string;
   clientId: string;
@@ -608,7 +657,8 @@ export type ClientMessage =
   | ClientPresenceUpdate
   | ClientCollabChat
   | ClientAgentAuthPrompt
-  | ClientAgentAuthResult;
+  | ClientAgentAuthResult
+  | ClientDispatchState;
 
 export type ServerMessage =
   | ServerHelloOk
@@ -635,6 +685,8 @@ export type ServerMessage =
   | ServerAgentAuthStart
   | ServerAgentAuthInput
   | ServerAgentAuthCancel
+  | ServerDispatchControl
+  | ServerDispatchState
   | ServerAgentAuthPrompt
   | ServerAgentAuthResult;
 
