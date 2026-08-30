@@ -140,6 +140,11 @@ export class AgentCredentials {
   /** Probe every provider, honouring a short cache. */
   async hostSnapshot(force = false) {
     if (force || Date.now() - this.lastProbeAt > PROBE_CACHE_MS || !this.providerSnapshot.length) {
+      // Re-read the shared latch file first. The agent-health CLI and the task
+      // runner write to it from their own processes; without this the daemon
+      // keeps serving whatever it loaded at startup, which is how the node
+      // page went on reporting "Ready" for agents already latched as dead.
+      this.creditLatch.reload();
       this.providerSnapshot = await Promise.all(
         providerIds.map((provider) =>
           probeCliProvider(
