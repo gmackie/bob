@@ -27,30 +27,49 @@ export const makeSecretsHandlers = (ctx: HandlerContext) => {
   const sec = makeSecretsRpcHandlers(ctx);
 
   return {
-    // --- Stubs (6) — gmacko-only tenant-scoped secrets, no Bob equivalent ---
+    // --- Stubs — gmacko-only tenant-scoped secrets, no Bob equivalent ---
+    //
+    // These DIE rather than fail. None of the Secrets Rpcs declare an error,
+    // so failing with a Bob tagged error was unencodable and the client saw
+    // "Expected UnauthorizedError | TenantNotSelectedError, got
+    // BobNotFoundError" — a schema mismatch instead of "not implemented".
+    // A defect is not subject to the declared channel, so the message
+    // survives and says which procedure is missing.
     "secrets.create": () =>
-      Effect.fail(
-        new BobNotFoundError({ entity: "secret", id: "not-implemented" }),
+      Effect.die(
+        new Error(
+          "secrets.create is not implemented in Bob (gmacko-only tenant-scoped secrets)",
+        ),
       ),
     "secrets.list": () =>
-      Effect.fail(
-        new BobNotFoundError({ entity: "secret", id: "not-implemented" }),
+      Effect.die(
+        new Error(
+          "secrets.list is not implemented in Bob (gmacko-only tenant-scoped secrets)",
+        ),
       ),
     "secrets.getEnvelope": () =>
-      Effect.fail(
-        new BobNotFoundError({ entity: "secret", id: "not-implemented" }),
+      Effect.die(
+        new Error(
+          "secrets.getEnvelope is not implemented in Bob (gmacko-only tenant-scoped secrets)",
+        ),
       ),
     "secrets.decryptForUse": () =>
-      Effect.fail(
-        new BobNotFoundError({ entity: "secret", id: "not-implemented" }),
+      Effect.die(
+        new Error(
+          "secrets.decryptForUse is not implemented in Bob (gmacko-only tenant-scoped secrets)",
+        ),
       ),
     "secrets.markUsed": () =>
-      Effect.fail(
-        new BobNotFoundError({ entity: "secret", id: "not-implemented" }),
+      Effect.die(
+        new Error(
+          "secrets.markUsed is not implemented in Bob (gmacko-only tenant-scoped secrets)",
+        ),
       ),
     "secrets.delete": () =>
-      Effect.fail(
-        new BobNotFoundError({ entity: "secret", id: "not-implemented" }),
+      Effect.die(
+        new Error(
+          "secrets.delete is not implemented in Bob (gmacko-only tenant-scoped secrets)",
+        ),
       ),
 
     // --- Session Secrets (8) — secrets.* → secrets.session.* ---
