@@ -88,12 +88,20 @@ export class AuthSessionManager {
 
   start(requestId: string, provider: ProviderId): { ok: boolean; error?: string } {
     if (this.sessions.has(requestId)) return { ok: false, error: "duplicate request id" };
-    for (const session of this.sessions.values()) {
-      // One login per provider. A second PTY would race the first for the same
-      // credential file and neither operator would know which one won.
-      if (session.provider === provider) {
-        return { ok: false, error: `a login for ${provider} is already in progress` };
-      }
+
+    // One login per provider — a second PTY would race the first for the same
+    // credential file and neither operator would know which one won. But the
+    // older session SUPERSEDES rather than blocking: refusing left an operator
+    // locked out of a provider entirely, because cancel() needs the original
+    // requestId and the UI mints a fresh one per click. An abandoned attempt
+    // (tab closed, page reloaded) then produced "a login for codex is already
+    // in progress" forever, with no control anywhere to clear it.
+    //
+    // Clicking "Sign in" is the operator saying "start over", so honour it:
+    // cancel the old one, tell its requester it was cancelled so a stale tab
+    // stops waiting, and spawn fresh.
+    for (const [existingId, session] of this.sessions) {
+      if (session.provider === provider) this.cancel(existingId);
     }
 
     // getAuthDriver is total over ProviderId, so there is no missing-driver case.

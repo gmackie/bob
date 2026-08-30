@@ -112,9 +112,20 @@ describe("AuthSessionManager", () => {
     expect(prompts.at(-1)?.tail).toContain("unrecognised prompt");
   });
 
-  it("rejects a second concurrent login for the same provider", () => {
-    expect(manager.start("req-1", "grok").ok).toBe(true);
-    expect(manager.start("req-2", "grok").ok).toBe(false);
+  it("lets a second sign-in supersede the first for the same provider", () => {
+    // Changed 2026-08-30. This used to expect a rejection, which locked an
+    // operator out: cancel() needs the ORIGINAL requestId and the UI mints a
+    // fresh one per click, so an abandoned attempt produced "a login for codex
+    // is already in progress" forever with no way to clear it. Clicking Sign
+    // in is the operator saying "start over". The one-login-per-provider rule
+    // still holds — the old PTY is killed first, so two never race the same
+    // credential file. See auth-session-supersede.test.ts.
+    manager.start("req-1", "codex");
+
+    expect(manager.start("req-2", "codex").ok).toBe(true);
+    // The abandoned request is told it was cancelled so a stale tab stops
+    // waiting on a prompt that will never arrive.
+    expect(results.some((r) => r.requestId === "req-1" && r.status === "cancelled")).toBe(true);
   });
 
   it("allows a different provider concurrently", () => {

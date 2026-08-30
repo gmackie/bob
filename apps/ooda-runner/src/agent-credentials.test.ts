@@ -85,12 +85,18 @@ describe("AgentCredentials", () => {
     });
   });
 
-  it("rejects a second concurrent login for the same provider", () => {
+  it("lets a second sign-in supersede an abandoned one", () => {
+    // Changed 2026-08-30 after a production report: refusing here locked the
+    // operator out of codex entirely, because cancel() needs the original
+    // requestId and the UI mints a fresh one per click. Clicking Sign in is
+    // the operator saying "start over".
     creds.startAuth("req-1", "grok");
     sent.length = 0;
     creds.startAuth("req-2", "grok");
 
-    expect(sent.at(-1)).toMatchObject({ type: "agent_auth_result", requestId: "req-2", ok: false });
+    // The abandoned request is told it was cancelled; the new one proceeds.
+    expect(sent.some((m) => m.requestId === "req-1" && m.status === "cancelled")).toBe(true);
+    expect(sent.some((m) => m.type === "agent_auth_result" && m.requestId === "req-2" && m.ok === false)).toBe(false);
   });
 
   it("ignores a code for an unknown request", () => {
