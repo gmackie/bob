@@ -19,6 +19,8 @@ import {
   normalizeSkillfleetRuntime,
 } from "@gmacko/core/skillfleet-bridge";
 import { bobRunReporterFromEnv, type BobRunReporter } from "./bob-run-reporter";
+import { AgentCredentials } from "./agent-credentials.js";
+import { DispatchControl } from "./dispatch-control.js";
 import { EventBuffer } from "./event-buffer";
 import {
   adoptSupervisedRun,
@@ -218,9 +220,29 @@ type ServerMessage =
       payload: Record<string, unknown>;
     }
   | ServerSessionAvailable
+  | { type: "agent_auth_start"; requestId: string; provider: string }
+  | { type: "agent_auth_input"; requestId: string; value: string }
+  | { type: "agent_auth_cancel"; requestId: string }
+  | { type: "dispatch_control"; requestId: string; action: "start" | "stop" }
   | { type: string };
 
 export class BobGatewayConnector {
+  /**
+   * Agent credential state and browser-driven re-auth. Lives on this class
+   * because this connector owns the workspace's single daemon slot. Assigned in
+   * the constructor: field initializers run in declaration order, and hostId is
+   * declared below this point.
+   */
+  private readonly credentials: AgentCredentials;
+  private readonly dispatch: DispatchControl;
+  /**
+   * Last few KB of each run's output, kept only until the run ends. Needed
+   * because a provider's billing error (the 402 that went undetected for
+   * eight days) shows up in run output and nowhere else.
+   */
+  private readonly runOutputTail = new Map<string, string>();
+
+
   private ws: WebSocket | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private helloTimer: NodeJS.Timeout | null = null;
@@ -260,6 +282,14 @@ export class BobGatewayConnector {
       process.env.BOB_RUNNER_BUFFER_DIR ??
         join(homedir(), ".bob-runner", "event-buffer"),
     );
+    this.dispatch = new DispatchControl({ send: (msg) => this.send(msg as never) });
+    this.credentials = new AgentCredentials({
+      hostId: this.hostId,
+      daemonVersion: process.env.BOB_RUNNER_VERSION ?? "dev",
+      send: (msg) => this.send(msg as never),
+      queueDepth: () => this.activeSessions.size,
+      dispatchRunning: () => this.dispatch.isRunning(),
+    });
   }
 
   start(): void {
@@ -315,6 +345,15 @@ export class BobGatewayConnector {
         connectorInstanceId: this.connectorInstanceId,
         daemonVersion: process.env.BOB_RUNNER_VERSION,
       });
+      // The probe is async; hello must not wait on it, so the first snapshot
+      // follows immediately as a ping. Without this the dashboard has no agent
+      // health at all and the credential cards never render.
+      void this.credentials
+        .hostSnapshot()
+        .then((hostSnapshot) =>
+          this.send({ type: "ping", ts: new Date().toISOString(), hostSnapshot } as never),
+        )
+        .catch(() => undefined);
       // If hello_ok never arrives (e.g. the gateway hit a transient DB error
       // handling hello), the socket is open but we're unregistered and will
       // never receive sessions — force a reconnect instead of idling forever.
@@ -666,10 +705,29 @@ export class BobGatewayConnector {
     }
   }
 
+  /** Bounded append; only the tail matters for classifying a failure. */
+  private captureOutput(sessionId: string, chunk: string): void {
+    const next = `${this.runOutputTail.get(sessionId) ?? ""}${chunk}`;
+    this.runOutputTail.set(sessionId, next.slice(-8_000));
+  }
+
+  /** Hand a finished run to the credit latch, then drop its buffered output. */
+  private finishRunOutcome(sessionId: string, agentType: string, exitCode: number | null): void {
+    this.credentials.noteRunOutcome(agentType, exitCode, this.runOutputTail.get(sessionId) ?? "");
+    this.runOutputTail.delete(sessionId);
+  }
+
   private startHeartbeat(): void {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = setInterval(() => {
-      this.send({ type: "ping", ts: new Date().toISOString() });
+      // Snapshot rides the heartbeat (probe results are cached ~5 min), which
+      // is how the gateway keeps the dashboard's agent health current.
+      void this.credentials
+        .hostSnapshot()
+        .then((hostSnapshot) =>
+          this.send({ type: "ping", ts: new Date().toISOString(), hostSnapshot } as never),
+        )
+        .catch(() => this.send({ type: "ping", ts: new Date().toISOString() }));
     }, HEARTBEAT_INTERVAL_MS);
   }
 
@@ -699,6 +757,31 @@ export class BobGatewayConnector {
         // before anything could orphan-mark the run.
         this.replayUnacked();
         break;
+      case "agent_auth_start": {
+        const m = msg as { requestId: string; provider: string };
+        this.credentials.startAuth(m.requestId, m.provider);
+        break;
+      }
+      case "agent_auth_input": {
+        const m = msg as { requestId: string; value: string };
+        this.credentials.submitCode(m.requestId, m.value);
+        break;
+      }
+      case "agent_auth_cancel": {
+        const m = msg as { requestId: string };
+        this.credentials.cancelAuth(m.requestId);
+        break;
+      }
+      case "dispatch_control": {
+        const m = msg as { requestId: string; action: "start" | "stop" };
+        void this.dispatch.apply(m.requestId, m.action).catch((error: unknown) => {
+          console.error(
+            "[bob-gw] dispatch control failed:",
+            error instanceof Error ? error.message : error,
+          );
+        });
+        break;
+      }
       case "event_ack": {
         const ack = msg as { type: "event_ack"; sessionId: string; sendSeq: number };
         if (typeof ack.sessionId === "string" && typeof ack.sendSeq === "number") {
@@ -1460,6 +1543,10 @@ export class BobGatewayConnector {
       },
     );
 
+    // Before the throw: a non-zero exit is exactly the case the credit latch
+    // needs to see, and throwing first would skip it.
+    this.finishRunOutcome(session.sessionId, session.agentType, exitCode);
+
     if (exitCode !== 0 && !this.stopRequested.has(session.sessionId)) {
       throw new Error(`Agent exited with code ${exitCode}`);
     }
@@ -1515,6 +1602,7 @@ export class BobGatewayConnector {
       });
 
       child.stdout?.on("data", (data: Buffer) => {
+        this.captureOutput(session.sessionId, data.toString());
         onChunk?.(data.toString());
         this.sendEvent(session.sessionId, "output_chunk", "agent", {
           data: data.toString(),
@@ -1523,6 +1611,7 @@ export class BobGatewayConnector {
       });
 
       child.stderr?.on("data", (data: Buffer) => {
+        this.captureOutput(session.sessionId, data.toString());
         onChunk?.(data.toString());
         this.sendEvent(session.sessionId, "output_chunk", "agent", {
           data: data.toString(),
@@ -1531,6 +1620,9 @@ export class BobGatewayConnector {
       });
 
       child.on("close", (code) => {
+        // Record before settling: rejecting first would skip the credit latch,
+        // and a non-zero exit is precisely what it needs to classify.
+        this.finishRunOutcome(session.sessionId, session.agentType, code);
         if (code === 0) resolve();
         else reject(new Error(`Agent exited with code ${code}`));
       });

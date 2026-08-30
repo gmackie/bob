@@ -11,7 +11,7 @@ import { execFile, spawn } from "node:child_process";
 import { killProcessTree } from "./process-tree";
 import type { ChildProcess } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
@@ -37,6 +37,10 @@ import {
   parseProviderStream,
 } from "../providers/runtime.js";
 import { probeCliProvider } from "../providers/cli-provider.js";
+import { CreditLatch } from "../providers/credit.js";
+import { AuthSessionManager } from "../providers/auth-session.js";
+import type { AuthPty } from "../providers/auth-session.js";
+import { FileCreditStore } from "../providers/credit-store.js";
 import { providerIds } from "../providers/contract.js";
 import { createOracleClient, fetchOracleSeed, buildSeedQuestion } from "../oracle-client.js";
 import { readOracleConfig } from "../oracle-config.js";
@@ -167,10 +171,16 @@ interface ServerSessionAvailable {
   };
 }
 
+type AgentAuthProviderId = "claude" | "codex" | "grok" | "cursor-agent";
+
 type KnownServerMessage =
   | { type: "hello_ok"; userId: string; heartbeatIntervalMs: number }
   | { type: "error"; code: string; message: string }
   | { type: "pong" }
+  // Browser-driven agent re-authentication (see providers/auth-session.ts).
+  | { type: "agent_auth_start"; requestId: string; provider: AgentAuthProviderId }
+  | { type: "agent_auth_input"; requestId: string; value: string }
+  | { type: "agent_auth_cancel"; requestId: string }
   | ServerSessionAvailable;
 
 /** Any inbound gateway message: known variants, plus unrecognized ones we ignore. */
@@ -222,12 +232,91 @@ const activeSessions = new Map<string, ChildProcess>();
 const sessionAdmission = new SessionAdmission(MAX_CONCURRENT);
 let providerSnapshot: Awaited<ReturnType<typeof probeCliProvider>>[] = [];
 let lastProviderProbeAt = 0;
+/**
+ * Credit verdicts, latched from real dispatch outcomes. No probe can see an
+ * exhausted balance, so this is the only path by which a provider that is
+ * authenticated but broke is ever reported as anything other than ready.
+ */
+const creditLatch = new CreditLatch(new FileCreditStore());
+
+/**
+ * Browser-driven agent logins.
+ *
+ * The daemon runs as the user that owns ~/.claude and ~/.codex (see
+ * bob-execution.service: User=bob, HOME=/home/bob, ProtectHome=false), so the
+ * vendor CLI writes its own credentials exactly as it does over SSH. We relay a
+ * URL out and a code back and never handle a token ourselves.
+ */
+const authSessions = new AuthSessionManager({
+  spawn: (driver): AuthPty => {
+    // Plain pipes, no PTY. Verified 2026-08-29 against the installed CLIs: all
+    // three device-auth flows print their verification URL with stdio piped
+    // (grok on stderr, codex and claude on stdout). Device-code flows are built
+    // for headless use, so a pseudo-terminal buys nothing here — and avoiding
+    // node-pty keeps the deploy bundle pure JS. That matters: the deploy script
+    // runs npm install on the build machine and rsyncs node_modules to a Linux
+    // host, so a native module would ship the wrong architecture.
+    const child = spawn(driver.command, driver.args, {
+      cwd: process.env.HOME ?? homedir(),
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, ...driver.env, NO_COLOR: "1", TERM: "dumb" },
+    });
+    return {
+      write: (data) => child.stdin.write(data),
+      kill: () => {
+        child.kill("SIGTERM");
+      },
+      // Merge both streams: providers disagree about where the URL goes.
+      onData: (cb) => {
+        child.stdout.on("data", (d: Buffer) => cb(d.toString()));
+        child.stderr.on("data", (d: Buffer) => cb(d.toString()));
+      },
+      onExit: (cb) => child.on("close", (code) => cb(code ?? 1)),
+    };
+  },
+  onPrompt: (prompt) => {
+    console.log(`[executor] auth ${prompt.provider}: ${prompt.kind}`);
+    send({
+      type: "agent_auth_prompt",
+      requestId: prompt.requestId,
+      provider: prompt.provider,
+      kind: prompt.kind,
+      url: prompt.url,
+      code: prompt.code,
+      instructions: prompt.instructions,
+      tail: prompt.tail,
+    });
+  },
+  onResult: (result) => {
+    console.log(`[executor] auth ${result.provider}: ${result.status}`);
+    if (result.ok) {
+      // Re-auth does NOT clear a credit latch: signing in again does not buy
+      // credit. Named call so the intent survives future edits.
+      creditLatch.noteAuthSuccess(result.provider);
+      // The verdict may have changed; re-probe on the next snapshot.
+      lastProviderProbeAt = 0;
+      void collectHostSnapshot().then((hostSnapshot) => {
+        send({ type: "ping", ts: new Date().toISOString(), hostSnapshot });
+      });
+    }
+    send({
+      type: "agent_auth_result",
+      requestId: result.requestId,
+      provider: result.provider,
+      ok: result.ok,
+      status: result.status,
+      detail: result.detail,
+    });
+  },
+});
 
 async function collectHostSnapshot() {
   if (Date.now() - lastProviderProbeAt > 5 * 60_000 || providerSnapshot.length === 0) {
     providerSnapshot = await Promise.all(
       providerIds.map((provider) =>
-        probeCliProvider(provider, (command, args) =>
+        probeCliProvider(
+          provider,
+          (command, args) =>
           new Promise((resolve, reject) => {
             execFile(command, args, { timeout: 10_000 }, (error, stdout, stderr) => {
               if (error && "code" in error && error.code === "ENOENT") {
@@ -240,7 +329,9 @@ async function collectHostSnapshot() {
                 stderr,
               });
             });
-          }),
+            }),
+          new Date(),
+          creditLatch.get(provider),
         ),
       ),
     );
@@ -372,6 +463,34 @@ function handleMessage(msg: ServerMessage): void {
 
     case "pong":
       break;
+
+    case "agent_auth_start": {
+      const start = asKnownMessage(msg, "agent_auth_start");
+      const outcome = authSessions.start(start.requestId, start.provider);
+      if (!outcome.ok) {
+        send({
+          type: "agent_auth_result",
+          requestId: start.requestId,
+          provider: start.provider,
+          ok: false,
+          status: "failed",
+          detail: outcome.error ?? "could not start login",
+        });
+      }
+      break;
+    }
+
+    case "agent_auth_input": {
+      const input = asKnownMessage(msg, "agent_auth_input");
+      authSessions.submitCode(input.requestId, input.value);
+      break;
+    }
+
+    case "agent_auth_cancel": {
+      const cancel = asKnownMessage(msg, "agent_auth_cancel");
+      authSessions.cancel(cancel.requestId);
+      break;
+    }
 
     default:
       break;
@@ -654,6 +773,9 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
     activeSessions.set(sessionId, child);
 
     let output = "";
+    // Kept separate from stdout: provider billing/auth errors land on stderr,
+    // and the credit classifier needs them verbatim.
+    let errOutput = "";
 
     child.stdout.on("data", (data: Buffer) => {
       const chunk = data.toString();
@@ -666,6 +788,7 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
 
     child.stderr.on("data", (data: Buffer) => {
       const chunk = data.toString();
+      errOutput += chunk;
       sendEvent(sessionId, "output_chunk", "agent", {
         data: chunk,
         stream: "stderr",
@@ -674,6 +797,14 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
 
     child.on("close", (code) => {
       const durationMs = Date.now() - startTime;
+      if (providerId) {
+        // Latches on 402/quota, clears on success, ignores everything else.
+        creditLatch.noteRunOutcome(providerId, {
+          code: code ?? 1,
+          stdout: output,
+          stderr: errOutput,
+        });
+      }
       const providerUsage = providerId
         ? parseProviderStream(providerId, output, prompt).usage
         : undefined;

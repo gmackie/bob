@@ -40,10 +40,16 @@ export interface ProviderHealthSnapshot {
   installed: boolean;
   authenticated: boolean;
   version?: string;
-  status: "ready" | "unavailable" | "unauthenticated" | "degraded";
+  /**
+   * `no_credit` means authenticated but out of balance. It cannot be probed
+   * — it is latched from real dispatch outcomes. See providers/credit.ts.
+   */
+  status: "ready" | "unavailable" | "unauthenticated" | "degraded" | "no_credit";
   capabilities: ProviderCapabilities;
   checkedAt: string;
   error?: string;
+  /** Provider's own wording, redacted. Drives "top up" vs "sign in". */
+  detail?: string;
 }
 
 interface NormalizeUsageInput {

@@ -18,7 +18,9 @@ DEPLOY_STAGE="${REPO_ROOT}/.deploy/execution-daemon"
 rm -rf "${DEPLOY_STAGE}"
 mkdir -p "${DEPLOY_STAGE}/dist/daemon"
 
-cp apps/bob-execution/dist/daemon/index.js "${DEPLOY_STAGE}/dist/daemon/"
+# Copy the whole build dir: the daemon and agent-health share a tsup chunk,
+# so copying index.js alone leaves a dangling import at runtime.
+cp apps/bob-execution/dist/daemon/*.js "${DEPLOY_STAGE}/dist/daemon/"
 cp apps/bob-execution/bob-execution.service "${DEPLOY_STAGE}/"
 
 cat > "${DEPLOY_STAGE}/package.json" << 'PKGJSON'
@@ -48,6 +50,21 @@ echo "==> Installing systemd service..."
 ssh "${SSH_TARGET}" "cp ${REMOTE_DIR}/bob-execution.service /etc/systemd/system/ 2>/dev/null || true"
 scp "${DEPLOY_STAGE}/bob-execution.service" "${SSH_TARGET}:/etc/systemd/system/"
 ssh "${SSH_TARGET}" "systemctl daemon-reload"
+
+# The relay keeps ONE daemon per workspace, so starting this service while
+# ooda-runner holds that slot evicts it — taking the credential surface and
+# dispatch control down with it. ooda-runner is the daemon on hetzner-bob, so
+# refuse rather than fight it for the socket. Deploying the files (including
+# the agent-health CLI, which the task runner's circuit breaker shells out to)
+# is always safe; only starting the service is not.
+echo "==> Checking whether another daemon holds the workspace slot..."
+if ssh "${SSH_TARGET}" "systemctl is-active --quiet ooda-runner.service" 2>/dev/null; then
+  echo "    ooda-runner is active on ${HOST} and owns the gateway daemon slot."
+  echo "    Files deployed; NOT starting bob-execution (it would evict ooda-runner)."
+  echo "    To hand the slot over deliberately: stop ooda-runner first."
+  echo "==> Deploy complete (files only)!"
+  exit 0
+fi
 
 echo "==> Checking for .env..."
 if ssh "${SSH_TARGET}" "test -f ${REMOTE_DIR}/.env"; then

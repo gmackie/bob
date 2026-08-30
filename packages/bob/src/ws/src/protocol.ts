@@ -58,10 +58,13 @@ export interface ProviderHealthWire {
   installed: boolean;
   authenticated: boolean;
   version?: string;
-  status: "ready" | "unavailable" | "unauthenticated" | "degraded";
+  /** `no_credit` = authenticated but out of balance; latched from run outcomes. */
+  status: "ready" | "unavailable" | "unauthenticated" | "degraded" | "no_credit";
   capabilities: ProviderCapabilityWire;
   checkedAt: string;
   error?: string;
+  /** Provider's own wording, redacted. Drives "top up" vs "sign in". */
+  detail?: string;
 }
 
 export interface HostSnapshotWire {
@@ -71,6 +74,12 @@ export interface HostSnapshotWire {
   queueDepth: number;
   checkedAt: string;
   providers: ProviderHealthWire[];
+  /**
+   * Whether the host's standalone task runner process is up, as systemd
+   * reports it. Absent from daemons that predate dispatch control, which is
+   * why the UI must treat `undefined` as "unknown" rather than "stopped".
+   */
+  dispatchRunning?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -436,6 +445,140 @@ export interface ServerHostSnapshot {
   snapshot: HostSnapshotWire;
 }
 
+// ---------------------------------------------------------------------------
+// Browser-driven agent re-authentication.
+//
+// Before this existed, a dead credential could only be fixed by SSHing to the
+// host and running a login script by hand, so outages lasted as long as nobody
+// happened to be at a terminal — the 2026-08-29 one ran eight days.
+//
+// The daemon already runs as the user that owns the credential files, so it
+// spawns the vendor CLI and the CLI writes its own credentials. Bob relays a
+// URL out and a short-lived code back; it never holds a token.
+// ---------------------------------------------------------------------------
+
+export type AgentAuthProvider = "claude" | "codex" | "grok" | "cursor-agent";
+
+/** Server → daemon: begin an interactive login. */
+export interface ServerAgentAuthStart {
+  type: "agent_auth_start";
+  requestId: string;
+  provider: AgentAuthProvider;
+}
+
+/** Server → daemon: the operator's pasted code, for the CLI's stdin. */
+export interface ServerAgentAuthInput {
+  type: "agent_auth_input";
+  requestId: string;
+  value: string;
+}
+
+/** Server → daemon: abandon a pending login. */
+export interface ServerAgentAuthCancel {
+  type: "agent_auth_cancel";
+  requestId: string;
+}
+
+/** Server → UI: relayed from the daemon. */
+export interface ServerAgentAuthPrompt {
+  type: "agent_auth_prompt";
+  workspaceId: string;
+  requestId: string;
+  provider: AgentAuthProvider;
+  /** `raw` means no matcher fired — show `tail` so the operator is never stuck. */
+  kind: "url" | "await_code" | "raw";
+  url?: string;
+  /**
+   * A code the operator must READ and enter in their browser — codex prints one
+   * separately, grok embeds it in the URL. Distinct from the code they paste
+   * back to us. Without it those flows cannot be completed.
+   */
+  code?: string;
+  instructions: string;
+  tail?: string;
+}
+
+/** Server → UI: relayed from the daemon. */
+export interface ServerAgentAuthResult {
+  type: "agent_auth_result";
+  workspaceId: string;
+  requestId: string;
+  provider: AgentAuthProvider;
+  ok: boolean;
+  status: "authenticated" | "failed" | "expired" | "cancelled";
+  detail?: string;
+}
+
+/** Daemon → server: a prompt for the operator. Never carries a token. */
+export interface ClientAgentAuthPrompt {
+  type: "agent_auth_prompt";
+  requestId: string;
+  provider: AgentAuthProvider;
+  kind: "url" | "await_code" | "raw";
+  url?: string;
+  /**
+   * A code the operator must READ and enter in their browser — codex prints one
+   * separately, grok embeds it in the URL. Distinct from the code they paste
+   * back to us. Without it those flows cannot be completed.
+   */
+  code?: string;
+  instructions: string;
+  tail?: string;
+}
+
+/** Daemon → server: terminal outcome of a login. */
+export interface ClientAgentAuthResult {
+  type: "agent_auth_result";
+  requestId: string;
+  provider: AgentAuthProvider;
+  ok: boolean;
+  status: "authenticated" | "failed" | "expired" | "cancelled";
+  detail?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Dispatch control.
+//
+// The circuit breaker keeps a *running* task runner from claiming work against
+// dead agents and lifts itself once one is healthy. A runner stopped at the
+// systemd level is a different problem: bob-task-runner polls Linear directly
+// and holds no connection to Bob, so nothing in the UI could reach it and
+// "SSH in and run systemctl" was the only way back.
+//
+// ooda-runner holds the gateway socket on the same host, so it relays the
+// control. The unit it may touch is a constant in the daemon, never a field
+// here — a unit name on the wire would make a forged frame root-level command
+// execution.
+// ---------------------------------------------------------------------------
+
+export type DispatchAction = "start" | "stop";
+
+/** Server → daemon: start or stop the host's task runner. */
+export interface ServerDispatchControl {
+  type: "dispatch_control";
+  requestId: string;
+  action: DispatchAction;
+}
+
+/** Daemon → server: the runner's state after an action, as systemd reports it. */
+export interface ClientDispatchState {
+  type: "dispatch_state";
+  requestId: string;
+  ok: boolean;
+  running: boolean;
+  detail?: string;
+}
+
+/** Server → UI: relayed from the daemon. */
+export interface ServerDispatchState {
+  type: "dispatch_state";
+  workspaceId: string;
+  requestId: string;
+  ok: boolean;
+  running: boolean;
+  detail?: string;
+}
+
 export interface SessionPresenceParticipant {
   userId: string;
   clientId: string;
@@ -512,7 +655,10 @@ export type ClientMessage =
   | ClientSubscribeWorkspace
   | ClientUnsubscribeWorkspace
   | ClientPresenceUpdate
-  | ClientCollabChat;
+  | ClientCollabChat
+  | ClientAgentAuthPrompt
+  | ClientAgentAuthResult
+  | ClientDispatchState;
 
 export type ServerMessage =
   | ServerHelloOk
@@ -535,7 +681,14 @@ export type ServerMessage =
   | ServerPresenceSnapshot
   | ServerPresenceChanged
   | ServerCollabChatMessage
-  | ServerArtifactUpdated;
+  | ServerArtifactUpdated
+  | ServerAgentAuthStart
+  | ServerAgentAuthInput
+  | ServerAgentAuthCancel
+  | ServerDispatchControl
+  | ServerDispatchState
+  | ServerAgentAuthPrompt
+  | ServerAgentAuthResult;
 
 // ---------------------------------------------------------------------------
 // Helpers

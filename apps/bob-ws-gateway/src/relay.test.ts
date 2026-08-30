@@ -188,6 +188,130 @@ describe("Relay", () => {
       ]);
     });
 
+    it("relays a daemon's dispatch_state to workspace observers", async () => {
+      const daemon = new FakeWs();
+      relay.handleConnection(daemon as any);
+      daemon.receive({
+        type: "hello",
+        clientId: "hetzner-bob",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      } as ClientMessage);
+      await new Promise((r) => setImmediate(r));
+
+      const browser = new FakeWs();
+      relay.handleConnection(browser as any);
+      browser.receive({ type: "hello", clientId: "web", deviceType: "web", token: "good-browser" });
+      await new Promise((r) => setImmediate(r));
+      browser.receive({ type: "subscribe_workspace", workspaceId: "ws-1" });
+      await new Promise((r) => setImmediate(r));
+
+      daemon.receive({
+        type: "dispatch_state",
+        requestId: "req-1",
+        ok: true,
+        running: true,
+      } as ClientMessage);
+      await new Promise((r) => setImmediate(r));
+
+      expect(browser.sentOfType("dispatch_state")).toEqual([
+        expect.objectContaining({
+          type: "dispatch_state",
+          workspaceId: "ws-1",
+          requestId: "req-1",
+          ok: true,
+          running: true,
+        }),
+      ]);
+    });
+
+    it("ignores a dispatch_state forged by a browser", async () => {
+      // Only a daemon may report the runner's state. A browser that could
+      // forge one would tell the whole workspace the runner is up when it is
+      // not — the exact lie the circuit breaker exists to prevent.
+      const daemon = new FakeWs();
+      relay.handleConnection(daemon as any);
+      daemon.receive({
+        type: "hello",
+        clientId: "hetzner-bob",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      } as ClientMessage);
+      await new Promise((r) => setImmediate(r));
+
+      const attacker = new FakeWs();
+      relay.handleConnection(attacker as any);
+      attacker.receive({
+        type: "hello",
+        clientId: "web",
+        deviceType: "web",
+        token: "good-browser",
+      });
+      await new Promise((r) => setImmediate(r));
+      attacker.receive({ type: "subscribe_workspace", workspaceId: "ws-1" });
+      await new Promise((r) => setImmediate(r));
+
+      const observer = new FakeWs();
+      relay.handleConnection(observer as any);
+      observer.receive({
+        type: "hello",
+        clientId: "web2",
+        deviceType: "web",
+        token: "good-browser",
+      });
+      await new Promise((r) => setImmediate(r));
+      observer.receive({ type: "subscribe_workspace", workspaceId: "ws-1" });
+      await new Promise((r) => setImmediate(r));
+
+      attacker.receive({
+        type: "dispatch_state",
+        requestId: "forged",
+        ok: true,
+        running: true,
+      } as ClientMessage);
+      await new Promise((r) => setImmediate(r));
+
+      expect(observer.sentOfType("dispatch_state")).toEqual([]);
+    });
+
+    it("reports no daemon rather than dropping a dispatch_control silently", () => {
+      // The caller turns false into "host offline" for the operator; dropping
+      // it would leave them watching a spinner that never resolves.
+      expect(
+        relay.requestDispatchControl("ws-nobody", {
+          type: "dispatch_control",
+          requestId: "req-1",
+          action: "start",
+        }),
+      ).toBe(false);
+    });
+
+    it("delivers a dispatch_control to the workspace's daemon", async () => {
+      const daemon = new FakeWs();
+      relay.handleConnection(daemon as any);
+      daemon.receive({
+        type: "hello",
+        clientId: "hetzner-bob",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      } as ClientMessage);
+      await new Promise((r) => setImmediate(r));
+
+      const delivered = relay.requestDispatchControl("ws-1", {
+        type: "dispatch_control",
+        requestId: "req-2",
+        action: "stop",
+      });
+
+      expect(delivered).toBe(true);
+      expect(daemon.sentOfType("dispatch_control")).toEqual([
+        expect.objectContaining({ requestId: "req-2", action: "stop" }),
+      ]);
+    });
+
     it("includes planning draft and produced task counts in workspace snapshots", async () => {
       (db.query.chatConversations.findMany as any).mockResolvedValueOnce([
         {

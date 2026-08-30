@@ -52,6 +52,18 @@ export {
   type ServerPresenceChanged,
   type ServerCollabChatMessage,
   type ServerArtifactUpdated,
+  type ServerAgentAuthStart,
+  type ServerAgentAuthInput,
+  type ServerAgentAuthCancel,
+  type ServerAgentAuthPrompt,
+  type ServerAgentAuthResult,
+  type ClientAgentAuthPrompt,
+  type ClientAgentAuthResult,
+  type AgentAuthProvider,
+  type DispatchAction,
+  type ServerDispatchControl,
+  type ServerDispatchState,
+  type ClientDispatchState,
 
   // Codec
   parseClientMessage,

@@ -15,6 +15,9 @@ import type {
   SessionStatus,
   WorkspaceSessionInfo,
   HostSnapshotWire,
+  ServerAgentAuthPrompt,
+  ServerAgentAuthResult,
+  ServerDispatchState,
 } from "./protocol.js";
 import { encodeClientMessage, parseServerMessage } from "./protocol.js";
 
@@ -57,6 +60,12 @@ export interface BobWsClientOptions {
   onPresenceChanged?: (message: ServerPresenceChanged) => void;
   onCollabChatMessage?: (message: ServerCollabChatMessage) => void;
   onArtifactUpdated?: (message: ServerArtifactUpdated) => void;
+  /** Agent re-auth: verification link / code prompt from the host daemon. */
+  onAgentAuthPrompt?: (message: ServerAgentAuthPrompt) => void;
+  /** Agent re-auth: terminal outcome of a login. */
+  onAgentAuthResult?: (message: ServerAgentAuthResult) => void;
+  /** Confirmed task-runner state after a start/stop, straight from systemd. */
+  onDispatchState?: (message: ServerDispatchState) => void;
   onError: (error: ServerError) => void;
   onConnectionStateChange: (state: ConnectionState) => void;
   /** Override WebSocket constructor for React Native or testing. */
@@ -294,6 +303,18 @@ export class BobWsClient {
 
       case "host_snapshot":
         this.opts.onHostSnapshot?.(msg.workspaceId, msg.snapshot);
+        break;
+
+      case "agent_auth_prompt":
+        this.opts.onAgentAuthPrompt?.(msg);
+        break;
+
+      case "agent_auth_result":
+        this.opts.onAgentAuthResult?.(msg);
+        break;
+
+      case "dispatch_state":
+        this.opts.onDispatchState?.(msg);
         break;
 
       case "session_status_changed":

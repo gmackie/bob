@@ -1,0 +1,16 @@
+# Let ooda-runner start and stop its neighbour, the standalone task runner.
+#
+# bob-task-runner polls Linear directly and holds no connection to Bob, so a
+# runner stopped at the systemd level could previously only be restarted over
+# SSH. ooda-runner does hold the gateway socket, so it acts as the control
+# plane — but only for this one unit and only for these three verbs.
+#
+# Deliberately NOT a wildcard. `systemctl *` here would turn a forged websocket
+# frame into root on the node.
+#
+# Install to /etc/sudoers.d/bob-dispatch-control with mode 0440, and validate
+# with `visudo -c -f` before moving it into place — a malformed file in
+# sudoers.d locks sudo out of the host entirely.
+bob ALL=(root) NOPASSWD: /usr/bin/systemctl start bob-task-runner.service
+bob ALL=(root) NOPASSWD: /usr/bin/systemctl stop bob-task-runner.service
+bob ALL=(root) NOPASSWD: /usr/bin/systemctl is-active bob-task-runner.service

@@ -25,6 +25,10 @@ import {
   type ServerWorkspaceInvalidationType,
   type SessionStatus,
   type HostSnapshotWire,
+  type ServerAgentAuthStart,
+  type ServerDispatchControl,
+  type ServerAgentAuthInput,
+  type ServerAgentAuthCancel,
   type SessionPresenceParticipant,
 } from "./protocol.js";
 import type { SessionEventRecord } from "./persistence.js";
@@ -747,6 +751,52 @@ export class Relay {
     switch (msg.type) {
       case "hello":
         await this.handleHello(conn, msg);
+        return;
+      // Agent re-auth prompts/results originate on the daemon and are for the
+      // operator's browser. Only a daemon may emit them: a browser forging one
+      // could otherwise show a fake sign-in link to everyone in the workspace.
+      case "agent_auth_prompt":
+        if (conn.kind === "daemon" && conn.workspaceId) {
+          this.broadcastToWorkspace(conn.workspaceId, {
+            type: "agent_auth_prompt",
+            workspaceId: conn.workspaceId,
+            requestId: msg.requestId,
+            provider: msg.provider,
+            kind: msg.kind,
+            url: msg.url,
+            code: msg.code,
+            instructions: msg.instructions,
+            tail: msg.tail,
+          });
+        }
+        return;
+      case "agent_auth_result":
+        if (conn.kind === "daemon" && conn.workspaceId) {
+          this.broadcastToWorkspace(conn.workspaceId, {
+            type: "agent_auth_result",
+            workspaceId: conn.workspaceId,
+            requestId: msg.requestId,
+            provider: msg.provider,
+            ok: msg.ok,
+            status: msg.status,
+            detail: msg.detail,
+          });
+        }
+        return;
+      // Same daemon-only guard as the auth prompts above: a browser forging a
+      // dispatch_state could tell the whole workspace the runner is up when it
+      // is not, which is precisely the lie the breaker exists to prevent.
+      case "dispatch_state":
+        if (conn.kind === "daemon" && conn.workspaceId) {
+          this.broadcastToWorkspace(conn.workspaceId, {
+            type: "dispatch_state",
+            workspaceId: conn.workspaceId,
+            requestId: msg.requestId,
+            ok: msg.ok,
+            running: msg.running,
+            detail: msg.detail,
+          });
+        }
         return;
       case "ping":
         this.send(conn, { type: "pong", ts: new Date().toISOString() });
@@ -2615,6 +2665,52 @@ export class Relay {
         });
       }
     }
+  }
+
+  /**
+   * Send to every browser subscribed to a workspace. Scoped by
+   * workspaceScopeId so an auth prompt for one workspace's host never reaches
+   * another's.
+   */
+  private broadcastToWorkspace(workspaceId: string, msg: ServerMessage): void {
+    for (const conn of this.connections.values()) {
+      if (
+        conn.kind === "browser" &&
+        conn.workspaceSubscribed &&
+        conn.workspaceScopeId === workspaceId
+      ) {
+        this.send(conn, msg);
+      }
+    }
+  }
+
+  /**
+   * Server → daemon: drive an interactive agent login on the host.
+   *
+   * Returns false when no daemon is connected for that workspace, so the caller
+   * can tell the operator "host offline" rather than leaving a spinner running.
+   */
+  requestAgentAuth(
+    workspaceId: string,
+    msg: ServerAgentAuthStart | ServerAgentAuthInput | ServerAgentAuthCancel,
+  ): boolean {
+    const daemon = this.daemonByWorkspace.get(workspaceId);
+    if (!daemon) return false;
+    this.send(daemon, msg);
+    return true;
+  }
+
+  /**
+   * Server → daemon: start or stop the host's task runner.
+   *
+   * Returns false when no daemon is connected, so the caller can say "host
+   * offline" instead of leaving the operator watching a spinner.
+   */
+  requestDispatchControl(workspaceId: string, msg: ServerDispatchControl): boolean {
+    const daemon = this.daemonByWorkspace.get(workspaceId);
+    if (!daemon) return false;
+    this.send(daemon, msg);
+    return true;
   }
 
   private broadcastHostSnapshot(workspaceId: string, snapshot: HostSnapshotWire): void {

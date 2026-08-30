@@ -182,43 +182,92 @@ const TEAM_ID = process.env.LINEAR_TEAM_ID || "5027d80c-70dc-4c48-b88b-40053c03a
 
 
 // --- Agent preference & health ---
+//
+// Health, credit state, and the dispatch decision all come from the execution
+// daemon's agent-health build artifact. It used to be /opt/bob/scripts/agent-health.js
+// — a file that existed only on this box, was not in version control, and was
+// free to disagree with the daemon and the UI about whether an agent was alive.
+// It is now built from the same probe the daemon uses and reads the same
+// durable credit latch, so the three cannot drift apart.
 const AGENT_PREFERENCE = (process.env.BOB_AGENT_PREFERENCE || "claude,codex,grok").split(",").map(s => s.trim());
+const AGENT_HEALTH_BIN = process.env.BOB_AGENT_HEALTH_BIN || "/opt/bob/execution-daemon/dist/daemon/agent-health.js";
+
+const STATUS_ICON = {
+  ready: "OK",
+  no_credit: "NO CREDIT",
+  unauthenticated: "SIGN IN",
+  unavailable: "MISSING",
+  degraded: "DEGRADED",
+};
 
 function checkAgentHealth() {
-  const results = [];
-  for (const agent of AGENT_PREFERENCE) {
-    try {
-      const out = require("child_process").execSync(
-        "node /opt/bob/scripts/agent-health.js --agent " + agent,
-        { encoding: "utf8", timeout: 30000 }
-      );
-      const report = JSON.parse(out);
-      const a = report.agents[0];
-      results.push(a);
-      const icon = a.status === "ok" ? "OK" : a.status === "rate_limited" ? "LIMIT" : a.status === "auth_expired" ? "EXPIRED" : "FAIL";
-      console.log("[runner] Agent " + icon + " " + a.name + " " + (a.version || "") + " - " + a.status + (a.reason ? " (" + a.reason + ")" : ""));
-    } catch (e) {
-      results.push({ name: agent, status: "error", reason: e.message.split("\n")[0] });
-      console.log("[runner] Agent FAIL " + agent + " - check failed");
+  try {
+    // Exit code 1 simply means "not everything is ready", which is the case we
+    // most need to read — so take stdout regardless of status.
+    const res = require("child_process").spawnSync(
+      "node",
+      [AGENT_HEALTH_BIN],
+      { encoding: "utf8", timeout: 60000, env: { ...process.env, BOB_AGENT_PREFERENCE: AGENT_PREFERENCE.join(",") } }
+    );
+    const report = JSON.parse(res.stdout || "{}");
+    for (const a of report.agents || []) {
+      const icon = STATUS_ICON[a.status] || String(a.status).toUpperCase();
+      console.log("[runner] Agent " + icon + " " + a.name + " " + (a.version || "") + " - " + a.status + (a.detail ? " (" + a.detail + ")" : ""));
     }
+    return report;
+  } catch (e) {
+    // A broken health check is NOT evidence that agents are dead. Return an
+    // empty report: the gate treats absence of evidence as uncertain and keeps
+    // dispatching, which is the behaviour agentHealthRouter.ts asks for.
+    console.log("[runner] Agent health check failed (" + e.message.split("\n")[0] + ") - treating as unknown");
+    return { agents: [], dispatch: { agent: AGENT_PREFERENCE[0], paused: false, reason: "health check unavailable", blocked: [] } };
   }
-  return results;
 }
 
 let _agentHealthCache = null;
 let _agentHealthTs = 0;
 const HEALTH_CACHE_MS = 10 * 60 * 1000;
 
-function pickAgent() {
+function agentHealth({ fresh = false } = {}) {
   const now = Date.now();
-  if (!_agentHealthCache || now - _agentHealthTs > HEALTH_CACHE_MS) {
+  if (fresh || !_agentHealthCache || now - _agentHealthTs > HEALTH_CACHE_MS) {
     _agentHealthCache = checkAgentHealth();
     _agentHealthTs = now;
   }
-  const available = _agentHealthCache.find(a => a.status === "ok");
-  if (available) return available.name;
-  console.log("[runner] WARNING No healthy agents, falling back to " + AGENT_PREFERENCE[0]);
-  return AGENT_PREFERENCE[0];
+  return _agentHealthCache;
+}
+
+/**
+ * The dispatch decision. `paused` is only ever true on CONFIRMED evidence
+ * (probe says unauthenticated/unavailable, or a real 402 latched no_credit).
+ * Statistical inference and broken health checks never pause dispatch.
+ */
+function dispatchDecision(opts) {
+  const report = agentHealth(opts);
+  return report.dispatch || { agent: AGENT_PREFERENCE[0], paused: false, reason: "no decision in report", blocked: [] };
+}
+
+function pickAgent() {
+  return dispatchDecision().agent || AGENT_PREFERENCE[0];
+}
+
+/**
+ * Feed a dispatch outcome back into the shared credit latch. A 402 observed
+ * here latches for the daemon and the UI too; a success clears it. Classification
+ * deliberately lives in one place rather than being re-implemented here.
+ */
+function noteRunOutcome(agentType, exitCode, output) {
+  try {
+    require("child_process").spawnSync(
+      "node",
+      [AGENT_HEALTH_BIN, "--note-outcome", "--agent", agentType, "--exit-code", String(exitCode ?? 1)],
+      { input: (output || "").slice(-8000), encoding: "utf8", timeout: 15000 }
+    );
+    // The verdict just changed; don't answer from a stale cache.
+    _agentHealthCache = null;
+  } catch (e) {
+    console.log("[runner] Could not record run outcome: " + e.message.split("\n")[0]);
+  }
 }
 // --- end agent health ---
 
@@ -511,6 +560,7 @@ ${issue.description || "No description provided."}
   console.log(`[runner] Starting playbook agent...`);
   const result = await runAgent(agentType, repoDir, prompt, logFile);
   console.log(`[runner] Agent exited with code ${result.exitCode}`);
+  noteRunOutcome(agentType, result.exitCode, result.output);
   await bobPushLog(bobRunId, result.output);
   try { writeFileSync(logFile, result.output); } catch {}
 
@@ -592,6 +642,7 @@ Do NOT modify unrelated files. Stay focused on this specific issue.`;
   console.log(`[runner] Starting codex...`);
   const result = await runAgent(agentType, repoDir, prompt, logFile);
   console.log(`[runner] Codex exited with code ${result.exitCode}`);
+  noteRunOutcome(agentType, result.exitCode, result.output);
   await bobPushLog(bobRunId, result.output);
 
   // Check if any commits were made
@@ -667,6 +718,22 @@ async function runOnce() {
   console.log(`[runner] Scanning for work...`);
   void sendHeartbeat();
   await refreshRemoteConfig();
+
+  // Circuit breaker. On 2026-08-29 all three agents were confirmed dead and
+  // this loop still claimed work, failed in ~1s, posted "produced no changes",
+  // and reset the issue to unstarted — every 120s across the whole backlog, for
+  // eight days. Claiming nothing is strictly better than claiming and burning.
+  // Only CONFIRMED evidence pauses; see providers/dispatch-gate.ts.
+  const decision = dispatchDecision();
+  if (decision.paused && process.env.BOB_DISPATCH_OVERRIDE !== "1") {
+    console.log(`[runner] DISPATCH PAUSED - ${decision.reason}`);
+    for (const b of decision.blocked || []) {
+      const remedy = b.remedy === "top_up" ? "top up billing" : b.remedy === "sign_in" ? "re-authenticate" : "install the CLI";
+      console.log(`[runner]   ${b.agent}: ${b.status} -> ${remedy}${b.detail ? " (" + b.detail + ")" : ""}`);
+    }
+    console.log(`[runner] Fix from the Bob UI (Nodes -> agent cards), or set BOB_DISPATCH_OVERRIDE=1 to force.`);
+    return false;
+  }
 
   const projects = effectiveProjects();
   const targetSlugs = STARTUP_FILTER ? [STARTUP_FILTER] : Object.keys(projects);
