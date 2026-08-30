@@ -57,9 +57,7 @@ describe("probeCliProvider — credit state", () => {
   it("reports no_credit for an authenticated provider with an exhausted balance", async () => {
     // The 2026-08-29 regression: grok passed its auth probe and died on every
     // dispatch with 402. `ready` here is what burned the backlog for 8 days.
-    const result = await probeCliProvider("grok", authedRun, new Date(), {
-      latched: true,
-      detail: "402 Payment Required — Grok Build usage balance exhausted",
+    const result = await probeCliProvider("grok", authedRun, new Date(), { kind: "no_credit", detail: "402 Payment Required — Grok Build usage balance exhausted",
     });
 
     expect(result.status).toBe("no_credit");
@@ -69,7 +67,7 @@ describe("probeCliProvider — credit state", () => {
   });
 
   it("stays ready when no credit latch is set", async () => {
-    expect(await probeCliProvider("grok", authedRun, new Date(), { latched: false })).toMatchObject({
+    expect(await probeCliProvider("grok", authedRun, new Date(), {})).toMatchObject({
       status: "ready",
     });
   });
@@ -80,7 +78,7 @@ describe("probeCliProvider — credit state", () => {
         ? { code: 0, stdout: "grok 1.2.3", stderr: "" }
         : { code: 1, stdout: "", stderr: "OAuth token revoked" });
 
-    expect(await probeCliProvider("grok", run, new Date(), { latched: true })).toMatchObject({
+    expect(await probeCliProvider("grok", run, new Date(), { kind: "no_credit" })).toMatchObject({
       status: "unauthenticated",
     });
   });

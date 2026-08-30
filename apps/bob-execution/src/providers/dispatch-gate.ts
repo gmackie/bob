@@ -23,7 +23,9 @@
  * Both guarantees then hold at once.
  */
 
-export type DispatchRemedy = "sign_in" | "top_up" | "install";
+/** `wait` has no button: a quota lifts on its own, and offering an action
+ *  that cannot help is how an operator loops on the wrong remedy. */
+export type DispatchRemedy = "sign_in" | "top_up" | "install" | "wait";
 
 /** Structurally typed so the runner can pass raw JSON from agent-health. */
 export interface HealthLike {
@@ -54,6 +56,8 @@ export interface GateDecision {
 const CONFIRMED_DEAD: Record<string, DispatchRemedy> = {
   unauthenticated: "sign_in",
   no_credit: "top_up",
+  // Temporary, but no dispatch can succeed until it lifts.
+  rate_limited: "wait",
   unavailable: "install",
 };
 

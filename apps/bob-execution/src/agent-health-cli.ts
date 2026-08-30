@@ -31,7 +31,7 @@ import type { ProviderId } from "./providers/contract.js";
 import { providerIds } from "./providers/contract.js";
 import { FileCreditStore } from "./providers/credit-store.js";
 import { decideDispatch } from "./providers/dispatch-gate.js";
-import { CreditLatch } from "./providers/credit.js";
+import { RunOutcomeLatch } from "./providers/credit.js";
 
 const PROBE_TIMEOUT_MS = 10_000;
 
@@ -80,7 +80,7 @@ function readStdin(): Promise<string> {
   });
 }
 
-async function noteOutcome(argv: string[], latch: CreditLatch): Promise<void> {
+async function noteOutcome(argv: string[], latch: RunOutcomeLatch): Promise<void> {
   const [provider] = parseAgents(argv);
   if (!provider) process.exit(2);
   const flag = argv.indexOf("--exit-code");
@@ -98,7 +98,7 @@ async function noteOutcome(argv: string[], latch: CreditLatch): Promise<void> {
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const agents = parseAgents(argv);
-  const latch = new CreditLatch(new FileCreditStore());
+  const latch = new RunOutcomeLatch(new FileCreditStore());
 
   if (argv.includes("--note-outcome")) {
     await noteOutcome(argv, latch);

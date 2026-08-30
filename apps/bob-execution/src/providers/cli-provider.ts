@@ -1,5 +1,5 @@
 import type { ProviderCapabilities, ProviderHealthSnapshot, ProviderId } from "./contract.js";
-import type { CreditState } from "./credit.js";
+import type { LatchedOutcome } from "./credit.js";
 import { redactDetail } from "./credit.js";
 
 export interface CommandResult {
@@ -46,16 +46,25 @@ const capabilities: Record<ProviderId, ProviderCapabilities> = {
 /**
  * Probe a provider CLI.
  *
- * The probe establishes *auth* only. It cannot establish *credit*: `grok models`
- * exits 0 on an authenticated account with an exhausted balance, which is why
- * the 2026-08-29 outage reported a healthy agent that 402'd on every dispatch.
- * Credit arrives via `credit`, latched from real run outcomes by CreditLatch.
+ * The probe is an ESTIMATE. A real run outcome is proof, and where they
+ * disagree the outcome wins.
+ *
+ * It cannot see credit: `grok models` exits 0 on an authenticated account with
+ * an exhausted balance, which is why the 2026-08-29 outage reported a healthy
+ * agent that 402'd on every dispatch. It is not reliable on auth either — on
+ * 2026-08-30 codex probed Ready while every run died on `401 Unauthorized`,
+ * and cursor probed Ready while every run died on "Authentication required".
+ * And it cannot see a quota: claude probed Ready against a spent weekly cap.
+ *
+ * So `latched` — set from real run outcomes by RunOutcomeLatch — overrides a
+ * clean probe, and carries WHICH failure it was so the UI can offer the right
+ * remedy: top up, sign in, or wait.
  */
 export async function probeCliProvider(
   provider: ProviderId,
   run: RunCommand,
   now = new Date(),
-  credit: CreditState = { latched: false },
+  latched: LatchedOutcome = {},
 ): Promise<ProviderHealthSnapshot> {
   const command = providerCommands[provider];
   const base = { provider, command, capabilities: capabilities[provider], checkedAt: now.toISOString() };
@@ -79,15 +88,27 @@ export async function probeCliProvider(
         detail: redactDetail(`${auth.stderr}\n${auth.stdout}`) || undefined,
       };
     }
-    if (credit.latched) {
+    // A clean probe does not clear a latched outcome: the probe is exactly
+    // what was wrong in both outages.
+    if (latched.kind) {
+      const asStatus = {
+        no_credit: "no_credit",
+        auth: "unauthenticated",
+        rate_limited: "rate_limited",
+      } as const;
+      const why = {
+        no_credit: "provider reported an exhausted balance",
+        auth: "a real run failed to authenticate",
+        rate_limited: "provider reported a rate or quota limit",
+      } as const;
       return {
         ...base,
         installed: true,
-        authenticated: true,
+        authenticated: latched.kind !== "auth",
         version: version.stdout.trim() || undefined,
-        status: "no_credit",
-        error: "provider reported an exhausted balance",
-        detail: credit.detail,
+        status: asStatus[latched.kind],
+        error: why[latched.kind],
+        detail: latched.detail,
       };
     }
     return {

@@ -66,6 +66,7 @@ function statusTone(status: string): string {
     case "ready":
       return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
     case "no_credit":
+    case "rate_limited":
       return "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-300";
     case "unauthenticated":
       return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
@@ -309,6 +310,13 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
                 >
                   Top up
                 </a>
+              ) : null}
+              {/* No control: a quota lifts on its own. The detail line carries
+                  the provider's own wording, which is where the reset time is. */}
+              {provider.remedy === "wait" ? (
+                <span className="text-xs text-amber-700 dark:text-amber-300">
+                  waits for the provider limit to reset
+                </span>
               ) : null}
               {provider.remedy === "install" ? (
                 <span className="font-mono text-xs text-muted-foreground">

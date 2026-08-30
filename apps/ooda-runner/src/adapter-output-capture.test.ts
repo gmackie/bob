@@ -95,7 +95,11 @@ describe("adapter output reaches the credit latch", () => {
     expect(creditState()).not.toHaveProperty("grok");
   });
 
-  it("does not latch a rate limit as an exhausted balance", () => {
+  it("records a rate limit as its own kind, not as an exhausted balance", () => {
+    // Updated 2026-08-30: rate limits used to be swallowed entirely, which is
+    // how claude's spent weekly cap showed as "Ready" while every run failed.
+    // They latch now — but as `rate_limited`, whose remedy is to wait, never
+    // as `no_credit`, whose remedy is to spend money.
     const c = connector as unknown as {
       forwardAdapterEvent: (id: string, e: { type: string; data: string }) => void;
       finishRunOutcome: (id: string, agent: string, code: number | null) => void;
@@ -104,6 +108,6 @@ describe("adapter output reaches the credit latch", () => {
     c.forwardAdapterEvent("s4", { type: "stderr", data: "429 Too Many Requests" });
     c.finishRunOutcome("s4", "grok", 1);
 
-    expect(creditState()).not.toHaveProperty("grok");
+    expect((creditState().grok as { kind?: string })?.kind).toBe("rate_limited");
   });
 });

@@ -24,15 +24,20 @@ const PROVIDER_STATUS_LABELS: Record<string, string> = {
   ready: "Ready",
   unauthenticated: "Sign in required",
   no_credit: "Out of credit",
+  rate_limited: "Rate limited",
   degraded: "Degraded",
   unavailable: "Unavailable",
 };
 
-export type ProviderRemedy = "sign_in" | "top_up" | "install";
+/** Mirrors DispatchRemedy in providers/dispatch-gate.ts. `wait` has no
+ *  control: a quota lifts on its own, and offering an action that cannot help
+ *  is how an operator loops on the wrong remedy for a week. */
+export type ProviderRemedy = "sign_in" | "top_up" | "install" | "wait";
 
 const PROVIDER_REMEDIES: Record<string, ProviderRemedy> = {
   unauthenticated: "sign_in",
   no_credit: "top_up",
+  rate_limited: "wait",
   unavailable: "install",
 };
 
