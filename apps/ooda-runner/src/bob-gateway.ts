@@ -1487,6 +1487,12 @@ export class BobGatewayConnector {
     onChunk?: (s: string) => void,
   ): void {
     if (event.type === "stdout" || event.type === "stderr") {
+      // The credit latch can only classify what it is given. runWithCli pipes
+      // its streams through captureOutput; adapter runs come through here, and
+      // without this they fed noteRunOutcome an empty string — so grok's
+      // `"http_status": 402` was invisible, credit-state.json stayed {}, and
+      // the node page kept reporting Grok "Ready" while every dispatch burned.
+      this.captureOutput(sessionId, event.data);
       onChunk?.(event.data);
       this.sendEvent(sessionId, "output_chunk", "agent", {
         data: event.data,
