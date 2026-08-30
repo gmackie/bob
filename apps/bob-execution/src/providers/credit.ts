@@ -149,7 +149,7 @@ export interface LatchedOutcome {
  * has a local session file, or a weekly cap — only an actual run reveals those.
  */
 export class RunOutcomeLatch {
-  private readonly state = new Map<ProviderId, Required<LatchedOutcome>>();
+  private state = new Map<ProviderId, Required<LatchedOutcome>>();
 
   /**
    * `store` makes the latch durable and cross-process. Omit it for pure unit
@@ -157,10 +157,36 @@ export class RunOutcomeLatch {
    * pointed at the same path so they cannot disagree about a provider.
    */
   constructor(private readonly store?: CreditStore) {
+    this.reload();
+  }
+
+  /**
+   * Re-read the shared state file.
+   *
+   * Three processes share this latch — the ooda-runner daemon, the task runner
+   * and the agent-health CLI — precisely so they cannot disagree about a
+   * provider. They disagreed anyway: each loaded once at construction, so a
+   * latch written by the CLI stayed invisible to the long-lived daemon and the
+   * node page went on reporting "Ready" for agents already known to be dead.
+   *
+   * Callers reload before reading. Best-effort: a corrupt or missing file
+   * leaves what is already in memory rather than throwing, because losing the
+   * latch is worse than reading a stale one.
+   */
+  reload(): void {
+    if (!this.store) return;
+    let stored: unknown;
+    try {
+      stored = this.store.read() ?? {};
+    } catch {
+      return;
+    }
+    if (!stored || typeof stored !== "object") return;
+
     // The state file is operator-editable and may predate a schema change, so
     // validate the shape rather than trusting the declared type. Entries
     // written before kinds existed recorded only credit failures.
-    const stored: unknown = this.store?.read() ?? {};
+    const next = new Map<ProviderId, Required<LatchedOutcome>>();
     for (const [provider, value] of Object.entries(stored as Record<string, unknown>)) {
       const record = value as { detail?: unknown; at?: unknown; kind?: unknown } | null;
       if (!record || typeof record.detail !== "string") continue;
@@ -168,12 +194,13 @@ export class RunOutcomeLatch {
         record.kind === "auth" || record.kind === "rate_limited" || record.kind === "no_credit"
           ? record.kind
           : "no_credit";
-      this.state.set(provider as ProviderId, {
+      next.set(provider as ProviderId, {
         kind,
         detail: record.detail,
         at: typeof record.at === "string" ? record.at : "",
       });
     }
+    this.state = next;
   }
 
   private persist(): void {
