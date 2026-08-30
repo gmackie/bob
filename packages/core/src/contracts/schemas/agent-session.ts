@@ -13,6 +13,8 @@
 
 import { Schema } from "effect";
 
+import { WireTimestamp } from "./wire-timestamp.js";
+
 // --- Enums ------------------------------------------------------------------
 
 /** Session lifecycle status. */
@@ -86,8 +88,8 @@ export const SessionSchema = Schema.Struct({
   workItemId: Schema.NullOr(Schema.String),
   workItemIdentifierSnapshot: Schema.NullOr(Schema.String),
   planningTaskId: Schema.NullOr(Schema.String),
-  createdAt: Schema.Date,
-  updatedAt: Schema.Date,
+  createdAt: WireTimestamp,
+  updatedAt: WireTimestamp,
 });
 export type SessionWire = Schema.Schema.Type<typeof SessionSchema>;
 
@@ -99,7 +101,7 @@ export const SessionEventSchema = Schema.Struct({
   direction: EventDirectionEnum,
   eventType: Schema.String,
   payload: Schema.Record(Schema.String, Schema.Unknown),
-  createdAt: Schema.Date,
+  createdAt: WireTimestamp,
 });
 export type SessionEventWire = Schema.Schema.Type<typeof SessionEventSchema>;
 
@@ -108,8 +110,8 @@ export const SessionConnectionSchema = Schema.Struct({
   id: Schema.String,
   sessionId: Schema.String,
   gatewayId: Schema.String,
-  connectedAt: Schema.Date,
-  disconnectedAt: Schema.NullOr(Schema.Date),
+  connectedAt: WireTimestamp,
+  disconnectedAt: Schema.NullOr(WireTimestamp),
 });
 export type SessionConnectionWire = Schema.Schema.Type<
   typeof SessionConnectionSchema
@@ -122,7 +124,7 @@ export const WorkflowStateSchema = Schema.Struct({
   message: Schema.NullOr(Schema.String),
   phase: Schema.NullOr(Schema.String),
   progress: Schema.NullOr(Schema.String),
-  updatedAt: Schema.Date,
+  updatedAt: WireTimestamp,
 });
 export type WorkflowStateWire = Schema.Schema.Type<typeof WorkflowStateSchema>;
 

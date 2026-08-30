@@ -10,6 +10,8 @@
 // convention); validation can be tightened at handler time.
 import { Schema } from "effect";
 
+import { WireTimestamp } from "./wire-timestamp.js";
+
 // ---------------------------------------------------------------------------
 // Workspace
 // ---------------------------------------------------------------------------
@@ -22,8 +24,8 @@ export const WorkspaceSchema = Schema.Struct({
   description: Schema.NullOr(Schema.String),
   defaultAgentType: Schema.optional(Schema.NullOr(Schema.String)),
   forgeAvailable: Schema.optional(Schema.Boolean),
-  createdAt: Schema.DateTimeUtcFromString,
-  updatedAt: Schema.DateTimeUtcFromString,
+  createdAt: WireTimestamp,
+  updatedAt: WireTimestamp,
 });
 export type WorkspaceWire = typeof WorkspaceSchema.Type;
 
@@ -32,7 +34,7 @@ export const WorkspaceMemberSchema = Schema.Struct({
   workspaceId: Schema.String, // UUID
   userId: Schema.String, // UUID
   role: Schema.Literals(["owner", "admin", "member"]),
-  joinedAt: Schema.DateTimeUtcFromString,
+  joinedAt: WireTimestamp,
   workspace: Schema.optional(WorkspaceSchema),
 });
 export type WorkspaceMemberWire = typeof WorkspaceMemberSchema.Type;

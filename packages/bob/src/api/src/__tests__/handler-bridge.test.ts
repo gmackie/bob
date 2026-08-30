@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Effect } from "effect";
+import { Effect, Cause, Exit } from "effect";
 import { TRPCError } from "@trpc/server";
 import {
   BobNotFoundError,
@@ -64,11 +64,23 @@ describe("wrapHandler", () => {
     expect(error).toBeInstanceOf(BobConflictError);
   });
 
-  it("maps unknown JS errors to BobConflictError", async () => {
+  it("dies with the real cause on an unknown JS error, rather than a tagged error", async () => {
+    // Changed 2026-08-30. This used to expect BobConflictError, but no Rpc
+    // declares it: `ProjectsListRpc` is payload + success only, so its error
+    // channel is just `UnauthorizedError | TenantNotSelectedError`. Failing
+    // with an undeclared tagged error was unencodable, and the server replied
+    // "Expected UnauthorizedError | TenantNotSelectedError, got
+    // BobConflictError" — erasing the actual cause. Dying keeps the message,
+    // which is the difference between a blank page and a diagnosable error.
+    // See __tests__/../handlers/__tests__/bridge-unknown-error.test.ts.
     const handler = () => Promise.reject(new Error("something broke"));
-    const error = await Effect.runPromise(
-      wrapHandler(handler, ctx, {}).pipe(Effect.flip),
-    );
-    expect(error).toBeInstanceOf(BobConflictError);
+    const exit = await Effect.runPromiseExit(wrapHandler(handler, ctx, {}));
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      const die = exit.cause.reasons.find((r) => Cause.isDieReason(r));
+      expect(die).toBeDefined();
+      expect(String((die as { defect?: unknown }).defect)).toContain("something broke");
+    }
   });
 });

@@ -14,6 +14,7 @@ import type { TRPCRouterRecord } from "@trpc/server";
 import { agentAuthRouter } from "@bob/api/router/agentAuth";
 import { agentRunRouter } from "@bob/api/router/agentRun";
 import { authRouter } from "@bob/api/router/auth";
+import { billingRouter } from "@bob/api/router/billing";
 import { cockpitRouter } from "@bob/api/router/cockpit";
 import { cookiesRouter } from "@bob/api/router/cookies";
 import { checkpointRouter } from "@bob/api/router/checkpoint";
@@ -39,6 +40,7 @@ import { repositoryRouter } from "@bob/api/router/repository";
 import { sessionRouter } from "@bob/api/router/session";
 import { skillRouter } from "@bob/api/router/skill";
 import { snapshotRouter } from "@bob/api/router/snapshot";
+import { usageRouter } from "@bob/api/router/usage";
 import {
   activityRouter,
   artifactRouter,
@@ -63,6 +65,9 @@ const edgeRouterRecord = {
   agentRun: agentRunRouter,
   artifact: artifactRouter,
   auth: authRouter,
+  // Neither touches a Node-only API; both were simply never registered,
+  // so they 404'd in production exactly like agentAuth did.
+  billing: billingRouter,
   chat: chatRouter,
   checkpoint: checkpointRouter,
   cockpit: cockpitRouter,
@@ -93,6 +98,7 @@ const edgeRouterRecord = {
   skill: skillRouter,
   snapshot: snapshotRouter,
   taskRun: taskRunRouter,
+  usage: usageRouter,
   notification: notificationRouter,
   workItem: workItemRouter,
   workItems: workItemsRouter,

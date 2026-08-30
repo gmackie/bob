@@ -209,7 +209,12 @@ describe("@gmacko/bob-client e2e round-trip against Effect stub server", () => {
     await expect(
       client.agent.run.list({ workspaceId: "stub-ws-1" }),
     ).resolves.toEqual([]);
-    await expect(client.projects.list()).resolves.toHaveLength(2);
+    // Requires a workspaceId: the handler scopes access by it, and the
+    // contract said Void until 2026-08-30 — so the payload arrived undefined
+    // and the handler crashed on `input.workspaceId`.
+    await expect(
+      client.projects.list({ workspaceId: "stub-ws-1" }),
+    ).resolves.toHaveLength(2);
     await expect(client.settings.getPreferences()).resolves.toMatchObject({
       userId: "user_settings_stub",
       theme: "dark",

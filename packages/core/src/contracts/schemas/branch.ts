@@ -1,12 +1,14 @@
 import { Schema } from "effect";
 
+import { WireTimestamp } from "./wire-timestamp.js";
+
 export const Branch = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
   threadId: Schema.String.check(Schema.isUUID()),
   parentBranchId: Schema.NullOr(Schema.String.check(Schema.isUUID())),
   forkPointMessageId: Schema.NullOr(Schema.String.check(Schema.isUUID())),
   name: Schema.String.check(Schema.isMinLength(1)).check(Schema.isMaxLength(256)),
-  createdAt: Schema.Date,
+  createdAt: WireTimestamp,
 });
 export type Branch = typeof Branch.Type;
 

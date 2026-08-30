@@ -32,15 +32,14 @@ const NODE_ONLY: Record<string, string> = {
 };
 
 /**
- * Edge-safe routers that are nonetheless absent from the worker — the same
- * silent 404 as agentAuth, found by this test on 2026-08-30 and left as-is
- * because fixing them is a separate change with its own verification. Neither
- * imports a Node-only API, so both are omissions rather than decisions.
+ * Edge-safe routers absent from the worker. `billing` and `usage` sat here
+ * briefly on 2026-08-30 — found by this test, then registered — so the list is
+ * now empty and should stay that way.
  *
  * Pinned exactly, so the set can only shrink: a NEW router that skips the edge
  * fails the test rather than joining a growing list of quiet 404s.
  */
-const KNOWN_EDGE_GAPS = ["billing", "usage"];
+const KNOWN_EDGE_GAPS: string[] = [];
 
 function routerKeys(router: unknown): string[] {
   const record = (router as { _def: { record: Record<string, unknown> } })._def.record;

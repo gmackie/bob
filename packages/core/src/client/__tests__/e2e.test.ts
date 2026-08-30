@@ -201,7 +201,10 @@ describe("@gmacko/client e2e round-trip against stub server", () => {
 
   it("projects.list returns 2 stub projects", async () => {
     const client = createGmackoRpcClient({ baseURL });
-    const projects = await client.projects.list();
+    // `projects.list` requires a workspaceId: the handler scopes access by it
+    // (assertWorkspaceAccess) and crashed on `undefined` while the contract
+    // still said Void. See contracts/__tests__/projects-list-payload.test.ts.
+    const projects = await client.projects.list({ workspaceId: "ws-stub" });
     expect(projects).toHaveLength(2);
     // Sanity: slug + name match the stub fixtures.
     const slugs = projects.map((p) => p.slug).sort();

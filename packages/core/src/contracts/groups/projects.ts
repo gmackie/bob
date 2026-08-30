@@ -86,7 +86,12 @@ export const ProjectsCreateRpc = Rpc.make("projects.create", {
 });
 
 export const ProjectsListRpc = Rpc.make("projects.list", {
-  payload: Schema.Void,
+  // The handler reads `workspaceId` and gates access on it via
+  // `assertWorkspaceAccess` before querying. Declaring Void here meant the
+  // payload arrived as `undefined` and the handler crashed on
+  // `input.workspaceId` — invisibly, because the resulting error was
+  // undeclared and could not be encoded (2026-08-30).
+  payload: Schema.Struct({ workspaceId: Schema.String }),
   success: Schema.Array(ProjectSchema),
 });
 

@@ -4,6 +4,8 @@
 // encode/decode surface.
 import { Schema } from "effect";
 
+import { WireTimestamp } from "./wire-timestamp.js";
+
 /**
  * Wire schema for `SessionSecretPolicy`. Every field is optional — an empty
  * object is a valid "no restrictions" policy.
@@ -21,7 +23,7 @@ export type SessionSecretPolicyWire = typeof SessionSecretPolicySchema.Type;
 /**
  * Wire schema for `SecretEnvelope` — the no-plaintext, tenant-scoped view of a
  * stored secret. Timestamps serialize as `Date` to match the existing Thread /
- * Message convention (`Schema.Date`), not ISO strings.
+ * Message convention (`WireTimestamp`), not ISO strings.
  */
 export const SecretEnvelopeSchema = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
@@ -29,7 +31,7 @@ export const SecretEnvelopeSchema = Schema.Struct({
   name: Schema.String,
   policy: SessionSecretPolicySchema,
   usesRemaining: Schema.NullOr(Schema.Number),
-  createdAt: Schema.Date,
-  updatedAt: Schema.Date,
+  createdAt: WireTimestamp,
+  updatedAt: WireTimestamp,
 });
 export type SecretEnvelopeWire = typeof SecretEnvelopeSchema.Type;

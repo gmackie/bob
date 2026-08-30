@@ -1,5 +1,7 @@
 import { Schema } from "effect";
 
+import { WireTimestamp } from "./wire-timestamp.js";
+
 export const ThreadStatus = Schema.Literals(["active", "paused", "archived", "completed"]);
 export type ThreadStatus = typeof ThreadStatus.Type;
 
@@ -9,8 +11,8 @@ export const Thread = Schema.Struct({
   status: ThreadStatus,
   activeBranchId: Schema.NullOr(Schema.String.check(Schema.isUUID())),
   tags: Schema.Array(Schema.String),
-  createdAt: Schema.Date,
-  updatedAt: Schema.Date,
+  createdAt: WireTimestamp,
+  updatedAt: WireTimestamp,
 });
 export type Thread = typeof Thread.Type;
 

@@ -13,12 +13,14 @@
 //   - `Schema.Unknown` — passthrough (Schema.d.ts:1538).
 //   - `Schema.Record(key, value)` — positional args (Schema.d.ts:2114), NOT
 //     the `{key,value}` shorthand that appears in some examples.
-//   - `Schema.Date` — decoded to JS `Date` (Schema.d.ts:5218). Chosen over
-//     `Schema.DateTimeUtcFromString` because the stub's `getTranscript`
+//   - `WireTimestamp` — decoded to JS `Date` (Schema.d.ts:5218). Chosen over
+//     `WireTimestamp` because the stub's `getTranscript`
 //     handler returns plain JS `Date` values; tightening the wire encoding
 //     to ISO-8601 can happen in 6J once the actual server-side encoder runs.
 
 import { Schema } from "effect";
+
+import { WireTimestamp } from "./wire-timestamp.js";
 
 // --- AgentEvent tagged-union Schema -----------------------------------------
 
@@ -94,8 +96,8 @@ export const ChatConversationSchema = Schema.Struct({
     "canceled",
   ]),
   metadata: Schema.Record(Schema.String, Schema.Unknown),
-  createdAt: Schema.Date,
-  updatedAt: Schema.Date,
+  createdAt: WireTimestamp,
+  updatedAt: WireTimestamp,
 });
 export type ChatConversationWire = Schema.Schema.Type<
   typeof ChatConversationSchema
@@ -108,6 +110,6 @@ export const ChatMessageSchema = Schema.Struct({
   role: Schema.Literals(["user", "assistant", "system", "tool"]),
   content: Schema.String,
   metadata: Schema.Record(Schema.String, Schema.Unknown),
-  createdAt: Schema.Date,
+  createdAt: WireTimestamp,
 });
 export type ChatMessageWire = Schema.Schema.Type<typeof ChatMessageSchema>;

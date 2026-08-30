@@ -12,7 +12,15 @@ export interface ProjectsClient {
     readonly slug: string;
     readonly name: string;
   }) => Promise<ProjectWire>;
-  readonly list: () => Promise<ReadonlyArray<ProjectWire>>;
+  /**
+   * Scoped to a workspace: the handler gates access with
+   * `assertWorkspaceAccess(workspaceId)` before querying. This took no
+   * argument while the contract said `Schema.Void`, so the payload reached
+   * the handler as `undefined` and it crashed on `input.workspaceId`.
+   */
+  readonly list: (input: {
+    readonly workspaceId: string;
+  }) => Promise<ReadonlyArray<ProjectWire>>;
   readonly getBySlug: (input: {
     readonly slug: string;
   }) => Promise<ProjectWire>;
@@ -38,7 +46,7 @@ export const makeProjectsClient = (runtime: ClientRuntime): ProjectsClient => {
 
   return {
     create: (input) => invoke<ProjectWire>("projects.create", input),
-    list: () => invoke<ReadonlyArray<ProjectWire>>("projects.list"),
+    list: (input) => invoke<ReadonlyArray<ProjectWire>>("projects.list", input),
     getBySlug: (input) => invoke<ProjectWire>("projects.getBySlug", input),
     delete: (input) => invoke<void>("projects.delete", input),
   };
