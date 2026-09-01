@@ -117,6 +117,12 @@ export const publicApiRouter = {
         // under /home/bob/dev). Used by "Make it a project" scaffolds so
         // create-gmacko-app runs in a fresh project dir, not the bob monorepo.
         workingDirectory: z.string().max(512).optional(),
+        // Autonomy for the unattended run. Defaults to "full" (server-side) so
+        // the runner uses permissionMode "skip" and doesn't hang on a
+        // permission_request; "prompt" preserves interactive gating.
+        autonomyLevel: z.enum(["full", "prompt"]).optional(),
+        // Optional model override, threaded to the agent CLI (--model / -m).
+        model: z.string().min(1).max(128).optional(),
         // Opaque OODA correlation for M2 read-back. threadSlug is the thread
         // workspace directory (what the runner resolves); threadId is the UUID
         // for provenance/entity extraction. At least one is required.

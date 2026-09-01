@@ -8,6 +8,8 @@ export {
   type ResolveAgentTypeInput,
 } from "./resolve-agent-type";
 
+export { slugify, generateBranchName } from "./branch-name";
+
 export interface WorkItemRef {
   id: string;
   kind: WorkItemKind;

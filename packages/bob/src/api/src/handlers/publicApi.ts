@@ -28,7 +28,7 @@ import {
   workspaceMembers,
   workspaces,
 } from "@bob/db/schema";
-import { resolveAgentType } from "@bob/work-items";
+import { generateBranchName, resolveAgentType } from "@bob/work-items";
 
 import type { HandlerContext } from "./context.js";
 
@@ -696,6 +696,14 @@ export async function publicApiDispatchExecution(
     description?: string;
     agentType?: string;
     workingDirectory?: string;
+    // Headless dispatch runs unattended, so it defaults to "full" autonomy
+    // (permissionMode "skip") — otherwise ACP agents (claude/grok) raise a
+    // permission_request and hang with nobody to approve. See permissionModeFor
+    // in apps/ooda-runner/src/bob-gateway.ts.
+    autonomyLevel?: "full" | "prompt";
+    // Optional model override threaded to the runner's CLI (--model / -m) via
+    // personaConfig.model (buildCliCommand in bob-gateway.ts).
+    model?: string;
     ooda?: { threadId?: string; threadSlug?: string };
   },
 ) {
@@ -761,6 +769,28 @@ export async function publicApiDispatchExecution(
     });
   }
   const identifier = workItem.id.slice(0, 8);
+  // Feature branch for this run. Its presence on the delivered session_available
+  // is what makes the runner create an isolated worktree, push, and open a PR
+  // (see bob-gateway.ts handleSessionAvailable). The gateway reads it off the
+  // taskRuns row (relay.ts deliverPendingSessionsToDaemon:
+  // taskRuns.branch where taskRuns.sessionId = session.id), so a taskRuns row
+  // must exist — created below — or the runner commits on the current branch
+  // with no isolation. Shared generateBranchName keeps the shape byte-identical
+  // to the auto-drain executor's branches.
+  const branch = generateBranchName(identifier, input.title);
+
+  // Persona applied to the dispatched session. autonomyLevel "full" maps to
+  // permissionMode "skip" in the runner so unattended ACP agents don't park on
+  // a permission_request (matches UNATTENDED_PERSONA in taskExecutor.ts). model,
+  // when provided, is threaded to the CLI as --model/-m via personaConfig.model.
+  // `metadata.ooda` is the opaque read-back correlation (M2); it must stay nested
+  // under `metadata` because that is the only sub-object the gateway forwards to
+  // the runner as personaConfig.metadata (relay.ts session_available).
+  const personaMetadata: Record<string, unknown> = {
+    autonomyLevel: input.autonomyLevel ?? "full",
+    ...(input.model ? { model: input.model } : {}),
+    ...(input.ooda ? { metadata: { ooda: input.ooda } } : {}),
+  };
 
   const workingDirectory =
     safeWorkingDirectory(input.workingDirectory) ?? "/home/bob/dev/gmacko-bob";
@@ -775,18 +805,40 @@ export async function publicApiDispatchExecution(
       title: `${identifier}: ${input.title}`,
       workItemId: workItem.id,
       workItemIdentifierSnapshot: identifier,
-      // Opaque correlation passthrough for read-back (M2). Nested under
-      // `metadata` because that is the only sub-object the gateway forwards to
-      // the runner as personaConfig.metadata (relay.ts session_available).
-      personaMetadata: input.ooda
-        ? { metadata: { ooda: input.ooda } }
-        : undefined,
+      gitBranch: branch,
+      personaMetadata,
     })
     .returning();
   if (!session) {
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
       message: "Failed to create execution session",
+    });
+  }
+
+  // Record the task run keyed to this session. The gateway's branch lookup
+  // (relay.ts) joins taskRuns on sessionId, so without this row the runner
+  // receives no branch and skips worktree/push/PR entirely. Column choices
+  // mirror taskExecutor's execution-path insert; planningProvider defaults to
+  // "internal" (this is an internal work item, not a synced planning item).
+  const [taskRun] = await ctx.db
+    .insert(taskRuns)
+    .values({
+      userId: ctx.userId,
+      workItemId: workItem.id,
+      workItemIdentifierSnapshot: identifier,
+      planningWorkspaceId: input.workspaceId,
+      planningItemId: workItem.id,
+      planningItemIdentifier: identifier,
+      sessionId: session.id,
+      status: "starting",
+      branch,
+    })
+    .returning();
+  if (!taskRun) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed to create task run",
     });
   }
 
@@ -811,15 +863,20 @@ export async function publicApiDispatchExecution(
           sessionType: "execution",
           description: input.description ?? undefined,
           identifier,
-          // Carry the OODA correlation on the nudge path too. The gateway's
+          // Branch drives the runner's worktree/push/PR path. Carry it on the
+          // nudge too so a nudge-delivered session isolates just like the
+          // DB-read tick path (which reads it from the taskRuns row).
+          branch,
+          // Carry the full persona on the nudge path. The gateway's
           // nudgeSession() forwards `personaConfig` verbatim from this payload
           // (relay.ts) and marks the session delivered, which dedupes the
-          // DB-reading deliverPendingSessionsToDaemon path. Without this, a
-          // nudge-delivered session reaches the runner with no
-          // personaConfig.metadata.ooda, so the M2 read-back silently no-ops.
-          personaConfig: input.ooda
-            ? { metadata: { ooda: input.ooda } }
-            : undefined,
+          // DB-reading deliverPendingSessionsToDaemon path. Without a complete
+          // personaConfig here, a nudge-delivered session reaches the runner
+          // with autonomyLevel/model/metadata unset — so it would hang on a
+          // permission_request, ignore the model override, and no-op the M2
+          // read-back. Identical shape to what the tick path derives from the
+          // session's personaMetadata.
+          personaConfig: personaMetadata,
         }),
       });
     } catch {
@@ -831,6 +888,7 @@ export async function publicApiDispatchExecution(
     sessionId: session.id,
     workItemId: workItem.id,
     identifier,
+    branch,
     status: session.status,
   };
 }
