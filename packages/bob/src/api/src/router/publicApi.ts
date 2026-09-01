@@ -122,7 +122,15 @@ export const publicApiRouter = {
         // permission_request; "prompt" preserves interactive gating.
         autonomyLevel: z.enum(["full", "prompt"]).optional(),
         // Optional model override, threaded to the agent CLI (--model / -m).
-        model: z.string().min(1).max(128).optional(),
+        // Must start with an alphanumeric so it can't be smuggled in as a
+        // leading-dash flag (e.g. "--dangerously-*"); still allows normal model
+        // ids like "claude-sonnet-4" and "gpt-5.5".
+        model: z
+          .string()
+          .min(1)
+          .max(128)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9._:\/-]*$/)
+          .optional(),
         // Opaque OODA correlation for M2 read-back. threadSlug is the thread
         // workspace directory (what the runner resolves); threadId is the UUID
         // for provenance/entity extraction. At least one is required.

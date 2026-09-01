@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { generateBranchName, slugify } from "./branch-name";
 
-// Reference implementation copied verbatim from apps/bob-execution taskExecutor
-// (slugify + generateBranchName as of the shared-helper extraction). These
-// assert the shared helper is byte-identical to the auto-drain executor so both
-// dispatch paths name branches the same way.
+// Golden reference for the historical taskExecutor slug rules. apps/bob-execution
+// taskExecutor now imports generateBranchName from this package (single source of
+// truth), so these assertions pin the shape both dispatch paths produce and guard
+// against anyone silently changing the slug rules out from under the executor.
 function refSlugify(text: string): string {
   return text
     .toLowerCase()

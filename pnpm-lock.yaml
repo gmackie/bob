@@ -368,6 +368,9 @@ importers:
       '@bob/telemetry':
         specifier: workspace:*
         version: link:../../packages/bob/src/telemetry
+      '@bob/work-items':
+        specifier: workspace:*
+        version: link:../../packages/bob/src/work-items
       '@gmacko/core':
         specifier: workspace:*
         version: link:../../packages/core

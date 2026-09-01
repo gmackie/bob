@@ -10,6 +10,10 @@
     "./schema": {
       "types": "./dist/schema.d.ts",
       "default": "./src/schema.ts"
+    },
+    "./branch-name": {
+      "types": "./dist/branch-name.d.ts",
+      "default": "./src/branch-name.ts"
     }
   },
   "license": "MIT",

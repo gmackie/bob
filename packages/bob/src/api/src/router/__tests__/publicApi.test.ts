@@ -473,3 +473,54 @@ describe("publicApi router tenant isolation", () => {
     );
   });
 });
+
+describe("publicApi dispatchExecution model validation", () => {
+  const baseInput = {
+    workspaceId: "33333333-3333-4333-8333-333333333333",
+    title: "Do the thing",
+    ooda: { threadSlug: "some-thread" },
+  };
+
+  it("rejects a leading-dash model that could be smuggled in as a CLI flag", async () => {
+    const caller = createCaller(createMockDb());
+
+    await expect(
+      caller.publicApi.dispatchExecution({
+        ...baseInput,
+        model: "--dangerously-skip-permissions",
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("rejects a model containing a space", async () => {
+    const caller = createCaller(createMockDb());
+
+    await expect(
+      caller.publicApi.dispatchExecution({
+        ...baseInput,
+        model: "claude sonnet",
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it.each(["claude-sonnet-4", "gpt-5.5", "anthropic/claude-haiku-4-5", "gpt-4o"])(
+    "accepts normal model id %s (passes schema, fails later on the dispatch gate)",
+    async (model) => {
+      const prev = process.env.BOB_OODA_DISPATCH_ENABLED;
+      delete process.env.BOB_OODA_DISPATCH_ENABLED;
+      try {
+        const caller = createCaller(createMockDb());
+
+        // A valid model clears zod validation, so the request reaches the
+        // dispatch gate and fails FORBIDDEN — NOT the BAD_REQUEST a rejected
+        // model would produce.
+        await expect(
+          caller.publicApi.dispatchExecution({ ...baseInput, model }),
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      } finally {
+        if (prev === undefined) delete process.env.BOB_OODA_DISPATCH_ENABLED;
+        else process.env.BOB_OODA_DISPATCH_ENABLED = prev;
+      }
+    },
+  );
+});

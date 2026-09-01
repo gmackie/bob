@@ -9,6 +9,7 @@ import {
   runLifecycleEvents,
   taskRuns,
 } from "@bob/db/schema";
+import { generateBranchName } from "@bob/work-items/branch-name";
 import { buildBobExternalTaskMetadata } from "./externalTaskMetadata.js";
 import { applySnapshotToTask, snapshotTaskFromProvider } from "./providerSnapshot.js";
 import {
@@ -142,20 +143,6 @@ export async function gatewayRequest(
   }
 
   return response.json();
-}
-
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/[\s_-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 50);
-}
-
-function generateBranchName(task: PlanningTask): string {
-  const slug = slugify(task.title);
-  return `bob/${task.identifier}/${slug}`;
 }
 
 export async function findRepositoryForTask(
@@ -315,7 +302,7 @@ export async function executeTask(
     };
   }
 
-  const branch = generateBranchName(task);
+  const branch = generateBranchName(task.identifier, task.title);
   const selectedAgent = options?.agentType ?? "opencode";
   const executionBackend = resolveExecutionBackend();
   const t3RuntimeConfig =

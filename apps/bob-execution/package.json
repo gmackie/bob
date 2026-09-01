@@ -21,6 +21,7 @@
     "@bob/db": "workspace:*",
     "@bob/observability": "workspace:*",
     "@bob/telemetry": "workspace:*",
+    "@bob/work-items": "workspace:*",
     "@gmacko/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@trpc/client": "catalog:",
