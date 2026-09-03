@@ -19,6 +19,12 @@ import {
   settingsConnectForgeGraph,
   settingsDisconnectForgeGraph,
 } from "../handlers/settings";
+import {
+  notificationPreferencesList,
+  notificationPreferencesReset,
+  notificationPreferencesSet,
+  notificationPreferencesSetInput,
+} from "../handlers/notificationPreferences";
 
 const CONFIG_ROOT_IDS = [
   "opencode_xdg",
@@ -31,6 +37,29 @@ const CONFIG_ROOT_IDS = [
 ] as const;
 
 export const settingsRouter = {
+  /**
+   * Per-type notification opinions. Mirrors settingsEdgeRouter — the mobile
+   * and web clients are typed against this router while the Worker serves the
+   * edge one, so a procedure added to only one of them typechecks and then
+   * 404s in production. See apps/bob/src/lib/__tests__/edge-router-parity.
+   */
+  listNotificationPreferences: protectedProcedure.query(({ ctx }) =>
+    notificationPreferencesList({ db: ctx.db, userId: ctx.session.user.id } as never),
+  ),
+
+  setNotificationPreference: protectedProcedure
+    .input(notificationPreferencesSetInput)
+    .mutation(({ ctx, input }) =>
+      notificationPreferencesSet(
+        { db: ctx.db, userId: ctx.session.user.id } as never,
+        input,
+      ),
+    ),
+
+  resetNotificationPreferences: protectedProcedure.mutation(({ ctx }) =>
+    notificationPreferencesReset({ db: ctx.db, userId: ctx.session.user.id } as never),
+  ),
+
   getPreferences: protectedProcedure.query(({ ctx }) =>
     settingsGetPreferences({ db: ctx.db, userId: ctx.session.user.id }),
   ),

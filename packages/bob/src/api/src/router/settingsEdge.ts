@@ -19,6 +19,12 @@ import {
   settingsEdgeConnectForgeGraph,
   settingsEdgeDisconnectForgeGraph,
 } from "../handlers/settingsEdge";
+import {
+  notificationPreferencesList,
+  notificationPreferencesReset,
+  notificationPreferencesSet,
+  notificationPreferencesSetInput,
+} from "../handlers/notificationPreferences";
 
 export const settingsEdgeRouter: TRPCRouterRecord = {
   getPreferences: protectedProcedure.query(({ ctx }) =>
@@ -30,6 +36,28 @@ export const settingsEdgeRouter: TRPCRouterRecord = {
     .mutation(({ ctx, input }) =>
       settingsEdgeUpdatePreferences({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
+
+  /**
+   * Sparse per-type opinions. The client merges these with the shared defaults
+   * rather than the server resolving them, so changing a default does not
+   * require migrating anyone.
+   */
+  listNotificationPreferences: protectedProcedure.query(({ ctx }) =>
+    notificationPreferencesList({ db: ctx.db, userId: ctx.session.user.id } as never),
+  ),
+
+  setNotificationPreference: protectedProcedure
+    .input(notificationPreferencesSetInput)
+    .mutation(({ ctx, input }) =>
+      notificationPreferencesSet(
+        { db: ctx.db, userId: ctx.session.user.id } as never,
+        input,
+      ),
+    ),
+
+  resetNotificationPreferences: protectedProcedure.mutation(({ ctx }) =>
+    notificationPreferencesReset({ db: ctx.db, userId: ctx.session.user.id } as never),
+  ),
 
   listApiKeys: protectedProcedure.query(({ ctx }) =>
     settingsEdgeListApiKeys({ db: ctx.db, userId: ctx.session.user.id }, undefined as void),
