@@ -22,8 +22,16 @@ export const userPreferences = pgTable("user_preferences", (t) => ({
   theme: t.varchar({ length: 20 }).notNull().default("system"),
   language: t.varchar({ length: 10 }).notNull().default("en"),
   timezone: t.varchar({ length: 50 }).notNull().default("UTC"),
+  // Master switches. These remain an absolute veto over their channel, so
+  // turning push off in settings genuinely silences push whatever the
+  // per-type rows say. Per-type refinement lives in notificationPreferences.
   emailNotifications: t.boolean().notNull().default(true),
   pushNotifications: t.boolean().notNull().default(true),
+  // "HH:MM" in the user's timezone column above. Null = no quiet hours.
+  // Suppresses push and email only; the in-app record is never withheld,
+  // because quiet hours are about not being disturbed, not losing history.
+  quietHoursStart: t.varchar({ length: 5 }),
+  quietHoursEnd: t.varchar({ length: 5 }),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
   updatedAt: t
     .timestamp({ mode: "string", withTimezone: true })

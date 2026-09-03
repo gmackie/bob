@@ -10,6 +10,14 @@
     "./schema": {
       "types": "./dist/schema.d.ts",
       "default": "./src/schema.ts"
+    },
+    "./preferences": {
+      "types": "./dist/preferences.d.ts",
+      "default": "./src/preferences.ts"
+    },
+    "./preferences-rows": {
+      "types": "./dist/preferences-rows.d.ts",
+      "default": "./src/preferences-rows.ts"
     }
   },
   "license": "MIT",

@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock db: control the two lookups pushToUser makes (preference + tokens).
+// Mock db: control the three lookups pushToUser makes — master preferences,
+// per-type notification overrides, and device tokens.
 const prefFindFirst = vi.fn();
 const tokensFindMany = vi.fn();
+const notifPrefsFindMany = vi.fn();
 const deleteWhere = vi.fn((..._a: unknown[]) => Promise.resolve());
 
 vi.mock("@bob/db/client", () => ({
@@ -10,6 +12,7 @@ vi.mock("@bob/db/client", () => ({
     query: {
       userPreferences: { findFirst: (...a: any[]) => prefFindFirst(...a) },
       devicePushTokens: { findMany: (...a: any[]) => tokensFindMany(...a) },
+      notificationPreferences: { findMany: (...a: any[]) => notifPrefsFindMany(...a) },
     },
     delete: vi.fn(() => ({ where: (...a: any[]) => deleteWhere(...a) })),
   },
@@ -20,7 +23,10 @@ import { pushToUser } from "./push.js";
 describe("pushToUser", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    prefFindFirst.mockResolvedValue({ pushNotifications: true });
+    prefFindFirst.mockResolvedValue({ pushNotifications: true, emailNotifications: true });
+    // No per-type opinions: defaults apply. These tests send untyped pushes,
+    // which stay on the master switch.
+    notifPrefsFindMany.mockResolvedValue([]);
     tokensFindMany.mockResolvedValue([{ expoPushToken: "ExponentPushToken[aaa]" }]);
     (globalThis.fetch as any) = vi.fn(async () => ({
       ok: true,

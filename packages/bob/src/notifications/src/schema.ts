@@ -27,7 +27,7 @@
 // =============================================================================
 
 import { relations } from "drizzle-orm";
-import { index, pgTable } from "drizzle-orm/pg-core";
+import { index, pgTable, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -92,6 +92,42 @@ export const activities = pgTable("activities", (t) => ({
   metadata: t.json().$type<Record<string, unknown>>(),
   createdAt: t.timestamp({ mode: "string" }).defaultNow().notNull(),
 }));
+
+/**
+ * Per-type, per-channel notification overrides.
+ *
+ * Sparse on purpose: a row exists only where a person has expressed an
+ * opinion, and everything else falls back to DEFAULT_NOTIFICATION_PREFERENCES
+ * in ./preferences.ts. Writing 18 rows per user at signup would make the
+ * defaults impossible to change later without a migration touching everyone.
+ */
+export const notificationPreferences = pgTable(
+  "notification_preferences",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    userId: t
+      .text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    type: workItemNotificationTypeEnum().notNull(),
+    /** "push" | "email" | "in_app" — see NotificationChannel. */
+    channel: t.varchar({ length: 16 }).notNull(),
+    enabled: t.boolean().notNull(),
+    updatedAt: t
+      .timestamp({ mode: "string", withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  }),
+  (table) => [
+    index("notification_preferences_user_idx").on(table.userId),
+    // One opinion per (user, type, channel); upserts key on this.
+    uniqueIndex("notification_preferences_unique_idx").on(
+      table.userId,
+      table.type,
+      table.channel,
+    ),
+  ],
+);
 
 export const notifications = pgTable("notifications", (t) => ({
   id: t.uuid().notNull().primaryKey().defaultRandom(),
