@@ -15,10 +15,10 @@ export function useExternalLinkConfig(): ExternalLinkConfig {
   return {
     forgegraphScheme: String(extra.forgegraphScheme ?? "forgegraph"),
     forgegraphWebOrigin: String(extra.forgegraphWebOrigin ?? "https://forgegraf.com"),
-    // No default: Kanbanger's host is not yet known to this app, and guessing
-    // one would ship links that 404. Set `kanbangerWebOrigin` in app config to
-    // turn these on.
+    // KanBanger (linear-clone) ships an Expo app whose scheme is still the
+    // default "my-app", so there is no real custom scheme to target yet — the
+    // https fallback carries these links until it has one.
     kanbangerScheme: String(extra.kanbangerScheme ?? "kanbanger"),
-    kanbangerWebOrigin: String(extra.kanbangerWebOrigin ?? ""),
+    kanbangerWebOrigin: String(extra.kanbangerWebOrigin ?? "https://tasks.gmac.io"),
   };
 }

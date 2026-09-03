@@ -19,8 +19,10 @@ export type ExternalTarget =
   | "forgegraph.ci"
   | "forgegraph.alerts"
   | "forgegraph.pullRequests"
-  | "kanbanger.issue"
-  | "kanbanger.board";
+  | "kanbanger.tasks"
+  | "kanbanger.myTasks"
+  | "kanbanger.triage"
+  | "kanbanger.cycles";
 
 export interface ExternalLinkConfig {
   forgegraphScheme: string;
@@ -32,6 +34,8 @@ export interface ExternalLinkConfig {
 export interface ExternalLinkRequest {
   target: ExternalTarget;
   id?: string;
+  /** Required by every KanBanger target; its routes are workspace-scoped. */
+  workspaceSlug?: string;
 }
 
 export interface ExternalLink {
@@ -48,6 +52,12 @@ interface TargetSpec {
   path: string;
   /** Detail screens need an id; index screens do not. */
   requiresId: boolean;
+  /**
+   * KanBanger scopes everything under /dashboard/:workspaceSlug, so its links
+   * need a workspace as well as an id. Reading its routes rather than
+   * assuming a flat /issues/:id is what stopped this shipping as 404s.
+   */
+  workspaceScoped?: boolean;
 }
 
 const TARGETS: Record<ExternalTarget, TargetSpec> = {
@@ -60,8 +70,31 @@ const TARGETS: Record<ExternalTarget, TargetSpec> = {
     path: "pull-requests",
     requiresId: false,
   },
-  "kanbanger.issue": { app: "kanbanger", path: "issues", requiresId: true },
-  "kanbanger.board": { app: "kanbanger", path: "boards", requiresId: false },
+  // Paths read from linear-clone/apps/web/src/app/dashboard/[workspaceSlug]/.
+  "kanbanger.tasks": {
+    app: "kanbanger",
+    path: "tasks/all",
+    requiresId: false,
+    workspaceScoped: true,
+  },
+  "kanbanger.myTasks": {
+    app: "kanbanger",
+    path: "tasks/my",
+    requiresId: false,
+    workspaceScoped: true,
+  },
+  "kanbanger.triage": {
+    app: "kanbanger",
+    path: "triage",
+    requiresId: false,
+    workspaceScoped: true,
+  },
+  "kanbanger.cycles": {
+    app: "kanbanger",
+    path: "cycles",
+    requiresId: false,
+    workspaceScoped: true,
+  },
 };
 
 const APP_LABELS = { forgegraph: "ForgeGraph", kanbanger: "KanBanger" } as const;
@@ -76,6 +109,8 @@ export function buildExternalLink(
   // A link to a detail screen with no id lands on an error page. Rendering no
   // affordance is better than rendering one that fails.
   if (spec.requiresId && !request.id) return null;
+  // Same for a workspace-scoped path with no workspace.
+  if (spec.workspaceScoped && !request.workspaceSlug) return null;
 
   const scheme =
     spec.app === "forgegraph" ? config.forgegraphScheme : config.kanbangerScheme;
@@ -87,10 +122,14 @@ export function buildExternalLink(
   // Ids come from server data and can contain slashes; encoding stops one
   // forging extra path segments.
   const suffix = request.id ? `/${encodeURIComponent(request.id)}` : "";
+  const prefix = spec.workspaceScoped
+    ? `dashboard/${encodeURIComponent(request.workspaceSlug!)}/`
+    : "";
+  const path = `${prefix}${spec.path}${suffix}`;
 
   return {
-    appUrl: `${scheme}://${spec.path}${suffix}`,
-    webUrl: `${origin.replace(/\/+$/, "")}/${spec.path}${suffix}`,
+    appUrl: `${scheme}://${path}`,
+    webUrl: `${origin.replace(/\/+$/, "")}/${path}`,
     label: `Open in ${APP_LABELS[spec.app]}`,
   };
 }
@@ -109,9 +148,9 @@ export function linkAffordance(target: ExternalTarget): LinkAffordance {
   const spec = TARGETS[target];
   const label = `Open in ${APP_LABELS[spec.app]}`;
 
-  // Kanbanger issue and board detail render inside Bob. The link out exists
-  // for the things Bob does not do — editing the board, say — not for reading.
-  const shownInBob = target === "kanbanger.issue" || target === "kanbanger.board";
+  // KanBanger task detail renders inside Bob. The link out exists for what Bob
+  // does not do — reordering a cycle, triaging a board — not for reading.
+  const shownInBob = target === "kanbanger.tasks" || target === "kanbanger.myTasks";
 
   return { primary: shownInBob ? "in_app" : "external", externalLabel: label };
 }

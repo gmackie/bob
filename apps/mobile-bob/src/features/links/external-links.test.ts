@@ -20,7 +20,7 @@ const config = {
   forgegraphScheme: "forgegraph",
   forgegraphWebOrigin: "https://forgegraf.com",
   kanbangerScheme: "kanbanger",
-  kanbangerWebOrigin: "https://kanbanger.app",
+  kanbangerWebOrigin: "https://tasks.gmac.io",
 };
 
 describe("buildExternalLink", () => {
@@ -43,30 +43,39 @@ describe("buildExternalLink", () => {
     );
   });
 
-  it("builds a Kanbanger issue link", () => {
-    const link = buildExternalLink({ target: "kanbanger.issue", id: "KAN-14" }, config);
+  it("builds a workspace-scoped KanBanger link", () => {
+    // KanBanger routes everything under /dashboard/:workspaceSlug. Reading its
+    // real routes rather than assuming a flat /issues/:id is what stopped this
+    // shipping as 404s.
+    const link = buildExternalLink(
+      { target: "kanbanger.tasks", workspaceSlug: "gmackie" },
+      config,
+    );
 
-    expect(link?.appUrl).toBe("kanbanger://issues/KAN-14");
-    expect(link?.webUrl).toBe("https://kanbanger.app/issues/KAN-14");
+    expect(link?.webUrl).toBe("https://tasks.gmac.io/dashboard/gmackie/tasks/all");
   });
 
-  it("percent-encodes an id, so an id with a slash cannot forge a path", () => {
-    const link = buildExternalLink({ target: "kanbanger.issue", id: "a/../b" }, config);
+  it("percent-encodes a workspace slug, so it cannot forge extra path segments", () => {
+    const link = buildExternalLink(
+      { target: "kanbanger.triage", workspaceSlug: "a/../b" },
+      config,
+    );
 
-    expect(link?.appUrl).toBe("kanbanger://issues/a%2F..%2Fb");
     expect(link?.webUrl).not.toContain("/../");
   });
 
+  it("returns null when a workspace-scoped target has no workspace", () => {
+    // Without a workspace the URL lands on a 404; better to render nothing.
+    expect(buildExternalLink({ target: "kanbanger.tasks" }, config)).toBeNull();
+  });
+
   it("returns null when the target needs an id and none was given", () => {
-    // A link to a detail screen with no id lands on an error page; better to
-    // render no affordance at all.
-    expect(buildExternalLink({ target: "kanbanger.issue" }, config)).toBeNull();
     expect(buildExternalLink({ target: "forgegraph.node" }, config)).toBeNull();
   });
 
   it("returns null when that app is not configured, rather than a broken link", () => {
     const link = buildExternalLink(
-      { target: "kanbanger.issue", id: "KAN-14" },
+      { target: "kanbanger.tasks", workspaceSlug: "gmackie" },
       { ...config, kanbangerWebOrigin: "", kanbangerScheme: "" },
     );
 
@@ -75,10 +84,10 @@ describe("buildExternalLink", () => {
 });
 
 describe("linkAffordance", () => {
-  it("keeps a Kanbanger issue inside Bob, offering the app only as a secondary", () => {
-    // Bob renders issue detail. Sending someone out to read what is already on
+  it("keeps KanBanger tasks inside Bob, offering the app only as a secondary", () => {
+    // Bob renders task detail. Sending someone out to read what is already on
     // screen is a regression dressed as an integration.
-    const affordance = linkAffordance("kanbanger.issue");
+    const affordance = linkAffordance("kanbanger.tasks");
 
     expect(affordance.primary).toBe("in_app");
     expect(affordance.externalLabel).toBe("Open in KanBanger");
