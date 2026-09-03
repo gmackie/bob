@@ -1,3 +1,15 @@
+/**
+ * The settings sections, as components both shells render.
+ *
+ * The phone pushes each of these onto a stack (review on the road: one thing
+ * at a time). The tablet shows them in the detail half of a master-detail
+ * layout (working sessions: list and detail together). Extracting them here
+ * means the two surfaces cannot drift into having different settings — which
+ * is what happens when a 742-line screen is copied rather than shared.
+ *
+ * Extracted verbatim from app/settings.tsx; behaviour is unchanged.
+ */
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -27,6 +39,7 @@ import { SELECTED_WORKSPACE_KEY } from "~/features/settings/workspace-selection"
 import { colors } from "~/lib/colors";
 import { trpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
+import type { ProviderKey } from "~/features/tablet/dashboard";
 
 const PERMISSIONS = ["read", "write", "delete", "admin"] as const;
 
@@ -90,7 +103,7 @@ function SettingsActionGrid({
   );
 }
 
-function AccountSection() {
+export function AccountSection() {
   const queryClient = useQueryClient();
 
   const clearLocalSession = () => {
@@ -175,7 +188,7 @@ function AccountSection() {
   );
 }
 
-function WorkspacesSection() {
+export function WorkspacesSection() {
   const queryClient = useQueryClient();
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
     null,
@@ -262,7 +275,13 @@ function WorkspacesSection() {
   );
 }
 
-function ProvidersSection() {
+export function ProvidersSection({
+  onOpenProvider,
+}: {
+  /** Tablet passes this so provider detail opens in the cockpit pane instead
+   *  of pushing a route the split layout has no stack for. */
+  onOpenProvider?: (provider: ProviderKey) => void;
+} = {}) {
   const rows = buildMobileSettingsProviderRows();
 
   return (
@@ -275,7 +294,9 @@ function ProvidersSection() {
         {rows.map((row) => (
           <Pressable
             key={row.key}
-            onPress={() => router.push(row.href)}
+            onPress={() =>
+              onOpenProvider ? onOpenProvider(row.key as ProviderKey) : router.push(row.href)
+            }
             accessibilityRole="button"
             accessibilityLabel={`Open ${row.label} provider settings`}
             className="border-border rounded-lg border p-3 active:opacity-80"
@@ -294,7 +315,7 @@ function ProvidersSection() {
   );
 }
 
-function PreferencesSection() {
+export function PreferencesSection() {
   const queryClient = useQueryClient();
 
   const { data: preferences, isLoading } = useQuery(
@@ -408,7 +429,7 @@ function PreferencesSection() {
   );
 }
 
-function DeviceSection() {
+export function DeviceSection() {
   const { data: apiKeys } = useQuery(
     trpc.settings.listApiKeys.queryOptions(undefined, { staleTime: 60_000 }),
   );
@@ -428,7 +449,7 @@ function DeviceSection() {
   );
 }
 
-function ApiKeysSection() {
+export function ApiKeysSection() {
   const queryClient = useQueryClient();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
@@ -636,107 +657,6 @@ function ApiKeysSection() {
           ))}
         </View>
       )}
-    </View>
-  );
-}
-
-export default function SettingsScreen() {
-  const insets = useSafeAreaInsets();
-  const queryClient = useQueryClient();
-  const scrollRef = useRef<ScrollView>(null);
-  const sectionOffsets = useRef<Record<MobileSettingsSectionKey, number>>({
-    workspace: 0,
-    account: 0,
-    providers: 0,
-    app: 0,
-    device: 0,
-  });
-  const actions = buildMobileSettingsActions();
-
-  const scrollToSection = (section: MobileSettingsSectionKey) => {
-    scrollRef.current?.scrollTo({
-      y: Math.max(0, sectionOffsets.current[section] - 16),
-      animated: true,
-    });
-  };
-
-  const handleLogout = () => {
-    Alert.alert("Log out", "Sign out of Bob on this device?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Log out",
-        style: "destructive",
-        onPress: () => {
-          void AsyncStorage.removeItem(SELECTED_WORKSPACE_KEY)
-            .then(() => authClient.signOut())
-            .finally(() => {
-              queryClient.clear();
-              router.replace("/");
-            });
-        },
-      },
-    ]);
-  };
-
-  const handleActionPress = (action: MobileSettingsAction) => {
-    if (action.kind === "logout") {
-      handleLogout();
-      return;
-    }
-    if (action.targetSection) scrollToSection(action.targetSection);
-  };
-
-  return (
-    <View
-      className="bg-background flex-1"
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
-    >
-      <Stack.Screen options={{ title: "Settings" }} />
-      <ScrollView ref={scrollRef} className="flex-1 p-4">
-        <Text className="text-foreground mb-4 text-2xl font-bold">
-          Settings
-        </Text>
-        <SettingsActionGrid
-          actions={actions}
-          onActionPress={handleActionPress}
-        />
-        <View
-          onLayout={(event) => {
-            sectionOffsets.current.workspace = event.nativeEvent.layout.y;
-          }}
-        >
-          <WorkspacesSection />
-        </View>
-        <View
-          onLayout={(event) => {
-            sectionOffsets.current.account = event.nativeEvent.layout.y;
-          }}
-        >
-          <AccountSection />
-        </View>
-        <View
-          onLayout={(event) => {
-            sectionOffsets.current.providers = event.nativeEvent.layout.y;
-          }}
-        >
-          <ProvidersSection />
-        </View>
-        <View
-          onLayout={(event) => {
-            sectionOffsets.current.app = event.nativeEvent.layout.y;
-          }}
-        >
-          <PreferencesSection />
-        </View>
-        <View
-          onLayout={(event) => {
-            sectionOffsets.current.device = event.nativeEvent.layout.y;
-          }}
-        >
-          <DeviceSection />
-        </View>
-        <ApiKeysSection />
-      </ScrollView>
     </View>
   );
 }

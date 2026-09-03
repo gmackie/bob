@@ -31,6 +31,7 @@ describe("buildSettingsIndex", () => {
       "notifications",
       "providers",
       "apiKeys",
+      "device",
       "appearance",
     ]);
   });

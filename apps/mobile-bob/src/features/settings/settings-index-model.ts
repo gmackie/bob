@@ -16,7 +16,8 @@ export type SettingsRowKey =
   | "notifications"
   | "providers"
   | "apiKeys"
-  | "appearance";
+  | "appearance"
+  | "device";
 
 export interface SettingsRow {
   key: SettingsRowKey;
@@ -80,6 +81,13 @@ export function buildSettingsIndex(input: SettingsIndexInput): SettingsRow[] {
       label: "API Keys",
       value: `${input.apiKeyCount} key${input.apiKeyCount === 1 ? "" : "s"}`,
       href: "/settings/api-keys",
+      needsAttention: false,
+    },
+    {
+      key: "device",
+      label: "Device",
+      value: "",
+      href: "/settings/device",
       needsAttention: false,
     },
     {
