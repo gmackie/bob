@@ -13,6 +13,7 @@ import { useGateway } from "~/hooks/use-gateway";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { colors } from "~/lib/colors";
 import { authClient } from "~/utils/auth";
+import { LiveChecksCard } from "~/features/runs/LiveChecksCard";
 
 /**
  * A run is awaiting approval when a permission_request event has no matching
@@ -171,6 +172,13 @@ export default function ExecutionSessionScreen() {
           </View>
         </View>
       ) : null}
+      {/* The lights, above the transcript. On a phone this is what a person
+          is actually watching: a phase goes amber while it runs and green when
+          it passes, without them touching anything. Reading it out of the
+          scrolling thread is not the same job. */}
+      <View className="px-4">
+        <LiveChecksCard events={selectedSessionEvents} />
+      </View>
       <AgentThreadView
         sessionId={sessionId}
         events={selectedSessionEvents}

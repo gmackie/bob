@@ -18,6 +18,7 @@ import type {
   WorkspaceSessionInfo,
 } from "@bob/ws";
 import { BobWsClient } from "@bob/ws";
+import type { HostSnapshotWire } from "@bob/ws";
 
 import { authClient } from "~/utils/auth";
 import { getBaseUrl } from "~/utils/base-url";
@@ -83,6 +84,12 @@ export interface GatewaySession {
 export interface UseGatewayResult {
   connectionState: ConnectionState;
   sessions: GatewaySession[];
+  /**
+   * Live agent health for the workspace's host, pushed by the daemon on every
+   * heartbeat. This is what makes the node lights on the phone move on their
+   * own while a run is going, rather than only on pull-to-refresh.
+   */
+  hostSnapshot: HostSnapshotWire | null;
   selectedSessionId: string | null;
   selectedSessionEvents: ServerEvent[];
   selectedWorkItemId: string | null;
@@ -113,6 +120,7 @@ export function useGateway(): UseGatewayResult {
   const [sessions, setSessions] = useState<GatewaySession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedSessionEvents, setSelectedSessionEvents] = useState<ServerEvent[]>([]);
+  const [hostSnapshot, setHostSnapshot] = useState<HostSnapshotWire | null>(null);
   const [selectedWorkItemId, setSelectedWorkItemId] = useState<string | null>(null);
   const [activePlanningSessionId, setActivePlanningSessionId] = useState<string | null>(null);
 
@@ -218,6 +226,11 @@ export function useGateway(): UseGatewayResult {
         trackConnectionStateChanged(state);
         if (state === "connected") trackTabletSessionStart();
       },
+      // The daemon sends this with every heartbeat, so agent status changes
+      // reach the phone within a heartbeat rather than on next refresh.
+      onHostSnapshot: (_workspaceId: string, snapshot: HostSnapshotWire) => {
+        setHostSnapshot(snapshot);
+      },
       onWorkspaceSnapshot: (snapshot: WorkspaceSessionInfo[]) => {
         setSessions(
           snapshot.map((s) => ({
@@ -289,6 +302,7 @@ export function useGateway(): UseGatewayResult {
 
   return {
     connectionState,
+    hostSnapshot,
     sessions,
     selectedSessionId,
     selectedSessionEvents,
