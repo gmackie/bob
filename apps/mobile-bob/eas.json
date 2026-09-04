@@ -98,15 +98,17 @@
         "AUTH_URL": "${PRODUCTION_API_URL}",
         "SENTRY_DSN": "${EXPO_PUBLIC_SENTRY_DSN_PROD}",
         "POSTHOG_KEY": "${EXPO_PUBLIC_POSTHOG_KEY_PROD}",
-        "POSTHOG_HOST": "${EXPO_PUBLIC_POSTHOG_HOST}"
+        "POSTHOG_HOST": "${EXPO_PUBLIC_POSTHOG_HOST}",
+        "APP_VARIANT": "production"
       },
       "ios": {
-        "enterpriseProvisioning": "universal"
+        "buildConfiguration": "Release-production"
       },
       "android": {
         "buildType": "app-bundle"
       },
-      "channel": "production"
+      "channel": "production",
+      "distribution": "store"
     }
   },
   "submit": {
