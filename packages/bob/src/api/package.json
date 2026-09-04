@@ -114,6 +114,7 @@
     "@bob/db": "workspace:*",
     "@bob/execution": "workspace:*",
     "@bob/execution-lib": "workspace:*",
+    "@bob/notifications": "workspace:*",
     "@bob/telemetry": "workspace:*",
     "@bob/tenancy": "workspace:*",
     "@bob/work-items": "workspace:*",

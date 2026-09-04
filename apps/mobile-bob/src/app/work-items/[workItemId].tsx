@@ -34,6 +34,7 @@ import type {MobileWorkItemEntryValidationState} from "~/features/tablet/work-it
 import { getMobileDetailBackAction } from "~/features/tablet/navigation";
 import { authClient } from "~/utils/auth";
 import { trpc } from "~/utils/api";
+import { RelatedAppsCard } from "~/features/links/RelatedAppsCard";
 
 const PIPELINE_STAGES = [
   { key: "idea", label: "Idea" },
@@ -362,6 +363,26 @@ export default function WorkItemDetailScreen() {
             <ValidationStateCard validationState={validationState} />
           ) : null}
         </Card>
+
+        {/* Escape hatches, not primary actions. Bob is where this work item is
+            reviewed; these reach the things Bob does not render — the deploy
+            and node behind it in ForgeGraph, and the board it came from in
+            KanBanger. Each renders only when its app is configured and the
+            identifiers it needs are present. */}
+        <RelatedAppsCard
+          requests={[
+            ...(workItem.workspaceId
+              ? ([
+                  {
+                    target: "kanbanger.tasks" as const,
+                    workspaceSlug: workItem.workspaceId,
+                  },
+                ] as const)
+              : []),
+            { target: "forgegraph.pullRequests" as const },
+            { target: "forgegraph.alerts" as const },
+          ]}
+        />
 
         {entryView === "outcome" ? (
           <OutcomeReadableOutputCard

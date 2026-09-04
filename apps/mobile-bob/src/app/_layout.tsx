@@ -17,7 +17,7 @@ import { TabletPlanningDashboard } from "~/components/tablet/TabletPlanningDashb
 import { TabletProviderPane } from "~/components/tablet/TabletProviderPane";
 import { TabletProjectPane } from "~/components/tablet/TabletProjectPane";
 import { TabletProjectsDashboardPane } from "~/components/tablet/TabletProjectsDashboardPane";
-import { TabletSettingsPane } from "~/components/tablet/TabletSettingsPane";
+import { TabletSettingsSplit } from "~/components/tablet/TabletSettingsSplit";
 import { TaskLaneTablePane } from "~/components/tablet/TaskLaneTablePane";
 import { ChatScreenView } from "~/features/chat/chat-screen";
 import {
@@ -243,7 +243,11 @@ function MainPane({
   // Every TabletShellTarget variant is handled explicitly above, so TS has
   // narrowed `target` to the settings variant here — no fallthrough to the
   // gateway-state heuristics below for a typed target.
-  return <TabletSettingsPane onOpenProvider={onOpenProvider} />;
+  // Master-detail over the shared section registry: same settings as the
+  // phone routes, presented for a working session rather than for review on
+  // the road. Replaces TabletSettingsPane, which duplicated the sections and
+  // had no per-type notification control or API keys.
+  return <TabletSettingsSplit onOpenProvider={onOpenProvider} />;
 }
 
 function TabletLayout() {

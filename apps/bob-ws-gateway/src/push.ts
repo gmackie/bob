@@ -8,7 +8,11 @@
 
 import { and, eq, inArray } from "@bob/db";
 import { db } from "@bob/db/client";
-import { devicePushTokens, userPreferences } from "@bob/db/schema";
+import { devicePushTokens, notificationPreferences, userPreferences } from "@bob/db/schema";
+import { overridesFromRows, quietHoursFromPreferences } from "@bob/notifications/preferences-rows";
+import type { NotificationType } from "@bob/notifications/preferences";
+
+import { shouldSendPush } from "./push-gate.js";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
@@ -41,14 +45,47 @@ async function enabledTokensForUser(userId: string): Promise<string[]> {
   return rows.map((r) => r.expoPushToken);
 }
 
-/** The settings toggle (userPreferences.pushNotifications) is authoritative.
- *  Absent row → default true (matches the column default). */
-async function pushEnabledForUser(userId: string): Promise<boolean> {
-  const pref = await db.query.userPreferences.findFirst({
-    where: eq(userPreferences.userId, userId),
-    columns: { pushNotifications: true },
+/**
+ * Does this specific notification go out?
+ *
+ * Was a single boolean, which meant a person could only choose "every event"
+ * or "none" — so an agent blocked and waiting on them arrived in the same
+ * stream as "batch completed". Now the master switch is a veto, per-type rows
+ * refine within it, and quiet hours suppress. The rules themselves live in
+ * @bob/notifications/preferences, shared with the API.
+ *
+ * Absent preference row → column defaults (both channels on), matching the
+ * previous behaviour for anyone who never opened settings.
+ */
+async function pushEnabledForUser(
+  userId: string,
+  type?: NotificationType,
+): Promise<boolean> {
+  const [pref, rows] = await Promise.all([
+    db.query.userPreferences.findFirst({
+      where: eq(userPreferences.userId, userId),
+      columns: {
+        pushNotifications: true,
+        emailNotifications: true,
+        quietHoursStart: true,
+        quietHoursEnd: true,
+      },
+    }),
+    db.query.notificationPreferences.findMany({
+      where: eq(notificationPreferences.userId, userId),
+      columns: { type: true, channel: true, enabled: true },
+    }),
+  ]);
+
+  return shouldSendPush({
+    type,
+    masters: {
+      push: pref?.pushNotifications ?? true,
+      email: pref?.emailNotifications ?? true,
+    },
+    overrides: overridesFromRows(rows),
+    quietHours: quietHoursFromPreferences(pref ?? null),
   });
-  return pref?.pushNotifications ?? true;
 }
 
 /**
@@ -64,13 +101,17 @@ export async function pushToUser(
     data?: Record<string, unknown>;
     channelId?: string;
     priority?: "high" | "default";
+    /** Absent for pushes that are not work-item notifications (terminal
+     *  session events); those keep the master-switch behaviour. */
+    type?: NotificationType;
   },
 ): Promise<{ delivered: boolean; tickets: Record<string, string>; retryable: boolean }> {
   let tokens: string[];
   try {
     // Push disabled or no registered tokens: nothing to deliver, and retrying
     // won't change that — NOT retryable (the badge backstop surfaces it in-app).
-    if (!(await pushEnabledForUser(userId))) return { delivered: false, tickets: {}, retryable: false };
+    if (!(await pushEnabledForUser(userId, notification.type)))
+      return { delivered: false, tickets: {}, retryable: false };
     tokens = await enabledTokensForUser(userId);
   } catch (err) {
     console.error("[push] token lookup failed:", err);
