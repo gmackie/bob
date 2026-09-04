@@ -138,7 +138,15 @@ module.exports = ({ config }) => {
     icon: getVariantIcon(),
     userInterfaceStyle: "automatic",
     updates: updatesConfig,
-    runtimeVersion: { policy: "fingerprint" },
+    // "fingerprint" hashes the bare ios/ directory, which EAS mutates during the
+    // build: pod install writes into it and autoIncrement bumps
+    // CURRENT_PROJECT_VERSION in project.pbxproj. Both land after the local
+    // fingerprint is computed, so local and builder values can never agree and
+    // CONFIGURE_EXPO_UPDATES fails the build with "Runtime version calculated on
+    // local machine not equal to runtime version calculated during build."
+    // appVersion is deterministic on both sides and gives the semantics we want:
+    // an update is compatible with the app version it was published for.
+    runtimeVersion: { policy: "appVersion" },
     newArchEnabled: true,
     assetBundlePatterns: ["**/*"],
     ios: {
