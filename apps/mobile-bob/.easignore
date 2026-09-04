@@ -1,42 +1,56 @@
-# EAS uploads the whole monorepo, and without this file that archive is 1.7 GB
-# of mostly regenerated content — big enough that the metadata upload fails with
-# a 400 before the build ever starts. Tracked content is ~65 MB; everything
-# excluded here is either reinstalled or rebuilt on the builder.
+# EAS copies the whole monorepo working tree, not just tracked files. Without
+# this the archive is 4.4 GB, and the upload dies before the build starts:
+#   Your project archive is 1.5 GB
+#   Failed to upload metadata to EAS Build -> 400 (Bad Request)
 #
-# Do NOT exclude whole apps/ or packages/ subtrees: pnpm needs every workspace
-# package.json present for a frozen-lockfile install to resolve.
+# 4.31 GB of that 4.4 GB is apps/mobile-bob/.preflight/dd-screenshots — Xcode
+# DerivedData from a Preflight screenshot run (libRNReanimated.a alone is
+# 279 MB). Excluding .preflight/ takes the archive to ~100 MB.
+#
+# Patterns must be depth-independent (a bare name, or **/). A rooted path like
+# apps/desktop-bob/resources/bin/ silently matches nothing, because eas-cli
+# resolves this file relative to the directory holding eas.json, while the
+# archive itself is rooted at the monorepo.
+#
+# Do NOT exclude whole apps/ or packages/ subtrees: pnpm needs all 49 workspace
+# package.json files present for a frozen-lockfile install to resolve.
 
-# Reinstalled by the builder
+# Reinstalled on the builder
 node_modules/
 
-# History — never needed to build
+# History
 .git/
 
-# CocoaPods + native build output; `pod install` and xcodebuild regenerate these
-**/ios/Pods/
-**/ios/build/
-**/ios/DerivedData/
-**/android/build/
-**/android/.gradle/
-**/android/app/build/
+# Preflight scratch: DerivedData, screenshots, simulator build output
+.preflight/
+.gstack/
 
-# Expo / Metro caches
-**/.expo/
-**/.expo-shared/
+# Native build output — pod install and xcodebuild regenerate these
+Pods/
+DerivedData/
+.cxx/
+.gradle/
+
+# Expo / Metro / TS caches
+.expo/
+.expo-shared/
+.cache/
+*.tsbuildinfo
 
 # Build output from the other apps in the monorepo (nothing tracked lives here)
-**/.next/
-**/.turbo/
-**/dist/
-**/.output/
-**/.wrangler/
-**/.vercel/
-**/coverage/
+.next/
+.turbo/
+dist/
+.output/
+.wrangler/
+.vercel/
+coverage/
 
-# Cross-compiled desktop daemon binaries — 20 MB, unused by a mobile build
-apps/desktop-bob/resources/bin/
+# Cross-compiled desktop daemon binaries — unused by a mobile build
+bob-darwin-amd64
+bob-darwin-arm64
 
 # Local artifacts
 screenshots/
 .deploy/
-**/*.log
+*.log
