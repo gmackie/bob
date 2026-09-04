@@ -45,7 +45,15 @@ jobs:
           REMOTE="https://git.forgegraf.com/${GITHUB_REPOSITORY}.git"
           BRANCH="${GITHUB_REF_NAME}"
           SHA="${GITHUB_SHA}"
-          WORKSPACE_ROOT="/Volumes/dev/.preflight-ci/${REPO}"
+          # Must sit UNDER a Preflight runner's --workspace-root, because the
+          # runner matches jobs by workspace root and creates the checkout
+          # itself. gmacko-mini runs from /Volumes/T9-APFS/apps (its script
+          # explains why: / and /Volumes/dev share a container that repeatedly
+          # fell under Preflight's 15GB floor, so the node declined every
+          # claim). This path was never moved to match, so every Bob build
+          # queued here was unclaimable and eventually cancelled — the runner
+          # logged "no runner jobs available" while work orders sat waiting.
+          WORKSPACE_ROOT="/Volumes/T9-APFS/apps/.preflight-ci/${REPO}"
 
           BODY=$(cat <<JSON
           {
