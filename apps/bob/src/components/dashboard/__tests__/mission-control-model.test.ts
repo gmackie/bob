@@ -198,7 +198,7 @@ describe("dispatch pause derivation", () => {
           ],
         } as never,
         at,
-      ).providers[0];
+      ).providers[0]!;
 
     expect(host("no_credit")).toMatchObject({ statusLabel: "Out of credit", remedy: "top_up" });
     expect(host("unauthenticated")).toMatchObject({ remedy: "sign_in" });
