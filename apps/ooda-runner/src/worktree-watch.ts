@@ -10,8 +10,8 @@
  * commit subject. Everything here is best-effort: a watcher error degrades to
  * no events, never to a failed session.
  */
-import { openSync, closeSync, readSync, statSync, watch, type FSWatcher } from "node:fs";
-import { join } from "node:path";
+import { openSync, closeSync, readSync, statSync, readdirSync, watch, type FSWatcher } from "node:fs";
+import { join, relative } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -70,6 +70,11 @@ export function isInteresting(relPath: string): boolean {
   return !relPath.split(/[\\/]/).some((seg) => IGNORED_SEGMENTS.has(seg) || seg.endsWith(".swp") || seg.endsWith("~"));
 }
 
+/** A directory name we must never descend into or register a watch for. */
+function isIgnoredDir(name: string): boolean {
+  return IGNORED_SEGMENTS.has(name) || name.endsWith(".swp") || name.endsWith("~");
+}
+
 /** Parse `git diff --numstat` output. Binary files show "-" and count as 0. */
 export function parseNumstat(out: string): NumstatEntry[] {
   const rows: NumstatEntry[] = [];
@@ -118,7 +123,8 @@ export interface WorktreeWatchHandle {
 export function watchWorktree(opts: WorktreeWatchOptions): WorktreeWatchHandle {
   const interval = opts.intervalMs ?? 2000;
   const pending = new Map<string, { n: number; last: number }>();
-  let watcher: FSWatcher | null = null;
+  const watchers = new Set<FSWatcher>();
+  const watched = new Set<string>();
   let timer: NodeJS.Timeout | null = null;
   let flushing = false;
   let stopped = false;
@@ -197,17 +203,61 @@ export function watchWorktree(opts: WorktreeWatchOptions): WorktreeWatchHandle {
     }
   };
 
+  // Watch each directory non-recursively, walking the tree ourselves and
+  // skipping IGNORED_SEGMENTS (node_modules, .git, dist, ...) at EVERY level. A
+  // single recursive fs.watch registers a descriptor per directory — ~50k on a
+  // big JS monorepo's node_modules — which exhausted inotify (ENOSPC) and leaked
+  // ~1GB of heap per session, OOM-crashing the runner. Skipping the heavy dirs
+  // keeps this to a few hundred watches.
+  const watchDir = (dir: string): void => {
+    if (stopped || watched.has(dir)) return;
+    let w: FSWatcher;
+    try {
+      w = watch(dir, (event, filename) => {
+        if (!filename) return;
+        const name = filename.toString();
+        const full = join(dir, name);
+        const rel = relative(opts.path, full);
+        if (isInteresting(rel)) {
+          const cur = pending.get(rel);
+          pending.set(rel, { n: (cur?.n ?? 0) + 1, last: Date.now() });
+        }
+        // A newly created directory needs its own watch (a non-recursive watch
+        // does not see into it) — walk it, still skipping ignored dirs.
+        if (event === "rename" && !isIgnoredDir(name)) {
+          try {
+            if (statSync(full).isDirectory()) walk(full);
+          } catch {
+            /* transient: created then removed, or a file not a dir */
+          }
+        }
+      });
+    } catch (err) {
+      opts.log?.(`[worktree-watch] watch(${dir}) failed: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+    w.on("error", (err) => {
+      opts.log?.(`[worktree-watch] watcher error (file events off for this dir): ${err.message}`);
+    });
+    watchers.add(w);
+    watched.add(dir);
+  };
+
+  const walk = (dir: string): void => {
+    watchDir(dir);
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.isDirectory() && !isIgnoredDir(e.name)) walk(join(dir, e.name));
+    }
+  };
+
   try {
-    watcher = watch(opts.path, { recursive: true }, (_event, filename) => {
-      if (!filename) return;
-      const rel = filename.toString();
-      if (!isInteresting(rel)) return;
-      const cur = pending.get(rel);
-      pending.set(rel, { n: (cur?.n ?? 0) + 1, last: Date.now() });
-    });
-    watcher.on("error", (err) => {
-      opts.log?.(`[worktree-watch] watcher error (file events off for this session): ${err.message}`);
-    });
+    walk(opts.path);
     timer = setInterval(() => void flush(), interval);
   } catch (err) {
     opts.log?.(`[worktree-watch] could not start: ${err instanceof Error ? err.message : String(err)}`);
@@ -219,11 +269,15 @@ export function watchWorktree(opts: WorktreeWatchOptions): WorktreeWatchHandle {
       drainCheckEvents();
       stopped = true;
       if (timer) clearInterval(timer);
-      try {
-        watcher?.close();
-      } catch {
-        /* ignore */
+      for (const w of watchers) {
+        try {
+          w.close();
+        } catch {
+          /* ignore */
+        }
       }
+      watchers.clear();
+      watched.clear();
     },
   };
 }
