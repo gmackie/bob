@@ -5,6 +5,7 @@ import type { ServerEvent } from "@bob/ws";
 import { extractSessionEventText } from "~/features/chat/session-event-text";
 import { colors } from "~/lib/colors";
 import { hapticMedium, hapticSuccess } from "~/lib/haptics";
+import { LiveChecksCard } from "~/features/runs/LiveChecksCard";
 
 function formatEventType(eventType: string): string {
   switch (eventType) {
@@ -189,6 +190,13 @@ export function AgentThreadView({
       style={{ backgroundColor: colors.background }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      {/* Check lights, pinned above the transcript rather than scrolling away
+          inside it. During a working session this is the state a person keeps
+          glancing at; burying it in the thread means hunting for it. */}
+      <View className="px-4 pt-2">
+        <LiveChecksCard events={events} />
+      </View>
+
       {/* Header */}
       <View
         className="flex-row items-center justify-between px-4 py-2"
