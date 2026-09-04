@@ -36,7 +36,16 @@ env:
 
 jobs:
   enqueue:
-    runs-on: ubuntu-latest
+    # `forgegraph-ci` rather than `ubuntu-latest`: this job is a curl and a jq,
+    # but ubuntu-latest currently resolves to labnuc alone — hetzner-bob no
+    # longer carries that label — and labnuc's capacity is 2, which the long
+    # `ci` job keeps full. A one-deep pool meant this 8-second enqueue sat in
+    # "Waiting to run" behind a job that can take hours.
+    #
+    # `forgegraph-ci` is on both machines, so the pool is two deep without
+    # opening hetzner-bob (which is also the agent host) to every heavy
+    # ubuntu-latest job.
+    runs-on: forgegraph-ci
     steps:
       - name: Enqueue Preflight build of this commit
         run: |
