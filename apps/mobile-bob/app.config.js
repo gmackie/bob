@@ -138,15 +138,17 @@ module.exports = ({ config }) => {
     icon: getVariantIcon(),
     userInterfaceStyle: "automatic",
     updates: updatesConfig,
-    // "fingerprint" hashes the bare ios/ directory, which EAS mutates during the
-    // build: pod install writes into it and autoIncrement bumps
-    // CURRENT_PROJECT_VERSION in project.pbxproj. Both land after the local
-    // fingerprint is computed, so local and builder values can never agree and
-    // CONFIGURE_EXPO_UPDATES fails the build with "Runtime version calculated on
-    // local machine not equal to runtime version calculated during build."
-    // appVersion is deterministic on both sides and gives the semantics we want:
-    // an update is compatible with the app version it was published for.
-    runtimeVersion: { policy: "appVersion" },
+    // The bare workflow rejects runtime version *policies* outright:
+    //   "You're currently using the bare workflow, where runtime version
+    //    policies are not supported. You must set your runtime version manually."
+    // It has to be a literal. "fingerprint" was accepted but hashed the bare
+    // ios/ directory, which EAS mutates after the local fingerprint is computed
+    // (pod install writes into ios/, autoIncrement bumps CURRENT_PROJECT_VERSION),
+    // so CONFIGURE_EXPO_UPDATES failed every production build with "Runtime
+    // version calculated on local machine not equal to runtime version
+    // calculated during build." A literal is identical on both sides.
+    // Keep this in step with `version` above when the app version changes.
+    runtimeVersion: "0.1.0",
     newArchEnabled: true,
     assetBundlePatterns: ["**/*"],
     ios: {
