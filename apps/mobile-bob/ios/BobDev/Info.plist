@@ -65,6 +65,8 @@
 	<string>Expo Dev Launcher uses the local network to discover and connect to development servers running on your computer.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Allow Bob to use the camera to scan the sign-in QR code from Bob web.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Allow Bob to attach screenshots and images from your photo library to work items.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Allow Bob to use the microphone for voice prompts.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
