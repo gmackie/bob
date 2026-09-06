@@ -31,3 +31,7 @@ packages/research-backend/.venv/
 
 # check-events v2 stream + CTRF (CI + agent worktrees)
 .fg/
+
+# Expo machine-local state: device history, dev-server settings, build
+# logs and image caches. 31 files / 3.6 MB were committed before this.
+.expo/
