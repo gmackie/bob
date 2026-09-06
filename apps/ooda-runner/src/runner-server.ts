@@ -230,6 +230,7 @@ export class RunnerServer {
   private runnerId: string | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private pollInFlight = false;
   private reapTimer: ReturnType<typeof setInterval> | null = null;
   private activeSessions = new Set<string>();
   private activePromotions = new Set<string>();
@@ -367,13 +368,24 @@ export class RunnerServer {
       void this.heartbeat();
     }, HEARTBEAT_INTERVAL_MS);
 
-    // Start session polling loop
+    // Start session polling loop. A single in-flight guard prevents overlap:
+    // if a tick's work outlasts POLL_INTERVAL_MS (e.g. many sessions), the next
+    // tick is skipped rather than stacking — overlapping ticks each pinned a
+    // suspended sessions iterator, leaking the heap until the runner OOM'd.
     this.pollTimer = setInterval(() => {
-      void this.pollForSessions();
-      void this.agentJobWorker?.poll();
-      void this.hostTurnWorker?.poll();
-      void this.integrationDeliveryWorker?.poll();
-      void this.externalStatusWorker?.poll();
+      if (this.pollInFlight) return;
+      this.pollInFlight = true;
+      void (async () => {
+        try {
+          await this.pollForSessions();
+          await this.agentJobWorker?.poll();
+          await this.hostTurnWorker?.poll();
+          await this.integrationDeliveryWorker?.poll();
+          await this.externalStatusWorker?.poll();
+        } finally {
+          this.pollInFlight = false;
+        }
+      })();
     }, POLL_INTERVAL_MS);
 
     // Start stale-session reaper loop
