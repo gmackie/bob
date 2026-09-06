@@ -11,6 +11,10 @@
  * registry is shared and each shell decides only presentation.
  */
 
+// Canonical threshold lives with the navigation model so the root layout and
+// this pane cannot disagree about what counts as tablet-width.
+import { SPLIT_MIN_WIDTH } from "~/features/navigation/mobile-nav";
+
 export type SettingsSectionKey =
   | "account"
   | "workspace"
@@ -56,12 +60,6 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   section("device", "device", "Device", "This device's registration and push token"),
 ];
 
-/**
- * Below this width a master-detail layout leaves two unusable columns. iPad
- * Split View and Slide Over hand an app a phone-width window, so tablet alone
- * is not enough to decide.
- */
-const SPLIT_MIN_WIDTH = 700;
 
 export interface ShellInput {
   isTablet: boolean;
