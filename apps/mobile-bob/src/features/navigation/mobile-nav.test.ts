@@ -24,6 +24,7 @@ describe("MOBILE_NAV_DESTINATIONS", () => {
   it("reaches every phone surface that was previously tablet-only", () => {
     const hrefs = MOBILE_NAV_DESTINATIONS.map((d) => d.href);
     for (const href of [
+      "/home",
       "/chat",
       "/tasks",
       "/planning",
