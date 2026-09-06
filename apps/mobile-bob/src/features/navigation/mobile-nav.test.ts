@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   MOBILE_NAV_DESTINATIONS,
+  SPLIT_MIN_WIDTH,
   markActiveDestination,
   resolveHeaderLeadingAction,
+  shouldUseSplitPaneLayout,
 } from "./mobile-nav";
 
 describe("resolveHeaderLeadingAction", () => {
@@ -55,5 +57,26 @@ describe("markActiveDestination", () => {
 
   it("marks nothing active on an unknown route", () => {
     expect(markActiveDestination("/nope").some((d) => d.isActive)).toBe(false);
+  });
+});
+
+describe("shouldUseSplitPaneLayout", () => {
+  it("uses the split pane on a landscape tablet", () => {
+    expect(shouldUseSplitPaneLayout({ isTablet: true, width: 1180 })).toBe(true);
+  });
+
+  it("falls back to the clean mobile view on a portrait tablet", () => {
+    // An iPad in portrait is 820pt... but Split View and Slide Over hand the
+    // app a phone-width window, which is what this guards.
+    expect(shouldUseSplitPaneLayout({ isTablet: true, width: 507 })).toBe(false);
+  });
+
+  it("never splits on a phone, however wide the window reports", () => {
+    expect(shouldUseSplitPaneLayout({ isTablet: false, width: 1180 })).toBe(false);
+  });
+
+  it("treats the threshold as inclusive", () => {
+    expect(shouldUseSplitPaneLayout({ isTablet: true, width: SPLIT_MIN_WIDTH })).toBe(true);
+    expect(shouldUseSplitPaneLayout({ isTablet: true, width: SPLIT_MIN_WIDTH - 1 })).toBe(false);
   });
 });

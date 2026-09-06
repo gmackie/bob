@@ -67,6 +67,8 @@ import type {
 } from "~/features/tablet/shell";
 import type { ProviderKey, TaskLaneKey } from "~/features/tablet/dashboard";
 import type { MobileWorkItemEntryView } from "~/features/tablet/work-item-entry";
+import { MobileNavSheet } from "~/features/navigation/mobile-nav-sheet";
+import { shouldUseSplitPaneLayout } from "~/features/navigation/mobile-nav";
 import { colors } from "~/lib/colors";
 
 import "../styles.css";
@@ -84,7 +86,51 @@ function firstRouteParam(value: string | string[] | undefined): string | undefin
 }
 
 function PhoneLayout() {
-  return <Stack screenOptions={stackScreenOptions} />;
+  const [navVisible, setNavVisible] = useState(false);
+  const pathname = usePathname();
+
+  // headerShown was false globally, so every screen's Stack.Screen title
+  // rendered nothing and there was nowhere to put navigation — the phone could
+  // only ever show /chat. Turn the header back on and hang the menu off it, so
+  // every route gets navigation without touching each screen. /chat opts out
+  // again below: it draws its own header.
+  const phoneScreenOptions = {
+    ...stackScreenOptions,
+    headerShown: true,
+    headerStyle: { backgroundColor: colors.background },
+    headerTintColor: colors.foreground,
+    headerTitleStyle: { color: colors.foreground },
+    headerShadowVisible: false,
+    headerRight: () => (
+      <Pressable
+        onPress={() => setNavVisible(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Open navigation"
+        className="active:opacity-70"
+      >
+        <Text
+          className="text-base font-semibold"
+          style={{ color: colors.accent }}
+        >
+          Menu
+        </Text>
+      </Pressable>
+    ),
+  };
+
+  return (
+    <>
+      <Stack screenOptions={phoneScreenOptions}>
+        <Stack.Screen name="chat" options={{ headerShown: false }} />
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+      </Stack>
+      <MobileNavSheet
+        visible={navVisible}
+        pathname={pathname}
+        onClose={() => setNavVisible(false)}
+      />
+    </>
+  );
 }
 
 function OodaChatPane() {
@@ -715,12 +761,25 @@ function TabletLayout() {
   );
 }
 
+function Shell() {
+  // Platform.isPad alone is orientation-blind: an iPad in portrait, in Split
+  // View or in Slide Over gets a phone-width window, and the split-pane then
+  // renders two unusable columns. Decide on width, using the same threshold
+  // the settings shell uses.
+  const { width } = useWindowDimensions();
+  return shouldUseSplitPaneLayout({ isTablet, width }) ? (
+    <TabletLayout />
+  ) : (
+    <PhoneLayout />
+  );
+}
+
 export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <Providers>
         <AuthGate>
-          {isTablet ? <TabletLayout /> : <PhoneLayout />}
+          <Shell />
         </AuthGate>
         <StatusBar style="light" />
       </Providers>

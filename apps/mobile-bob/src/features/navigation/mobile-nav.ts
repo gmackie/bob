@@ -43,3 +43,24 @@ export function markActiveDestination(
     isActive: pathname === d.href || pathname.startsWith(`${d.href}/`),
   }));
 }
+
+/**
+ * Below this width a split layout leaves two unusable columns. iPad Split View
+ * and Slide Over hand an app a phone-width window, and an iPad in portrait is
+ * narrow too — so `Platform.isPad` alone is not enough to decide. This is the
+ * canonical threshold; the settings shell reuses it so the root layout and the
+ * settings pane never disagree about what "tablet" means.
+ */
+export const SPLIT_MIN_WIDTH = 700;
+
+/**
+ * Which shell to render. The root layout used to branch on Platform.isPad
+ * alone, so an iPad in portrait got the full split-pane in a phone-width
+ * window.
+ */
+export function shouldUseSplitPaneLayout(input: {
+  isTablet: boolean;
+  width: number;
+}): boolean {
+  return input.isTablet && input.width >= SPLIT_MIN_WIDTH;
+}
