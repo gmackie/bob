@@ -23,7 +23,7 @@ export const filesystemRouter = {
       }),
     )
     .query(({ ctx, input }) =>
-      filesystemList({ db: ctx.db, userId: ctx.session.user.id }, input),
+      filesystemList({ db: ctx.db, userId: ctx.session.user.id, filesystem: ctx.filesystem }, input),
     ),
 
   read: protectedProcedure
@@ -34,7 +34,7 @@ export const filesystemRouter = {
       }),
     )
     .query(({ ctx, input }) =>
-      filesystemRead({ db: ctx.db, userId: ctx.session.user.id }, input),
+      filesystemRead({ db: ctx.db, userId: ctx.session.user.id, filesystem: ctx.filesystem }, input),
     ),
 
   write: protectedProcedure
@@ -46,7 +46,7 @@ export const filesystemRouter = {
       }),
     )
     .mutation(({ ctx, input }) =>
-      filesystemWrite({ db: ctx.db, userId: ctx.session.user.id }, input),
+      filesystemWrite({ db: ctx.db, userId: ctx.session.user.id, filesystem: ctx.filesystem }, input),
     ),
 
   delete: protectedProcedure
@@ -57,7 +57,7 @@ export const filesystemRouter = {
       }),
     )
     .mutation(({ ctx, input }) =>
-      filesystemDelete({ db: ctx.db, userId: ctx.session.user.id }, input),
+      filesystemDelete({ db: ctx.db, userId: ctx.session.user.id, filesystem: ctx.filesystem }, input),
     ),
 
   mkdir: protectedProcedure
@@ -68,7 +68,7 @@ export const filesystemRouter = {
       }),
     )
     .mutation(({ ctx, input }) =>
-      filesystemMkdir({ db: ctx.db, userId: ctx.session.user.id }, input),
+      filesystemMkdir({ db: ctx.db, userId: ctx.session.user.id, filesystem: ctx.filesystem }, input),
     ),
 
   move: protectedProcedure
@@ -79,7 +79,7 @@ export const filesystemRouter = {
       }),
     )
     .mutation(({ ctx, input }) =>
-      filesystemMove({ db: ctx.db, userId: ctx.session.user.id }, input),
+      filesystemMove({ db: ctx.db, userId: ctx.session.user.id, filesystem: ctx.filesystem }, input),
     ),
 
   copy: protectedProcedure
@@ -90,7 +90,7 @@ export const filesystemRouter = {
       }),
     )
     .mutation(({ ctx, input }) =>
-      filesystemCopy({ db: ctx.db, userId: ctx.session.user.id }, input),
+      filesystemCopy({ db: ctx.db, userId: ctx.session.user.id, filesystem: ctx.filesystem }, input),
     ),
 
   search: protectedProcedure
@@ -102,7 +102,7 @@ export const filesystemRouter = {
       }),
     )
     .query(({ ctx, input }) =>
-      filesystemSearch({ db: ctx.db, userId: ctx.session.user.id }, input),
+      filesystemSearch({ db: ctx.db, userId: ctx.session.user.id, filesystem: ctx.filesystem }, input),
     ),
 
   gitStatus: protectedProcedure
@@ -112,6 +112,6 @@ export const filesystemRouter = {
       }),
     )
     .query(({ ctx, input }) =>
-      filesystemGitStatus({ db: ctx.db, userId: ctx.session.user.id }, input),
+      filesystemGitStatus({ db: ctx.db, userId: ctx.session.user.id, filesystem: ctx.filesystem }, input),
     ),
 } satisfies TRPCRouterRecord;

@@ -2,7 +2,7 @@
  * Effect-RPC handler functions for the filesystem RPCs.
  *
  * Each handler accepts the RPC payload, delegates to the extracted handler
- * function via `wrapHandler`, and returns an Effect value.
+ * function via `wrapAuthorizedHandler`, and returns an Effect value.
  */
 import type { HandlerContext } from "../handlers/context.js";
 import type {
@@ -16,7 +16,7 @@ import type {
   FilesystemSearchInput,
   FilesystemWriteInput,
 } from "../handlers/filesystem.js";
-import { wrapHandler } from "../handlers/bridge.js";
+import { wrapAuthorizedHandler } from "../handlers/authorized-rpc.js";
 import {
   filesystemCopy,
   filesystemDelete,
@@ -31,29 +31,29 @@ import {
 
 export const makeFilesystemRpcHandlers = (ctx: HandlerContext) => ({
   "filesystem.list": (input: FilesystemListInput) =>
-    wrapHandler(filesystemList, ctx, input, "filesystem"),
+    wrapAuthorizedHandler(filesystemList, ctx, input, "filesystem"),
 
   "filesystem.read": (input: FilesystemReadInput) =>
-    wrapHandler(filesystemRead, ctx, input, "filesystem"),
+    wrapAuthorizedHandler(filesystemRead, ctx, input, "filesystem"),
 
   "filesystem.write": (input: FilesystemWriteInput) =>
-    wrapHandler(filesystemWrite, ctx, input, "filesystem"),
+    wrapAuthorizedHandler(filesystemWrite, ctx, input, "filesystem"),
 
   "filesystem.delete": (input: FilesystemDeleteInput) =>
-    wrapHandler(filesystemDelete, ctx, input, "filesystem"),
+    wrapAuthorizedHandler(filesystemDelete, ctx, input, "filesystem"),
 
   "filesystem.mkdir": (input: FilesystemMkdirInput) =>
-    wrapHandler(filesystemMkdir, ctx, input, "filesystem"),
+    wrapAuthorizedHandler(filesystemMkdir, ctx, input, "filesystem"),
 
   "filesystem.move": (input: FilesystemMoveInput) =>
-    wrapHandler(filesystemMove, ctx, input, "filesystem"),
+    wrapAuthorizedHandler(filesystemMove, ctx, input, "filesystem"),
 
   "filesystem.copy": (input: FilesystemCopyInput) =>
-    wrapHandler(filesystemCopy, ctx, input, "filesystem"),
+    wrapAuthorizedHandler(filesystemCopy, ctx, input, "filesystem"),
 
   "filesystem.search": (input: FilesystemSearchInput) =>
-    wrapHandler(filesystemSearch, ctx, input, "filesystem"),
+    wrapAuthorizedHandler(filesystemSearch, ctx, input, "filesystem"),
 
   "filesystem.gitStatus": (input: FilesystemGitStatusInput) =>
-    wrapHandler(filesystemGitStatus, ctx, input, "filesystem"),
+    wrapAuthorizedHandler(filesystemGitStatus, ctx, input, "filesystem"),
 });

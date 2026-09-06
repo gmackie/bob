@@ -1,3 +1,5 @@
+import { getNotificationTargetHref } from "../planning/navigation";
+
 export const SELECTED_WORKSPACE_KEY = "@bob/selected_workspace";
 
 export interface SelectableWorkspaceMembership {
@@ -8,7 +10,9 @@ export interface SelectableWorkspaceMembership {
   } | null;
 }
 
-export type SelectedWorkspace = NonNullable<SelectableWorkspaceMembership["workspace"]>;
+export type SelectedWorkspace = NonNullable<
+  SelectableWorkspaceMembership["workspace"]
+>;
 
 export function selectWorkspace(input: {
   selectedWorkspaceId: string | null;
@@ -21,7 +25,9 @@ export function selectWorkspace(input: {
 
   return (
     workspaces.find((workspace) => workspace.id === input.routeWorkspaceId) ??
-    workspaces.find((workspace) => workspace.id === input.selectedWorkspaceId) ??
+    workspaces.find(
+      (workspace) => workspace.id === input.selectedWorkspaceId,
+    ) ??
     workspaces[0] ??
     null
   );
@@ -30,10 +36,14 @@ export function selectWorkspace(input: {
 export function buildWorkspaceSelectionPath(
   currentPath: string,
   workspaceId: string,
-): string {
+) {
   const [pathname = "/", queryString = ""] = currentPath.split("?");
   const params = new URLSearchParams(queryString);
   params.set("workspace", workspaceId);
   const nextQuery = params.toString();
-  return nextQuery ? `${pathname}?${nextQuery}` : pathname;
+  return (
+    getNotificationTargetHref({
+      url: nextQuery ? `${pathname}?${nextQuery}` : pathname,
+    }) ?? "/settings"
+  );
 }

@@ -20,7 +20,7 @@
     "@gmacko/ooda": "workspace:*",
     "@trpc/client": "catalog:",
     "superjson": "catalog:",
-    "ws": "^8.18.0",
+    "ws": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -29,6 +29,6 @@
     "@types/ws": "^8.5.13",
     "tsx": "catalog:",
     "typescript": "^5.9.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.2.7"
   }
 }

@@ -19,7 +19,7 @@ import {
   SecretNameConflictError,
   SecretNotFoundError,
 } from "@gmacko/core/secrets/errors";
-import { NotFoundError } from "@gmacko/core/rpc/errors";
+import { NotFoundError, UnauthorizedError, RpcError } from "@gmacko/core/rpc/errors";
 
 import {
   SecretEnvelopeSchema,
@@ -111,7 +111,7 @@ export const SecretsSessionGetManifestRpc = Rpc.make(
       sessionId: Schema.String.check(Schema.isUUID()),
     }),
     success: SessionSecretManifestSchema,
-    error: NotFoundError,
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -124,7 +124,7 @@ export const SecretsSessionGetForExecutionRpc = Rpc.make(
       handle: Schema.String,
     }),
     success: SessionSecretForExecutionSchema,
-    error: NotFoundError,
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -139,6 +139,7 @@ export const SecretsSessionCreateRpc = Rpc.make("secrets.session.create", {
     policy: Schema.optional(SessionSecretPolicyInputSchema),
   }),
   success: SessionSecretSchema,
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
 });
 
 /** List all secrets for a session. Auth: protected. */
@@ -147,7 +148,7 @@ export const SecretsSessionListRpc = Rpc.make("secrets.session.list", {
     sessionId: Schema.String.check(Schema.isUUID()),
   }),
   success: SessionSecretManifestSchema,
-  error: NotFoundError,
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
 });
 
 /** Delete a session secret. Auth: protected. */
@@ -156,7 +157,7 @@ export const SecretsSessionDeleteRpc = Rpc.make("secrets.session.delete", {
     secretId: Schema.String,
   }),
   success: SessionSecretDeleteResultSchema,
-  error: SecretNotFoundError,
+  error: Schema.Union([SecretNotFoundError, NotFoundError, UnauthorizedError, RpcError]),
 });
 
 /** Record usage of a session secret. Auth: protected. */
@@ -164,6 +165,7 @@ export const SecretsSessionMarkUsedRpc = Rpc.make(
   "secrets.session.markUsed",
   {
     payload: Schema.Struct({
+      usageId: Schema.optional(Schema.String.check(Schema.isUUID())),
       secretId: Schema.String,
       sessionId: Schema.String.check(Schema.isUUID()),
       executor: Schema.String,
@@ -173,6 +175,7 @@ export const SecretsSessionMarkUsedRpc = Rpc.make(
       durationMs: Schema.optional(Schema.Number),
     }),
     success: SessionSecretUsageSchema,
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -190,7 +193,7 @@ export const SecretsSessionUpsertDeployBindingRpc = Rpc.make(
       templateId: Schema.optional(Schema.String),
     }),
     success: ProjectDeployBindingSchema,
-    error: NotFoundError,
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -203,7 +206,7 @@ export const SecretsSessionPromoteRpc = Rpc.make("secrets.session.promote", {
     forgegraphKey: Schema.String,
   }),
   success: SessionSecretSchema,
-  error: Schema.Union([SecretNotFoundError, NotFoundError]),
+  error: Schema.Union([SecretNotFoundError, NotFoundError, UnauthorizedError, RpcError]),
 });
 
 // --- Group ---

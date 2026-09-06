@@ -1,7 +1,7 @@
-// @bob/db/schema — Thin barrel re-exporting from co-located area packages.
-// All 62+ `from "@bob/db/schema"` import sites keep working unchanged.
-export * from "@bob/auth/schema";
-export * from "@bob/tenancy/schema";
+// @bob/db/schema — Aggregate of the canonical leaf schema definitions.
+// All 62+ `from "@bob/schema/db"` import sites keep working unchanged.
+export * from "@bob/schema/auth";
+export * from "@bob/schema/tenancy";
 
 // gmacko auth tables — canonical plural names (users, sessions, accounts,
 // verifications). These are the SAME underlying pgTable objects as the singular
@@ -15,17 +15,17 @@ export {
   accounts,
   verifications,
 } from "@gmacko/core/db/schema/auth";
-export * from "@bob/settings/schema";
-export * from "@bob/projects/schema";
-export * from "@bob/work-items/schema";
-export * from "@bob/agents/schema";
-export * from "@bob/chat/schema";
-export * from "@bob/git/schema";
-export * from "@bob/webhooks/schema";
-export * from "@bob/ci/schema";
-export * from "@bob/notifications/schema";
-export * from "@bob/cookies/schema";
-export * from "@bob/secrets/schema";
+export * from "@bob/schema/settings";
+export * from "@bob/schema/projects";
+export * from "@bob/schema/work-items";
+export * from "@bob/schema/agents";
+export * from "@bob/schema/chat";
+export * from "@bob/schema/git";
+export * from "@bob/schema/webhooks";
+export * from "@bob/schema/ci";
+export * from "@bob/schema/notifications";
+export * from "@bob/schema/cookies";
+export * from "@bob/schema/secrets";
 export * from "./hermes-schema.js";
 export {
   agentPersonas,

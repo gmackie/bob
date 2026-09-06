@@ -53,7 +53,7 @@ export default function TasksScreen() {
             getTabletTaskLaneWorkItemHref(
               { workItemId, view },
               selectedWorkspaceId,
-            ) as never,
+            ),
           )
         }
       />
@@ -68,27 +68,27 @@ export default function TasksScreen() {
       view === "outcome"
         ? getMobileOutcomeWorkItemHref(workItemId, selectedWorkspaceId)
         : getMobileQueueWorkItemHref(workItemId, selectedWorkspaceId);
-    router.push(href as never);
+    router.push(href);
   };
 
   return (
     <TasksDashboard
       sessions={getLiveDashboardSessions(gateway.sessions)}
       onOpenProvider={(provider) =>
-        router.push(getTabletProviderHref(provider, selectedWorkspaceId) as never)
+        router.push(getTabletProviderHref(provider, selectedWorkspaceId))
       }
       onOpenLane={(targetLane) =>
-        router.push(getTabletTaskLaneHref(targetLane, selectedWorkspaceId) as never)
+        router.push(getTabletTaskLaneHref(targetLane, selectedWorkspaceId))
       }
       onOpenWorkItem={handleOpenWorkItem}
       onOpenTaskTab={(tab) =>
-        router.push(getMobileTaskTabHref(tab, selectedWorkspaceId) as never)
+        router.push(getMobileTaskTabHref(tab, selectedWorkspaceId))
       }
       onOpenMode={(mode) =>
-        router.push(getTabletDashboardHref(mode, selectedWorkspaceId) as never)
+        router.push(getTabletDashboardHref(mode, selectedWorkspaceId))
       }
       onOpenSettings={() =>
-        router.push(getTabletSettingsHref(selectedWorkspaceId) as never)
+        router.push(getTabletSettingsHref(selectedWorkspaceId))
       }
     />
   );

@@ -109,7 +109,7 @@ export default function HomeScreen() {
                       title={row.title}
                       subtitle={row.identifier}
                       showDivider={index < section.rows.length - 1}
-                      onPress={() => router.push(row.href as never)}
+                      onPress={() => router.push(row.href)}
                       right={
                         <Badge variant={BADGE[row.tone]}>{row.statusLabel}</Badge>
                       }

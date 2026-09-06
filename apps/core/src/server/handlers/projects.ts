@@ -1,7 +1,7 @@
 import "server-only";
 import { Effect } from "effect";
 
-import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
+import { ReferenceProjectsRpc as ProjectsRpc } from "./surface";
 import { CurrentUser } from "@gmacko/core/rpc/context";
 import { AuthMiddleware } from "@gmacko/core/auth";
 import { Projects } from "@gmacko/core/projects";

@@ -2,7 +2,6 @@ import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 
 import { colors } from "~/lib/colors";
-
 import { markActiveDestination } from "./mobile-nav";
 
 interface MobileNavSheetProps {
@@ -30,11 +29,16 @@ export function MobileNavSheet({
       transparent
       onRequestClose={onClose}
     >
-      <Pressable className="flex-1 bg-black/60" onPress={onClose}>
+      <View className="flex-1 justify-end">
         <Pressable
-          className="mt-auto rounded-t-3xl px-5 pb-10 pt-4"
+          className="absolute inset-0 bg-black/60"
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close navigation"
+        />
+        <View
+          className="mt-auto rounded-t-3xl px-5 pt-4 pb-10"
           style={{ backgroundColor: colors.card }}
-          onPress={(event) => event.stopPropagation()}
         >
           <View
             className="mx-auto mb-4 h-1 w-10 rounded-full"
@@ -61,7 +65,7 @@ export function MobileNavSheet({
                 onPress={() => {
                   onClose();
                   if (!destination.isActive) {
-                    router.push(destination.href as never);
+                    router.push(destination.href);
                   }
                 }}
               >
@@ -78,8 +82,8 @@ export function MobileNavSheet({
               </Pressable>
             ))}
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

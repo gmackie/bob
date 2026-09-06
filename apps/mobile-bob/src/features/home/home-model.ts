@@ -1,3 +1,5 @@
+import type { Href } from "expo-router";
+
 /**
  * Phone home: triage.
  *
@@ -29,7 +31,7 @@ export interface HomeRow {
   status: string;
   statusLabel: string;
   tone: HomeTone;
-  href: string;
+  href: Extract<Href, string>;
 }
 
 export interface HomeSection {
@@ -84,10 +86,12 @@ function toMillis(value: string | Date | null | undefined): number {
 }
 
 function toRow(item: HomeWorkItemInput): HomeRow {
+  const identifier = item.identifier?.trim();
+  const title = item.title?.trim();
   return {
     id: item.id,
-    identifier: item.identifier?.trim() || item.id.slice(0, 8),
-    title: item.title?.trim() || "Untitled",
+    identifier: identifier?.length ? identifier : item.id.slice(0, 8),
+    title: title?.length ? title : "Untitled",
     status: item.status,
     statusLabel: STATUS_LABELS[item.status] ?? item.status,
     tone: TONES[item.status] ?? "muted",
@@ -118,7 +122,7 @@ export function buildHomeTriage(
   options: { limit?: number } = {},
 ): HomeTriage {
   const limit = options.limit ?? HOME_SECTION_LIMIT;
-  const items = input.workItems ?? [];
+  const items = input.workItems;
 
   const needsYou = items.filter((i) => NEEDS_YOU.has(i.status));
   const running = items.filter((i) => i.status === "running");

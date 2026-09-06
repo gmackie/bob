@@ -43,20 +43,20 @@ export const settingsEdgeRouter: TRPCRouterRecord = {
    * require migrating anyone.
    */
   listNotificationPreferences: protectedProcedure.query(({ ctx }) =>
-    notificationPreferencesList({ db: ctx.db, userId: ctx.session.user.id } as never),
+    notificationPreferencesList({ db: ctx.db, userId: ctx.session.user.id }),
   ),
 
   setNotificationPreference: protectedProcedure
     .input(notificationPreferencesSetInput)
     .mutation(({ ctx, input }) =>
       notificationPreferencesSet(
-        { db: ctx.db, userId: ctx.session.user.id } as never,
+        { db: ctx.db, userId: ctx.session.user.id },
         input,
       ),
     ),
 
   resetNotificationPreferences: protectedProcedure.mutation(({ ctx }) =>
-    notificationPreferencesReset({ db: ctx.db, userId: ctx.session.user.id } as never),
+    notificationPreferencesReset({ db: ctx.db, userId: ctx.session.user.id }),
   ),
 
   listApiKeys: protectedProcedure.query(({ ctx }) =>

@@ -15,7 +15,7 @@ export default function Index() {
       href={
         getAuthenticatedHomeHref({
           isTablet: Platform.OS === "ios" && Platform.isPad,
-        }) as never
+        })
       }
     />
   );

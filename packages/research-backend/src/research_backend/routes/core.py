@@ -135,7 +135,9 @@ def library(
 
 
 @router.post("/collections")
-def create_collection(payload: CollectionCreate, service: PaperService = Depends(get_paper_service)):
+def create_collection(
+    payload: CollectionCreate, service: PaperService = Depends(get_paper_service)
+):
     return service.create_collection(payload)
 
 

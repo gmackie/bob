@@ -51,7 +51,7 @@ export default function PlanningSessionScreen() {
   }
 
   if (!sessionId) {
-    return <Redirect href={getMobilePlanningDashboardHref(selectedWorkspaceId) as never} />;
+    return <Redirect href={getMobilePlanningDashboardHref(selectedWorkspaceId)} />;
   }
 
   const planningSession = getPlanningPaneSession(sessions, sessionId);
@@ -77,7 +77,7 @@ export default function PlanningSessionScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={backAction.accessibilityLabel}
-          onPress={() => router.replace(backAction.href as never)}
+          onPress={() => router.replace(backAction.href)}
           className="rounded-md px-3 py-2 active:opacity-70"
           style={{ backgroundColor: colors.secondary }}
         >

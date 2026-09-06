@@ -23,10 +23,7 @@ test("the Hetzner runner deploy installs the checked-in Node 24 systemd override
 });
 
 test("the Hetzner runner deploy refuses unsupported build and service runtimes", () => {
-  assert.match(
-    deployScript,
-    /require_node_24 "deploy toolchain" "node"/,
-  );
+  assert.match(deployScript, /require_node_24 "deploy toolchain" "node"/);
   assert.match(
     deployScript,
     /if require_node_24 "active service" "\/proc\/\$\{main_pid\}\/exe"; then\s+exit 0\s+fi/,
@@ -39,4 +36,8 @@ test("CI enforces the OODA runner Node runtime deployment contract", () => {
     workflow,
     /node --test scripts\/verify-ooda-runner-node-runtime\.test\.mjs/,
   );
+});
+
+test("CI uses the supported Node 24 runtime", () => {
+  assert.match(workflow, /NODE_VERSION: "24"/);
 });

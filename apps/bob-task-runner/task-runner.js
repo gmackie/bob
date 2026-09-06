@@ -20,339 +20,416 @@
  *   BOB_RUNNER_PROJECTS   JSON map slug -> Linear project id (optional override)
  *   LINEAR_TEAM_ID        Linear team id (default below)
  */
-const { execSync, spawn } = require("child_process");
-const { readFileSync, writeFileSync, existsSync, mkdirSync } = require("fs");
-const { join } = require("path");
+function createRunner(options = {}) {
+  const env = options.env ?? process.env;
+  const argv = options.argv ?? process.argv.slice(2);
+  const { execFileSync, spawn, spawnSync } =
+    options.childProcess ?? require("node:child_process");
+  const { readFileSync, writeFileSync, existsSync, mkdirSync } =
+    options.fs ?? require("node:fs");
+  const { join } = require("node:path");
+  const fetch = options.fetch ?? globalThis.fetch;
+  const now = options.now ?? Date.now;
 
-const LINEAR_KEY_FILE = process.env.LINEAR_KEY_FILE || "/home/bob/.linear-key";
-const LINEAR_KEY =
-  process.env.LINEAR_API_KEY ||
-  (existsSync(LINEAR_KEY_FILE) ? readFileSync(LINEAR_KEY_FILE, "utf8").trim() : "");
-// Secret comes from the environment — never hard-code it in the repo.
-const PULSE_API_KEY = process.env.PULSE_API_KEY || "";
-const STATE_DIR = process.env.BOB_RUNNER_STATE_DIR || "/home/bob/.bob-runner";
-const LOG_DIR = join(STATE_DIR, "logs");
-const MAX_RUNTIME_MS = 20 * 60 * 1000; // 20 min per issue
-
-// Startup slug -> repo dir on the runner host.
-const DEFAULT_REPOS = {
-  appealkey: "/home/bob/dev/appealkey",
-  habitplay: "/home/bob/dev/habit-app",
-  playtrek: "/home/bob/dev/playtrek",
-  driftport: "/home/bob/dev/driftport",
-  latchflow: "/home/bob/dev/latchflow",
-  levelforge: "/home/bob/dev/levelforge",
-  forgegraph: "/home/bob/dev/bob",
-  streamconductor: "/home/bob/dev/streamconductor",
-  classcheck: "/home/bob/dev/class-check",
-  controlsfoundry: "/home/bob/dev/controlsfoundry",
-  gentrellis: "/home/bob/dev/gentrellis",
-  bob: "/home/bob/dev/bob",
-  // Playbook lane ONLY (see runOnce): the pulse checkout exists so
-  // growth.offer_synthesis can deliver docs/ai/OFFER_CANDIDATES.md, not so
-  // the runner starts coding pulse backlog issues unsupervised.
-  bizpulse: "/home/bob/dev/pulse",
-};
-
-// Startup slug -> Linear project ID.
-const DEFAULT_PROJECTS = {
-  appealkey: "6470095d-da6b-4d43-9a7a-0b40d76057af",
-  habitplay: "c9607479-57c6-4652-bf24-e7c3f7137e14",
-  playtrek: "eafba504-d3e5-4873-8a86-4711caa9cd0c",
-  driftport: "da45f496-bc56-4d1c-98cf-60d1051a5600",
-  latchflow: "f1f65d1a-2f82-4a7f-8bc8-4335b9282fb1",
-  levelforge: "98e36fe3-0859-4357-a852-f9dacee2d3f1",
-  forgegraph: "48fedca7-94be-4194-a525-6688664731c7",
-  streamconductor: "448e1bd5-7795-4500-a3f4-c13a9e5ca832",
-  classcheck: "28498543-00ea-4cbb-8fec-32170773a997",
-  controlsfoundry: "40c155ef-54e0-40f3-85a8-ca328056b973",
-  gentrellis: "06681f23-8a40-4bf8-9ee5-8c7f7f2a72eb",
-  bob: "22b9ea42-2b01-4a67-b849-042b61d0853b",
-  bizpulse: "7eb8413c-4d5a-42b6-9834-f1f93a17d487",
-};
-
-function parseJsonEnv(name, fallback) {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    console.log(`[runner] ignoring invalid JSON in ${name}`);
-    return fallback;
+  const LINEAR_KEY_FILE = env.LINEAR_KEY_FILE || "/home/bob/.linear-key";
+  function linearKey() {
+    return (
+      env.LINEAR_API_KEY ||
+      (existsSync(LINEAR_KEY_FILE)
+        ? readFileSync(LINEAR_KEY_FILE, "utf8").trim()
+        : "")
+    );
   }
-}
+  // Secret comes from the environment — never hard-code it in the repo.
+  const PULSE_API_KEY = env.PULSE_API_KEY || "";
+  const STATE_DIR = env.BOB_RUNNER_STATE_DIR || "/home/bob/.bob-runner";
+  const LOG_DIR = join(STATE_DIR, "logs");
+  const MAX_RUNTIME_MS = 20 * 60 * 1000; // 20 min per issue
 
-const REPOS = parseJsonEnv("BOB_RUNNER_REPOS", DEFAULT_REPOS);
-const PROJECTS = parseJsonEnv("BOB_RUNNER_PROJECTS", DEFAULT_PROJECTS);
+  // Startup slug -> repo dir on the runner host.
+  const DEFAULT_REPOS = {
+    appealkey: "/home/bob/dev/appealkey",
+    habitplay: "/home/bob/dev/habit-app",
+    playtrek: "/home/bob/dev/playtrek",
+    driftport: "/home/bob/dev/driftport",
+    latchflow: "/home/bob/dev/latchflow",
+    levelforge: "/home/bob/dev/levelforge",
+    forgegraph: "/home/bob/dev/bob",
+    streamconductor: "/home/bob/dev/streamconductor",
+    classcheck: "/home/bob/dev/class-check",
+    controlsfoundry: "/home/bob/dev/controlsfoundry",
+    gentrellis: "/home/bob/dev/gentrellis",
+    bob: "/home/bob/dev/bob",
+    // Playbook lane ONLY (see runOnce): the pulse checkout exists so
+    // growth.offer_synthesis can deliver docs/ai/OFFER_CANDIDATES.md, not so
+    // the runner starts coding pulse backlog issues unsupervised.
+    bizpulse: "/home/bob/dev/pulse",
+  };
 
-// --- Remote slug→{project, repo} map served by Pulse ------------------
-// Source of truth is Pulse's startup/connector/startup_repo rows (company
-// factory Q4): provisioning writes rows there and this runner picks them
-// up on the next scan — no more SSH hand-edits. Remote entries win over
-// the hardcoded defaults; the defaults remain the fallback when Pulse is
-// unreachable. Repos missing on disk are cloned lazily at claim time.
-const REMOTE_CONFIG_URL =
-  (process.env.PULSE_API_URL || "https://bizpulse.cc") +
-  "/api/gtm/runner-config";
-let _remoteRepos = {}; // slug -> { projectId, provider, repoSlug, localPath }
+  // Startup slug -> Linear project ID.
+  const DEFAULT_PROJECTS = {
+    appealkey: "6470095d-da6b-4d43-9a7a-0b40d76057af",
+    habitplay: "c9607479-57c6-4652-bf24-e7c3f7137e14",
+    playtrek: "eafba504-d3e5-4873-8a86-4711caa9cd0c",
+    driftport: "da45f496-bc56-4d1c-98cf-60d1051a5600",
+    latchflow: "f1f65d1a-2f82-4a7f-8bc8-4335b9282fb1",
+    levelforge: "98e36fe3-0859-4357-a852-f9dacee2d3f1",
+    forgegraph: "48fedca7-94be-4194-a525-6688664731c7",
+    streamconductor: "448e1bd5-7795-4500-a3f4-c13a9e5ca832",
+    classcheck: "28498543-00ea-4cbb-8fec-32170773a997",
+    controlsfoundry: "40c155ef-54e0-40f3-85a8-ca328056b973",
+    gentrellis: "06681f23-8a40-4bf8-9ee5-8c7f7f2a72eb",
+    bob: "22b9ea42-2b01-4a67-b849-042b61d0853b",
+    bizpulse: "7eb8413c-4d5a-42b6-9834-f1f93a17d487",
+  };
 
-async function refreshRemoteConfig() {
-  const secret = process.env.PULSE_SERVICE_SECRET;
-  if (!secret) return;
-  try {
-    const res = await fetch(REMOTE_CONFIG_URL, {
-      headers: { Authorization: "Bearer " + secret },
-    });
-    if (!res.ok) {
-      console.log(`[runner] remote config fetch -> ${res.status}`);
-      return;
-    }
-    const data = await res.json();
-    if (data && typeof data.repos === "object" && data.repos !== null) {
-      _remoteRepos = data.repos;
-    }
-  } catch (e) {
-    console.log(`[runner] remote config fetch failed: ${e.message}`);
-  }
-}
-
-function remoteEntry(slug) {
-  const r = _remoteRepos[slug];
-  if (!r || !r.projectId || !r.repoSlug) return null;
-  const dir =
-    r.localPath || "/home/bob/dev/" + r.repoSlug.split("/").pop();
-  // The forge is canonical (several repos exist ONLY there); github is a
-  // mirror for some. Try in that order.
-  const cloneUrls = [
-    "git@git.forgegraf.com:" + r.repoSlug + ".git",
-    "git@github.com:" + r.repoSlug + ".git",
-  ];
-  return { projectId: r.projectId, repoDir: dir, cloneUrls };
-}
-
-function effectiveProjects() {
-  const merged = { ...PROJECTS };
-  for (const [slug, r] of Object.entries(_remoteRepos)) {
-    if (r && r.projectId) merged[slug] = r.projectId;
-  }
-  return merged;
-}
-
-function effectiveRepoDir(slug) {
-  const remote = remoteEntry(slug);
-  if (remote) return remote.repoDir;
-  return getRepoDir(slug);
-}
-
-// Slugs whose clone failed this process: skipped until restart so a repo
-// that exists nowhere (stale startup_repo row) can't burn a scan slot
-// every cycle.
-const _cloneFailed = new Set();
-
-// Clone a missing repo at claim time so provisioning a new company needs
-// zero host access. Returns true when the dir exists (already or after
-// cloning). Tries the forge first (canonical), then the github mirror.
-function ensureRepoDir(slug) {
-  const remote = remoteEntry(slug);
-  const dir = remote ? remote.repoDir : getRepoDir(slug);
-  if (!dir) return false;
-  if (existsSync(dir)) return true;
-  if (!remote) return false;
-  for (const url of remote.cloneUrls) {
+  function parseJsonEnv(name, fallback) {
+    const raw = env[name];
+    if (!raw) return fallback;
     try {
-      console.log(`[runner] cloning ${url} -> ${dir}`);
-      execSync(`git clone --depth 20 ${url} ${dir}`, {
-        stdio: "pipe",
-        timeout: 300000,
-        env: {
-          ...process.env,
-          GIT_SSH_COMMAND: "ssh -o StrictHostKeyChecking=accept-new",
-        },
+      return JSON.parse(raw);
+    } catch {
+      console.log(`[runner] ignoring invalid JSON in ${name}`);
+      return fallback;
+    }
+  }
+
+  const REPOS = parseJsonEnv("BOB_RUNNER_REPOS", DEFAULT_REPOS);
+  const PROJECTS = parseJsonEnv("BOB_RUNNER_PROJECTS", DEFAULT_PROJECTS);
+
+  // --- Remote slug→{project, repo} map served by Pulse ------------------
+  // Source of truth is Pulse's startup/connector/startup_repo rows (company
+  // factory Q4): provisioning writes rows there and this runner picks them
+  // up on the next scan — no more SSH hand-edits. Remote entries win over
+  // the hardcoded defaults; the defaults remain the fallback when Pulse is
+  // unreachable. Repos missing on disk are cloned lazily at claim time.
+  const REMOTE_CONFIG_URL =
+    (env.PULSE_API_URL || "https://bizpulse.cc") + "/api/gtm/runner-config";
+  let _remoteRepos = options.remoteRepos ?? {}; // slug -> { projectId, provider, repoSlug, localPath }
+
+  async function refreshRemoteConfig() {
+    const secret = env.PULSE_SERVICE_SECRET;
+    if (!secret) return;
+    try {
+      const res = await fetch(REMOTE_CONFIG_URL, {
+        headers: { Authorization: "Bearer " + secret },
       });
-      if (existsSync(dir)) return true;
+      if (!res.ok) {
+        console.log(`[runner] remote config fetch -> ${res.status}`);
+        return;
+      }
+      const data = await res.json();
+      if (data && typeof data.repos === "object" && data.repos !== null) {
+        _remoteRepos = data.repos;
+      }
     } catch (e) {
-      console.log(`[runner] clone failed (${url}): ${e.message.split("\n")[0]}`);
+      console.log(`[runner] remote config fetch failed: ${e.message}`);
     }
   }
-  _cloneFailed.add(slug);
-  return false;
-}
-// --- end remote config -------------------------------------------------
-const TEAM_ID = process.env.LINEAR_TEAM_ID || "5027d80c-70dc-4c48-b88b-40053c03aec3";
 
+  function remoteEntry(slug) {
+    const r = _remoteRepos[slug];
+    if (!r || !r.projectId || !r.repoSlug) return null;
+    const dir = r.localPath || "/home/bob/dev/" + r.repoSlug.split("/").pop();
+    // The forge is canonical (several repos exist ONLY there); github is a
+    // mirror for some. Try in that order.
+    const cloneUrls = [
+      "git@git.forgegraf.com:" + r.repoSlug + ".git",
+      "git@github.com:" + r.repoSlug + ".git",
+    ];
+    return { projectId: r.projectId, repoDir: dir, cloneUrls };
+  }
 
-// --- Agent preference & health ---
-//
-// Health, credit state, and the dispatch decision all come from the execution
-// daemon's agent-health build artifact. It used to be /opt/bob/scripts/agent-health.js
-// — a file that existed only on this box, was not in version control, and was
-// free to disagree with the daemon and the UI about whether an agent was alive.
-// It is now built from the same probe the daemon uses and reads the same
-// durable credit latch, so the three cannot drift apart.
-const AGENT_PREFERENCE = (process.env.BOB_AGENT_PREFERENCE || "claude,codex,grok").split(",").map(s => s.trim());
-const AGENT_HEALTH_BIN = process.env.BOB_AGENT_HEALTH_BIN || "/opt/bob/execution-daemon/dist/daemon/agent-health.js";
-
-const STATUS_ICON = {
-  ready: "OK",
-  no_credit: "NO CREDIT",
-  unauthenticated: "SIGN IN",
-  unavailable: "MISSING",
-  degraded: "DEGRADED",
-};
-
-function checkAgentHealth() {
-  try {
-    // Exit code 1 simply means "not everything is ready", which is the case we
-    // most need to read — so take stdout regardless of status.
-    const res = require("child_process").spawnSync(
-      "node",
-      [AGENT_HEALTH_BIN],
-      { encoding: "utf8", timeout: 60000, env: { ...process.env, BOB_AGENT_PREFERENCE: AGENT_PREFERENCE.join(",") } }
-    );
-    const report = JSON.parse(res.stdout || "{}");
-    for (const a of report.agents || []) {
-      const icon = STATUS_ICON[a.status] || String(a.status).toUpperCase();
-      console.log("[runner] Agent " + icon + " " + a.name + " " + (a.version || "") + " - " + a.status + (a.detail ? " (" + a.detail + ")" : ""));
+  function effectiveProjects() {
+    const merged = { ...PROJECTS };
+    for (const [slug, r] of Object.entries(_remoteRepos)) {
+      if (r && r.projectId) merged[slug] = r.projectId;
     }
-    return report;
-  } catch (e) {
-    // A broken health check is NOT evidence that agents are dead. Return an
-    // empty report: the gate treats absence of evidence as uncertain and keeps
-    // dispatching, which is the behaviour agentHealthRouter.ts asks for.
-    console.log("[runner] Agent health check failed (" + e.message.split("\n")[0] + ") - treating as unknown");
-    return { agents: [], dispatch: { agent: AGENT_PREFERENCE[0], paused: false, reason: "health check unavailable", blocked: [] } };
+    return merged;
   }
-}
 
-let _agentHealthCache = null;
-let _agentHealthTs = 0;
-const HEALTH_CACHE_MS = 10 * 60 * 1000;
-
-function agentHealth({ fresh = false } = {}) {
-  const now = Date.now();
-  if (fresh || !_agentHealthCache || now - _agentHealthTs > HEALTH_CACHE_MS) {
-    _agentHealthCache = checkAgentHealth();
-    _agentHealthTs = now;
+  function effectiveRepoDir(slug) {
+    const remote = remoteEntry(slug);
+    if (remote) return remote.repoDir;
+    return getRepoDir(slug);
   }
-  return _agentHealthCache;
-}
 
-/**
- * The dispatch decision. `paused` is only ever true on CONFIRMED evidence
- * (probe says unauthenticated/unavailable, or a real 402 latched no_credit).
- * Statistical inference and broken health checks never pause dispatch.
- */
-function dispatchDecision(opts) {
-  const report = agentHealth(opts);
-  return report.dispatch || { agent: AGENT_PREFERENCE[0], paused: false, reason: "no decision in report", blocked: [] };
-}
+  // Clone failures receive a bounded cooldown; other repositories remain eligible.
+  const _cloneFailed = new Map();
+  const CLONE_BACKOFF_MS = 5 * 60_000;
 
-function pickAgent() {
-  return dispatchDecision().agent || AGENT_PREFERENCE[0];
-}
+  // Clone a missing repo at claim time so provisioning a new company needs
+  // zero host access. Returns true when the dir exists (already or after
+  // cloning). Tries the forge first (canonical), then the github mirror.
+  function ensureRepoDir(slug) {
+    const remote = remoteEntry(slug);
+    const dir = remote ? remote.repoDir : getRepoDir(slug);
+    if (!dir) return false;
+    if (existsSync(dir)) {
+      try {
+        if (git(dir, ["rev-parse", "--is-inside-work-tree"]) === "true") {
+          _cloneFailed.delete(slug);
+          return true;
+        }
+      } catch {}
+      _cloneFailed.set(slug, now() + CLONE_BACKOFF_MS);
+      return false;
+    }
+    if ((_cloneFailed.get(slug) ?? 0) > now()) return false;
+    if (!remote || DRY_RUN) return false;
+    for (const url of remote.cloneUrls) {
+      try {
+        console.log(`[runner] cloning ${url} -> ${dir}`);
+        execFileSync("git", ["clone", "--depth", "20", "--", url, dir], {
+          stdio: "pipe",
+          timeout: 300000,
+          env: {
+            ...env,
+            GIT_SSH_COMMAND: "ssh -o StrictHostKeyChecking=accept-new",
+          },
+        });
+        if (existsSync(dir)) {
+          _cloneFailed.delete(slug);
+          return ensureRepoDir(slug);
+        }
+      } catch (e) {
+        console.log(
+          `[runner] clone failed (${url}): ${e.message.split("\n")[0]}`,
+        );
+      }
+    }
+    _cloneFailed.set(slug, now() + CLONE_BACKOFF_MS);
+    return false;
+  }
+  // --- end remote config -------------------------------------------------
+  const TEAM_ID = env.LINEAR_TEAM_ID || "5027d80c-70dc-4c48-b88b-40053c03aec3";
 
-/**
- * Feed a dispatch outcome back into the shared credit latch. A 402 observed
- * here latches for the daemon and the UI too; a success clears it. Classification
- * deliberately lives in one place rather than being re-implemented here.
- */
-function noteRunOutcome(agentType, exitCode, output) {
-  try {
-    require("child_process").spawnSync(
-      "node",
-      [AGENT_HEALTH_BIN, "--note-outcome", "--agent", agentType, "--exit-code", String(exitCode ?? 1)],
-      { input: (output || "").slice(-8000), encoding: "utf8", timeout: 15000 }
+  // --- Agent preference & health ---
+  //
+  // Health, credit state, and the dispatch decision all come from the execution
+  // daemon's agent-health build artifact. It used to be /opt/bob/scripts/agent-health.js
+  // — a file that existed only on this box, was not in version control, and was
+  // free to disagree with the daemon and the UI about whether an agent was alive.
+  // It is now built from the same probe the daemon uses and reads the same
+  // durable credit latch, so the three cannot drift apart.
+  const AGENT_PREFERENCE = (env.BOB_AGENT_PREFERENCE || "claude,codex,grok")
+    .split(",")
+    .map((s) => s.trim());
+  const AGENT_HEALTH_BIN =
+    env.BOB_AGENT_HEALTH_BIN ||
+    "/opt/bob/execution-daemon/dist/daemon/agent-health.js";
+
+  const STATUS_ICON = {
+    ready: "OK",
+    no_credit: "NO CREDIT",
+    unauthenticated: "SIGN IN",
+    unavailable: "MISSING",
+    degraded: "DEGRADED",
+  };
+
+  function checkAgentHealth() {
+    try {
+      // Exit code 1 simply means "not everything is ready", which is the case we
+      // most need to read — so take stdout regardless of status.
+      const res = spawnSync("node", [AGENT_HEALTH_BIN], {
+        encoding: "utf8",
+        timeout: 60000,
+        env: { ...env, BOB_AGENT_PREFERENCE: AGENT_PREFERENCE.join(",") },
+      });
+      const report = JSON.parse(res.stdout || "{}");
+      for (const a of report.agents || []) {
+        const icon = STATUS_ICON[a.status] || String(a.status).toUpperCase();
+        console.log(
+          "[runner] Agent " +
+            icon +
+            " " +
+            a.name +
+            " " +
+            (a.version || "") +
+            " - " +
+            a.status +
+            (a.detail ? " (" + a.detail + ")" : ""),
+        );
+      }
+      return report;
+    } catch (e) {
+      // A broken health check is NOT evidence that agents are dead. Return an
+      // empty report: the gate treats absence of evidence as uncertain and keeps
+      // dispatching, which is the behaviour agentHealthRouter.ts asks for.
+      console.log(
+        "[runner] Agent health check failed (" +
+          e.message.split("\n")[0] +
+          ") - treating as unknown",
+      );
+      return {
+        agents: [],
+        dispatch: {
+          agent: AGENT_PREFERENCE[0],
+          paused: false,
+          reason: "health check unavailable",
+          blocked: [],
+        },
+      };
+    }
+  }
+
+  let _agentHealthCache = null;
+  let _agentHealthTs = 0;
+  const HEALTH_CACHE_MS = 10 * 60 * 1000;
+
+  function agentHealth({ fresh = false } = {}) {
+    const now = Date.now();
+    if (fresh || !_agentHealthCache || now - _agentHealthTs > HEALTH_CACHE_MS) {
+      _agentHealthCache = checkAgentHealth();
+      _agentHealthTs = now;
+    }
+    return _agentHealthCache;
+  }
+
+  /**
+   * The dispatch decision. `paused` is only ever true on CONFIRMED evidence
+   * (probe says unauthenticated/unavailable, or a real 402 latched no_credit).
+   * Statistical inference and broken health checks never pause dispatch.
+   */
+  function dispatchDecision(opts) {
+    const report = agentHealth(opts);
+    return (
+      report.dispatch || {
+        agent: AGENT_PREFERENCE[0],
+        paused: false,
+        reason: "no decision in report",
+        blocked: [],
+      }
     );
-    // The verdict just changed; don't answer from a stale cache.
-    _agentHealthCache = null;
-  } catch (e) {
-    console.log("[runner] Could not record run outcome: " + e.message.split("\n")[0]);
   }
-}
-// --- end agent health ---
 
-// Parse args
-const args = process.argv.slice(2);
-const DRY_RUN = args.includes("--dry-run");
-const ONCE = args.includes("--once");
-const STARTUP_FILTER = args.includes("--startup") ? args[args.indexOf("--startup") + 1] : null;
+  function pickAgent() {
+    return dispatchDecision().agent || AGENT_PREFERENCE[0];
+  }
 
-// --- Bob run reporting (best-effort; never breaks the runner) ---
-const BOB_API_URL = process.env.BOB_API_URL;
-const BOB_API_KEY = process.env.BOB_API_KEY;
-const BOB_WORKSPACE_ID = process.env.BOB_WORKSPACE_ID;
-const BOB_REPORT = !!(BOB_API_URL && BOB_API_KEY && BOB_WORKSPACE_ID);
+  /**
+   * Feed a dispatch outcome back into the shared credit latch. A 402 observed
+   * here latches for the daemon and the UI too; a success clears it. Classification
+   * deliberately lives in one place rather than being re-implemented here.
+   */
+  function noteRunOutcome(agentType, exitCode, output) {
+    try {
+      spawnSync(
+        "node",
+        [
+          AGENT_HEALTH_BIN,
+          "--note-outcome",
+          "--agent",
+          agentType,
+          "--exit-code",
+          String(exitCode ?? 1),
+        ],
+        {
+          input: (output || "").slice(-8000),
+          encoding: "utf8",
+          timeout: 15000,
+        },
+      );
+      // The verdict just changed; don't answer from a stale cache.
+      _agentHealthCache = null;
+    } catch (e) {
+      console.log(
+        "[runner] Could not record run outcome: " + e.message.split("\n")[0],
+      );
+    }
+  }
+  // --- end agent health ---
 
-async function bobApi(method, path, body) {
-  if (!BOB_REPORT) return null;
-  try {
-    const r = await fetch(BOB_API_URL + path, {
-      method,
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + BOB_API_KEY },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) {
-      console.log("[bob-report] " + method + " " + path + " -> " + r.status);
+  // Parse args
+  const args = argv;
+  const DRY_RUN = args.includes("--dry-run");
+  const ONCE = args.includes("--once");
+  const STARTUP_FILTER = args.includes("--startup")
+    ? args[args.indexOf("--startup") + 1]
+    : null;
+
+  // --- Bob run reporting (best-effort; never breaks the runner) ---
+  const BOB_API_URL = env.BOB_API_URL;
+  const BOB_API_KEY = env.BOB_API_KEY;
+  const BOB_WORKSPACE_ID = env.BOB_WORKSPACE_ID;
+  const BOB_REPORT = !!(BOB_API_URL && BOB_API_KEY && BOB_WORKSPACE_ID);
+
+  async function bobApi(method, path, body) {
+    if (!BOB_REPORT) return null;
+    try {
+      const r = await fetch(BOB_API_URL + path, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + BOB_API_KEY,
+        },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        console.log("[bob-report] " + method + " " + path + " -> " + r.status);
+        return null;
+      }
+      return await r.json().catch(() => ({}));
+    } catch (e) {
+      console.log(
+        "[bob-report] " + method + " " + path + " failed: " + e.message,
+      );
       return null;
     }
-    return await r.json().catch(() => ({}));
-  } catch (e) {
-    console.log("[bob-report] " + method + " " + path + " failed: " + e.message);
-    return null;
   }
-}
 
-// Open the run as soon as the issue is claimed (before the slow Linear/git
-// phase) so it shows up immediately for monitoring.
-async function bobStartRun(issue, slug) {
-  // Omit agentType so the server resolves it via the work-item override ->
-  // project default -> workspace default -> "claude" hierarchy. The created
-  // run echoes back the resolved agentType, which we use to pick the CLI.
-  const run = await bobApi("POST", "/api/v1/runs", {
-    workItemId: issue.identifier,
-    workspaceId: BOB_WORKSPACE_ID,
-    agentConfig: { title: issue.title, slug },
-  });
-  const id = run && run.id;
-  const agentType = pickAgent();
-  if (id) await bobApi("PATCH", "/api/v1/runs/" + id, { status: "running" });
-  return { id: id || null, agentType };
-}
-
-async function bobPushLog(runId, output) {
-  if (!runId || !output) return;
-  const tail = output.length > 60000 ? output.slice(-60000) : output;
-  await bobApi("POST", "/api/v1/runs/" + runId + "/artifacts", {
-    type: "log",
-    storageKey: "inline:" + runId + ":log",
-    metadata: { content: tail },
-  });
-}
-
-async function bobFinishRun(runId, status, summary) {
-  if (!runId) return;
-  await bobApi("PATCH", "/api/v1/runs/" + runId, { status, summary });
-}
-// --- end Bob run reporting ---
-
-async function linearQuery(query, variables = {}) {
-  const resp = await fetch("https://tasks.gmac.io/graphql", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: LINEAR_KEY,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-  const data = await resp.json();
-  if (data.errors?.length) {
-    throw new Error(data.errors[0].message);
+  // Open the run as soon as the issue is claimed (before the slow Linear/git
+  // phase) so it shows up immediately for monitoring.
+  async function bobStartRun(issue, slug) {
+    // Omit agentType so the server resolves it via the work-item override ->
+    // project default -> workspace default -> "claude" hierarchy. The created
+    // run echoes back the resolved agentType, which we use to pick the CLI.
+    const run = await bobApi("POST", "/api/v1/runs", {
+      workItemId: issue.identifier,
+      workspaceId: BOB_WORKSPACE_ID,
+      agentConfig: { title: issue.title, slug },
+    });
+    const id = run && run.id;
+    const agentType = pickAgent();
+    if (id) await bobApi("PATCH", "/api/v1/runs/" + id, { status: "running" });
+    return { id: id || null, agentType };
   }
-  return data.data;
-}
 
-async function getUnstartedIssues(projectId) {
-  const data = await linearQuery(`
+  async function bobPushLog(runId, output) {
+    if (!runId || !output) return;
+    const tail = output.length > 60000 ? output.slice(-60000) : output;
+    await bobApi("POST", "/api/v1/runs/" + runId + "/artifacts", {
+      type: "log",
+      storageKey: "inline:" + runId + ":log",
+      metadata: { content: tail },
+    });
+  }
+
+  async function bobFinishRun(runId, status, summary) {
+    if (!runId) return;
+    await bobApi("PATCH", "/api/v1/runs/" + runId, { status, summary });
+  }
+  // --- end Bob run reporting ---
+
+  async function linearQuery(query, variables = {}) {
+    const resp = await fetch("https://tasks.gmac.io/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: linearKey(),
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+    const data = await resp.json();
+    if (data.errors?.length) {
+      throw new Error(data.errors[0].message);
+    }
+    return data.data;
+  }
+
+  async function getUnstartedIssues(projectId) {
+    const data = await linearQuery(
+      `
     query($projectId: ID!) {
       issues(
         filter: {
@@ -369,179 +446,200 @@ async function getUnstartedIssues(projectId) {
         }
       }
     }
-  `, { projectId });
-  return data.issues?.nodes || [];
-}
+  `,
+      { projectId },
+    );
+    return data.issues?.nodes || [];
+  }
 
-async function updateIssueState(issueId, stateType) {
-  // Find the state ID for the target type
-  const data = await linearQuery(`
+  async function updateIssueState(issueId, stateType) {
+    // Find the state ID for the target type
+    const data = await linearQuery(
+      `
     query($teamId: ID!) {
       workflowStates(filter: { team: { id: { eq: $teamId } } }) {
         nodes { id name type }
       }
     }
-  `, { teamId: TEAM_ID });
+  `,
+      { teamId: TEAM_ID },
+    );
 
-  const states = data.workflowStates?.nodes || [];
-  const target = states.find(s => s.type === stateType);
-  if (!target) return;
+    const states = data.workflowStates?.nodes || [];
+    const target = states.find((s) => s.type === stateType);
+    if (!target) return;
 
-  await linearQuery(`
+    await linearQuery(
+      `
     mutation($issueId: String!, $stateId: String!) {
       issueUpdate(id: $issueId, input: { stateId: $stateId }) {
         success
       }
     }
-  `, { issueId, stateId: target.id });
-}
+  `,
+      { issueId, stateId: target.id },
+    );
+  }
 
-async function addIssueComment(issueId, body) {
-  await linearQuery(`
+  async function addIssueComment(issueId, body) {
+    await linearQuery(
+      `
     mutation($issueId: String!, $body: String!) {
       commentCreate(input: { issueId: $issueId, body: $body }) {
         success
       }
     }
-  `, { issueId, body });
-}
-
-function getSlugForProject(projectId) {
-  for (const [slug, pid] of Object.entries(PROJECTS)) {
-    if (pid === projectId) return slug;
+  `,
+      { issueId, body },
+    );
   }
-  return null;
-}
 
-function getRepoDir(slug) {
-  return REPOS[slug] || null;
-}
-
-function getClaimedFile() {
-  return join(STATE_DIR, "claimed.json");
-}
-
-function loadClaimed() {
-  const f = getClaimedFile();
-  if (!existsSync(f)) return {};
-  try { return JSON.parse(readFileSync(f, "utf8")); } catch { return {}; }
-}
-
-function saveClaimed(data) {
-  writeFileSync(getClaimedFile(), JSON.stringify(data, null, 2));
-}
-
-function isClaimed(issueId) {
-  const claimed = loadClaimed();
-  return !!claimed[issueId];
-}
-
-function markClaimed(issueId, slug, status = "in_progress") {
-  const claimed = loadClaimed();
-  claimed[issueId] = { slug, status, startedAt: new Date().toISOString() };
-  saveClaimed(claimed);
-}
-
-function markDone(issueId, status) {
-  const claimed = loadClaimed();
-  if (claimed[issueId]) {
-    claimed[issueId].status = status;
-    claimed[issueId].completedAt = new Date().toISOString();
+  function getRepoDir(slug) {
+    return REPOS[slug] || null;
   }
-  saveClaimed(claimed);
-}
 
-function unclaim(issueId) {
-  const claimed = loadClaimed();
-  delete claimed[issueId];
-  saveClaimed(claimed);
-}
-
-// Build the [command, args] for a given agent type. codex keeps its exact
-// prior invocation; claude and grok run headless against the working tree.
-function agentCommand(agentType, prompt, logFile) {
-  switch (agentType) {
-    case "claude":
-      return ["claude", [
-        "-p", prompt,
-        "--output-format", "text",
-        "--dangerously-skip-permissions",
-      ]];
-    case "grok":
-      // Grok Build headless mode (writes to stdout; we capture it ourselves).
-      // Valid --output-format values are plain | json | streaming-json.
-      return ["grok", ["-p", prompt, "--output-format", "plain"]];
-    case "codex":
-    default:
-      return ["codex", [
-        "exec",
-        "--dangerously-bypass-approvals-and-sandbox",
-        "-m", "gpt-5.5",
-        "-o", logFile,
-        prompt,
-      ]];
+  function getClaimedFile() {
+    return join(STATE_DIR, "claimed.json");
   }
-}
 
-async function runAgent(agentType, repoDir, prompt, logFile) {
-  const [command, args] = agentCommand(agentType, prompt, logFile);
-  console.log(`[runner] Spawning ${command} (agent: ${agentType})`);
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: repoDir,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        ...process.env,
-        PULSE_API_KEY,
-        PULSE_API_URL: "https://bizpulse.cc",
-      },
+  function loadClaimed() {
+    const f = getClaimedFile();
+    if (!existsSync(f)) return {};
+    try {
+      return JSON.parse(readFileSync(f, "utf8"));
+    } catch {
+      return {};
+    }
+  }
+
+  function saveClaimed(data) {
+    writeFileSync(getClaimedFile(), JSON.stringify(data, null, 2));
+  }
+
+  function isClaimed(issueId) {
+    const claimed = loadClaimed();
+    return !!claimed[issueId];
+  }
+
+  function markClaimed(issueId, slug, status = "in_progress") {
+    const claimed = loadClaimed();
+    claimed[issueId] = { slug, status, startedAt: new Date().toISOString() };
+    saveClaimed(claimed);
+  }
+
+  function markDone(issueId, status) {
+    const claimed = loadClaimed();
+    if (claimed[issueId]) {
+      claimed[issueId].status = status;
+      claimed[issueId].completedAt = new Date().toISOString();
+    }
+    saveClaimed(claimed);
+  }
+
+  function agentCommand(agentType, prompt, logFile) {
+    switch (agentType) {
+      case "claude":
+        return [
+          "claude",
+          [
+            "-p",
+            prompt,
+            "--output-format",
+            "text",
+            "--dangerously-skip-permissions",
+          ],
+        ];
+      case "grok":
+        // Grok Build headless mode (writes to stdout; we capture it ourselves).
+        // Valid --output-format values are plain | json | streaming-json.
+        return ["grok", ["-p", prompt, "--output-format", "plain"]];
+      case "codex":
+      default:
+        return [
+          "codex",
+          [
+            "exec",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "-m",
+            "gpt-5.5",
+            "-o",
+            logFile,
+            prompt,
+          ],
+        ];
+    }
+  }
+
+  async function runAgent(agentType, repoDir, prompt, logFile) {
+    const [command, args] = agentCommand(agentType, prompt, logFile);
+    console.log(`[runner] Spawning ${command} (agent: ${agentType})`);
+    return new Promise((resolve, reject) => {
+      const child = spawn(command, args, {
+        cwd: repoDir,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...env,
+          PULSE_API_KEY,
+          PULSE_API_URL: "https://bizpulse.cc",
+        },
+      });
+
+      let output = "";
+      child.stdout?.on("data", (d) => {
+        output += d.toString();
+      });
+      child.stderr?.on("data", (d) => {
+        output += d.toString();
+      });
+
+      const timeout = setTimeout(() => {
+        console.log(`[runner] Timeout, killing ${command}`);
+        child.kill("SIGTERM");
+        setTimeout(() => {
+          if (!child.killed) child.kill("SIGKILL");
+        }, 5000);
+      }, MAX_RUNTIME_MS);
+
+      child.on("close", (code) => {
+        clearTimeout(timeout);
+        resolve({ exitCode: code, output });
+      });
+
+      child.on("error", (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
     });
-
-    let output = "";
-    child.stdout?.on("data", d => { output += d.toString(); });
-    child.stderr?.on("data", d => { output += d.toString(); });
-
-    const timeout = setTimeout(() => {
-      console.log(`[runner] Timeout, killing ${command}`);
-      child.kill("SIGTERM");
-      setTimeout(() => { if (!child.killed) child.kill("SIGKILL"); }, 5000);
-    }, MAX_RUNTIME_MS);
-
-    child.on("close", code => {
-      clearTimeout(timeout);
-      resolve({ exitCode: code, output });
-    });
-
-    child.on("error", err => {
-      clearTimeout(timeout);
-      reject(err);
-    });
-  });
-}
-
-// [pulse] playbook issues (GTM research etc.) are operating work, not code
-// work: the issue body carries the full agent instructions, success is an API
-// side effect (batch POSTed, run transitioned), and no commits are expected.
-async function processPlaybookIssue(issue, slug, repoDir) {
-  const logFile = join(LOG_DIR, `${issue.identifier}-${Date.now()}.txt`);
-
-  console.log(`[runner] Processing playbook issue ${issue.identifier}: ${issue.title}`);
-
-  if (DRY_RUN) {
-    console.log(`[runner] DRY RUN -- would run playbook agent here`);
-    return "dry_run";
   }
 
-  const { id: bobRunId, agentType } = await bobStartRun(issue, slug);
+  // [pulse] playbook issues (GTM research etc.) are operating work, not code
+  // work: the issue body carries the full agent instructions, success is an API
+  // side effect (batch POSTed, run transitioned), and no commits are expected.
+  async function processPlaybookIssue(issue, slug, repoDir) {
+    const logFile = join(LOG_DIR, `${issue.identifier}-${Date.now()}.txt`);
 
-  try {
-    await updateIssueState(issue.id, "started");
-    await addIssueComment(issue.id, `🤖 Bob agent claiming this playbook issue.\n\nRunner: ${agentType}`);
-  } catch (e) {
-    console.log(`[runner] Failed to update Linear: ${e.message}`);
-  }
+    console.log(
+      `[runner] Processing playbook issue ${issue.identifier}: ${issue.title}`,
+    );
 
-  const prompt = `You are an AI agent executing a BizPulse playbook run for the ${slug} startup.
+    if (DRY_RUN) {
+      console.log(`[runner] DRY RUN -- would run playbook agent here`);
+      return "dry_run";
+    }
+
+    const { id: bobRunId, agentType } = await bobStartRun(issue, slug);
+
+    try {
+      await updateIssueState(issue.id, "started");
+      await addIssueComment(
+        issue.id,
+        `🤖 Bob agent claiming this playbook issue.\n\nRunner: ${agentType}`,
+      );
+    } catch (e) {
+      console.log(`[runner] Failed to update Linear: ${e.message}`);
+    }
+
+    const prompt = `You are an AI agent executing a BizPulse playbook run for the ${slug} startup.
 
 The issue description below contains your full instructions. Follow them exactly, including the curl/CLI commands. Environment you can rely on:
 - PULSE_SERVICE_SECRET is set (for the GTM ingest endpoint Authorization header)
@@ -557,71 +655,111 @@ ${issue.description || "No description provided."}
 - Verify each API call succeeded from its response before moving on.
 - End your final message with exactly one line: "PLAYBOOK_RESULT: ok" if every required step succeeded, or "PLAYBOOK_RESULT: failed — <short reason>" otherwise.`;
 
-  console.log(`[runner] Starting playbook agent...`);
-  const result = await runAgent(agentType, repoDir, prompt, logFile);
-  console.log(`[runner] Agent exited with code ${result.exitCode}`);
-  noteRunOutcome(agentType, result.exitCode, result.output);
-  await bobPushLog(bobRunId, result.output);
-  try { writeFileSync(logFile, result.output); } catch {}
-
-  const succeeded = result.exitCode === 0 && /PLAYBOOK_RESULT:\s*ok/i.test(result.output);
-  const tail = result.output.length > 1500 ? result.output.slice(-1500) : result.output;
-
-  if (succeeded) {
+    console.log(`[runner] Starting playbook agent...`);
+    const result = await runAgent(agentType, repoDir, prompt, logFile);
+    console.log(`[runner] Agent exited with code ${result.exitCode}`);
+    noteRunOutcome(agentType, result.exitCode, result.output);
+    await bobPushLog(bobRunId, result.output);
     try {
-      await addIssueComment(issue.id, `✅ Bob agent completed this playbook run.\n\n\`\`\`\n${tail}\n\`\`\``);
-      await updateIssueState(issue.id, "completed");
+      writeFileSync(logFile, result.output);
     } catch {}
-    await bobFinishRun(bobRunId, "completed", { exitCode: result.exitCode });
-    return "completed";
+
+    const succeeded =
+      result.exitCode === 0 && /PLAYBOOK_RESULT:\s*ok/i.test(result.output);
+    const tail =
+      result.output.length > 1500 ? result.output.slice(-1500) : result.output;
+
+    if (succeeded) {
+      try {
+        await addIssueComment(
+          issue.id,
+          `✅ Bob agent completed this playbook run.\n\n\`\`\`\n${tail}\n\`\`\``,
+        );
+        await updateIssueState(issue.id, "completed");
+      } catch {}
+      await bobFinishRun(bobRunId, "completed", { exitCode: result.exitCode });
+      return "completed";
+    }
+
+    try {
+      await addIssueComment(
+        issue.id,
+        `⚠️ Bob agent did not report success on this playbook run.\n\n\`\`\`\n${tail}\n\`\`\`\nLog: ${logFile}`,
+      );
+      await updateIssueState(issue.id, "unstarted");
+    } catch {}
+    await bobFinishRun(bobRunId, "failed", {
+      exitCode: result.exitCode,
+      reason: "no_success_marker",
+    });
+    return "no_success";
   }
 
-  try {
-    await addIssueComment(issue.id, `⚠️ Bob agent did not report success on this playbook run.\n\n\`\`\`\n${tail}\n\`\`\`\nLog: ${logFile}`);
-    await updateIssueState(issue.id, "unstarted");
-  } catch {}
-  await bobFinishRun(bobRunId, "failed", { exitCode: result.exitCode, reason: "no_success_marker" });
-  return "no_success";
-}
-
-async function processIssue(issue, slug, repoDir) {
-  if (issue.title.startsWith("[pulse]")) {
-    return processPlaybookIssue(issue, slug, repoDir);
+  function git(repoDir, args) {
+    return execFileSync("git", args, {
+      cwd: repoDir,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
   }
-
-  const branchName = `bob/${issue.identifier.toLowerCase()}`;
-  const logFile = join(LOG_DIR, `${issue.identifier}-${Date.now()}.txt`);
-
-  console.log(`[runner] Processing ${issue.identifier}: ${issue.title}`);
-  console.log(`[runner] Repo: ${repoDir}, Branch: ${branchName}`);
-
-  if (DRY_RUN) {
-    console.log(`[runner] DRY RUN -- would run codex here`);
-    return "dry_run";
+  function resolveBase(repoDir) {
+    let configured = env.BOB_RUNNER_BASE_BRANCH;
+    if (!configured) {
+      try {
+        configured = git(repoDir, ["config", "--get", "bob.baseBranch"]);
+      } catch {}
+    }
+    const ref =
+      configured || git(repoDir, ["symbolic-ref", "refs/remotes/origin/HEAD"]);
+    if (!ref) throw new Error("Repository base branch is unresolved");
+    return {
+      ref,
+      sha: git(repoDir, [
+        "rev-parse",
+        "--verify",
+        "--end-of-options",
+        `${ref}^{commit}`,
+      ]),
+    };
   }
-
-  // Open the Bob run at claim time so it's visible immediately (the Linear
-  // update + git setup below can take minutes before codex starts).
-  const { id: bobRunId, agentType } = await bobStartRun(issue, slug);
-
-  // Mark as in-progress in Linear
-  try {
-    await updateIssueState(issue.id, "started");
-    await addIssueComment(issue.id, `🤖 Bob agent claiming this issue.\n\nBranch: \`${branchName}\`\nRunner: ${agentType}\nRepo: ${repoDir}`);
-  } catch (e) {
-    console.log(`[runner] Failed to update Linear: ${e.message}`);
-  }
-
-  // Create branch
-  try {
-    execSync(`git checkout main 2>/dev/null || git checkout master`, { cwd: repoDir, stdio: "pipe" });
-    execSync(`git pull --ff-only 2>/dev/null || true`, { cwd: repoDir, stdio: "pipe" });
-    execSync(`git checkout -B ${branchName}`, { cwd: repoDir, stdio: "pipe" });
-  } catch (e) {
-    console.log(`[runner] Git setup failed: ${e.message}`);
-  }
-
-  const prompt = `You are an AI agent working on issue ${issue.identifier} for the ${slug} startup.
+  async function processIssue(issue, slug, repoDir) {
+    if (DRY_RUN) {
+      console.log(
+        `[runner] DRY RUN: would process ${issue.identifier} in ${repoDir}`,
+      );
+      return "dry_run";
+    }
+    if (issue.title.startsWith("[pulse]"))
+      return processPlaybookIssue(issue, slug, repoDir);
+    const branchName = `bob/${issue.identifier.toLowerCase()}`;
+    const logFile = join(LOG_DIR, `${issue.identifier}-${now()}.txt`);
+    const { id: bobRunId, agentType } = await bobStartRun(issue, slug);
+    const facts = {
+      exitCode: null,
+      commits: null,
+      pushed: false,
+      branch: branchName,
+      base: null,
+    };
+    let reason = "setup_failed";
+    try {
+      // This legacy runner is Git-only. Refuse JJ and dirty checkouts instead of
+      // resetting shared user state or bypassing the repository's version-control model.
+      if (existsSync(join(repoDir, ".jj")))
+        throw new Error("JJ repository requires a JJ-aware runner");
+      if (git(repoDir, ["status", "--porcelain"]))
+        throw new Error("Repository contains existing changes");
+      const base = resolveBase(repoDir);
+      facts.base = base.ref;
+      facts.baseSha = base.sha;
+      git(repoDir, ["check-ref-format", "--branch", branchName]);
+      git(repoDir, ["switch", "-c", branchName, base.sha]);
+      await updateIssueState(issue.id, "started");
+      await addIssueComment(
+        issue.id,
+        `Bob agent started work on ${branchName} from ${base.ref}.`,
+      );
+      const prompt = `You are an AI agent working on issue ${issue.identifier} for the ${slug} startup.
 
 ## Issue
 **${issue.title}**
@@ -639,223 +777,249 @@ If you cannot fully resolve the issue, make as much progress as possible and doc
 
 Do NOT modify unrelated files. Stay focused on this specific issue.`;
 
-  console.log(`[runner] Starting codex...`);
-  const result = await runAgent(agentType, repoDir, prompt, logFile);
-  console.log(`[runner] Codex exited with code ${result.exitCode}`);
-  noteRunOutcome(agentType, result.exitCode, result.output);
-  await bobPushLog(bobRunId, result.output);
-
-  // Check if any commits were made
-  let hasCommits = false;
-  try {
-    const diffCount = execSync(`git log main..HEAD --oneline 2>/dev/null | wc -l`, {
-      cwd: repoDir, encoding: "utf8"
-    }).trim();
-    hasCommits = parseInt(diffCount) > 0;
-  } catch {
-    try {
-      const diffCount = execSync(`git log master..HEAD --oneline 2>/dev/null | wc -l`, {
-        cwd: repoDir, encoding: "utf8"
-      }).trim();
-      hasCommits = parseInt(diffCount) > 0;
-    } catch {}
-  }
-
-  if (hasCommits) {
-    console.log(`[runner] Commits found, pushing branch`);
-    try {
-      // Plain push: --force is both unnecessary (branches are per-issue) and
-      // rejected by some repos (preflight-app blocks force pushes).
-      execSync(`git push -u origin ${branchName}`, { cwd: repoDir, stdio: "pipe" });
-    } catch (e) {
-      console.log(`[runner] Push failed: ${e.message}`);
+      reason = "agent_failed";
+      const result = await runAgent(agentType, repoDir, prompt, logFile);
+      facts.exitCode = result.exitCode;
+      noteRunOutcome(agentType, result.exitCode, result.output);
+      await bobPushLog(bobRunId, result.output);
+      reason = "commit_count_failed";
+      const count = git(repoDir, ["rev-list", "--count", `${base.sha}..HEAD`]);
+      if (!/^\d+$/.test(count)) throw new Error("Invalid commit count");
+      facts.commits = Number(count);
+      if (result.exitCode !== 0) reason = "agent_failed";
+      else if (facts.commits === 0) reason = "no_changes";
+      else {
+        reason = "push_failed";
+        git(repoDir, ["push", "-u", "origin", `HEAD:refs/heads/${branchName}`]);
+        facts.pushed = true;
+        await bobFinishRun(bobRunId, "completed", facts);
+        try {
+          await addIssueComment(
+            issue.id,
+            `Bob agent completed and pushed ${branchName}. Review the changes before merging.`,
+          );
+        } catch {}
+        return "completed";
+      }
+    } catch (error) {
+      facts.error = error.message;
+      console.error(
+        `[runner] ${issue.identifier}: ${reason}: ${error.message}`,
+      );
     }
-
+    // Local branches, commits, and uncommitted work remain available for recovery.
+    await bobFinishRun(bobRunId, "failed", { ...facts, reason });
     try {
-      await addIssueComment(issue.id, `✅ Bob agent completed work on branch \`${branchName}\`.\n\nReview the changes and merge when ready.`);
-    } catch {}
-
-    await bobFinishRun(bobRunId, "completed", { exitCode: result.exitCode });
-    return "completed";
-  } else {
-    console.log(`[runner] No commits made`);
-    try {
-      await addIssueComment(issue.id, `⚠️ Bob agent attempted this issue but did not produce commits.\n\nLog: ${logFile}\nMay need manual intervention.`);
+      await addIssueComment(
+        issue.id,
+        `Bob run failed (${reason}). Work is preserved in ${repoDir} on ${branchName}; published=${facts.pushed}.`,
+      );
       await updateIssueState(issue.id, "unstarted");
     } catch {}
+    return reason;
+  }
 
-    // Clean up branch
+  // Dead-man heartbeat: the watchdog on the BizPulse side alerts when this
+  // goes silent past its threshold. Best-effort — never blocks the loop.
+  async function sendHeartbeat() {
+    const secret = env.PULSE_SERVICE_SECRET;
+    if (!secret) return;
     try {
-      execSync(`git checkout main 2>/dev/null || git checkout master`, { cwd: repoDir, stdio: "pipe" });
-      execSync(`git branch -D ${branchName} 2>/dev/null || true`, { cwd: repoDir, stdio: "pipe" });
-    } catch {}
-
-    await bobFinishRun(bobRunId, "failed", { exitCode: result.exitCode, reason: "no_commits" });
-    return "no_changes";
-  }
-}
-
-// Dead-man heartbeat: the watchdog on the BizPulse side alerts when this
-// goes silent past its threshold. Best-effort — never blocks the loop.
-async function sendHeartbeat() {
-  const secret = process.env.PULSE_SERVICE_SECRET;
-  if (!secret) return;
-  try {
-    await fetch("https://bizpulse.cc/api/gtm/runner-heartbeat", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer " + secret,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ runner: "bob-task-runner" }),
-    });
-  } catch (e) {
-    console.log(`[runner] heartbeat failed: ${e.message}`);
-  }
-}
-
-async function runOnce() {
-  console.log(`[runner] Scanning for work...`);
-  void sendHeartbeat();
-  await refreshRemoteConfig();
-
-  // Circuit breaker. On 2026-08-29 all three agents were confirmed dead and
-  // this loop still claimed work, failed in ~1s, posted "produced no changes",
-  // and reset the issue to unstarted — every 120s across the whole backlog, for
-  // eight days. Claiming nothing is strictly better than claiming and burning.
-  // Only CONFIRMED evidence pauses; see providers/dispatch-gate.ts.
-  const decision = dispatchDecision();
-  if (decision.paused && process.env.BOB_DISPATCH_OVERRIDE !== "1") {
-    console.log(`[runner] DISPATCH PAUSED - ${decision.reason}`);
-    for (const b of decision.blocked || []) {
-      const remedy = b.remedy === "top_up" ? "top up billing" : b.remedy === "sign_in" ? "re-authenticate" : "install the CLI";
-      console.log(`[runner]   ${b.agent}: ${b.status} -> ${remedy}${b.detail ? " (" + b.detail + ")" : ""}`);
-    }
-    console.log(`[runner] Fix from the Bob UI (Nodes -> agent cards), or set BOB_DISPATCH_OVERRIDE=1 to force.`);
-    return false;
-  }
-
-  const projects = effectiveProjects();
-  const targetSlugs = STARTUP_FILTER ? [STARTUP_FILTER] : Object.keys(projects);
-
-  // Collect all issues across all startups, then pick the highest priority globally
-  const allCandidates = [];
-
-  for (const slug of targetSlugs) {
-    const projectId = projects[slug];
-    const repoDir = effectiveRepoDir(slug);
-    if (!projectId || !repoDir) continue;
-    // Missing dirs are fine when the remote config can clone them at claim
-    // time; only skip when we'd have no way to materialize the repo.
-    if (!existsSync(repoDir) && !remoteEntry(slug)) continue;
-
-    try {
-      const issues = await getUnstartedIssues(projectId);
-      for (const issue of issues) {
-        // The bizpulse project holds founder/ops work orders that are NOT
-        // for autonomous execution — only genuine GTM playbook dispatches
-        // may be claimed there. Title alone is not enough: July's bulk
-        // objective work orders are also [pulse]-titled, and letting an
-        // agent execute one ended with it self-grading a business
-        // objective 'achieved' (GMA-385). The GTM instruction marker only
-        // appears in issues built by buildGtmPlaybookInstructions.
-        if (
-          slug === "bizpulse" &&
-          !(issue.description || "").includes("## Agent Instructions — growth.")
-        ) {
-          continue;
-        }
-        // STALE issues are never auto-claimed when the claim only became
-        // possible today (remote-config slugs, freshly clonable repos):
-        // month-old [pulse] work orders and backlog need a deliberate
-        // re-dispatch (the roadmap's ↻ refresh) before an agent acts on
-        // them — GMA-385/364 both started as silent stale-claims. Rules:
-        // [pulse]-titled operating work orders: fresh-only EVERYWHERE;
-        // remote-only slugs: fresh-only for everything.
-        const ageMs = issue.updatedAt
-          ? Date.now() - Date.parse(issue.updatedAt)
-          : Infinity;
-        const stale = ageMs > 14 * 86_400_000;
-        if (stale && issue.title.startsWith("[pulse]")) continue;
-        if (stale && !(slug in DEFAULT_PROJECTS)) continue;
-        if (!isClaimed(issue.id)) {
-          allCandidates.push({ issue, slug, repoDir });
-        }
-      }
+      await fetch("https://bizpulse.cc/api/gtm/runner-heartbeat", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + secret,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ runner: "bob-task-runner" }),
+      });
     } catch (e) {
-      console.log(`[runner] Failed to fetch issues for ${slug}: ${e.message}`);
+      console.log(`[runner] heartbeat failed: ${e.message}`);
     }
   }
 
-  if (allCandidates.length === 0) {
-    console.log(`[runner] No unclaimed issues found`);
+  async function runOnce() {
+    console.log(`[runner] Scanning for work...`);
+    if (!DRY_RUN) void sendHeartbeat();
+    await refreshRemoteConfig();
+
+    // Circuit breaker. On 2026-08-29 all three agents were confirmed dead and
+    // this loop still claimed work, failed in ~1s, posted "produced no changes",
+    // and reset the issue to unstarted — every 120s across the whole backlog, for
+    // eight days. Claiming nothing is strictly better than claiming and burning.
+    // Only CONFIRMED evidence pauses; see providers/dispatch-gate.ts.
+    const decision = DRY_RUN ? { paused: false } : dispatchDecision();
+    if (decision.paused && env.BOB_DISPATCH_OVERRIDE !== "1") {
+      console.log(`[runner] DISPATCH PAUSED - ${decision.reason}`);
+      for (const b of decision.blocked || []) {
+        const remedy =
+          b.remedy === "top_up"
+            ? "top up billing"
+            : b.remedy === "sign_in"
+              ? "re-authenticate"
+              : "install the CLI";
+        console.log(
+          `[runner]   ${b.agent}: ${b.status} -> ${remedy}${b.detail ? " (" + b.detail + ")" : ""}`,
+        );
+      }
+      console.log(
+        `[runner] Fix from the Bob UI (Nodes -> agent cards), or set BOB_DISPATCH_OVERRIDE=1 to force.`,
+      );
+      return false;
+    }
+
+    const projects = effectiveProjects();
+    const targetSlugs = STARTUP_FILTER
+      ? [STARTUP_FILTER]
+      : Object.keys(projects);
+
+    // Collect all issues across all startups, then pick the highest priority globally
+    const allCandidates = [];
+
+    for (const slug of targetSlugs) {
+      const projectId = projects[slug];
+      const repoDir = effectiveRepoDir(slug);
+      if (!projectId || !repoDir) continue;
+      if ((_cloneFailed.get(slug) ?? 0) > now()) continue;
+      // Missing dirs are fine when the remote config can clone them at claim
+      // time; only skip when we'd have no way to materialize the repo.
+      if (!existsSync(repoDir) && !remoteEntry(slug)) continue;
+
+      try {
+        const issues = await getUnstartedIssues(projectId);
+        for (const issue of issues) {
+          // The bizpulse project holds founder/ops work orders that are NOT
+          // for autonomous execution — only genuine GTM playbook dispatches
+          // may be claimed there. Title alone is not enough: July's bulk
+          // objective work orders are also [pulse]-titled, and letting an
+          // agent execute one ended with it self-grading a business
+          // objective 'achieved' (GMA-385). The GTM instruction marker only
+          // appears in issues built by buildGtmPlaybookInstructions.
+          if (
+            slug === "bizpulse" &&
+            !(issue.description || "").includes(
+              "## Agent Instructions — growth.",
+            )
+          ) {
+            continue;
+          }
+          // STALE issues are never auto-claimed when the claim only became
+          // possible today (remote-config slugs, freshly clonable repos):
+          // month-old [pulse] work orders and backlog need a deliberate
+          // re-dispatch (the roadmap's ↻ refresh) before an agent acts on
+          // them — GMA-385/364 both started as silent stale-claims. Rules:
+          // [pulse]-titled operating work orders: fresh-only EVERYWHERE;
+          // remote-only slugs: fresh-only for everything.
+          const ageMs = issue.updatedAt
+            ? Date.now() - Date.parse(issue.updatedAt)
+            : Infinity;
+          const stale = ageMs > 14 * 86_400_000;
+          if (stale && issue.title.startsWith("[pulse]")) continue;
+          if (stale && !(slug in DEFAULT_PROJECTS)) continue;
+          if (!isClaimed(issue.id)) {
+            allCandidates.push({ issue, slug, repoDir });
+          }
+        }
+      } catch (e) {
+        console.log(
+          `[runner] Failed to fetch issues for ${slug}: ${e.message}`,
+        );
+      }
+    }
+
+    if (allCandidates.length === 0) {
+      console.log(`[runner] No unclaimed issues found`);
+      return false;
+    }
+
+    // Sort by priority (1=urgent first), then by identifier (newer = higher number = from audits)
+    allCandidates.sort((a, b) => {
+      const pa = a.issue.priority || 4;
+      const pb = b.issue.priority || 4;
+      if (pa !== pb) return pa - pb;
+      // Prefer higher issue numbers (audit issues are newer)
+      const na = parseInt(a.issue.identifier.replace(/\D/g, "")) || 0;
+      const nb = parseInt(b.issue.identifier.replace(/\D/g, "")) || 0;
+      return nb - na;
+    });
+
+    for (const { issue, slug, repoDir } of allCandidates) {
+      console.log(
+        `[runner] Found: ${issue.identifier} (P${issue.priority}) - ${issue.title} [${slug}]`,
+      );
+      if (DRY_RUN) {
+        console.log(
+          `[runner] DRY RUN: would prepare ${repoDir} and claim ${issue.identifier}`,
+        );
+        return true;
+      }
+      if (!ensureRepoDir(slug)) {
+        console.log(
+          `[runner] Repo unavailable for ${slug}; trying next candidate`,
+        );
+        continue;
+      }
+      markClaimed(issue.id, slug);
+      try {
+        const status = await processIssue(issue, slug, repoDir);
+        markDone(issue.id, status);
+        return true;
+      } catch (error) {
+        console.error(`[runner] ${issue.identifier} failed: ${error.message}`);
+        markDone(issue.id, "error");
+        return true;
+      }
+    }
     return false;
   }
 
-  // Sort by priority (1=urgent first), then by identifier (newer = higher number = from audits)
-  allCandidates.sort((a, b) => {
-    const pa = a.issue.priority || 4;
-    const pb = b.issue.priority || 4;
-    if (pa !== pb) return pa - pb;
-    // Prefer higher issue numbers (audit issues are newer)
-    const na = parseInt(a.issue.identifier.replace(/\D/g, "")) || 0;
-    const nb = parseInt(b.issue.identifier.replace(/\D/g, "")) || 0;
-    return nb - na;
-  });
+  async function main() {
+    if (!DRY_RUN) {
+      if (!existsSync(STATE_DIR)) mkdirSync(STATE_DIR, { recursive: true });
+      if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
+    }
 
-  const { issue, slug, repoDir } = allCandidates[0];
-  console.log(`[runner] Found: ${issue.identifier} (P${issue.priority}) - ${issue.title} [${slug}]`);
-  console.log(`[runner] ${allCandidates.length} total unclaimed issues across ${targetSlugs.length} startups`);
+    console.log(`[runner] Bob Task Runner starting`);
+    console.log(
+      `[runner] Mode: ${DRY_RUN ? "dry-run" : "live"}, Once: ${ONCE}, Filter: ${STARTUP_FILTER || "all"}`,
+    );
+    console.log(`[runner] Bob reporting: ${BOB_REPORT ? "on" : "off"}`);
+    console.log("[runner] Checking agent health...");
+    if (!DRY_RUN) checkAgentHealth();
 
-  markClaimed(issue.id, slug);
+    if (ONCE) {
+      await runOnce();
+      return;
+    }
 
-  if (!ensureRepoDir(slug)) {
-    // Repo unavailable is an infrastructure failure, not a verdict on the
-    // issue: UNCLAIM it so a future process (after the repo exists or the
-    // config is fixed) can pick it up. The slug goes on _cloneFailed, so
-    // this process won't thrash on it.
-    console.log(`[runner] ${issue.identifier} unclaimed (repo unavailable for ${slug})`);
-    unclaim(issue.id);
-    return true;
+    // Continuous mode: run one issue, wait 2 min, repeat
+    while (true) {
+      const didWork = await runOnce();
+      const waitMs = didWork ? 120_000 : 600_000; // 2 min after work, 10 min if idle
+      console.log(`[runner] Waiting ${waitMs / 1000}s...`);
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
   }
 
-  try {
-    const status = await processIssue(issue, slug, repoDir);
-    markDone(issue.id, status);
-    console.log(`[runner] ${issue.identifier} -> ${status}`);
-    return true;
-  } catch (e) {
-    console.error(`[runner] Error processing ${issue.identifier}: ${e.message}`);
-    markDone(issue.id, "error");
-    return true;
-  }
+  const services = options.services ?? {};
+  processIssue = services.processIssue ?? processIssue;
+  runAgent = services.runAgent ?? runAgent;
+  bobStartRun = services.bobStartRun ?? bobStartRun;
+  bobPushLog = services.bobPushLog ?? bobPushLog;
+  bobFinishRun = services.bobFinishRun ?? bobFinishRun;
+  addIssueComment = services.addIssueComment ?? addIssueComment;
+  updateIssueState = services.updateIssueState ?? updateIssueState;
+  getUnstartedIssues = services.getUnstartedIssues ?? getUnstartedIssues;
+  checkAgentHealth = services.checkAgentHealth ?? checkAgentHealth;
+  dispatchDecision = services.dispatchDecision ?? dispatchDecision;
+  noteRunOutcome = services.noteRunOutcome ?? noteRunOutcome;
+  return { main, runOnce, processIssue, ensureRepoDir };
 }
-
-async function main() {
-  if (!existsSync(STATE_DIR)) mkdirSync(STATE_DIR, { recursive: true });
-  if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
-
-  console.log(`[runner] Bob Task Runner starting`);
-  console.log(`[runner] Mode: ${DRY_RUN ? "dry-run" : "live"}, Once: ${ONCE}, Filter: ${STARTUP_FILTER || "all"}`);
-  console.log(`[runner] Bob reporting: ${BOB_REPORT ? "on" : "off"}`);
-  console.log("[runner] Checking agent health...");
-  checkAgentHealth();
-
-  if (ONCE) {
-    await runOnce();
-    return;
-  }
-
-  // Continuous mode: run one issue, wait 2 min, repeat
-  while (true) {
-    const didWork = await runOnce();
-    const waitMs = didWork ? 120_000 : 600_000; // 2 min after work, 10 min if idle
-    console.log(`[runner] Waiting ${waitMs / 1000}s...`);
-    await new Promise(r => setTimeout(r, waitMs));
-  }
-}
-
-main().catch(e => {
-  console.error(`[runner] Fatal: ${e.message}`);
-  process.exit(1);
-});
+module.exports = { createRunner };
+if (require.main === module)
+  createRunner()
+    .main()
+    .catch((e) => {
+      console.error(`[runner] Fatal: ${e.message}`);
+      process.exitCode = 1;
+    });

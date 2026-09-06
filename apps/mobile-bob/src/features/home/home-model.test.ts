@@ -54,14 +54,15 @@ describe("buildHomeTriage", () => {
         item({ id: "new", status: "failed", updatedAt: "2026-09-05T00:00:00Z" }),
       ],
     });
-    expect(t.sections[0]!.rows.map((r) => r.id)).toEqual(["new", "old"]);
+    expect(t.sections[0]?.rows.map((r) => r.id)).toEqual(["new", "old"]);
   });
 
   it("caps a section and reports the overflow", () => {
     const many = Array.from({ length: HOME_SECTION_LIMIT + 3 }, (_, i) =>
       item({ id: `wi_${i}`, status: "queued" }),
     );
-    const s = buildHomeTriage({ workItems: many }).sections[0]!;
+    const s = buildHomeTriage({ workItems: many }).sections[0];
+    if (!s) throw new Error("Expected fixture row");
     expect(s.rows).toHaveLength(HOME_SECTION_LIMIT);
     expect(s.overflowCount).toBe(3);
     expect(s.total).toBe(HOME_SECTION_LIMIT + 3);
@@ -74,14 +75,14 @@ describe("buildHomeTriage", () => {
         item({ id: "b", status: "blocked" }),
       ],
     });
-    const tones = Object.fromEntries(t.sections[0]!.rows.map((r) => [r.id, r.tone]));
+    const tones = Object.fromEntries(t.sections[0]?.rows.map((r) => [r.id, r.tone]) ?? []);
     expect(tones.f).toBe("danger");
     expect(tones.b).toBe("warning");
   });
 
   it("links each row at its work item", () => {
     const t = buildHomeTriage({ workItems: [item({ id: "wi_42", status: "failed" })] });
-    expect(t.sections[0]!.rows[0]!.href).toBe("/work-items/wi_42");
+    expect(t.sections[0]?.rows[0]?.href).toBe("/work-items/wi_42");
   });
 
   it("survives missing titles, identifiers and timestamps", () => {
@@ -90,7 +91,8 @@ describe("buildHomeTriage", () => {
         { id: "wi_abcdef123", status: "failed", title: null, identifier: null, updatedAt: null },
       ],
     });
-    const row = t.sections[0]!.rows[0]!;
+    const row = t.sections[0]?.rows[0];
+    if (!row) throw new Error("Expected fixture row");
     expect(row.title).toBe("Untitled");
     expect(row.identifier).toBe("wi_abcde");
   });
@@ -99,7 +101,7 @@ describe("buildHomeTriage", () => {
     const t = buildHomeTriage({
       workItems: [item({ id: "x", status: "failed", updatedAt: "not-a-date" })],
     });
-    expect(t.sections[0]!.rows[0]!.id).toBe("x");
+    expect(t.sections[0]?.rows[0]?.id).toBe("x");
   });
 
   it("handles an empty workspace", () => {

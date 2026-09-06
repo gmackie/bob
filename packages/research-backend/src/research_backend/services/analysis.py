@@ -95,10 +95,12 @@ class CodexAppServerGateway(AnalysisGateway):
     ) -> dict[str, str]:
         prompt = (
             "You are analyzing academic paper text for a local research toolkit.\n"
-            "Do not run shell commands, modify files, or use tools. Work only from the provided text.\n"
+            "Do not run shell commands, modify files, or use tools. "
+            "Work only from the provided text.\n"
             "Return JSON only with keys research_question, methods, sample, findings, limitations. "
-            "Each value must be a string. Use empty strings when the text does not support a field.\n\n"
-            f"{text[:self.prompt_text_limit]}"
+            "Each value must be a string. "
+            "Use empty strings when the text does not support a field.\n\n"
+            f"{text[: self.prompt_text_limit]}"
         )
         content = self._run_turn(prompt=prompt, model=model, settings=settings)
         try:
@@ -120,7 +122,9 @@ class CodexAppServerGateway(AnalysisGateway):
         runtime = settings or {}
         command = runtime.get("codex_app_server_command", self.command)
         effective_model = runtime.get("codex_model", model)
-        timeout_seconds = float(runtime.get("codex_turn_timeout_seconds", self.turn_timeout_seconds))
+        timeout_seconds = float(
+            runtime.get("codex_turn_timeout_seconds", self.turn_timeout_seconds)
+        )
         process = subprocess.Popen(
             [command, "app-server"],
             stdin=subprocess.PIPE,
@@ -211,7 +215,9 @@ class CodexAppServerGateway(AnalysisGateway):
                                 return result
                         raise RuntimeError(f"Codex turn ended with status {status}")
                     elif message.get("error"):
-                        raise RuntimeError(message["error"].get("message", "Codex app-server error"))
+                        raise RuntimeError(
+                            message["error"].get("message", "Codex app-server error")
+                        )
             raise RuntimeError("Timed out waiting for Codex app-server turn to complete")
         finally:
             selector.close()
@@ -235,7 +241,9 @@ class CodexAppServerGateway(AnalysisGateway):
             ("Findings", extraction.get("findings", "")),
             ("Limitations", extraction.get("limitations", "")),
         ]
-        return "\n\n".join(f"## {heading}\n\n{body or 'Not reported.'}" for heading, body in sections)
+        return "\n\n".join(
+            f"## {heading}\n\n{body or 'Not reported.'}" for heading, body in sections
+        )
 
 
 @dataclass

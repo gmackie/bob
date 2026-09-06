@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { getSession } from "~/auth/server";
+import { getSession, localAccountAuth } from "~/auth/server";
 import { LoginForm } from "./_components/login-form";
 
 export default async function LoginPage() {
@@ -38,13 +38,13 @@ export default async function LoginPage() {
             </li>
             <li className="flex items-start gap-2">
               <span className="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-violet-300" />
-              Fast start-up with GitHub sign-in and workspace-aware auth.
+              {localAccountAuth ? "Private accounts stored on this device. Host execution is unavailable in local mode." : "Fast start-up with GitHub sign-in and workspace-aware auth."}
             </li>
           </ul>
         </section>
 
         <section className="w-full">
-          <LoginForm />
+          <LoginForm localAccountAuth={localAccountAuth} />
         </section>
       </div>
     </main>

@@ -81,12 +81,12 @@ export function resolveSettingsShell({ isTablet, width }: ShellInput): SettingsS
   return {
     mode: split ? "split" : "stack",
     showsDetailAlongsideList: split,
-    initialSection: split ? SETTINGS_SECTIONS[0]!.key : null,
+    initialSection: split ? (SETTINGS_SECTIONS[0]?.key ?? "account") : null,
   };
 }
 
 /** Route → section, so a deep link selects the right pane on tablet. */
 export function sectionForRoute(route: string): SettingsSection | null {
-  const path = route.split("?")[0]!.replace(/\/+$/, "");
+  const path = (route.split("?")[0] ?? "").replace(/\/+$/, "");
   return SETTINGS_SECTIONS.find((s) => s.route === path) ?? null;
 }

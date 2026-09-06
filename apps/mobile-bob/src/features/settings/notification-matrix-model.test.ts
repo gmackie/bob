@@ -40,8 +40,10 @@ describe("buildNotificationMatrix", () => {
 
   it("shows defaults when a person has expressed no opinion", () => {
     const rows = buildNotificationMatrix({ masters: allOn, overrides: {} });
-    const needsInput = rows.find((r) => r.type === "work_item_needs_input")!;
-    const completed = rows.find((r) => r.type === "task_completed")!;
+    const needsInput = rows.find((r) => r.type === "work_item_needs_input");
+    if (!needsInput) throw new Error("Expected fixture row");
+    const completed = rows.find((r) => r.type === "task_completed");
+    if (!completed) throw new Error("Expected fixture row");
 
     expect(needsInput.channels.push.enabled).toBe(true);
     expect(completed.channels.push.enabled).toBe(false);
@@ -55,7 +57,7 @@ describe("buildNotificationMatrix", () => {
       overrides: { task_completed: { push: true } },
     });
 
-    expect(rows.find((r) => r.type === "task_completed")!.channels.push.enabled).toBe(true);
+    expect(rows.find((r) => r.type === "task_completed")?.channels.push.enabled).toBe(true);
   });
 
   it("disables a channel's switches when its master is off, without losing the stored value", () => {
@@ -66,7 +68,8 @@ describe("buildNotificationMatrix", () => {
       masters: { push: false, email: true },
       overrides: { work_item_needs_input: { push: true } },
     });
-    const row = rows.find((r) => r.type === "work_item_needs_input")!;
+    const row = rows.find((r) => r.type === "work_item_needs_input");
+    if (!row) throw new Error("Expected fixture row");
 
     expect(row.channels.push.disabled).toBe(true);
     expect(row.channels.push.enabled).toBe(true);

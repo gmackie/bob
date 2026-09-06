@@ -49,6 +49,8 @@ vi.mock("@bob/db/client", () => {
   };
   const dbObj: any = {
     query: {
+      workspaces: { findFirst: vi.fn(() => Promise.resolve({ id: "ws-1", ownerUserId: "user-1" })) },
+      workspaceMembers: { findFirst: vi.fn(() => Promise.resolve({ id: "member-1", role: "member" })) },
       chatConversations: { findFirst: vi.fn(), findMany: vi.fn(() => Promise.resolve([])) },
       agentRuns: { findFirst: vi.fn(() => Promise.resolve(null)) },
       gatewayConfig: { findFirst: vi.fn(() => Promise.resolve(null)) },
@@ -102,6 +104,8 @@ describe("Relay", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(db.query.workspaces.findFirst).mockResolvedValue({ id: "ws-1", ownerUserId: "user-1" } as any);
+    vi.mocked(db.query.workspaceMembers.findFirst).mockResolvedValue({ id: "member-1", role: "member" } as any);
     persistedEvents = [];
     relay = new Relay({
       heartbeatIntervalMs: 30000,
@@ -152,6 +156,55 @@ describe("Relay", () => {
   });
 
   describe("browser workspace subscription", () => {
+    it("does not send an invalidation after unsubscribe during its authorization lookup", async () => {
+      const browser = new FakeWs();
+      relay.handleConnection(browser as any);
+      browser.receive({ type: "hello", clientId: "web", deviceType: "web", token: "good-browser" });
+      await new Promise((r) => setImmediate(r));
+      browser.receive({ type: "subscribe_workspace", workspaceId: "ws-1" });
+      await new Promise((r) => setImmediate(r));
+      let release!: (value: any) => void;
+      vi.mocked(db.query.workspaces.findFirst).mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }) as never);
+      const fanout = relay.notifyWorkspaceEvent({ type: "work_item_dispatched", workspaceId: "ws-1", entityId: "work" });
+      browser.receive({ type: "unsubscribe_workspace" });
+      await new Promise((r) => setImmediate(r));
+      release({ id: "ws-1", ownerUserId: "user-1" });
+      await fanout;
+      expect(browser.sentOfType("work_item_dispatched")).toHaveLength(0);
+    });
+
+    it("withholds host authentication frames from members and rechecks revoked subscriptions", async () => {
+      vi.mocked(db.query.workspaces.findFirst).mockResolvedValue({ id: "ws-1", ownerUserId: "user-2" } as any);
+      const browser = new FakeWs();
+      relay.handleConnection(browser as any);
+      browser.receive({ type: "hello", clientId: "web", deviceType: "web", token: "good-browser" });
+      await new Promise((r) => setImmediate(r));
+      browser.receive({ type: "subscribe_workspace", workspaceId: "ws-1" });
+      await new Promise((r) => setImmediate(r));
+      expect(browser.sentOfType("workspace_snapshot")).toHaveLength(1);
+      await (relay as any).broadcastToWorkspace("ws-1", { type: "agent_auth_prompt", workspaceId: "ws-1" });
+      expect(browser.sentOfType("agent_auth_prompt")).toHaveLength(0);
+      await (relay as any).broadcastToWorkspace("ws-1", { type: "dispatch_state", workspaceId: "ws-1" });
+      expect(browser.sentOfType("dispatch_state")).toHaveLength(1);
+      vi.mocked(db.query.workspaceMembers.findFirst).mockResolvedValueOnce(undefined);
+      await (relay as any).broadcastHostSnapshot("ws-1", { schemaVersion: 1 });
+      expect(browser.sentOfType("host_snapshot")).toHaveLength(0);
+    });
+
+    it("rejects a nonmember scope without exposing a snapshot or retaining the scope", async () => {
+      vi.mocked(db.query.workspaces.findFirst).mockResolvedValueOnce({ id: "foreign", ownerUserId: "user-2" } as any);
+      vi.mocked(db.query.workspaceMembers.findFirst).mockResolvedValueOnce(undefined);
+      const browser = new FakeWs();
+      relay.handleConnection(browser as any);
+      browser.receive({ type: "hello", clientId: "web", deviceType: "web", token: "good-browser" });
+      await new Promise((r) => setImmediate(r));
+      browser.receive({ type: "subscribe_workspace", workspaceId: "foreign" });
+      await new Promise((r) => setImmediate(r));
+      expect(browser.sentOfType("workspace_snapshot")).toEqual([]);
+      expect(browser.sentOfType("error")).toContainEqual(expect.objectContaining({ code: "FORBIDDEN" }));
+      expect((relay as any).connections.values().next().value.workspaceSubscribed).toBe(false);
+    });
+
     it("publishes the connected daemon host snapshot to workspace observers", async () => {
       const daemon = new FakeWs();
       relay.handleConnection(daemon as any);
@@ -889,7 +942,7 @@ describe("Relay", () => {
       browserWs.receive({ type: "subscribe_workspace", workspaceId: "ws-1" });
       await new Promise((r) => setImmediate(r));
 
-      relay.notifyWorkspaceEvent({
+      await relay.notifyWorkspaceEvent({
         type: "queue_order_changed",
         workspaceId: "ws-1",
         entityId: "task-1",
@@ -1061,7 +1114,7 @@ describe("Relay", () => {
       expect((acks[0] as any).sessionId).toBe(SESSION_ID);
     });
 
-    it("finalizes the session as stopped when no daemon is online", async () => {
+    it("retains stop intent and reports undelivered cancellation when the daemon is offline", async () => {
       const browserWs = await connectBrowser();
 
       mockSessionLookup([{ sessionUserId: "user-1", workspaceId: "ws-1" }]);
@@ -1069,9 +1122,19 @@ describe("Relay", () => {
       browserWs.receive({ type: "stop_session", sessionId: SESSION_ID });
       await new Promise((r) => setImmediate(r));
 
-      // Still acked — nothing is running, session was marked stopped in DB
-      expect(browserWs.sentOfType("session_stopped")).toHaveLength(1);
+      expect(browserWs.sentOfType("session_stopped")).toHaveLength(0);
+      expect(browserWs.sentOfType("error").some((event: any) => event.code === "STOP_NOT_DELIVERED")).toBe(true);
       expect(db.update).toHaveBeenCalled();
+    });
+
+    it("redelivers durable stopping intent on reconnect claims and replayed running status", async () => {
+      const daemonWs = await connectDaemon();
+      (db.query.chatConversations.findFirst as any).mockResolvedValue({ id: SESSION_ID, userId: "user-1", status: "stopping" });
+      daemonWs.receive({ type: "session_claimed", sessionId: SESSION_ID });
+      await new Promise((r) => setImmediate(r));
+      daemonWs.receive({ type: "session_status", sessionId: SESSION_ID, status: "running" });
+      await new Promise((r) => setImmediate(r));
+      expect(daemonWs.sentOfType("session_stop")).toHaveLength(2);
     });
 
     it("rejects stop_session for a session the user doesn't own", async () => {
@@ -1374,7 +1437,12 @@ describe("Relay", () => {
         },
       }));
       (db.insert as any).mockImplementation(() => ({
-        values: () => Promise.resolve(),
+        values: () => {
+          const result: any = Promise.resolve();
+          result.onConflictDoUpdate = () => Promise.resolve();
+          result.onConflictDoNothing = () => Promise.resolve();
+          return result;
+        },
       }));
     });
 
@@ -1429,13 +1497,26 @@ describe("Relay", () => {
       expect((db as any).transaction).toHaveBeenCalled();
     });
 
+    it("does not acknowledge a duplicate envelope belonging to another principal", async () => {
+      const daemonWs = await connectDaemon();
+      (db.select as any).mockImplementation(() => ({ from: () => ({
+        where: () => ({ limit: () => Promise.resolve([{ id: "foreign-event" }]) }),
+        leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+      }) }));
+      (db.update as any).mockImplementation(() => ({ set: () => ({ where: () => ({ returning: async () => [] }) }) }));
+      daemonWs.receive({ type: "session_event", sessionId: SID, eventType: "output_chunk", direction: "agent", payload: { data: "retry" }, sendSeq: 7 } as any);
+      await new Promise((r) => setImmediate(r));
+      expect(daemonWs.sentOfType("event_ack")).toHaveLength(0);
+      expect(daemonWs.sentOfType("error")).toContainEqual(expect.objectContaining({ code: "ACCESS_DENIED" }));
+    });
+
     it("acks a redelivered send-seq without inserting a second row", async () => {
       const daemonWs = await connectDaemon();
       // Dup check finds an existing row for (sessionId, sendSeq).
       (db.select as any).mockImplementation(() => ({
         from: () => ({
           where: () => ({ limit: () => Promise.resolve([{ id: "existing" }]) }),
-          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([{ id: "existing" }]) }) }),
         }),
       }));
       const inserted: any[] = [];
@@ -1527,7 +1608,7 @@ describe("Relay", () => {
             limit: () => Promise.resolve([{ id: "existing" }]),
             for: () => Promise.resolve([{ status: "completed" }]),
           }),
-          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+          leftJoin: () => ({ where: () => ({ limit: () => Promise.resolve([{ id: "existing" }]) }) }),
         }),
       }));
       (db.query.chatConversations.findFirst as any).mockResolvedValue({
@@ -1759,6 +1840,15 @@ describe("Relay", () => {
       );
       expect(result.applied).toBe(true);
       expect(result.corrective).toBe(false);
+    });
+
+    it("durable stopping survives replayed running and lease expiry until confirmed terminal", async () => {
+      for(const incoming of ["starting", "running", "host_unknown"]) {
+        const result=await withLockedStatus("stopping",()=> (relay as any).deriveAndWriteState(SID,incoming));
+        expect(result.applied).toBe(false);
+      }
+      const terminal=await withLockedStatus("stopping",()=> (relay as any).deriveAndWriteState(SID,"interrupted"));
+      expect(terminal.applied).toBe(true);
     });
 
     it("guard: onlyIfPrevIn rejects transitions from unlisted states", async () => {

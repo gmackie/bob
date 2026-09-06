@@ -1,0 +1,77 @@
+{
+  "name": "@bob/schema",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    "./agents": {
+      "types": "./dist/agents.d.ts",
+      "default": "./src/agents.ts"
+    },
+    "./auth": {
+      "types": "./dist/auth.d.ts",
+      "default": "./src/auth.ts"
+    },
+    "./chat": {
+      "types": "./dist/chat.d.ts",
+      "default": "./src/chat.ts"
+    },
+    "./ci": {
+      "types": "./dist/ci.d.ts",
+      "default": "./src/ci.ts"
+    },
+    "./cookies": {
+      "types": "./dist/cookies.d.ts",
+      "default": "./src/cookies.ts"
+    },
+    "./git": {
+      "types": "./dist/git.d.ts",
+      "default": "./src/git.ts"
+    },
+    "./notifications": {
+      "types": "./dist/notifications.d.ts",
+      "default": "./src/notifications.ts"
+    },
+    "./projects": {
+      "types": "./dist/projects.d.ts",
+      "default": "./src/projects.ts"
+    },
+    "./secrets": {
+      "types": "./dist/secrets.d.ts",
+      "default": "./src/secrets.ts"
+    },
+    "./settings": {
+      "types": "./dist/settings.d.ts",
+      "default": "./src/settings.ts"
+    },
+    "./tenancy": {
+      "types": "./dist/tenancy.d.ts",
+      "default": "./src/tenancy.ts"
+    },
+    "./webhooks": {
+      "types": "./dist/webhooks.d.ts",
+      "default": "./src/webhooks.ts"
+    },
+    "./work-items": {
+      "types": "./dist/work-items.d.ts",
+      "default": "./src/work-items.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false",
+    "lint": "eslint --flag unstable_native_nodejs_ts_config"
+  },
+  "dependencies": {
+    "@gmacko/core": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "drizzle-zod": "^0.8.3",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@bob/tsconfig": "workspace:*",
+    "typescript": "catalog:",
+    "@bob/eslint-config": "workspace:*",
+    "eslint": "catalog:"
+  }
+}

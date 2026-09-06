@@ -1,39 +1,67 @@
 import * as schema from "./schema";
 
-const DB_DRIVER = process.env.GMACKO_DB_DRIVER ?? "pglite";
+export type DatabaseConfig =
+  | { driver: "pglite"; dataDir: string }
+  | { driver: "postgres"; url: string };
 
-async function createDb() {
-  if (DB_DRIVER === "postgres") {
-    // Production: connect to external PostgreSQL
+export function readDatabaseConfig(
+  env: Record<string, string | undefined> = process.env,
+): DatabaseConfig {
+  const driver = env.GMACKO_DB_DRIVER ?? "pglite";
+  if (driver === "postgres") {
+    if (!env.DATABASE_URL)
+      throw new Error("DATABASE_URL is required for postgres");
+    let url: URL;
+    try {
+      url = new URL(env.DATABASE_URL);
+    } catch {
+      throw new Error("DATABASE_URL must be a PostgreSQL URL");
+    }
+    if (!["postgres:", "postgresql:"].includes(url.protocol) || !url.hostname) {
+      throw new Error("DATABASE_URL must be a PostgreSQL URL");
+    }
+    return { driver, url: env.DATABASE_URL };
+  }
+  if (driver !== "pglite")
+    throw new Error("GMACKO_DB_DRIVER must be pglite or postgres");
+  return { driver, dataDir: env.PGLITE_DATA_DIR ?? `${env.HOME}/.gmacko/data` };
+}
+
+export async function createDatabaseConnection(config: DatabaseConfig) {
+  if (config.driver === "postgres") {
     const { drizzle } = await import("drizzle-orm/postgres-js");
     const postgres = (await import("postgres")).default;
-    const connectionString =
-      process.env.DATABASE_URL ??
-      "postgres://gmacko:gmacko@localhost:5432/gmacko";
-    const sql = postgres(connectionString);
-    return drizzle(sql, { schema });
+    const client = postgres(config.url);
+    return {
+      driver: "postgres" as const,
+      client,
+      db: drizzle(client, { schema }),
+      close: () => client.end(),
+    };
   }
-
-  // Default: PGlite (WASM Postgres, no server needed)
   const { PGlite } = await import("@electric-sql/pglite");
   const { drizzle } = await import("drizzle-orm/pglite");
-  const dataDir =
-    process.env.PGLITE_DATA_DIR ??
-    `${process.env.HOME}/.gmacko/data`;
-  const client = new PGlite(dataDir);
-  return drizzle(client, { schema });
+  const client = new PGlite(config.dataDir);
+  return {
+    driver: "pglite" as const,
+    client,
+    db: drizzle(client, { schema }),
+    close: () => client.close(),
+  };
 }
+export type DatabaseConnection = Awaited<
+  ReturnType<typeof createDatabaseConnection>
+>;
+export type Database = DatabaseConnection["db"];
 
-// Lazy singleton
-let _db: Awaited<ReturnType<typeof createDb>> | undefined;
-
-export async function getDb() {
-  if (!_db) {
-    _db = await createDb();
-  }
-  return _db;
+// Share the pending connection as well as the resolved handle.
+let connection: Promise<DatabaseConnection> | undefined;
+export async function getDb(): Promise<Database> {
+  connection ??= createDatabaseConnection(readDatabaseConfig()).catch(
+    (error) => {
+      connection = undefined;
+      throw error;
+    },
+  );
+  return (await connection).db;
 }
-
-// Synchronous export for backwards compat — will be the PGlite instance once initialized
-// Prefer getDb() for new code
-export type Database = Awaited<ReturnType<typeof createDb>>;

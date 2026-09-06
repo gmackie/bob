@@ -37,8 +37,10 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import text
+
+from research_backend.dive.results import DiveStoredResult
 
 router = APIRouter(prefix="/dives", tags=["dives"])
 
@@ -114,6 +116,8 @@ class DiveResultsResponse(BaseModel):
     papers: list[dict]
     clusters: list[dict]
     edge_counts_by_kind: dict[str, int]
+    vault_schema: str | None = None
+    result: DiveStoredResult | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -263,11 +267,21 @@ def get_dive_results(
         )
 
     meta = row.meta if isinstance(row.meta, dict) else {}
-    vault_schema = meta.get("vault_schema") or "research_vault"
+    vault_schema = meta.get("vault_schema")
     if vault_schema not in _VALID_SCHEMAS:
-        # Paranoid guard — meta is writer-controlled but still, don't let
-        # a bad meta value produce arbitrary SQL.
-        vault_schema = "research_vault"
+        raise HTTPException(status_code=409, detail={
+            "code": "UNRESOLVED_VAULT_PROVENANCE",
+            "message": "Exploration vault identity is missing or invalid; explicit repair required",
+        })
+
+    stored_result = None
+    if "result" in meta:
+        try:
+            stored_result = DiveStoredResult.model_validate(meta["result"])
+        except ValidationError as exc:
+            raise HTTPException(status_code=409, detail={"code": "INVALID_DIVE_RESULT"}) from exc
+        # Preserve legacy reader logic while giving result its own replaceable namespace.
+        meta = {**meta, **stored_result.model_dump(mode="json")}
 
     # Pull cluster summary out of meta; tolerate both layouts.
     cluster_summary: dict[str, Any] = {}
@@ -309,6 +323,8 @@ def get_dive_results(
             papers=[],
             clusters=[],
             edge_counts_by_kind={},
+            vault_schema=vault_schema,
+            result=stored_result,
         )
 
     # Edge counts grouped by kind.
@@ -389,4 +405,6 @@ def get_dive_results(
         papers=papers,
         clusters=clusters_out,
         edge_counts_by_kind=edge_counts_by_kind,
+        vault_schema=vault_schema,
+        result=stored_result,
     )

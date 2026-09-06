@@ -8,7 +8,6 @@ import { overridesFromRows } from "@bob/notifications/preferences-rows";
 import { summariseNotificationPreferences } from "~/features/settings/notification-matrix-model";
 import { buildSettingsIndex } from "~/features/settings/settings-index-model";
 import { SETTINGS_SECTIONS } from "~/features/settings/settings-shell-model";
-import { colors } from "~/lib/colors";
 import { trpc } from "~/utils/api";
 
 /**
@@ -68,7 +67,7 @@ export default function SettingsIndexScreen() {
           {rows.map((row, index) => (
             <Pressable
               key={row.key}
-              onPress={() => router.push(row.href as never)}
+              onPress={() => router.push(row.href)}
               accessibilityRole="button"
               accessibilityLabel={`${row.label}${row.value ? `, ${row.value}` : ""}`}
               className={`flex-row items-center px-4 py-3 active:opacity-70 ${

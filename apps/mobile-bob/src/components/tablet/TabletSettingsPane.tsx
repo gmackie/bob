@@ -100,7 +100,7 @@ export function TabletSettingsPane({
         buildWorkspaceSelectionPath(
           currentPath(pathname, searchParams),
           workspaceId,
-        ) as Parameters<typeof router.replace>[0],
+        ),
       );
     });
   };

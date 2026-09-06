@@ -73,18 +73,25 @@ def list_knowledge_bases(request: Request) -> list[KBSummary]:
             continue
 
         from research_backend.models import KBConfig
+
         config = KBConfig.load(kb_dir / "kb.yaml")
 
-        raw_count = sum(1 for f in (kb_dir / "raw").iterdir() if f.is_file()) if (kb_dir / "raw").exists() else 0
+        raw_count = (
+            sum(1 for f in (kb_dir / "raw").iterdir() if f.is_file())
+            if (kb_dir / "raw").exists()
+            else 0
+        )
         article_count = _count_articles(kb_dir / "wiki")
 
-        results.append(KBSummary(
-            name=config.name,
-            description=config.description,
-            source_count=raw_count,
-            article_count=article_count,
-            categories=config.categories,
-        ))
+        results.append(
+            KBSummary(
+                name=config.name,
+                description=config.description,
+                source_count=raw_count,
+                article_count=article_count,
+                categories=config.categories,
+            )
+        )
 
     return results
 
@@ -95,9 +102,14 @@ def get_knowledge_base(request: Request, name: str) -> KBSummary:
     kbs_dir = _get_kbs_dir(request)
     kb_root = _resolve_kb(kbs_dir, name)
     from research_backend.models import KBConfig
+
     config = KBConfig.load(kb_root / "kb.yaml")
 
-    raw_count = sum(1 for f in (kb_root / "raw").iterdir() if f.is_file()) if (kb_root / "raw").exists() else 0
+    raw_count = (
+        sum(1 for f in (kb_root / "raw").iterdir() if f.is_file())
+        if (kb_root / "raw").exists()
+        else 0
+    )
 
     return KBSummary(
         name=config.name,
@@ -124,12 +136,14 @@ def list_articles(request: Request, name: str) -> list[ArticleSummary]:
             content = f.read_text()
             title = _extract_frontmatter(content, "title") or f.stem.replace("-", " ").title()
             atype = _extract_frontmatter(content, "type") or subdir.rstrip("s")
-            articles.append(ArticleSummary(
-                slug=f"{subdir}/{f.stem}",
-                title=title,
-                article_type=atype,
-                path=f"{subdir}/{f.name}",
-            ))
+            articles.append(
+                ArticleSummary(
+                    slug=f"{subdir}/{f.stem}",
+                    title=title,
+                    article_type=atype,
+                    path=f"{subdir}/{f.name}",
+                )
+            )
 
     return articles
 
@@ -179,11 +193,13 @@ def list_sources(request: Request, name: str) -> list[SourceInfo]:
                 ".html": "text/html",
             }.get(suffix, "application/octet-stream")
 
-            sources.append(SourceInfo(
-                filename=f.name,
-                size_bytes=f.stat().st_size,
-                mime_type=mime,
-            ))
+            sources.append(
+                SourceInfo(
+                    filename=f.name,
+                    size_bytes=f.stat().st_size,
+                    mime_type=mime,
+                )
+            )
 
     return sources
 

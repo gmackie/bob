@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { redirect } from "next/navigation";
 
-import { getSession } from "~/auth/server";
+import { getSession, localAccountAuth } from "~/auth/server";
 import { ObservabilityIdentity } from "~/lib/observability-browser";
 import { BilderDashboardProviders } from "./_providers";
 
@@ -18,7 +18,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <BilderDashboardProviders>
+    <BilderDashboardProviders executionAvailable={!localAccountAuth}>
       <ObservabilityIdentity
         user={{
           userId: session.user.id,

@@ -1,5 +1,6 @@
 "use client";
 
+import { useExecutionAvailable } from "./execution-availability";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BobWsClient,
@@ -86,8 +87,9 @@ export function useSessionSocket({
   onWorkspaceStatusChanged,
   onWorkspaceEvent,
   onConnectionChange,
-  enabled = true,
+  enabled: requestedEnabled = true,
 }: UseSessionSocketOptions) {
+  const enabled = useExecutionAvailable() && requestedEnabled;
   const clientRef = useRef<BobWsClient | null>(null);
   const clientIdRef = useRef<string>(
     typeof crypto.randomUUID === "function"

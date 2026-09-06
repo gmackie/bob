@@ -9,6 +9,7 @@ import {
   selectCurrentWorkspace,
   type ShellWorkspace,
 } from "~/components/layout/shell-settings-model";
+import { useExecutionAvailable } from "./execution-availability";
 import { useSessionSocket } from "./use-session-socket";
 import {
   shouldInvalidateForWorkspaceRealtimeMessage,
@@ -28,12 +29,13 @@ type WorkspaceMembership = {
  * Mount once at the dashboard layout level.
  */
 export function useWorkspaceEvents() {
+  const executionAvailable = useExecutionAvailable();
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
 
   const { data: gatewayInfo } = useQuery(
-    trpc.session.getGatewayWebSocketUrl.queryOptions(undefined),
+    trpc.session.getGatewayWebSocketUrl.queryOptions(undefined, { enabled: executionAvailable }),
   );
   const { data: workspaceMemberships } = useQuery(
     trpc.workspace.list.queryOptions(undefined, {

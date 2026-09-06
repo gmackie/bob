@@ -79,7 +79,7 @@ import {
   PersonaReadOnlyError,
   PersonaSyncResultSchema,
 } from "../schemas/agent-persona.js";
-import { NotFoundError } from "../../rpc/errors.js";
+import { NotFoundError, UnauthorizedError, RpcError } from "../../rpc/errors.js";
 
 /** Union of every error `agent.sendTurn` can surface (on its stream). */
 export const AgentStreamErrorSchema = Schema.Union([
@@ -855,6 +855,7 @@ export const AgentFilesystemListRpc = Rpc.make("agent.filesystem.list", {
     path: Schema.String,
     showHidden: Schema.optional(Schema.Boolean),
   }),
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   success: Schema.Array(FileEntrySchema),
 });
 
@@ -865,6 +866,7 @@ export const AgentFilesystemReadRpc = Rpc.make("agent.filesystem.read", {
     path: Schema.String,
     encoding: Schema.optional(Schema.Literals(["utf-8", "base64"])),
   }),
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   success: Schema.Struct({ content: Schema.String }),
 });
 
@@ -876,6 +878,7 @@ export const AgentFilesystemWriteRpc = Rpc.make("agent.filesystem.write", {
     content: Schema.String,
     createDirs: Schema.optional(Schema.Boolean),
   }),
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   success: Schema.Struct({ success: Schema.Boolean }),
 });
 
@@ -886,6 +889,7 @@ export const AgentFilesystemDeleteRpc = Rpc.make("agent.filesystem.delete", {
     path: Schema.String,
     recursive: Schema.optional(Schema.Boolean),
   }),
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   success: Schema.Struct({ success: Schema.Boolean }),
 });
 
@@ -896,6 +900,7 @@ export const AgentFilesystemMkdirRpc = Rpc.make("agent.filesystem.mkdir", {
     path: Schema.String,
     recursive: Schema.optional(Schema.Boolean),
   }),
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   success: Schema.Struct({ success: Schema.Boolean }),
 });
 
@@ -906,6 +911,7 @@ export const AgentFilesystemMoveRpc = Rpc.make("agent.filesystem.move", {
     source: Schema.String,
     destination: Schema.String,
   }),
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   success: Schema.Struct({ success: Schema.Boolean }),
 });
 
@@ -916,6 +922,7 @@ export const AgentFilesystemCopyRpc = Rpc.make("agent.filesystem.copy", {
     source: Schema.String,
     destination: Schema.String,
   }),
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   success: Schema.Struct({ success: Schema.Boolean }),
 });
 
@@ -927,6 +934,7 @@ export const AgentFilesystemSearchRpc = Rpc.make("agent.filesystem.search", {
     pattern: Schema.String,
     maxResults: Schema.optional(Schema.Number),
   }),
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   success: Schema.Array(FileSearchResultSchema),
 });
 
@@ -936,7 +944,8 @@ export const AgentFilesystemGitStatusRpc = Rpc.make(
   "agent.filesystem.gitStatus",
   {
     payload: Schema.Struct({ path: Schema.String }),
-    success: Schema.Array(GitStatusEntrySchema),
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
+  success: Schema.Array(GitStatusEntrySchema),
   },
 );
 

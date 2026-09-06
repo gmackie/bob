@@ -13,9 +13,8 @@
     "clean": "git clean -xdf .cache .turbo dist node_modules"
   },
   "dependencies": {
-    "@bob/projects": "workspace:*",
-    "@bob/work-items": "workspace:*",
-    "drizzle-orm": "^0.44.7"
+    "drizzle-orm": "^0.45.2",
+    "@bob/schema": "workspace:*"
   },
   "devDependencies": {
     "@bob/tsconfig": "workspace:*",

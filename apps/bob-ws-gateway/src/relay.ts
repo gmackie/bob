@@ -110,6 +110,7 @@ interface Connection {
   heartbeatTimer: NodeJS.Timeout | null;
   alive: boolean;
   workspaceSubscribed: boolean;
+  workspaceSubscriptionVersion: number;
   workspaceScopeId?: string;
   workspaceStatusFilter?: SessionStatus[];
   // Daemon only: sessionIds already delivered via session_available on this
@@ -170,6 +171,8 @@ export class Relay {
   /** Live presence roster for planning session collaborators (BOB-14). */
   private readonly presenceBySession = new Map<string, Map<string, SessionPresenceParticipant>>();
   private nextConnId = 0;
+  private draining = false;
+  private readonly messageQueues = new Set<Promise<void>>();
 
   private timeoutSweepTimer: NodeJS.Timeout | null = null;
   private reapTimer: NodeJS.Timeout | null = null;
@@ -506,6 +509,9 @@ export class Relay {
       if (TERMINAL.includes(previous)) {
         return { applied: false, previous, corrective: false };
       }
+      if (previous === "stopping" && !TERMINAL.includes(incoming)) {
+        return { applied: false, previous, corrective: false };
+      }
       const corrective = previous === "host_unknown" && TERMINAL.includes(incoming);
 
       await tx
@@ -514,6 +520,17 @@ export class Relay {
         .where(eq(chatConversations.id, sessionId));
       return { applied: true, previous, corrective };
     });
+  }
+
+  async drain(timeoutMs = 10_000): Promise<void> {
+    this.draining = true;
+    if(this.timeoutSweepTimer) clearInterval(this.timeoutSweepTimer);
+    if(this.reapTimer) clearInterval(this.reapTimer);
+    if(this.pendingDeliveryTimer) clearInterval(this.pendingDeliveryTimer);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try { await Promise.race([Promise.all([...this.messageQueues]), new Promise<never>((_,reject) => {
+      timeout = setTimeout(() => reject(new Error("Gateway message drain incomplete")), timeoutMs);
+    })]); } finally { if(timeout) clearTimeout(timeout); }
   }
 
   handleConnection(ws: WebSocket): void {
@@ -530,6 +547,7 @@ export class Relay {
       heartbeatTimer: null,
       alive: true,
       workspaceSubscribed: false,
+      workspaceSubscriptionVersion: 0,
     };
     this.connections.set(id, conn);
 
@@ -544,6 +562,7 @@ export class Relay {
     // one (session_status "running") and clobber its writes.
     let messageQueue: Promise<void> = Promise.resolve();
     ws.on("message", (data: Buffer | string) => {
+      if (this.draining) return;
       conn.alive = true;
       const raw = typeof data === "string" ? data : data.toString();
       messageQueue = messageQueue.then(async () => {
@@ -559,6 +578,9 @@ export class Relay {
           this.send(conn, createError("INTERNAL_ERROR", "Internal error"));
         }
       });
+      const pending = messageQueue;
+      this.messageQueues.add(pending);
+      void pending.finally(() => this.messageQueues.delete(pending));
     });
 
     ws.on("close", () => {
@@ -576,7 +598,7 @@ export class Relay {
    * from the DB on next connect.
    */
   async nudgeSession(input: NudgeInput): Promise<void> {
-    this.broadcastWorkspaceIdInvalidation(
+    await this.broadcastWorkspaceIdInvalidation(
       input.workspaceId,
       "work_item_dispatched",
       input.sessionId,
@@ -684,13 +706,13 @@ export class Relay {
     };
   }
 
-  notifyWorkspaceEvent(input: {
+  async notifyWorkspaceEvent(input: {
     type: ServerWorkspaceInvalidationType;
     workspaceId: string;
     entityId?: string;
     payload?: Record<string, unknown>;
-  }): void {
-    this.broadcastWorkspaceIdInvalidation(
+  }): Promise<void> {
+    await this.broadcastWorkspaceIdInvalidation(
       input.workspaceId,
       input.type,
       input.entityId,
@@ -757,7 +779,7 @@ export class Relay {
       // could otherwise show a fake sign-in link to everyone in the workspace.
       case "agent_auth_prompt":
         if (conn.kind === "daemon" && conn.workspaceId) {
-          this.broadcastToWorkspace(conn.workspaceId, {
+          await this.broadcastToWorkspace(conn.workspaceId, {
             type: "agent_auth_prompt",
             workspaceId: conn.workspaceId,
             requestId: msg.requestId,
@@ -772,7 +794,7 @@ export class Relay {
         return;
       case "agent_auth_result":
         if (conn.kind === "daemon" && conn.workspaceId) {
-          this.broadcastToWorkspace(conn.workspaceId, {
+          await this.broadcastToWorkspace(conn.workspaceId, {
             type: "agent_auth_result",
             workspaceId: conn.workspaceId,
             requestId: msg.requestId,
@@ -788,7 +810,7 @@ export class Relay {
       // is not, which is precisely the lie the breaker exists to prevent.
       case "dispatch_state":
         if (conn.kind === "daemon" && conn.workspaceId) {
-          this.broadcastToWorkspace(conn.workspaceId, {
+          await this.broadcastToWorkspace(conn.workspaceId, {
             type: "dispatch_state",
             workspaceId: conn.workspaceId,
             requestId: msg.requestId,
@@ -807,7 +829,7 @@ export class Relay {
         if (conn.kind === "daemon" && conn.workspaceId) {
           if (msg.hostSnapshot) {
             conn.hostSnapshot = msg.hostSnapshot;
-            this.broadcastHostSnapshot(conn.workspaceId, msg.hostSnapshot);
+            await this.broadcastHostSnapshot(conn.workspaceId, msg.hostSnapshot);
           }
           await db
             .update(runnerLeases)
@@ -918,6 +940,7 @@ export class Relay {
         await this.handleSubscribeWorkspace(conn, msg as ClientSubscribeWorkspace);
         return;
       case "unsubscribe_workspace":
+        conn.workspaceSubscriptionVersion++;
         conn.workspaceSubscribed = false;
         conn.workspaceStatusFilter = undefined;
         return;
@@ -1712,6 +1735,10 @@ export class Relay {
       this.send(conn, createError("SESSION_NOT_FOUND", "Session not found", msg.sessionId));
       return;
     }
+    if (!result.delivered) {
+      this.send(conn, createError("STOP_NOT_DELIVERED", "Stop is recorded; waiting for the daemon to reconnect", msg.sessionId));
+      return;
+    }
     // Ack that the stop was accepted; the daemon's terminal session_status
     // report ("interrupted") is what finalizes state for all subscribers.
     this.send(conn, { type: "session_stopped", sessionId: msg.sessionId });
@@ -1720,8 +1747,8 @@ export class Relay {
   /**
    * Ask the daemon running this session to kill its agent process.
    * Shared by the browser `stop_session` frame and POST /internal/session-stop
-   * (the tRPC session.stop path). When no daemon is reachable, the session is
-   * finalized as "stopped" directly — there is nothing left to kill.
+   * (the tRPC session.stop path). Disconnection cannot prove process exit.
+   * Persist stopping until a reconnect delivers cancellation and a terminal ACK follows.
    */
   async requestSessionStop(
     userId: string,
@@ -1758,11 +1785,11 @@ export class Relay {
 
     await this.deriveAndWriteState(
       sessionId,
-      "stopped",
-      { claimedByGatewayId: null, leaseExpiresAt: null },
+      "stopping",
+      undefined,
       activeStatuses,
     );
-    console.log(`[Relay] Stop for session ${sessionId}: no daemon online, marked stopped`);
+    console.log(`[Relay] Stop for session ${sessionId}: no daemon online, cancellation awaits reconnect`);
     return { delivered: false };
   }
 
@@ -1775,9 +1802,13 @@ export class Relay {
         eq(chatConversations.id, claim.sessionId),
         eq(chatConversations.userId, conn.userId!),
       ),
-      columns: { id: true },
+      columns: { id: true, status: true },
     });
     if (!owned) return;
+    if (owned.status === "stopping") {
+      this.send(conn, { type: "session_stop", sessionId: claim.sessionId });
+      return;
+    }
 
     // Idempotent claim: session_claimed is journaled with a send-seq and
     // replayed on reconnect, but (unlike event/status envelopes) the gateway
@@ -1930,14 +1961,17 @@ export class Relay {
     payload: Record<string, unknown>,
   ): Promise<{ kind: "inserted"; seq: number } | { kind: "duplicate" } | { kind: "denied" }> {
     return await db.transaction(async (tx) => {
-      // Duplicate check first so redelivery doesn't burn a gateway seq.
+      // Authorize duplicate receipts too; a guessed session/send-seq must not
+      // acknowledge another principal's event. Redelivery does not burn a seq.
       const existing = await tx
         .select({ id: sessionEvents.id })
         .from(sessionEvents)
+        .leftJoin(chatConversations, eq(chatConversations.id, sessionEvents.sessionId))
         .where(
           and(
             eq(sessionEvents.sessionId, sessionId),
             eq(sessionEvents.sendSeq, sendSeq),
+            eq(chatConversations.userId, conn.userId!),
           ),
         )
         .limit(1);
@@ -2149,6 +2183,10 @@ export class Relay {
       where: eq(chatConversations.id, msg.sessionId),
     });
     if (!session || session.userId !== conn.userId) return;
+    if (session.status === "stopping" && !TERMINAL_STATUSES.includes(msg.status as typeof TERMINAL_STATUSES[number])) {
+      this.send(conn, { type: "session_stop", sessionId: msg.sessionId });
+      return;
+    }
 
     // Extract a human-readable failure reason from the daemon's summary so it
     // can be surfaced in the UI (chatConversations.lastError) rather than being
@@ -2531,11 +2569,18 @@ export class Relay {
 
     for (const c of userConns) {
       if (!c.workspaceSubscribed) continue;
+      const scopeId = c.workspaceScopeId;
+      const subscriptionVersion = c.workspaceSubscriptionVersion;
       if (c.workspaceStatusFilter?.length && !c.workspaceStatusFilter.includes(status)) continue;
-      if (c.workspaceScopeId) {
-        const [matchingSession] = await this.filterSessionsByWorkspace([session], c.workspaceScopeId);
+      if (scopeId) {
+        if (!(await this.workspaceAccess(c.userId!, scopeId)).member) {
+          if (c.workspaceSubscriptionVersion === subscriptionVersion) c.workspaceSubscribed = false;
+          continue;
+        }
+        const [matchingSession] = await this.filterSessionsByWorkspace([session], scopeId);
         if (!matchingSession) continue;
       }
+      if (!c.workspaceSubscribed || c.workspaceSubscriptionVersion !== subscriptionVersion) continue;
       this.send(c, {
         type: "session_status_changed",
         sessionId: session.id,
@@ -2570,16 +2615,21 @@ export class Relay {
     return sent;
   }
 
-  private broadcastWorkspaceIdInvalidation(
+  private async broadcastWorkspaceIdInvalidation(
     workspaceId: string,
     type: ServerWorkspaceInvalidationType,
     entityId?: string,
     payload?: Record<string, unknown>,
-  ): void {
+  ): Promise<void> {
     for (const c of this.connections.values()) {
       if (c.kind !== "browser") continue;
       if (!c.workspaceSubscribed) continue;
+      const scopeId = c.workspaceScopeId;
+      const subscriptionVersion = c.workspaceSubscriptionVersion;
       if (c.workspaceScopeId && c.workspaceScopeId !== workspaceId) continue;
+      if (!(await this.workspaceAccess(c.userId!, workspaceId)).member) continue;
+      if (!c.workspaceSubscribed || (c.workspaceScopeId && c.workspaceScopeId !== workspaceId)) continue;
+      if (!c.workspaceSubscribed || c.workspaceSubscriptionVersion !== subscriptionVersion) continue;
       this.send(c, {
         type,
         workspaceId,
@@ -2600,19 +2650,26 @@ export class Relay {
 
     for (const c of userConns) {
       if (!c.workspaceSubscribed) continue;
+      const scopeId = c.workspaceScopeId;
+      const subscriptionVersion = c.workspaceSubscriptionVersion;
       if (
         c.workspaceStatusFilter?.length &&
         !c.workspaceStatusFilter.includes(session.status as SessionStatus)
       ) {
         continue;
       }
-      if (c.workspaceScopeId) {
-        const [matchingSession] = await this.filterSessionsByWorkspace([session], c.workspaceScopeId);
+      if (scopeId) {
+        if (!(await this.workspaceAccess(c.userId!, scopeId)).member) {
+          if (c.workspaceSubscriptionVersion === subscriptionVersion) c.workspaceSubscribed = false;
+          continue;
+        }
+        const [matchingSession] = await this.filterSessionsByWorkspace([session], scopeId);
         if (!matchingSession) continue;
       }
+      if (!c.workspaceSubscribed || c.workspaceSubscriptionVersion !== subscriptionVersion) continue;
       this.send(c, {
         type,
-        workspaceId: c.workspaceScopeId,
+        workspaceId: scopeId,
         entityId: session.id,
         createdAt: new Date().toISOString(),
       });
@@ -2621,7 +2678,27 @@ export class Relay {
 
   // ── Workspace subscription ────────────────────────────────────────
 
+  private async workspaceAccess(userId: string, workspaceId: string): Promise<{ member: boolean; hostAuth: boolean }> {
+    const workspace = await db.query.workspaces.findFirst({
+      where: eq(workspaces.id, workspaceId),
+      columns: { id: true, ownerUserId: true },
+    });
+    if (!workspace) return { member: false, hostAuth: false };
+    if (workspace.ownerUserId === userId) return { member: true, hostAuth: true };
+    const membership = await db.query.workspaceMembers.findFirst({
+      where: and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, userId)),
+      columns: { id: true },
+    });
+    return { member: Boolean(membership), hostAuth: false };
+  }
+
   private async handleSubscribeWorkspace(conn: Connection, msg: ClientSubscribeWorkspace): Promise<void> {
+    const subscriptionVersion = ++conn.workspaceSubscriptionVersion;
+    if (msg.workspaceId && !(await this.workspaceAccess(conn.userId!, msg.workspaceId)).member) {
+      this.send(conn, createError("FORBIDDEN", "Workspace access denied"));
+      return;
+    }
+    if (conn.workspaceSubscriptionVersion !== subscriptionVersion) return;
     conn.workspaceSubscribed = true;
     conn.workspaceScopeId = msg.workspaceId;
     conn.workspaceStatusFilter = msg.statusFilter;
@@ -2654,6 +2731,12 @@ export class Relay {
       sessions = sessions.filter((s) => msg.statusFilter!.includes(s.status));
     }
 
+    if (!conn.workspaceSubscribed || conn.workspaceSubscriptionVersion !== subscriptionVersion) return;
+    if (msg.workspaceId && !(await this.workspaceAccess(conn.userId!, msg.workspaceId)).member) {
+      if (conn.workspaceSubscriptionVersion === subscriptionVersion) conn.workspaceSubscribed = false;
+      return;
+    }
+    if (!conn.workspaceSubscribed || conn.workspaceSubscriptionVersion !== subscriptionVersion) return;
     this.send(conn, { type: "workspace_snapshot", sessions });
     if (msg.workspaceId) {
       const daemon = this.daemonByWorkspace.get(msg.workspaceId);
@@ -2672,15 +2755,19 @@ export class Relay {
    * workspaceScopeId so an auth prompt for one workspace's host never reaches
    * another's.
    */
-  private broadcastToWorkspace(workspaceId: string, msg: ServerMessage): void {
+  private async broadcastToWorkspace(workspaceId: string, msg: ServerMessage): Promise<void> {
+    const requiresHostAuth = msg.type === "agent_auth_prompt" || msg.type === "agent_auth_result";
     for (const conn of this.connections.values()) {
-      if (
-        conn.kind === "browser" &&
-        conn.workspaceSubscribed &&
-        conn.workspaceScopeId === workspaceId
-      ) {
-        this.send(conn, msg);
+      if (conn.kind !== "browser" || !conn.workspaceSubscribed || conn.workspaceScopeId !== workspaceId) continue;
+      const subscriptionVersion = conn.workspaceSubscriptionVersion;
+      const access = await this.workspaceAccess(conn.userId!, workspaceId);
+      if (!access.member) {
+        if (conn.workspaceSubscriptionVersion === subscriptionVersion) conn.workspaceSubscribed = false;
+        continue;
       }
+      if (requiresHostAuth && !access.hostAuth) continue;
+      // Scope may have changed while resolving membership.
+      if (conn.workspaceSubscribed && conn.workspaceSubscriptionVersion === subscriptionVersion) this.send(conn, msg);
     }
   }
 
@@ -2713,16 +2800,8 @@ export class Relay {
     return true;
   }
 
-  private broadcastHostSnapshot(workspaceId: string, snapshot: HostSnapshotWire): void {
-    for (const conn of this.connections.values()) {
-      if (
-        conn.kind === "browser" &&
-        conn.workspaceSubscribed &&
-        conn.workspaceScopeId === workspaceId
-      ) {
-        this.send(conn, { type: "host_snapshot", workspaceId, snapshot });
-      }
-    }
+  private async broadcastHostSnapshot(workspaceId: string, snapshot: HostSnapshotWire): Promise<void> {
+    await this.broadcastToWorkspace(workspaceId, { type: "host_snapshot", workspaceId, snapshot });
   }
 
   private async getPlanningDraftCounts(

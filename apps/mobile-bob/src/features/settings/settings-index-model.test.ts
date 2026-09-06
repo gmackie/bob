@@ -49,10 +49,12 @@ describe("buildSettingsIndex", () => {
   it("flags providers that need attention rather than only counting them", () => {
     // "4 ready" and "2 of 4 ready" are different situations; the index is
     // where an operator notices the second one.
-    const healthy = buildSettingsIndex(base).find((r) => r.key === "providers")!;
+    const healthy = buildSettingsIndex(base).find((r) => r.key === "providers");
+    if (!healthy) throw new Error("Expected fixture row");
     const degraded = buildSettingsIndex({ ...base, providerReadyCount: 2 }).find(
       (r) => r.key === "providers",
-    )!;
+    );
+    if (!degraded) throw new Error("Expected fixture row");
 
     expect(healthy.value).toBe("4 ready");
     expect(healthy.needsAttention).toBe(false);
@@ -62,7 +64,7 @@ describe("buildSettingsIndex", () => {
 
   it("uses the singular for one key", () => {
     expect(
-      buildSettingsIndex({ ...base, apiKeyCount: 1 }).find((r) => r.key === "apiKeys")!.value,
+      buildSettingsIndex({ ...base, apiKeyCount: 1 }).find((r) => r.key === "apiKeys")?.value,
     ).toBe("1 key");
   });
 

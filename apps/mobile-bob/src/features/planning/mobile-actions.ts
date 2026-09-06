@@ -70,15 +70,16 @@ export function getExecutionLaunchState(input: {
   };
 }
 
-export function getMobilePlanningChatHref(): string {
+export function getMobilePlanningChatHref() {
   return getAgentChatHref();
 }
 
 export function getMobilePlanningSessionHref(
   sessionId: string,
   workspaceId?: string | null,
-): string {
-  if (!workspaceId) return `/planning/sessions/${sessionId}`;
+) {
+  if (!workspaceId)
+    return `/planning/sessions/${encodeURIComponent(sessionId)}` as const;
   const params = new URLSearchParams({ workspace: workspaceId });
-  return `/planning/sessions/${sessionId}?${params.toString()}`;
+  return `/planning/sessions/${encodeURIComponent(sessionId)}?${params.toString()}` as const;
 }

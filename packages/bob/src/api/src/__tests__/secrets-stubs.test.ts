@@ -35,8 +35,10 @@ describe("unimplemented secrets stubs", () => {
 
   for (const tag of STUBS) {
     it(`${tag} says it is not implemented instead of failing to encode`, async () => {
+      const handler = handlers[tag];
+      if (!handler) throw new Error(`Missing handler ${tag}`);
       const exit = await Effect.runPromiseExit(
-        handlers[tag]!({ payload: undefined }) as Effect.Effect<unknown, never, never>,
+        handler({ payload: undefined }) as Effect.Effect<unknown, never, never>,
       );
 
       expect(Exit.isFailure(exit)).toBe(true);

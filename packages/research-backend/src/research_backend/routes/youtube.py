@@ -184,7 +184,6 @@ def list_videos(
     paths = sorted(raw_dir.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
 
     matches: list[YouTubeVideo] = []
-    skipped = 0
     scan_budget = max(500, (offset + limit) * 10) if (channel or enriched_only) else offset + limit
     scanned = 0
 

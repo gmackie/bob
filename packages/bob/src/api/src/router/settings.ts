@@ -44,20 +44,20 @@ export const settingsRouter = {
    * 404s in production. See apps/bob/src/lib/__tests__/edge-router-parity.
    */
   listNotificationPreferences: protectedProcedure.query(({ ctx }) =>
-    notificationPreferencesList({ db: ctx.db, userId: ctx.session.user.id } as never),
+    notificationPreferencesList({ db: ctx.db, userId: ctx.session.user.id }),
   ),
 
   setNotificationPreference: protectedProcedure
     .input(notificationPreferencesSetInput)
     .mutation(({ ctx, input }) =>
       notificationPreferencesSet(
-        { db: ctx.db, userId: ctx.session.user.id } as never,
+        { db: ctx.db, userId: ctx.session.user.id },
         input,
       ),
     ),
 
   resetNotificationPreferences: protectedProcedure.mutation(({ ctx }) =>
-    notificationPreferencesReset({ db: ctx.db, userId: ctx.session.user.id } as never),
+    notificationPreferencesReset({ db: ctx.db, userId: ctx.session.user.id }),
   ),
 
   getPreferences: protectedProcedure.query(({ ctx }) =>

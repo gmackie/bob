@@ -34,9 +34,10 @@ def render_result(result: QueryResult, output_dir: Path | None = None) -> str:
 def _render_markdown(result: QueryResult) -> str:
     """Render as a standard markdown document."""
     sources = ", ".join(result.sources_consulted) if result.sources_consulted else "none"
+    answered_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     return (
         f"# {result.question}\n\n"
-        f"*Query answered at {datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}*\n"
+        f"*Query answered at {answered_at}*\n"
         f"*Sources consulted: {sources}*\n\n"
         f"---\n\n"
         f"{result.answer}\n"

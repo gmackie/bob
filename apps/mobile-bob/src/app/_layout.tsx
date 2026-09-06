@@ -443,13 +443,13 @@ function TabletLayout() {
       ...prev,
       target: { type: "settings" },
     }));
-    router.replace(getTabletSettingsHref(selectedWorkspaceId) as never);
+    router.replace(getTabletSettingsHref(selectedWorkspaceId));
   }, [clearDetailState, router, selectedWorkspaceId]);
 
   const handleModeChange = useCallback((mode: TabletShellMode) => {
     clearDetailState();
     setShell(switchShellMode(mode));
-    router.replace(getTabletDashboardHref(mode, selectedWorkspaceId) as never);
+    router.replace(getTabletDashboardHref(mode, selectedWorkspaceId));
   }, [clearDetailState, router, selectedWorkspaceId]);
 
   const handleLeftTabChange = useCallback((leftTab: TabletLeftRailTab) => {
@@ -460,10 +460,10 @@ function TabletLayout() {
       target: selectLeftRailTarget(prev.mode, leftTab),
     }));
     if (leftTab === "projects") {
-      router.replace(getTabletProjectsHref(selectedWorkspaceId) as never);
+      router.replace(getTabletProjectsHref(selectedWorkspaceId));
       return;
     }
-    router.replace(getTabletDashboardHref(shell.mode, selectedWorkspaceId) as never);
+    router.replace(getTabletDashboardHref(shell.mode, selectedWorkspaceId));
   }, [clearDetailState, router, selectedWorkspaceId, shell.mode]);
 
   const handleSelectSession = useCallback((sessionId: string) => {
@@ -482,20 +482,20 @@ function TabletLayout() {
           outcomeTarget.target.workItemId,
           outcomeTarget.entryView ?? "outcome",
           selectedWorkspaceId,
-        ) as never,
+        ),
       );
       return;
     }
 
     setShell(getExecutionSessionShellState(sessionId));
     gateway.selectSession(sessionId);
-    router.replace(getTabletSessionHref(sessionId, selectedWorkspaceId) as never);
+    router.replace(getTabletSessionHref(sessionId, selectedWorkspaceId));
   }, [gateway, router, selectedWorkspaceId]);
 
   const handleOpenSession = useCallback((sessionId: string) => {
     setShell(getExecutionSessionShellState(sessionId));
     gateway.selectSession(sessionId);
-    router.replace(getTabletSessionHref(sessionId, selectedWorkspaceId) as never);
+    router.replace(getTabletSessionHref(sessionId, selectedWorkspaceId));
   }, [gateway, router, selectedWorkspaceId]);
 
   const handleOpenPlanningSession = useCallback((sessionId: string) => {
@@ -506,7 +506,7 @@ function TabletLayout() {
       target: { type: "planning-session", sessionId },
     });
     gateway.openPlanningSession(sessionId);
-    router.replace(getTabletPlanningSessionHref(sessionId, selectedWorkspaceId) as never);
+    router.replace(getTabletPlanningSessionHref(sessionId, selectedWorkspaceId));
   }, [gateway, router, selectedWorkspaceId]);
 
   const handleOpenPlanningSummaryTarget = useCallback((target: TabletPlanningSummaryTarget) => {
@@ -517,7 +517,7 @@ function TabletLayout() {
         leftTab: "projects",
         target: { type: "projects-dashboard" },
       });
-      router.replace(getTabletProjectsHref(selectedWorkspaceId, target.filter) as never);
+      router.replace(getTabletProjectsHref(selectedWorkspaceId, target.filter));
       return;
     }
 
@@ -526,7 +526,7 @@ function TabletLayout() {
       leftTab: "recent-sessions",
       target: { type: "planning-dashboard" },
     });
-    router.replace(getMobilePlanningFilterHref(target.filter, selectedWorkspaceId) as never);
+    router.replace(getMobilePlanningFilterHref(target.filter, selectedWorkspaceId));
   }, [clearDetailState, router, selectedWorkspaceId]);
 
   const handleOpenPlanningNavigationAction = useCallback((
@@ -539,7 +539,7 @@ function TabletLayout() {
         leftTab: "projects",
         target: { type: "projects-dashboard" },
       });
-      router.replace(getTabletProjectsHref(selectedWorkspaceId) as never);
+      router.replace(getTabletProjectsHref(selectedWorkspaceId));
       return;
     }
 
@@ -548,7 +548,7 @@ function TabletLayout() {
       leftTab: "recent-sessions",
       target: { type: "planning-dashboard" },
     });
-    router.replace(getTabletDashboardHref("planning", selectedWorkspaceId) as never);
+    router.replace(getTabletDashboardHref("planning", selectedWorkspaceId));
   }, [clearDetailState, router, selectedWorkspaceId]);
 
   const handleSelectWorkItem = useCallback((
@@ -562,7 +562,7 @@ function TabletLayout() {
     });
     setSelectedWorkItemView(view);
     gateway.selectWorkItem(workItemId);
-    router.replace(getTabletWorkItemHref(workItemId, view, selectedWorkspaceId) as never);
+    router.replace(getTabletWorkItemHref(workItemId, view, selectedWorkspaceId));
   }, [gateway, router, selectedWorkspaceId]);
 
   const handleSelectProject = useCallback((projectId: string) => {
@@ -572,7 +572,7 @@ function TabletLayout() {
       leftTab: "projects",
       target: { type: "project", projectId },
     });
-    router.replace(getTabletProjectHref(projectId, selectedWorkspaceId) as never);
+    router.replace(getTabletProjectHref(projectId, selectedWorkspaceId));
   }, [clearDetailState, router, selectedWorkspaceId]);
 
   const handleOpenProvider = useCallback((provider: ProviderKey) => {
@@ -582,7 +582,7 @@ function TabletLayout() {
       leftTab: "recent-outcomes",
       target: { type: "provider", provider },
     });
-    router.replace(getTabletProviderHref(provider, selectedWorkspaceId) as never);
+    router.replace(getTabletProviderHref(provider, selectedWorkspaceId));
   }, [clearDetailState, router, selectedWorkspaceId]);
 
   const handleOpenTaskLane = useCallback((lane: TaskLaneKey) => {
@@ -592,7 +592,7 @@ function TabletLayout() {
       leftTab: "priority-queue",
       target: { type: "task-lane", lane },
     });
-    router.replace(getTabletTaskLaneHref(lane, selectedWorkspaceId) as never);
+    router.replace(getTabletTaskLaneHref(lane, selectedWorkspaceId));
   }, [clearDetailState, router, selectedWorkspaceId]);
 
   useTabletShortcuts({

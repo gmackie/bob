@@ -16,7 +16,9 @@ class KBConfig:
 
     name: str
     description: str
-    provider: dict[str, str] = field(default_factory=lambda: {"default": "anthropic", "model": "claude-sonnet-4-6"})
+    provider: dict[str, str] = field(
+        default_factory=lambda: {"default": "anthropic", "model": "claude-sonnet-4-6"}
+    )
     article_types: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     categories: list[str] = field(default_factory=list)
     sources: list[str] = field(default_factory=lambda: ["pdf", "markdown", "url", "image"])
@@ -56,7 +58,9 @@ class Source:
     path: Path
     content_hash: str
     mime_type: str
-    ingested_at: str = field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
+    ingested_at: str = field(
+        default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat()
+    )
     text: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
     # Which adapter owns this source. Default "file" covers the legacy
@@ -76,7 +80,9 @@ class Article:
     category: str
     sources: list[str]
     content: str
-    last_compiled: str = field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
+    last_compiled: str = field(
+        default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat()
+    )
 
     @property
     def frontmatter(self) -> str:

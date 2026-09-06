@@ -8,15 +8,16 @@
  * Run: BOB_API_KEY=... BOB_WORKSPACE_ID=... GATEWAY_WS_URL=ws://... node daemon/index.js
  */
 import { execFile, spawn } from "node:child_process";
-import { killProcessTree } from "./process-tree";
-import type { ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import WebSocket from "ws";
-import { computeCostUsd } from "@gmacko/core/agent/model-pricing";
 import type { TokenCounts } from "@gmacko/core/agent/model-pricing";
+import type { ChildProcess } from "node:child_process";
+import { computeCostUsd } from "@gmacko/core/agent/model-pricing";
+import WebSocket from "ws";
+
 import {
   captureCriticalFailure,
   identifyTenant,
@@ -26,27 +27,37 @@ import {
 } from "@bob/observability";
 import {
   initTelemetry,
-  traceAgentExecution,
   setAgentResult,
   shutdownTelemetry,
+  traceAgentExecution,
 } from "@bob/telemetry";
+
+import type { AuthPty } from "../providers/auth-session.js";
+import {
+  buildSeedQuestion,
+  createOracleClient,
+  fetchOracleSeed,
+} from "../oracle-client.js";
+import { readOracleConfig } from "../oracle-config.js";
+import { AuthSessionManager } from "../providers/auth-session.js";
+import { probeCliProvider } from "../providers/cli-provider.js";
+import { providerIds } from "../providers/contract.js";
+import { FileCreditStore } from "../providers/credit-store.js";
+import { CreditLatch } from "../providers/credit.js";
 import {
   buildProviderCommand,
   buildProviderEnvironment,
   normalizeProviderId,
   parseProviderStream,
 } from "../providers/runtime.js";
-import { probeCliProvider } from "../providers/cli-provider.js";
-import { CreditLatch } from "../providers/credit.js";
-import { AuthSessionManager } from "../providers/auth-session.js";
-import type { AuthPty } from "../providers/auth-session.js";
-import { FileCreditStore } from "../providers/credit-store.js";
-import { providerIds } from "../providers/contract.js";
-import { createOracleClient, fetchOracleSeed, buildSeedQuestion } from "../oracle-client.js";
-import { readOracleConfig } from "../oracle-config.js";
-import { SessionAdmission } from "./session-admission.js";
+import { abortable } from "./abortable.js";
+import { DurableJournal } from "./durable-journal.js";
 import { claudeOracleArgs } from "./oracle-args.js";
+import { processFingerprint, stopRecordedProcess } from "./process-identity.js";
+import { SessionAdmission } from "./session-admission.js";
+import { SessionControl } from "./session-control.js";
 import { recordBobSessionOutcome } from "./skillfleet-workflow.js";
+import { prepareWorkspace } from "./workspace.js";
 
 interface AgentExecutionResult {
   exitCode: number;
@@ -70,10 +81,10 @@ interface AgentExecutionResult {
 // Config
 // ---------------------------------------------------------------------------
 
-const GATEWAY_WS_URL = process.env.GATEWAY_WS_URL ?? "ws://100.101.32.120:3003/sessions";
+const GATEWAY_WS_URL =
+  process.env.GATEWAY_WS_URL ?? "ws://100.101.32.120:3003/sessions";
 const BOB_API_KEY = process.env.BOB_API_KEY ?? "";
 const BOB_WORKSPACE_ID = process.env.BOB_WORKSPACE_ID ?? "";
-const DEV_DIR = process.env.BOB_DEV_DIR ?? process.env.HOME ?? "/home/mackieg";
 const CLIENT_ID = `executor-${process.pid}`;
 const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT ?? "2", 10);
 const RECONNECT_DELAY_MS = 5_000;
@@ -83,16 +94,22 @@ const CODEX_MODEL = process.env.CODEX_MODEL ?? "gpt-5.5";
 const CODEX_SANDBOX = process.env.CODEX_SANDBOX ?? "read-only";
 
 const ORACLE = readOracleConfig();
-const oracleClient = ORACLE.enabled ? createOracleClient(ORACLE.apiUrl, ORACLE.token) : null;
+const oracleClient = ORACLE.enabled
+  ? createOracleClient(ORACLE.apiUrl, ORACLE.token)
+  : null;
 
 function setupOracleMcpConfig(): string | null {
   if (!ORACLE.enabled) return null;
-  const mcpServerPath = fileURLToPath(new URL("../ooda-oracle-mcp.ts", import.meta.url));
+  const mcpServerPath = fileURLToPath(
+    new URL("../ooda-oracle-mcp.ts", import.meta.url),
+  );
   // Resolved for the tsx (no-build) deploy. If the server file is missing (e.g. a
   // bundled dist/ run that didn't emit it), degrade to "oracle disabled" rather than
   // spawning a broken MCP child on every claude session.
   if (!existsSync(mcpServerPath)) {
-    console.log(`[oracle] MCP server not found at ${mcpServerPath}; live tool disabled.`);
+    console.log(
+      `[oracle] MCP server not found at ${mcpServerPath}; live tool disabled.`,
+    );
     return null;
   }
   const configPath = join(tmpdir(), `ooda-oracle-mcp.${process.pid}.json`);
@@ -107,7 +124,9 @@ function setupOracleMcpConfig(): string | null {
   };
   // 0o600: the config embeds OODA_ORACLE_TOKEN, so keep it owner-only in tmpdir.
   writeFileSync(configPath, JSON.stringify(config), { mode: 0o600 });
-  console.log(`[oracle] MCP config written to ${configPath} (server ${mcpServerPath})`);
+  console.log(
+    `[oracle] MCP config written to ${configPath} (server ${mcpServerPath})`,
+  );
   return configPath;
 }
 
@@ -119,7 +138,8 @@ const observabilityConfig = resolveObservabilityConfig({
 initNodeObservability(observabilityConfig);
 initTelemetry({
   serviceName: "bob-execution",
-  disabled: !process.env.OTEL_EXPORTER_OTLP_ENDPOINT && !process.env.SIGNOZ_ENDPOINT,
+  disabled:
+    !process.env.OTEL_EXPORTER_OTLP_ENDPOINT && !process.env.SIGNOZ_ENDPOINT,
 });
 if (observabilityConfig.tenantId || BOB_WORKSPACE_ID) {
   identifyTenant({
@@ -164,8 +184,18 @@ interface ServerSessionAvailable {
     launchContext?: {
       intent: "shape" | "breakdown";
       notes: string;
-      workItem?: { id: string; identifier: string; title: string; kind: string };
-      selectedRepoSources: { id: string; label: string; path: string; detail: string }[];
+      workItem?: {
+        id: string;
+        identifier: string;
+        title: string;
+        kind: string;
+      };
+      selectedRepoSources: {
+        id: string;
+        label: string;
+        path: string;
+        detail: string;
+      }[];
       attachedFiles: { name: string; sizeLabel: string; content?: string }[];
     };
   };
@@ -178,9 +208,15 @@ type KnownServerMessage =
   | { type: "error"; code: string; message: string }
   | { type: "pong" }
   // Browser-driven agent re-authentication (see providers/auth-session.ts).
-  | { type: "agent_auth_start"; requestId: string; provider: AgentAuthProviderId }
+  | {
+      type: "agent_auth_start";
+      requestId: string;
+      provider: AgentAuthProviderId;
+    }
   | { type: "agent_auth_input"; requestId: string; value: string }
   | { type: "agent_auth_cancel"; requestId: string }
+  | { type: "session_stop"; sessionId: string }
+  | { type: "event_ack"; sessionId: string; sendSeq: number }
   | ServerSessionAvailable;
 
 /** Any inbound gateway message: known variants, plus unrecognized ones we ignore. */
@@ -216,7 +252,9 @@ function asKnownMessage<T extends KnownServerMessage["type"]>(
   type: T,
 ): Extract<KnownServerMessage, { type: T }> {
   if (msg.type !== type) {
-    throw new Error(`asKnownMessage: expected type "${type}", got "${msg.type}"`);
+    throw new Error(
+      `asKnownMessage: expected type "${type}", got "${msg.type}"`,
+    );
   }
   return msg as Extract<KnownServerMessage, { type: T }>;
 }
@@ -229,6 +267,15 @@ let ws: WebSocket | null = null;
 let heartbeatTimer: NodeJS.Timeout | null = null;
 let reconnectAttempt = 0;
 const activeSessions = new Map<string, ChildProcess>();
+const controls = new Map<string, SessionControl>();
+const journal = new DurableJournal(
+  process.env.BOB_JOURNAL_DIR ??
+    join(homedir(), ".bob", "execution-journal", BOB_WORKSPACE_ID),
+);
+let authenticated = false;
+let shuttingDown = false;
+let storageFailure = false;
+let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 const sessionAdmission = new SessionAdmission(MAX_CONCURRENT);
 let providerSnapshot: Awaited<ReturnType<typeof probeCliProvider>>[] = [];
 let lastProviderProbeAt = 0;
@@ -311,24 +358,41 @@ const authSessions = new AuthSessionManager({
 });
 
 async function collectHostSnapshot() {
-  if (Date.now() - lastProviderProbeAt > 5 * 60_000 || providerSnapshot.length === 0) {
+  if (
+    Date.now() - lastProviderProbeAt > 5 * 60_000 ||
+    providerSnapshot.length === 0
+  ) {
     providerSnapshot = await Promise.all(
       providerIds.map((provider) =>
         probeCliProvider(
           provider,
           (command, args) =>
-          new Promise((resolve, reject) => {
-            execFile(command, args, { timeout: 10_000 }, (error, stdout, stderr) => {
-              if (error && "code" in error && error.code === "ENOENT") {
-                reject(error instanceof Error ? error : new Error("command not found"));
-                return;
-              }
-              resolve({
-                code: typeof error?.code === "number" ? error.code : error ? 1 : 0,
-                stdout,
-                stderr,
-              });
-            });
+            new Promise((resolve, reject) => {
+              execFile(
+                command,
+                args,
+                { timeout: 10_000 },
+                (error, stdout, stderr) => {
+                  if (error && "code" in error && error.code === "ENOENT") {
+                    reject(
+                      error instanceof Error
+                        ? error
+                        : new Error("command not found"),
+                    );
+                    return;
+                  }
+                  resolve({
+                    code:
+                      typeof error?.code === "number"
+                        ? error.code
+                        : error
+                          ? 1
+                          : 0,
+                    stdout,
+                    stderr,
+                  });
+                },
+              );
             }),
           new Date(),
           creditLatch.get(provider),
@@ -394,11 +458,18 @@ function connect(): void {
   });
 
   ws.on("close", () => {
+    authenticated = false;
     cleanup();
+    if (shuttingDown) return;
     reconnectAttempt++;
-    const delay = Math.min(RECONNECT_DELAY_MS * Math.pow(2, reconnectAttempt - 1), 60_000);
-    console.log(`[executor] Disconnected, reconnecting in ${delay / 1000}s (attempt ${reconnectAttempt})...`);
-    setTimeout(connect, delay);
+    const delay = Math.min(
+      RECONNECT_DELAY_MS * Math.pow(2, reconnectAttempt - 1),
+      60_000,
+    );
+    console.log(
+      `[executor] Disconnected, reconnecting in ${delay / 1000}s (attempt ${reconnectAttempt})...`,
+    );
+    reconnectTimer = setTimeout(connect, delay);
   });
 
   ws.on("error", (err) => {
@@ -416,10 +487,49 @@ function connect(): void {
   });
 }
 
-function send(msg: Record<string, unknown>): void {
-  if (ws?.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(msg));
+function transmit(msg: Record<string, unknown>): void {
+  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+}
+function send(msg: Record<string, unknown>): boolean {
+  if (
+    (msg.type === "session_event" || msg.type === "session_status") &&
+    typeof msg.sessionId === "string"
+  ) {
+    if (
+      storageFailure &&
+      !(
+        msg.type === "session_status" &&
+        ["completed", "error", "interrupted"].includes(String(msg.status))
+      )
+    )
+      return false;
+    try {
+      const frame = journal.append({ ...msg, sessionId: msg.sessionId });
+      if (authenticated) transmit(frame);
+      return true;
+    } catch (error) {
+      storageFailure = true;
+      console.error(
+        "[executor] Durable storage failed; stopping all work without claiming completion",
+        error,
+      );
+      void gracefulShutdown();
+      return false;
+    }
+  } else {
+    transmit(msg);
+    return true;
   }
+}
+function replayJournal(): void {
+  const pending = journal.pending();
+  for (const sessionId of new Set([
+    ...controls.keys(),
+    ...pending.map((frame) => frame.sessionId),
+  ])) {
+    transmit({ type: "session_claimed", sessionId });
+  }
+  for (const frame of pending) transmit(frame);
 }
 
 function startHeartbeat(): void {
@@ -427,7 +537,9 @@ function startHeartbeat(): void {
   heartbeatTimer = setInterval(() => {
     void collectHostSnapshot().then((hostSnapshot) => {
       send({ type: "ping", ts: new Date().toISOString(), hostSnapshot });
-      console.log(`[executor] Heartbeat sent (${hostSnapshot.queueDepth} in flight)`);
+      console.log(
+        `[executor] Heartbeat sent (${hostSnapshot.queueDepth} in flight)`,
+      );
     });
   }, HEARTBEAT_INTERVAL_MS);
 }
@@ -447,16 +559,41 @@ function handleMessage(msg: ServerMessage): void {
   switch (msg.type) {
     case "hello_ok": {
       const helloOk = asKnownMessage(msg, "hello_ok");
+      authenticated = true;
+      replayJournal();
       console.log(`[executor] Authenticated as user ${helloOk.userId}`);
       break;
     }
 
     case "error": {
       const errorMsg = asKnownMessage(msg, "error");
-      console.error(`[executor] Server error: ${errorMsg.code} - ${errorMsg.message}`);
+      console.error(
+        `[executor] Server error: ${errorMsg.code} - ${errorMsg.message}`,
+      );
       break;
     }
 
+    case "event_ack": {
+      const ack = asKnownMessage(msg, "event_ack");
+      if (
+        typeof ack.sessionId !== "string" ||
+        !Number.isSafeInteger(ack.sendSeq)
+      )
+        break;
+      try {
+        journal.ack(ack.sessionId, ack.sendSeq);
+      } catch (error) {
+        storageFailure = true;
+        console.error("[executor] Journal ACK failed", error);
+        void gracefulShutdown();
+      }
+      break;
+    }
+    case "session_stop": {
+      const stop = asKnownMessage(msg, "session_stop");
+      controls.get(stop.sessionId)?.stop();
+      break;
+    }
     case "session_available":
       void handleSessionAvailable(asKnownMessage(msg, "session_available"));
       break;
@@ -501,64 +638,70 @@ function handleMessage(msg: ServerMessage): void {
 // Session execution
 // ---------------------------------------------------------------------------
 
-async function handleSessionAvailable(session: ServerSessionAvailable): Promise<void> {
-  if (!sessionAdmission.reserve(session.sessionId)) {
-    console.log(`[executor] At capacity (${MAX_CONCURRENT}), skipping ${session.sessionId}`);
+async function handleSessionAvailable(
+  session: ServerSessionAvailable,
+): Promise<void> {
+  if (journal.hasCompleted(session.sessionId)) {
+    if (authenticated)
+      for (const frame of journal.pending()) {
+        if (
+          frame.sessionId === session.sessionId &&
+          frame.type === "session_status" &&
+          ["completed", "error", "interrupted"].includes(String(frame.status))
+        )
+          transmit(frame);
+      }
     return;
   }
-
-  console.log(`[executor] Claiming session ${session.sessionId}: ${session.title}`);
-
-  // Claim the session
-  send({ type: "session_claimed", sessionId: session.sessionId });
-
-  // Report starting
-  send({ type: "session_status", sessionId: session.sessionId, status: "starting" });
-
-  // Prepare working directory
-  const workDir = resolveWorkDir(session);
-  if (!existsSync(workDir)) {
-    console.error(`[executor] Working directory not found: ${workDir}`);
-    send({ type: "session_status", sessionId: session.sessionId, status: "error" });
-    sessionAdmission.release(session.sessionId);
+  if (
+    shuttingDown ||
+    storageFailure ||
+    !sessionAdmission.reserve(session.sessionId)
+  )
     return;
-  }
-
-  // Create branch if specified
-  if (session.branch) {
-    try {
-      await gitCheckoutBranch(workDir, session.branch);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(`[executor] Branch checkout failed: ${message}`);
-    }
-  }
-
-  // Build the prompt from session metadata
-  let prompt = buildPrompt(session);
-  if (oracleClient && session.sessionType === "planning") {
-    const lc = session.planningContext?.launchContext;
-    // Seed the oracle with the planning substance (work-item title + brief), not the
-    // intent enum ("shape"/"breakdown"). Fall back to the session title/description.
-    const question =
-      buildSeedQuestion(lc?.workItem?.title, lc?.notes) ||
-      buildSeedQuestion(session.title, session.description);
-    // Repo hint comes from the selected repo source, not the git branch (a branch name
-    // is not a repository identifier and would silently mis-filter oracle results).
-    const repo = lc?.selectedRepoSources[0]?.label ?? lc?.selectedRepoSources[0]?.path;
-    const section = await fetchOracleSeed(oracleClient, { question, repo }, (m) => console.log(m));
-    if (section) prompt = `${prompt}\n\n${section}`;
-  }
-
-  // Spawn the agent
+  const control = new SessionControl();
+  controls.set(session.sessionId, control);
   const agentType = session.agentType || DEFAULT_AGENT_TYPE;
-  console.log(`[executor] Starting ${agentType} for ${session.identifier ?? session.sessionId}`);
-
-  send({ type: "session_status", sessionId: session.sessionId, status: "running" });
-  sendEvent(session.sessionId, "state", "system", { status: "running" });
-  const skillfleetStartedAt = Date.now();
-
+  const startedAt = Date.now();
+  let workDir = session.workingDirectory;
+  let outcome: "success" | "failure" = "failure";
   try {
+    send({ type: "session_claimed", sessionId: session.sessionId });
+    send({
+      type: "session_status",
+      sessionId: session.sessionId,
+      status: "starting",
+    });
+    control.signal.throwIfAborted();
+    workDir = await prepareWorkspace(
+      session.workingDirectory,
+      session.sessionId,
+      session.branch,
+      control.signal,
+    );
+    let prompt = buildPrompt(session);
+    if (oracleClient && session.sessionType === "planning") {
+      const lc = session.planningContext?.launchContext;
+      const question =
+        buildSeedQuestion(lc?.workItem?.title, lc?.notes) ||
+        buildSeedQuestion(session.title, session.description);
+      const repo =
+        lc?.selectedRepoSources[0]?.label ?? lc?.selectedRepoSources[0]?.path;
+      const section = await abortable(
+        fetchOracleSeed(oracleClient, { question, repo }, (m) =>
+          console.log(m),
+        ),
+        control.signal,
+      );
+      if (section) prompt = `${prompt}\n\n${section}`;
+    }
+    control.signal.throwIfAborted();
+    send({
+      type: "session_status",
+      sessionId: session.sessionId,
+      status: "running",
+    });
+    control.signal.throwIfAborted();
     let executionResult: AgentExecutionResult | undefined;
     await traceAgentExecution(
       {
@@ -570,12 +713,18 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
         branch: session.branch,
       },
       async (span) => {
-        const persona = getPersonaConfig(session);
-        executionResult = await runAgent(session, workDir, prompt, persona);
+        executionResult = await runAgent(
+          session,
+          workDir,
+          prompt,
+          getPersonaConfig(session),
+          control,
+        );
         setAgentResult(span, executionResult);
       },
     );
-    send({
+    control.signal.throwIfAborted();
+    const completed = send({
       type: "session_status",
       sessionId: session.sessionId,
       status: "completed",
@@ -583,55 +732,34 @@ async function handleSessionAvailable(session: ServerSessionAvailable): Promise<
         ? { providerCapacity: executionResult.providerCapacity }
         : undefined,
     });
-    sendEvent(session.sessionId, "state", "system", { status: "completed" });
-    await recordBobSessionOutcome({
-      sessionId: session.sessionId,
-      projectId: session.planningContext?.projectId ?? workDir,
-      agentType,
-      status: executionResult?.exitCode === 0 ? "success" : "failure",
-      durationMs: Date.now() - skillfleetStartedAt,
-      observedAt: new Date().toISOString(),
-    });
-    console.log(`[executor] Session ${session.sessionId} completed`);
-  } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    console.error(`[executor] Session ${session.sessionId} failed: ${errMsg}`);
-    captureCriticalFailure({
-      surface: "job",
-      operation: "execute_session",
-      error: err,
-      alertId: "job-session-failure",
-      tenant: {
-        tenantId: observabilityConfig.tenantId ?? BOB_WORKSPACE_ID,
-        workspaceId: BOB_WORKSPACE_ID,
-      },
-      metadata: {
-        sessionId: session.sessionId,
-        agentType: session.agentType,
-        identifier: session.identifier,
-      },
-    });
-    send({ type: "session_status", sessionId: session.sessionId, status: "error" });
-    sendEvent(session.sessionId, "error", "system", { code: "AGENT_ERROR", message: errMsg });
-    await recordBobSessionOutcome({
-      sessionId: session.sessionId,
-      projectId: session.planningContext?.projectId ?? workDir,
-      agentType,
-      status: "failure",
-      durationMs: Date.now() - skillfleetStartedAt,
-      observedAt: new Date().toISOString(),
-    });
+    if (completed) outcome = "success";
+  } catch (error) {
+    const status = control.signal.aborted ? "interrupted" : "error";
+    send({ type: "session_status", sessionId: session.sessionId, status });
+    if (!control.signal.aborted)
+      sendEvent(session.sessionId, "error", "system", {
+        code: "AGENT_ERROR",
+        message: error instanceof Error ? error.message : String(error),
+      });
   } finally {
     activeSessions.delete(session.sessionId);
+    controls.delete(session.sessionId);
     sessionAdmission.release(session.sessionId);
+    control.complete();
   }
-}
-
-function resolveWorkDir(session: ServerSessionAvailable): string {
-  if (session.workingDirectory && existsSync(session.workingDirectory)) {
-    return session.workingDirectory;
+  // Auxiliary reporting cannot turn a durably completed execution into an error.
+  try {
+    await recordBobSessionOutcome({
+      sessionId: session.sessionId,
+      projectId: session.planningContext?.projectId ?? workDir,
+      agentType,
+      status: outcome,
+      durationMs: Date.now() - startedAt,
+      observedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.warn("[executor] Outcome reporting failed", error);
   }
-  return DEV_DIR;
 }
 
 function buildPrompt(session: ServerSessionAvailable): string {
@@ -661,7 +789,9 @@ function buildPrompt(session: ServerSessionAvailable): string {
       parts.push(`\nPlanning intent: ${lc.intent}`);
       if (lc.notes) parts.push(`\nBrief: ${lc.notes}`);
       if (lc.workItem) {
-        parts.push(`\nWork item: ${lc.workItem.identifier} - ${lc.workItem.title} (${lc.workItem.kind})`);
+        parts.push(
+          `\nWork item: ${lc.workItem.identifier} - ${lc.workItem.title} (${lc.workItem.kind})`,
+        );
       }
       if (lc.selectedRepoSources.length) {
         parts.push(`\nRepo context:`);
@@ -689,7 +819,9 @@ function buildPrompt(session: ServerSessionAvailable): string {
   }
 
   if (session.sessionType === "planning") {
-    parts.push("\n\nAnalyze the codebase and create a structured plan with draft tasks.");
+    parts.push(
+      "\n\nAnalyze the codebase and create a structured plan with draft tasks.",
+    );
   } else {
     parts.push("\n\nImplement this task. Create a commit when done.");
   }
@@ -716,24 +848,17 @@ function sendEvent(
 // Git operations
 // ---------------------------------------------------------------------------
 
-function gitCheckoutBranch(workDir: string, branch: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("git", ["checkout", "-B", branch], { cwd: workDir, stdio: "pipe" });
-    let stderr = "";
-    child.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
-    child.on("close", (code: number | null) => {
-      if (code === 0) resolve();
-      else reject(new Error(`git checkout failed: ${stderr}`));
-    });
-    child.on("error", reject);
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Agent runner
 // ---------------------------------------------------------------------------
 
-function runAgent(session: ServerSessionAvailable, workDir: string, prompt: string, persona?: PersonaConfig): Promise<AgentExecutionResult> {
+function runAgent(
+  session: ServerSessionAvailable,
+  workDir: string,
+  prompt: string,
+  persona: PersonaConfig,
+  control: SessionControl,
+): Promise<AgentExecutionResult> {
   return new Promise((resolve, reject) => {
     const sessionId = session.sessionId;
     const agentType = session.agentType || DEFAULT_AGENT_TYPE;
@@ -743,34 +868,70 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
         ? getAgentCommand(agentType, prompt, persona, ORACLE_MCP_CONFIG_PATH)
         : providerId
           ? buildProviderCommand(providerId, prompt, {
-              model: persona?.model ?? (providerId === "codex" ? CODEX_MODEL : undefined),
+              model:
+                persona.model ??
+                (providerId === "codex" ? CODEX_MODEL : undefined),
               sandbox: CODEX_SANDBOX,
-              allowedTools: persona?.allowedTools,
-              systemPrompt: persona?.systemPrompt,
+              allowedTools: persona.allowedTools,
+              systemPrompt: persona.systemPrompt,
             })
           : getAgentCommand(agentType, prompt, persona, ORACLE_MCP_CONFIG_PATH);
-    console.log(`[executor] Spawning: ${command} ${args.join(" ").slice(0, 80)}...`);
+    console.log(
+      `[executor] Spawning: ${command} ${args.join(" ").slice(0, 80)}...`,
+    );
 
     const startTime = Date.now();
 
-    const child = spawn(command, args, {
-      cwd: workDir,
-      stdio: ["ignore", "pipe", "pipe"],
-      // Its own process group, so killing the session can signal everything
-      // the agent started rather than just the agent. Without this, `pnpm run
-      // lint` → `turbo` → `eslint` outlived every kill and piled up: 45 such
-      // orphans on hetzner-bob, load average 42, node dropped from the fleet.
-      detached: true,
-      env: {
-        ...buildProviderEnvironment(providerId, process.env),
-        CI: "true",
-        TERM: "dumb",
-        PULSE_API_KEY: process.env.PULSE_API_KEY ?? "",
-        PULSE_API_URL: process.env.PULSE_API_URL ?? "https://bizpulse.cc",
+    control.signal.throwIfAborted();
+    // The supervisor cannot launch the provider until its identity is durable.
+    // A daemon crash before that commit closes stdin and exits the supervisor.
+    const supervisor = `const {spawn}=require('node:child_process');
+      let terminating=false;process.on('SIGTERM',()=>{terminating=true;});process.on('SIGINT',()=>{terminating=true;});
+      let started=false;process.stdin.once('data',()=>{started=true;
+      const [command,args]=JSON.parse(process.argv[1]);
+      const child=spawn(command,args,{stdio:['ignore','inherit','inherit']});
+      child.on('error',()=>process.exit(1));child.on('close',(code)=>{if(terminating)process.kill(-process.pid,'SIGKILL');else process.exit(code??1);});});
+      process.stdin.on('end',()=>{if(!started)process.exit(1);});`;
+    const child = spawn(
+      process.execPath,
+      ["-e", supervisor, JSON.stringify([command, args]), randomUUID()],
+      {
+        cwd: workDir,
+        stdio: ["pipe", "pipe", "pipe"],
+        // Its own process group, so killing the session can signal everything
+        // the agent started rather than just the agent. Without this, `pnpm run
+        // lint` → `turbo` → `eslint` outlived every kill and piled up: 45 such
+        // orphans on hetzner-bob, load average 42, node dropped from the fleet.
+        detached: true,
+        env: {
+          ...buildProviderEnvironment(providerId, process.env),
+          CI: "true",
+          TERM: "dumb",
+          PULSE_API_KEY: process.env.PULSE_API_KEY ?? "",
+          PULSE_API_URL: process.env.PULSE_API_URL ?? "https://bizpulse.cc",
+        },
       },
-    });
+    );
 
     activeSessions.set(sessionId, child);
+    control.attach(child);
+    child.on("error", reject);
+    child.stdin.on("error", () => control.stop());
+    try {
+      if (!child.pid) throw new Error("Supervisor did not start");
+      const fingerprint = processFingerprint(child.pid);
+      if (!fingerprint) throw new Error("Supervisor identity unavailable");
+      journal.setProcess(sessionId, { pid: child.pid, fingerprint });
+      control.signal.throwIfAborted();
+      child.stdin.end("start");
+    } catch (error) {
+      control.stop();
+      child.once("close", () => {
+        control.closed();
+        reject(error instanceof Error ? error : new Error(String(error)));
+      });
+      return;
+    }
 
     let output = "";
     // Kept separate from stdout: provider billing/auth errors land on stderr,
@@ -796,6 +957,7 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
     });
 
     child.on("close", (code) => {
+      control.closed();
       const durationMs = Date.now() - startTime;
       if (providerId) {
         // Latches on 402/quota, clears on success, ignores everything else.
@@ -815,9 +977,9 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
             cacheReadTokens: 0,
             cacheCreationTokens: 0,
             costUsd: providerUsage.costUsd ?? 0,
-            model: persona?.model ?? agentType,
+            model: persona.model ?? agentType,
           }
-        : parseTokenUsage(output, persona?.model);
+        : parseTokenUsage(output, persona.model);
       const result: AgentExecutionResult = {
         exitCode: code ?? 1,
         inputTokens: tokenUsage.inputTokens,
@@ -828,14 +990,20 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
               providerCapacity: {
                 provider: providerId,
                 collectedAt: new Date().toISOString(),
-                allowance: { status: "unavailable" as const, source: "provider" as const },
+                allowance: {
+                  status: "unavailable" as const,
+                  source: "provider" as const,
+                },
                 ...(tokenUsage.inputTokens > 0 || tokenUsage.outputTokens > 0
                   ? {
                       observed: {
-                        source: providerUsage?.source ?? "bob_metered" as const,
+                        source:
+                          providerUsage?.source ?? ("bob_metered" as const),
                         inputTokens: tokenUsage.inputTokens,
                         outputTokens: tokenUsage.outputTokens,
-                        ...(tokenUsage.costUsd > 0 ? { costUsd: tokenUsage.costUsd } : {}),
+                        ...(tokenUsage.costUsd > 0
+                          ? { costUsd: tokenUsage.costUsd }
+                          : {}),
                       },
                     }
                   : {}),
@@ -868,13 +1036,15 @@ function runAgent(session: ServerSessionAvailable, workDir: string, prompt: stri
     });
 
     // Safety timeout — 30 minutes max per task
-    const timeout = setTimeout(() => {
-      console.warn(`[executor] Session ${sessionId} timed out, killing agent`);
-      killProcessTree(child, "SIGTERM");
-      setTimeout(() => {
-        if (!child.killed) killProcessTree(child, "SIGKILL");
-      }, 5000);
-    }, 30 * 60 * 1000);
+    const timeout = setTimeout(
+      () => {
+        console.warn(
+          `[executor] Session ${sessionId} timed out, killing agent`,
+        );
+        control.stop();
+      },
+      30 * 60 * 1000,
+    );
 
     child.on("close", () => clearTimeout(timeout));
   });
@@ -909,13 +1079,20 @@ function isClaudeResultLine(value: unknown): value is ClaudeResultLine {
   if (!("type" in value) || value.type !== "result") {
     return false;
   }
-  if (!("usage" in value) || typeof value.usage !== "object" || value.usage === null) {
+  if (
+    !("usage" in value) ||
+    typeof value.usage !== "object" ||
+    value.usage === null
+  ) {
     return false;
   }
   return true;
 }
 
-function parseTokenUsage(output: string, personaModel?: string): ParsedTokenUsage {
+function parseTokenUsage(
+  output: string,
+  personaModel?: string,
+): ParsedTokenUsage {
   const defaults: ParsedTokenUsage = {
     inputTokens: 0,
     outputTokens: 0,
@@ -993,7 +1170,9 @@ async function reportToBizPulse(
         summary: finalOutput.slice(-2000),
       }),
     });
-    console.log(`[executor] BizPulse report sent for session ${session.sessionId}`);
+    console.log(
+      `[executor] BizPulse report sent for session ${session.sessionId}`,
+    );
   } catch (err) {
     console.warn(`[executor] BizPulse report failed (fire-and-forget):`, err);
   }
@@ -1026,8 +1205,10 @@ function getPersonaConfig(session: ServerSessionAvailable): PersonaConfig {
   const meta = session.personaMetadata;
   if (!meta) return {};
 
-  let systemPrompt = typeof meta.systemPrompt === "string" ? meta.systemPrompt : undefined;
-  const autonomyLevel = typeof meta.autonomyLevel === "string" ? meta.autonomyLevel : undefined;
+  let systemPrompt =
+    typeof meta.systemPrompt === "string" ? meta.systemPrompt : undefined;
+  const autonomyLevel =
+    typeof meta.autonomyLevel === "string" ? meta.autonomyLevel : undefined;
   if (autonomyLevel && systemPrompt) {
     systemPrompt = `${systemPrompt}\n\nAutonomy level: ${autonomyLevel}. Operate within this level.`;
   } else if (autonomyLevel) {
@@ -1036,22 +1217,37 @@ function getPersonaConfig(session: ServerSessionAvailable): PersonaConfig {
 
   return {
     model: typeof meta.model === "string" ? meta.model : undefined,
-    allowedTools: Array.isArray(meta.allowedTools) ? meta.allowedTools as string[] : undefined,
+    allowedTools: Array.isArray(meta.allowedTools)
+      ? (meta.allowedTools as string[])
+      : undefined,
     systemPrompt,
     autonomyLevel,
   };
 }
 
 function getAgentCommand(
-  agentType: string, prompt: string, persona?: PersonaConfig, mcpConfigPath?: string | null,
+  agentType: string,
+  prompt: string,
+  persona?: PersonaConfig,
+  mcpConfigPath?: string | null,
 ): { command: string; args: string[] } {
   switch (agentType) {
     case "claude": {
-      const args = ["--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
+      const args = [
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--dangerously-skip-permissions",
+      ];
       if (persona?.model) args.push("--model", persona.model);
-      if (persona?.allowedTools?.length) args.push("--allowedTools", persona.allowedTools.join(","));
-      if (persona?.systemPrompt) args.push("--append-system-prompt", persona.systemPrompt);
-      const { mcpArgs, toolsToAdd } = claudeOracleArgs(persona, mcpConfigPath ?? null);
+      if (persona?.allowedTools?.length)
+        args.push("--allowedTools", persona.allowedTools.join(","));
+      if (persona?.systemPrompt)
+        args.push("--append-system-prompt", persona.systemPrompt);
+      const { mcpArgs, toolsToAdd } = claudeOracleArgs(
+        persona,
+        mcpConfigPath ?? null,
+      );
       // ensure tools are present even if persona.allowedTools already pushed
       if (toolsToAdd.length) {
         const have = persona?.allowedTools ?? [];
@@ -1079,11 +1275,21 @@ function getAgentCommand(
     case "opencode":
       return { command: "opencode", args: ["run", prompt] };
     default: {
-      const defaultArgs = ["--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"];
+      const defaultArgs = [
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--dangerously-skip-permissions",
+      ];
       if (persona?.model) defaultArgs.push("--model", persona.model);
-      if (persona?.allowedTools?.length) defaultArgs.push("--allowedTools", persona.allowedTools.join(","));
-      if (persona?.systemPrompt) defaultArgs.push("--append-system-prompt", persona.systemPrompt);
-      const { mcpArgs, toolsToAdd } = claudeOracleArgs(persona, mcpConfigPath ?? null);
+      if (persona?.allowedTools?.length)
+        defaultArgs.push("--allowedTools", persona.allowedTools.join(","));
+      if (persona?.systemPrompt)
+        defaultArgs.push("--append-system-prompt", persona.systemPrompt);
+      const { mcpArgs, toolsToAdd } = claudeOracleArgs(
+        persona,
+        mcpConfigPath ?? null,
+      );
       // ensure tools are present even if persona.allowedTools already pushed
       if (toolsToAdd.length) {
         const have = persona?.allowedTools ?? [];
@@ -1104,29 +1310,32 @@ function getAgentCommand(
 // Graceful shutdown
 // ---------------------------------------------------------------------------
 
-process.on("SIGTERM", gracefulShutdown);
-process.on("SIGINT", gracefulShutdown);
+process.on("SIGTERM", () => void gracefulShutdown());
+process.on("SIGINT", () => void gracefulShutdown());
 
-function gracefulShutdown(): void {
-  console.log("[executor] Shutting down...");
+async function gracefulShutdown(): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
   cleanup();
-
-  for (const [sessionId, child] of activeSessions) {
-    console.log(`[executor] Interrupting session ${sessionId}`);
-    send({ type: "session_status", sessionId, status: "interrupted" });
-    killProcessTree(child, "SIGTERM");
-  }
-
-  if (ws) {
-    setTimeout(() => {
-      ws?.close();
-      ws = null;
-    }, 500);
-  }
-
-  void Promise.all([shutdownNodeObservability(), shutdownTelemetry()]).finally(() => {
-    setTimeout(() => process.exit(0), 3000);
-  });
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  const sessions = [...controls.values()];
+  for (const control of sessions) control.stop();
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  const drained = await Promise.race([
+    Promise.all(sessions.map((control) => control.done)).then(() => true),
+    new Promise<false>((resolve) => {
+      deadline = setTimeout(() => resolve(false), 12_000);
+    }),
+  ]);
+  if (deadline) clearTimeout(deadline);
+  if (!drained)
+    console.error(
+      "[executor] Shutdown incomplete: unconfirmed process exits; journal retained",
+    );
+  ws?.close();
+  await Promise.all([shutdownNodeObservability(), shutdownTelemetry()]);
+  journal.close();
+  process.exit(storageFailure || !drained ? 1 : 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -1136,9 +1345,17 @@ function gracefulShutdown(): void {
 console.log("[executor] Bob Execution Daemon starting");
 console.log(`[executor] Gateway: ${GATEWAY_WS_URL}`);
 console.log(`[executor] Workspace: ${BOB_WORKSPACE_ID}`);
-console.log(`[executor] Dev dir: ${DEV_DIR}`);
 console.log(`[executor] Max concurrent: ${MAX_CONCURRENT}`);
 
 initTelemetry({ serviceName: "bob-daemon", serviceVersion: "0.1.0" });
 
+// Recover active markers even when every running frame was already ACKed.
+for (const active of journal.activeSessions()) {
+  if (active.process) await stopRecordedProcess(active.process);
+  journal.append({
+    type: "session_status",
+    sessionId: active.sessionId,
+    status: "interrupted",
+  });
+}
 connect();

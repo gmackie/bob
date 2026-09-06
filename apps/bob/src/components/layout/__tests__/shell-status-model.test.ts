@@ -32,3 +32,9 @@ describe("shell realtime status model", () => {
     });
   });
 });
+
+it("shows local execution unavailable rather than connecting or polling", () => {
+  for (const status of ["connected", "connecting", "disconnected"]) {
+    expect(getShellRealtimeStatusModel(status, false)).toEqual({ label: "Local", detail: "Host execution is unavailable in local mode.", tone: "muted" });
+  }
+});

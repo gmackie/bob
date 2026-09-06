@@ -55,7 +55,7 @@ export function TabletNotificationMatrix() {
   const matrix = useMemo(
     () =>
       buildNotificationMatrix({
-        masters,
+        masters: { push: masters.push, email: masters.email },
         overrides: overridesFromRows(
           (rows ?? []) as { type: string; channel: string; enabled: boolean }[],
         ),

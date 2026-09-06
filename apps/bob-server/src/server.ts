@@ -1,3 +1,8 @@
+import { serverStartupTimeout } from "./startup-timeout.js";
+import { localAuthEnvironment } from "./local-auth.js";
+import { randomBytes } from "node:crypto";
+import { realpath } from "node:fs/promises";
+import { terminateProcessTree } from "./process-tree.js";
 import {
   spawn,
   type ChildProcess,
@@ -27,6 +32,7 @@ export type StartServerArgs = CliArgs & { authToken: string };
 
 export type StartServerResult = {
   url: string;
+  upstreamProcessGroupId: number;
   stop: () => Promise<void>;
 };
 
@@ -37,7 +43,12 @@ export type StartServerResult = {
 export async function startServer(
   args: StartServerArgs,
 ): Promise<StartServerResult> {
+  const startupTimeoutMs = serverStartupTimeout();
+  const roots = await Promise.all((args.filesystemRoots ?? []).map((root) => realpath(root)));
+  const proxySecret = randomBytes(32).toString("hex");
   const internalPort = await findFreePort();
+  const externalPort = args.port || await findFreePort();
+  const localAuth = await localAuthEnvironment(args.baseDir, `http://${args.host}:${externalPort}`);
   const pgliteDir = path.join(args.baseDir, "userdata", "db");
 
   const useDev = process.env.BOB_DESKTOP_DEV === "1";
@@ -52,12 +63,15 @@ export async function startServer(
     cwd: launch.cwd,
     env: {
       ...process.env,
+      ...localAuth,
       PORT: String(internalPort),
       HOST: "127.0.0.1",
       BOB_DB_DRIVER: "pglite",
       BOB_DB_PGLITE_DIR: pgliteDir,
-      BOB_DB_MIGRATIONS_DIR: DB_MIGRATIONS_DIR,
+      BOB_DB_MIGRATIONS_DIR: process.env.BOB_DB_MIGRATIONS_DIR ?? DB_MIGRATIONS_DIR,
       BOB_BUILD_TARGET: "node",
+      BOB_LOCAL_OPERATOR_PROXY_SECRET: proxySecret,
+      BOB_LOCAL_OPERATOR_ROOTS: JSON.stringify(roots),
     },
     stdio: ["ignore", "inherit", "inherit"],
     // Put the child in its own process group so we can signal the whole
@@ -65,6 +79,8 @@ export async function startServer(
     detached: process.platform !== "win32",
   });
 
+  let launchError: Error | undefined;
+  child.on("error", (error) => { launchError = error; });
   child.on("exit", (code, signal) => {
     if (code !== null && code !== 0) {
       console.error(`[bob-server] blder child exited with code ${code}`);
@@ -74,80 +90,55 @@ export async function startServer(
   });
 
   try {
-    await waitForPort("127.0.0.1", internalPort, 30_000);
+    await waitForPort("127.0.0.1", internalPort, startupTimeoutMs, () => launchError ?? (child.exitCode !== null || child.signalCode !== null ? new Error("blder exited before readiness") : undefined));
   } catch (err) {
-    child.kill("SIGTERM");
+    try { await terminateProcessTree(child); } catch (cleanupError) {
+      throw new AggregateError([err, cleanupError], "Upstream startup and cleanup failed");
+    }
     throw err;
   }
 
   const server = createHttpServer({
     authToken: args.authToken,
     handler: async (req, res) => {
+      // Incoming callers cannot mint the capability header. Only requests
+      // which passed the local token/cookie gate receive our launch secret.
+      delete req.headers["x-bob-local-operator"];
+      req.headers["x-bob-local-operator"] = proxySecret;
       await proxyToInternal(req, res, internalPort);
     },
   });
 
-  await new Promise<void>((resolve, reject) => {
-    const onError = (err: Error) => {
-      server.off("listening", onListening);
-      reject(err);
-    };
-    const onListening = () => {
-      server.off("error", onError);
-      resolve();
-    };
-    server.once("error", onError);
-    server.once("listening", onListening);
-    server.listen(args.port, args.host);
-  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const onError = (err: Error) => {
+        server.off("listening", onListening);
+        reject(err);
+      };
+      const onListening = () => {
+        server.off("error", onError);
+        resolve();
+      };
+      server.once("error", onError);
+      server.once("listening", onListening);
+      server.listen(externalPort, args.host);
+    });
+  } catch (error) {
+    await terminateProcessTree(child);
+    throw error;
+  }
 
   const address = server.address() as AddressInfo;
   const url = `http://${args.host}:${address.port}`;
 
-  const stop = async (): Promise<void> => {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-    if (!child.killed && child.exitCode === null) {
-      killProcessTree(child, "SIGTERM");
-      // Hard-kill if still alive after 3s.
-      await new Promise<void>((resolve) => {
-        const timer = setTimeout(() => {
-          if (!child.killed && child.exitCode === null) {
-            killProcessTree(child, "SIGKILL");
-          }
-          resolve();
-        }, 3_000);
-        child.once("exit", () => {
-          clearTimeout(timer);
-          resolve();
-        });
-      });
-    }
-  };
+  let stopped: Promise<void> | undefined;
+  const stop = (): Promise<void> => stopped ??= (async () => {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await terminateProcessTree(child);
+  })();
 
-  return { url, stop };
-}
-
-/**
- * Signal a child process and — on POSIX — the whole process group rooted at
- * its pid. We spawn with detached:true so the child becomes its own group
- * leader; process.kill(-pid, signal) then targets every member. Falls back
- * to plain child.kill on Windows or if the process-group call fails.
- */
-function killProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
-  if (child.pid !== undefined && process.platform !== "win32") {
-    try {
-      process.kill(-child.pid, signal);
-      return;
-    } catch {
-      // Fall through to direct kill if the group signal fails (process may
-      // already be gone, or not actually a group leader on some shells).
-    }
-  }
-  try {
-    child.kill(signal);
-  } catch {
-    // best-effort
-  }
+  return { url, stop, upstreamProcessGroupId: child.pid! };
 }
 
 async function findFreePort(): Promise<number> {
@@ -171,10 +162,13 @@ async function waitForPort(
   host: string,
   port: number,
   timeoutMs: number,
+  failure: () => Error | undefined,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let lastErr: unknown;
   while (Date.now() < deadline) {
+    const failed = failure();
+    if (failed) throw failed;
     try {
       const res = await fetch(`http://${host}:${port}/`, { method: "HEAD" });
       if (res.status < 500) return;

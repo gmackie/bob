@@ -12,12 +12,14 @@ import {
   projects,
   repositories,
   workItems,
-  workspaceMembers,
   workspaces,
 } from "@bob/db/schema";
 
 import { detectProjectCapabilities } from "../services/projects/projectCapabilities";
 import { getForgeGraphClient } from "../services/forgegraph/config";
+
+import { requireWorkspaceAccess  } from "../services/secrets/workspaceAccess";
+import type {WorkspaceAccessDatabase} from "../services/secrets/workspaceAccess";
 
 import type { HandlerContext } from "./context.js";
 
@@ -26,17 +28,7 @@ import type { HandlerContext } from "./context.js";
 // ---------------------------------------------------------------------------
 
 async function assertWorkspaceAccess(db: Db, userId: string, workspaceId: string) {
-  const membership = await db.query.workspaceMembers.findFirst({
-    where: and(
-      eq(workspaceMembers.workspaceId, workspaceId),
-      eq(workspaceMembers.userId, userId),
-    ),
-    columns: { id: true },
-  });
-
-  if (!membership) {
-    throw new TRPCError({ code: "NOT_FOUND" });
-  }
+  await requireWorkspaceAccess(db as unknown as WorkspaceAccessDatabase, userId, workspaceId);
 }
 
 function mapLinkedRepository(repository: typeof repositories.$inferSelect | null | undefined) {

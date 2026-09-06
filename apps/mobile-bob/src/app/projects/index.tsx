@@ -97,7 +97,7 @@ export default function ProjectsListScreen() {
               <ProjectStatusCard
                 key={row.id}
                 row={row}
-                onPress={() => router.push(getProjectHref(row.id, row.workspaceId) as never)}
+                onPress={() => router.push(getProjectHref(row.id, row.workspaceId))}
               />
             ))
           ) : (

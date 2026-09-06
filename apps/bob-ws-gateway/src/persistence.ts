@@ -1,5 +1,4 @@
 import type { EventDirection, SessionEventType } from "./protocol.js";
-
 export interface SessionEventRecord {
   sessionId: string;
   seq: number;
@@ -7,146 +6,57 @@ export interface SessionEventRecord {
   eventType: SessionEventType;
   payload: Record<string, unknown>;
 }
-
-export interface PersistenceWriterConfig {
-  batchSize?: number;
-  flushIntervalMs?: number;
-  maxQueueSize?: number;
-  onBatchWrite: (events: SessionEventRecord[]) => Promise<void>;
-  onError?: (error: Error, events: SessionEventRecord[]) => void;
-}
-
-export class PersistenceWriter {
-  private readonly batchSize: number;
-  private readonly flushIntervalMs: number;
-  private readonly maxQueueSize: number;
-  private readonly onBatchWrite: (events: SessionEventRecord[]) => Promise<void>;
-  private readonly onError?: (error: Error, events: SessionEventRecord[]) => void;
-
-  private queue: SessionEventRecord[] = [];
-  private flushTimer: ReturnType<typeof setTimeout> | null = null;
-  private isWriting = false;
-  private isStopped = false;
-
-  constructor(config: PersistenceWriterConfig) {
-    this.batchSize = config.batchSize ?? 50;
-    this.flushIntervalMs = config.flushIntervalMs ?? 100;
-    this.maxQueueSize = config.maxQueueSize ?? 10000;
-    this.onBatchWrite = config.onBatchWrite;
-    this.onError = config.onError;
+/** No memory-only admission: a write is accepted only after its DB commit. */
+export class EventPersistence {
+  private readonly pending = new Set<Promise<void>>();
+  private stopped = false;
+  constructor(
+    private readonly insert: (event: SessionEventRecord) => Promise<void>,
+    private readonly maxPending = 1000,
+  ) {}
+  write(event: SessionEventRecord): Promise<void> {
+    if (this.stopped || this.pending.size >= this.maxPending)
+      return Promise.reject(Error("Persistence unavailable or saturated"));
+    const task = Promise.resolve().then(() => this.insert(event));
+    this.pending.add(task);
+    void task.then(
+      () => this.pending.delete(task),
+      () => this.pending.delete(task),
+    );
+    return task;
   }
-
-  start(): void {
-    this.isStopped = false;
-    this.scheduleFlush();
-  }
-
-  async stop(): Promise<void> {
-    this.isStopped = true;
-    this.clearFlushTimer();
-
-    if (this.queue.length > 0) {
-      await this.flush();
-    }
-  }
-
-  enqueue(event: SessionEventRecord): boolean {
-    if (this.isStopped) {
-      return false;
-    }
-
-    if (this.queue.length >= this.maxQueueSize) {
-      console.warn(`[PersistenceWriter] Queue full, dropping event for session ${event.sessionId}`);
-      return false;
-    }
-
-    this.queue.push(event);
-
-    if (this.queue.length >= this.batchSize) {
-      this.triggerFlush();
-    }
-
-    return true;
-  }
-
-  private scheduleFlush(): void {
-    if (this.isStopped || this.flushTimer) return;
-
-    this.flushTimer = setTimeout(() => {
-      this.flushTimer = null;
-      this.triggerFlush();
-    }, this.flushIntervalMs);
-  }
-
-  private clearFlushTimer(): void {
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
-  }
-
-  private triggerFlush(): void {
-    if (this.isWriting || this.queue.length === 0) {
-      if (!this.isStopped) {
-        this.scheduleFlush();
-      }
-      return;
-    }
-
-    this.flush().catch((error) => {
-      console.error("[PersistenceWriter] Flush error:", error);
-    });
-  }
-
-  private async flush(): Promise<void> {
-    if (this.isWriting || this.queue.length === 0) {
-      return;
-    }
-
-    this.isWriting = true;
-    this.clearFlushTimer();
-
-    const batch = this.queue.splice(0, this.batchSize);
-
-    try {
-      await this.onBatchWrite(batch);
-    } catch (error) {
-      console.error(`[PersistenceWriter] Failed to write ${batch.length} events:`, error);
-      this.onError?.(error as Error, batch);
-    } finally {
-      this.isWriting = false;
-
-      if (!this.isStopped) {
-        if (this.queue.length >= this.batchSize) {
-          setImmediate(() => this.triggerFlush());
-        } else {
-          this.scheduleFlush();
-        }
-      }
-    }
-  }
-
-  getQueueSize(): number {
-    return this.queue.length;
-  }
-
   isHealthy(): boolean {
-    return this.queue.length < this.maxQueueSize * 0.8;
+    return !this.stopped && this.pending.size < this.maxPending;
   }
-
-  getStats(): {
-    queueSize: number;
-    maxQueueSize: number;
-    isWriting: boolean;
-    isStopped: boolean;
-    healthPercent: number;
-  } {
-    return {
-      queueSize: this.queue.length,
-      maxQueueSize: this.maxQueueSize,
-      isWriting: this.isWriting,
-      isStopped: this.isStopped,
-      healthPercent: Math.round((1 - this.queue.length / this.maxQueueSize) * 100),
-    };
+  async stop(timeoutMs = 10_000): Promise<void> {
+    this.stopped = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.allSettled([...this.pending]).then((results) => {
+          const errors = results
+            .filter((result) => result.status === "rejected")
+            .map((result) => result.reason as unknown);
+          if (errors.length)
+            throw new AggregateError(
+              errors,
+              "Persistence shutdown contained failed writes",
+            );
+        }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                Error(
+                  "Persistence shutdown incomplete: pending database writes",
+                ),
+              ),
+            timeoutMs,
+          );
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 }

@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 
 import { RelatedAppsCard } from "~/features/links/RelatedAppsCard";
 import { buildPrList, prStatusTone } from "~/features/pull-requests/pr-list-model";
-import type { PrRow } from "~/features/pull-requests/pr-list-model";
 import { trpc } from "~/utils/api";
 
 /**
@@ -19,7 +18,7 @@ import { trpc } from "~/utils/api";
  */
 export default function PullRequestsScreen() {
   const query = useQuery(trpc.pullRequest.list.queryOptions({ limit: 50 }));
-  const rows = buildPrList((query.data ?? []) as PrRow[]);
+  const rows = buildPrList((query.data ?? []));
 
   return (
     <>

@@ -32,6 +32,8 @@ export const ServerEnv = Schema.Struct({
   ),
   // Public URL used for OAuth redirects + better-auth baseURL
   PUBLIC_BASE_URL: Schema.optional(Schema.String),
+  GMACKO_DB_DRIVER: Schema.optional(Schema.Literals(["pglite", "postgres"])),
+  DATABASE_URL: Schema.optional(Schema.String),
   // PGlite data directory override (defaults to ~/.gmacko/data)
   PGLITE_DATA_DIR: Schema.optional(Schema.String),
   // Enable better-auth's email + password provider. Off by default because

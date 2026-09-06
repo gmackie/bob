@@ -90,7 +90,7 @@ export default function NotificationsScreen() {
                 right={<Text className="text-sm text-muted">{row.transition}</Text>}
                 onPress={() => {
                   markSeenMutation.mutate({ ids: [row.id] });
-                  router.push(`/sessions/${row.sessionId}` as never);
+                  router.push(`/sessions/${row.sessionId}`);
                 }}
                 showDivider={index < unseenRows.length - 1}
               />
@@ -122,7 +122,7 @@ export default function NotificationsScreen() {
                   getNotificationDestination({
                     url: item.url,
                     workItemId: item.workItemId,
-                  }) as never,
+                  }),
                 );
               }}
               showDivider={index < notificationsQuery.data.items.length - 1}

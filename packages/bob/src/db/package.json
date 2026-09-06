@@ -41,24 +41,12 @@
     "with-env": "dotenv -e ../../.env --"
   },
   "dependencies": {
-    "@gmacko/core": "workspace:*",
-    "@bob/agents": "workspace:*",
-    "@bob/auth": "workspace:*",
-    "@bob/chat": "workspace:*",
-    "@bob/ci": "workspace:*",
-    "@bob/cookies": "workspace:*",
-    "@bob/git": "workspace:*",
-    "@bob/notifications": "workspace:*",
-    "@bob/projects": "workspace:*",
-    "@bob/secrets": "workspace:*",
-    "@bob/settings": "workspace:*",
-    "@bob/tenancy": "workspace:*",
-    "@bob/webhooks": "workspace:*",
-    "@bob/work-items": "workspace:*",
+    "@bob/schema": "workspace:*",
     "@electric-sql/pglite": "^0.3.0",
+    "@gmacko/core": "workspace:*",
     "@neondatabase/serverless": "^0.10.4",
-    "drizzle-kit": "^0.31.5",
-    "drizzle-orm": "^0.44.7",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
     "pg": "^8.17.1"
   },
   "devDependencies": {
@@ -69,7 +57,7 @@
     "eslint": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.11"
   },
   "prettier": "@bob/prettier-config"
 }

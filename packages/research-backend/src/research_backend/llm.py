@@ -42,9 +42,13 @@ class ClaudeCodeProvider:
 
     def generate(self, prompt: str, *, system: str = "") -> str:
         cmd = [
-            self.command, "-p", prompt,
-            "--model", self.model,
-            "--output-format", "text",
+            self.command,
+            "-p",
+            prompt,
+            "--model",
+            self.model,
+            "--output-format",
+            "text",
             "--bare",
         ]
         if system:
@@ -57,7 +61,9 @@ class ClaudeCodeProvider:
             timeout=self.timeout,
         )
         if result.returncode != 0:
-            raise RuntimeError(f"Claude Code failed (exit {result.returncode}): {result.stderr.strip()}")
+            raise RuntimeError(
+                f"Claude Code failed (exit {result.returncode}): {result.stderr.strip()}"
+            )
         return result.stdout.strip()
 
 
@@ -109,10 +115,20 @@ class CodexAppServerProvider:
         deadline = time.monotonic() + self.timeout
 
         # v2 protocol: initialize, then thread/start with sandbox + approval
-        send({
-            "jsonrpc": "2.0", "method": "initialize", "id": 0,
-            "params": {"clientInfo": {"name": "research_kb", "title": "Research KB", "version": "0.1.0"}},
-        })
+        send(
+            {
+                "jsonrpc": "2.0",
+                "method": "initialize",
+                "id": 0,
+                "params": {
+                    "clientInfo": {
+                        "name": "research_kb",
+                        "title": "Research KB",
+                        "version": "0.1.0",
+                    }
+                },
+            }
+        )
 
         try:
             while time.monotonic() < deadline:
@@ -139,22 +155,30 @@ class CodexAppServerProvider:
                         }
                         if self.model:
                             thread_params["model"] = self.model
-                        send({
-                            "jsonrpc": "2.0", "method": "thread/start", "id": 1,
-                            "params": thread_params,
-                        })
+                        send(
+                            {
+                                "jsonrpc": "2.0",
+                                "method": "thread/start",
+                                "id": 1,
+                                "params": thread_params,
+                            }
+                        )
 
                     # After thread/started notification, start turn
                     elif method == "thread/started":
                         thread_id = message.get("params", {}).get("thread", {}).get("id")
                         if thread_id and not started_turn:
-                            send({
-                                "jsonrpc": "2.0", "method": "turn/start", "id": 2,
-                                "params": {
-                                    "threadId": thread_id,
-                                    "input": [{"type": "text", "text": full_prompt}],
-                                },
-                            })
+                            send(
+                                {
+                                    "jsonrpc": "2.0",
+                                    "method": "turn/start",
+                                    "id": 2,
+                                    "params": {
+                                        "threadId": thread_id,
+                                        "input": [{"type": "text", "text": full_prompt}],
+                                    },
+                                }
+                            )
                             started_turn = True
                             deadline = time.monotonic() + self.timeout
 
@@ -179,8 +203,12 @@ class CodexAppServerProvider:
                             if result:
                                 return result
                         error = turn.get("error", {})
-                        err_msg = error.get("message", "") if isinstance(error, dict) else str(error)
-                        raise RuntimeError(f"Codex turn ended with status {status}: {err_msg[:300]}")
+                        err_msg = (
+                            error.get("message", "") if isinstance(error, dict) else str(error)
+                        )
+                        raise RuntimeError(
+                            f"Codex turn ended with status {status}: {err_msg[:300]}"
+                        )
 
                     # Fallback: thread goes idle after turn started = implicit completion
                     elif method == "thread/status/changed" and started_turn:
@@ -248,7 +276,7 @@ class CodexExecProvider:
 
                 stderr = result.stderr.strip()
                 if attempt < self.max_retries - 1 and _is_transient_codex_exec_error(stderr):
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
                     continue
                 raise RuntimeError(f"Codex exec failed (exit {result.returncode}): {stderr}")
 
@@ -265,6 +293,7 @@ class OpenAIProvider:
         timeout: int = 300,
     ):
         import os
+
         self.model = model
         self.max_tokens = max_tokens
         self.timeout = timeout

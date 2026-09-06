@@ -74,5 +74,8 @@ export function foldCheckEvents(events: readonly CheckEventLike[]): CheckRow[] {
     });
   }
 
-  return order.map((phase) => byPhase.get(phase)!);
+  return order.flatMap((phase) => {
+    const row = byPhase.get(phase);
+    return row ? [row] : [];
+  });
 }

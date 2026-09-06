@@ -1,4 +1,5 @@
 import "server-only";
+import { readTrustedLocalFilesystemConfig } from "@bob/api/handlers/trusted-local-filesystem";
 
 import { makeBobRuntimeLayers } from "@bob/api/runtime-layers";
 
@@ -12,6 +13,7 @@ import { authBundle } from "~/auth/server";
 const { runtimeLayer, authMiddlewareLayer } = makeBobRuntimeLayers({
   db,
   authInstance: authBundle.authInstance,
+  localFilesystem: readTrustedLocalFilesystemConfig(process.env),
 });
 
 export { runtimeLayer, authMiddlewareLayer };

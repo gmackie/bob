@@ -1,3 +1,5 @@
+import type { Href } from "expo-router";
+
 /**
  * Phone navigation.
  *
@@ -9,7 +11,7 @@
  */
 
 export interface MobileNavDestination {
-  href: string;
+  href: Extract<Href, string>;
   label: string;
   description: string;
 }
@@ -19,10 +21,22 @@ export const MOBILE_NAV_DESTINATIONS: readonly MobileNavDestination[] = [
   { href: "/chat", label: "Chat", description: "Talk to the agent" },
   { href: "/tasks", label: "Tasks", description: "Queue and outcomes" },
   { href: "/planning", label: "Planning", description: "Shape and plan work" },
-  { href: "/pull-requests", label: "Pull requests", description: "Review and merge" },
+  {
+    href: "/pull-requests",
+    label: "Pull requests",
+    description: "Review and merge",
+  },
   { href: "/nodes", label: "Nodes", description: "Agent and machine health" },
-  { href: "/notifications", label: "Notifications", description: "Recent activity" },
-  { href: "/settings", label: "Settings", description: "Account, providers, alerts" },
+  {
+    href: "/notifications",
+    label: "Notifications",
+    description: "Recent activity",
+  },
+  {
+    href: "/settings",
+    label: "Settings",
+    description: "Account, providers, alerts",
+  },
 ];
 
 /**

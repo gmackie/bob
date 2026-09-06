@@ -31,12 +31,12 @@ const cloudflareAliases: Record<string, string> = {
 export default defineConfig({
   plugins: [
     vinext(),
-    cloudflare({
+    ...(target === "cloudflare" ? [cloudflare({
       viteEnvironment: {
         name: "rsc",
         childEnvironments: ["ssr"],
       },
-    }),
+    })] : []),
   ],
   resolve: {
     alias: target === "node" ? nodeAliases : cloudflareAliases,

@@ -17,11 +17,10 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@bob/auth": "workspace:*",
-    "@bob/chat": "workspace:*",
     "@gmacko/bob-client": "workspace:*",
     "better-sqlite3": "^11.0.0",
-    "drizzle-orm": "^0.44.7"
+    "drizzle-orm": "^0.45.2",
+    "@bob/schema": "workspace:*"
   },
   "devDependencies": {
     "@bob/tsconfig": "workspace:*",

@@ -9,7 +9,8 @@ dance; single source of truth for what we've seen.
 Event kinds:
 - "import_started": {"kind": "import_started", "import_id": ..., "source": ..., "started_at": ...}
 - "watch":          {"kind": "watch", "import_id": ..., "video_id": ..., "watched_at": ..., ...}
-- "import_finished":{"kind": "import_finished", "import_id": ..., "events": N, "videos": M, "finished_at": ...}
+- "import_finished":{"kind": "import_finished", "import_id": ..., "events": N,
+                     "videos": M, "finished_at": ...}
 - "enrichment":     {"kind": "enrichment", "video_id": ..., "status": ..., "at": ...}
 """
 
@@ -52,40 +53,50 @@ def append_event(path: Path, record: dict[str, Any]) -> None:
 
 
 def append_import_started(path: Path, *, import_id: str, source: str) -> None:
-    append_event(path, {
-        "kind": "import_started",
-        "import_id": import_id,
-        "source": source,
-        "started_at": now_iso(),
-    })
+    append_event(
+        path,
+        {
+            "kind": "import_started",
+            "import_id": import_id,
+            "source": source,
+            "started_at": now_iso(),
+        },
+    )
 
 
 def append_watch(path: Path, event: WatchEvent) -> None:
-    append_event(path, {
-        "kind": "watch",
-        **asdict(event),
-    })
+    append_event(
+        path,
+        {
+            "kind": "watch",
+            **asdict(event),
+        },
+    )
 
 
-def append_import_finished(
-    path: Path, *, import_id: str, events: int, videos: int
-) -> None:
-    append_event(path, {
-        "kind": "import_finished",
-        "import_id": import_id,
-        "events": events,
-        "videos": videos,
-        "finished_at": now_iso(),
-    })
+def append_import_finished(path: Path, *, import_id: str, events: int, videos: int) -> None:
+    append_event(
+        path,
+        {
+            "kind": "import_finished",
+            "import_id": import_id,
+            "events": events,
+            "videos": videos,
+            "finished_at": now_iso(),
+        },
+    )
 
 
 def append_enrichment(path: Path, *, video_id: str, status: str) -> None:
-    append_event(path, {
-        "kind": "enrichment",
-        "video_id": video_id,
-        "status": status,
-        "at": now_iso(),
-    })
+    append_event(
+        path,
+        {
+            "kind": "enrichment",
+            "video_id": video_id,
+            "status": status,
+            "at": now_iso(),
+        },
+    )
 
 
 def iter_events(path: Path) -> Iterator[dict[str, Any]]:

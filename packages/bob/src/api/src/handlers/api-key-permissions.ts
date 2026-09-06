@@ -12,7 +12,7 @@ export function normalizeApiKeyPermissions(value: unknown): string[] {
     return value.map((entry) => (typeof entry === "string" ? entry : String(entry)));
   }
   if (value && typeof value === "object" && "scopes" in value) {
-    const scopes = (value as { scopes: unknown }).scopes;
+    const scopes = (value).scopes;
     if (Array.isArray(scopes)) {
       return scopes.map((entry) => (typeof entry === "string" ? entry : String(entry)));
     }

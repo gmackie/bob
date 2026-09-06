@@ -1,10 +1,9 @@
+import type { Href } from "expo-router";
+
+import type { TabletQueueAgentStatus, TabletQueueItem } from "./queue";
 import { extractSessionEventText } from "../chat/session-event-text";
-import {
-  formatStatusLabel
-
-
-} from "./queue";
-import type {TabletQueueAgentStatus, TabletQueueItem} from "./queue";
+import { appendWorkspaceParam, getSessionHref } from "../planning/navigation";
+import { formatStatusLabel } from "./queue";
 
 export type MobileWorkItemEntryView = "queue" | "outcome" | "planning";
 
@@ -45,8 +44,7 @@ export interface MobileWorkItemEntryRelatedWorkItem {
   status: string;
 }
 
-export interface MobileWorkItemEntryRelatedWorkItemSummary
-  extends MobileWorkItemEntryRelatedWorkItem {
+export interface MobileWorkItemEntryRelatedWorkItemSummary extends MobileWorkItemEntryRelatedWorkItem {
   statusLabel: string;
 }
 
@@ -146,7 +144,12 @@ export interface MobileReadableOutcomeRow {
 export type MobileWorkItemEntryAction =
   | { kind: "dispatch"; label: "Start work" }
   | { kind: "rerun"; label: "Rerun work" }
-  | { kind: "live-session"; label: "Open live session"; sessionId: string; href: string }
+  | {
+      kind: "live-session";
+      label: "Open live session";
+      sessionId: string;
+      href: Extract<Href, string>;
+    }
   | { kind: "none"; label: "No task action"; reason: string };
 
 const DISPATCHABLE_STATUSES = new Set(["ready", "todo", "backlog", "draft"]);
@@ -263,7 +266,7 @@ export function buildMobileWorkItemEntryContext({
           value:
             typeof workItem.queueSortOrder === "number"
               ? `#${workItem.queueSortOrder}`
-            : "Unsorted",
+              : "Unsorted",
         },
         ...getMobileProjectContextFacts(workItem.project),
         { label: "Dependencies", value: dependencySummary.dependencyStatus },
@@ -295,7 +298,8 @@ export function buildMobileWorkItemEntryContext({
   return {
     sourceLabel: "Planning",
     heading: "Work item detail",
-    description: "Review scope, project context, discussion, artifacts, and planning history.",
+    description:
+      "Review scope, project context, discussion, artifacts, and planning history.",
     backLabel: "Planning",
     facts: [{ label: "Status", value: formatStatusLabel(workItem.status) }],
     sections: PLANNING_DETAIL_SECTIONS,
@@ -321,20 +325,18 @@ export function getMobileWorkItemEntryAction(input: {
     return {
       kind: "none",
       label: "No task action",
-      reason: "Dispatch controls are only shown for task-forward queue details.",
+      reason:
+        "Dispatch controls are only shown for task-forward queue details.",
     };
   }
 
   const agentStatus = input.workItem.agentStatus;
-  if (
-    agentStatus?.sessionId &&
-    ACTIVE_AGENT_STATUSES.has(agentStatus.status)
-  ) {
+  if (agentStatus?.sessionId && ACTIVE_AGENT_STATUSES.has(agentStatus.status)) {
     return {
       kind: "live-session",
       label: "Open live session",
       sessionId: agentStatus.sessionId,
-      href: getMobileSessionHref(agentStatus.sessionId, input.workspaceId),
+      href: getSessionHref(agentStatus.sessionId, input.workspaceId),
     };
   }
 
@@ -349,7 +351,9 @@ export function getMobileWorkItemEntryAction(input: {
   };
 }
 
-function getAuthoritativeMobileOutcomeStatus(workItem: TabletQueueItem): string {
+function getAuthoritativeMobileOutcomeStatus(
+  workItem: TabletQueueItem,
+): string {
   const status = workItem.status;
   const agentStatus = workItem.agentStatus?.status;
 
@@ -364,7 +368,9 @@ function getAuthoritativeMobileOutcomeStatus(workItem: TabletQueueItem): string 
   return status;
 }
 
-function getMobileOutcomeAgentFacts(workItem: TabletQueueItem): MobileWorkItemEntryFact[] {
+function getMobileOutcomeAgentFacts(
+  workItem: TabletQueueItem,
+): MobileWorkItemEntryFact[] {
   const agentStatus = workItem.agentStatus;
   if (!agentStatus) return [];
 
@@ -388,7 +394,8 @@ function getMobileProjectContextFacts(
   return [
     {
       label: "Project",
-      value: key && name ? `${key} · ${name}` : (key ?? name ?? "Unknown project"),
+      value:
+        key && name ? `${key} · ${name}` : (key ?? name ?? "Unknown project"),
     },
   ];
 }
@@ -405,7 +412,8 @@ function readArtifactResult(
     return metadataResult;
   }
 
-  const text = `${artifact.title ?? ""} ${artifact.summary ?? ""}`.toLowerCase();
+  const text =
+    `${artifact.title ?? ""} ${artifact.summary ?? ""}`.toLowerCase();
   if (text.includes("pass")) return "passed";
   if (text.includes("fail")) return "failed";
 
@@ -466,8 +474,7 @@ export function getMobileWorkItemEntryValidationState(
 
   const reviewArtifact = artifacts.find(
     (artifact) =>
-      artifact.artifactRole === "review" ||
-      artifact.artifactType === "pr",
+      artifact.artifactRole === "review" || artifact.artifactType === "pr",
   );
 
   if (reviewArtifact) {
@@ -480,24 +487,28 @@ export function getMobileWorkItemEntryValidationState(
 
   return {
     label: "Validation not started",
-    detail: "No verification or review artifact is attached to the current task yet.",
+    detail:
+      "No verification or review artifact is attached to the current task yet.",
     tone: "default",
   };
 }
 
-export function selectLatestMobileSessionBackedOutcomeRun<T extends MobileWorkItemOutcomeRun>(
-  runs: T[],
-): T | null {
+export function selectLatestMobileSessionBackedOutcomeRun<
+  T extends MobileWorkItemOutcomeRun,
+>(runs: T[]): T | null {
   const candidates = runs.filter((run) => Boolean(run.sessionId));
   if (candidates.length === 0) return null;
 
-  return [...candidates].sort((left, right) => mobileRunTime(right) - mobileRunTime(left))[0] ?? null;
+  return (
+    [...candidates].sort(
+      (left, right) => mobileRunTime(right) - mobileRunTime(left),
+    )[0] ?? null
+  );
 }
 
-export function buildMobileWorkItemEntryRunRows<T extends MobileWorkItemOutcomeRun>(
-  runs: T[],
-  workspaceId?: string | null,
-): MobileWorkItemEntryRunRow[] {
+export function buildMobileWorkItemEntryRunRows<
+  T extends MobileWorkItemOutcomeRun,
+>(runs: T[], workspaceId?: string | null): MobileWorkItemEntryRunRow[] {
   return [...runs]
     .sort((left, right) => mobileRunTime(right) - mobileRunTime(left))
     .map((run) => {
@@ -533,13 +544,16 @@ export function buildMobileReadableOutcomeRows(
 }
 
 function mobileRunTime(run: MobileWorkItemOutcomeRun): number {
-  const value = run.completedAt ?? run.updatedAt ?? run.startedAt ?? run.createdAt;
+  const value =
+    run.completedAt ?? run.updatedAt ?? run.startedAt ?? run.createdAt;
   if (!value) return 0;
   const time = value instanceof Date ? value.getTime() : Date.parse(value);
   return Number.isNaN(time) ? 0 : time;
 }
 
-function getMobileReadableOutcomeEventLabel(event: MobileReadableOutcomeEvent): string {
+function getMobileReadableOutcomeEventLabel(
+  event: MobileReadableOutcomeEvent,
+): string {
   if (event.eventType === "tool_call") return "Tool Call";
   if (event.eventType === "tool_result") return "Tool Result";
   if (event.eventType === "error") return "Error";
@@ -548,50 +562,44 @@ function getMobileReadableOutcomeEventLabel(event: MobileReadableOutcomeEvent): 
   return "Agent";
 }
 
-function appendWorkspaceParam(path: string, workspaceId?: string | null): string {
-  if (!workspaceId) return path;
-  const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}workspace=${encodeURIComponent(workspaceId)}`;
-}
-
 export function getMobileQueueWorkItemHref(
   workItemId: string,
   workspaceId?: string | null,
-): string {
-  return appendWorkspaceParam(`/work-items/${workItemId}?view=queue`, workspaceId);
+) {
+  return appendWorkspaceParam(
+    `/work-items/${encodeURIComponent(workItemId)}?view=queue`,
+    workspaceId,
+  );
 }
 
 export function getMobileOutcomeWorkItemHref(
   workItemId: string,
   workspaceId?: string | null,
-): string {
-  return appendWorkspaceParam(`/work-items/${workItemId}?view=outcome`, workspaceId);
+) {
+  return appendWorkspaceParam(
+    `/work-items/${encodeURIComponent(workItemId)}?view=outcome`,
+    workspaceId,
+  );
 }
 
 export function getMobileWorkItemDispatchSuccessHref(input: {
   workItemId: string;
   workspaceId?: string | null;
   result?: { sessionId?: unknown } | null;
-}): string {
+}) {
   const sessionId =
     typeof input.result?.sessionId === "string" && input.result.sessionId.trim()
       ? input.result.sessionId
       : null;
 
   if (sessionId) {
-    return getMobileSessionHref(sessionId, input.workspaceId);
+    return getSessionHref(sessionId, input.workspaceId);
   }
 
   return appendWorkspaceParam(
-    `/work-items/${input.workItemId}/workspace`,
+    `/work-items/${encodeURIComponent(input.workItemId)}/workspace`,
     input.workspaceId,
   );
-}
-
-function getMobileSessionHref(sessionId: string, workspaceId?: string | null): string {
-  if (!workspaceId) return `/sessions/${sessionId}`;
-  const params = new URLSearchParams({ workspace: workspaceId });
-  return `/sessions/${sessionId}?${params.toString()}`;
 }
 
 const OPEN_DEPENDENCY_STATUSES = new Set([
@@ -609,12 +617,10 @@ const OPEN_DEPENDENCY_STATUSES = new Set([
   "todo",
 ]);
 
-function buildDependencySummary(
-  workItem: {
-    dependencies?: MobileWorkItemEntryRelatedWorkItem[] | null;
-    dependents?: MobileWorkItemEntryRelatedWorkItem[] | null;
-  },
-): MobileWorkItemEntryDependencySummary {
+function buildDependencySummary(workItem: {
+  dependencies?: MobileWorkItemEntryRelatedWorkItem[] | null;
+  dependents?: MobileWorkItemEntryRelatedWorkItem[] | null;
+}): MobileWorkItemEntryDependencySummary {
   const dependencies = (workItem.dependencies ?? []).map(formatRelatedWorkItem);
   const dependents = (workItem.dependents ?? []).map(formatRelatedWorkItem);
   const openDependencyCount = dependencies.filter((item) =>

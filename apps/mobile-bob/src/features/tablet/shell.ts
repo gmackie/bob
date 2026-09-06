@@ -1,11 +1,21 @@
+import type { Href } from "expo-router";
+
 import type { ProviderKey, TaskLaneKey } from "./dashboard";
-import { buildRecentOutcomeWorkItems, getRecentOutcomeRowModel } from "./dashboard";
-import { buildPriorityQueueItems  } from "./queue";
-import type {TabletQueueItem} from "./queue";
+import type { TabletQueueItem } from "./queue";
 import type { MobileWorkItemEntryView } from "./work-item-entry";
+import { appendWorkspaceParam } from "../planning/navigation";
+import {
+  buildRecentOutcomeWorkItems,
+  getRecentOutcomeRowModel,
+} from "./dashboard";
+import { buildPriorityQueueItems } from "./queue";
 
 export type TabletShellMode = "ooda" | "tasks" | "planning";
-export type TabletShellStatusFilter = "all" | "running" | "completed" | "failed";
+export type TabletShellStatusFilter =
+  | "all"
+  | "running"
+  | "completed"
+  | "failed";
 
 export type TasksLeftRailTab = "recent-outcomes" | "priority-queue";
 export type PlanningLeftRailTab = "recent-sessions" | "projects";
@@ -101,9 +111,15 @@ export interface TabletAgentRunSessionInput {
   } | null;
 }
 
-export type TabletShellStatusTone = "success" | "warning" | "danger" | "default";
+export type TabletShellStatusTone =
+  | "success"
+  | "warning"
+  | "danger"
+  | "default";
 
-export interface TabletShellSessionRow<TSession extends TabletShellSession = TabletShellSession> {
+export interface TabletShellSessionRow<
+  TSession extends TabletShellSession = TabletShellSession,
+> {
   session: TSession;
   sessionId: string;
   title: string;
@@ -124,7 +140,7 @@ export interface TabletRecentOutcomeRailRow {
   agentLabel: string;
   lastUpdatedLabel: string;
   target: TabletShellTarget;
-  href: string;
+  href: Extract<Href, string>;
   entryView: "outcome" | null;
   accessibilityLabel: string;
 }
@@ -142,7 +158,10 @@ export interface TabletPlanningPaneSession {
   title: string;
 }
 
-export type TabletShellRouteParams = Record<string, string | string[] | undefined>;
+export type TabletShellRouteParams = Record<
+  string,
+  string | string[] | undefined
+>;
 
 const TASK_TABS: TabletShellTab[] = [
   { key: "recent-outcomes", label: "Recent Outcomes" },
@@ -187,12 +206,16 @@ const COMPLETED_FILTER_STATUSES = new Set([
 ]);
 const FAILED_FILTER_STATUSES = new Set(["error", "failed", "interrupted"]);
 
-export function getDefaultLeftRailTab(mode: TabletShellMode): TabletLeftRailTab {
+export function getDefaultLeftRailTab(
+  mode: TabletShellMode,
+): TabletLeftRailTab {
   if (mode === "ooda") return "conversations";
   return mode === "tasks" ? "recent-outcomes" : "recent-sessions";
 }
 
-export function getDefaultShellTarget(mode: TabletShellMode): TabletShellTarget {
+export function getDefaultShellTarget(
+  mode: TabletShellMode,
+): TabletShellTarget {
   if (mode === "ooda") return { type: "ooda-chat" };
   return mode === "tasks"
     ? { type: "tasks-dashboard" }
@@ -211,7 +234,9 @@ export function switchShellMode(mode: TabletShellMode): TabletShellState {
   };
 }
 
-export function getExecutionSessionShellState(sessionId: string): TabletShellState {
+export function getExecutionSessionShellState(
+  sessionId: string,
+): TabletShellState {
   return {
     mode: "tasks",
     leftTab: "recent-outcomes",
@@ -226,7 +251,9 @@ export function getShellStateForPath(
 ): TabletShellState {
   const path = normalizePath(pathname);
   const lane = normalizeTaskLane(readParam(params, "lane"));
-  const provider = normalizeProvider(readParam(params, "provider") ?? pathSegment(path, 1));
+  const provider = normalizeProvider(
+    readParam(params, "provider") ?? pathSegment(path, 1),
+  );
   const workItemId = readParam(params, "workItemId") ?? pathSegment(path, 1);
   const workItemView = normalizeWorkItemRouteView(readParam(params, "view"));
   const sessionId = readParam(params, "sessionId") ?? pathSegment(path, 1);
@@ -279,7 +306,8 @@ export function getShellStateForPath(
   if (path.startsWith("/work-items/") && workItemId) {
     return {
       mode: "tasks",
-      leftTab: workItemView === "outcome" ? "recent-outcomes" : "priority-queue",
+      leftTab:
+        workItemView === "outcome" ? "recent-outcomes" : "priority-queue",
       target: {
         type: "work-item",
         workItemId,
@@ -500,7 +528,9 @@ export function getPlanningPaneSession<T extends TabletShellSession>(
   sessions: T[],
   sessionId: string,
 ): TabletPlanningPaneSession {
-  const session = sessions.find((candidate) => candidate.sessionId === sessionId);
+  const session = sessions.find(
+    (candidate) => candidate.sessionId === sessionId,
+  );
 
   return {
     sessionId,
@@ -538,7 +568,9 @@ export function matchesShellSessionStatusFilter(
   }
 }
 
-export function groupShellSessions<T extends TabletShellSession>(sessions: T[]) {
+export function groupShellSessions<T extends TabletShellSession>(
+  sessions: T[],
+) {
   const ordered = [...sessions].sort(
     (left, right) =>
       new Date(right.lastActivityAt).getTime() -
@@ -550,7 +582,8 @@ export function groupShellSessions<T extends TabletShellSession>(sessions: T[]) 
       (session) => !isPlanningSession(session) && isActiveShellSession(session),
     ),
     recentOutcomes: ordered.filter(
-      (session) => !isPlanningSession(session) && !isActiveShellSession(session),
+      (session) =>
+        !isPlanningSession(session) && !isActiveShellSession(session),
     ),
     planningActive: ordered.filter(
       (session) => isPlanningSession(session) && isActiveShellSession(session),
@@ -575,7 +608,9 @@ export function buildShellSessionRows<T extends TabletShellSession>(
       sessionId: session.sessionId,
       title: formatShellSessionTitle(session),
       agentLabel: formatAgentLabel(session.agentType),
-      detailLabel: isPlanningSession(session) ? formatPlanningOutputLabel(session) : undefined,
+      detailLabel: isPlanningSession(session)
+        ? formatPlanningOutputLabel(session)
+        : undefined,
       statusLabel: formatShellStatusLabel(session.status),
       statusTone: getShellStatusTone(session.status),
       lastUpdatedLabel: formatLastUpdatedLabel(session.lastActivityAt, now),
@@ -609,15 +644,18 @@ export function buildRecentOutcomeRailRows(input: {
         agentLabel: row.agentLabel,
         lastUpdatedLabel: row.lastUpdatedLabel,
         target: { type: "work-item", workItemId: item.id },
-        href: appendWorkspaceParam(`/work-items/${item.id}?view=outcome`, input.workspaceId),
+        href: appendWorkspaceParam(
+          `/work-items/${item.id}?view=outcome`,
+          input.workspaceId,
+        ),
         entryView: "outcome",
         accessibilityLabel: `${row.accessibilityLabel}, updated ${row.lastUpdatedLabel}`,
       } satisfies TabletRecentOutcomeRailRow,
       sortValue: timestampValue(item.completedAt ?? item.updatedAt),
     };
   });
-  const sessionRows = groupShellSessions(input.sessions).recentOutcomes
-    .filter((session) => !session.workItemId)
+  const sessionRows = groupShellSessions(input.sessions)
+    .recentOutcomes.filter((session) => !session.workItemId)
     .map((session) => ({
       row: {
         id: `session:${session.sessionId}`,
@@ -627,7 +665,10 @@ export function buildRecentOutcomeRailRows(input: {
         agentLabel: formatAgentLabel(session.agentType),
         lastUpdatedLabel: formatLastUpdatedLabel(session.lastActivityAt, now),
         target: { type: "execution-session", sessionId: session.sessionId },
-        href: appendWorkspaceParam(`/sessions/${session.sessionId}`, input.workspaceId),
+        href: appendWorkspaceParam(
+          `/sessions/${session.sessionId}`,
+          input.workspaceId,
+        ),
         entryView: null,
         accessibilityLabel: `${formatShellSessionTitle(session)}, ${formatShellStatusLabel(session.status)}, updated ${formatLastUpdatedLabel(session.lastActivityAt, now)}`,
       } satisfies TabletRecentOutcomeRailRow,
@@ -691,7 +732,9 @@ function formatPlanningOutputLabel(session: TabletShellSession): string {
   return [
     draftCount > 0 ? `${draftCount} draft${draftCount === 1 ? "" : "s"}` : null,
     taskCount > 0 ? `${taskCount} task${taskCount === 1 ? "" : "s"}` : null,
-  ].filter(Boolean).join(" · ");
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function normalizeCount(value: number | null | undefined): number {
@@ -719,17 +762,6 @@ function normalizeWorkItemRouteView(
   return "planning";
 }
 
-function appendWorkspaceParam(path: string, workspaceId?: string | null): string {
-  if (!workspaceId) return path;
-
-  const [pathname = path, queryString = ""] = path.split("?");
-  const params = new URLSearchParams(queryString);
-  params.set("workspace", workspaceId);
-  const query = params.toString();
-
-  return query ? `${pathname}?${query}` : pathname;
-}
-
 function normalizePath(pathname: string): string {
   const [path = "/"] = pathname.split("?");
   if (path.length > 1 && path.endsWith("/")) return path.slice(0, -1);
@@ -741,7 +773,12 @@ function pathSegment(pathname: string, index: number): string | undefined {
 }
 
 function normalizeProvider(value: string | undefined): ProviderKey | null {
-  if (value === "claude" || value === "codex" || value === "grok" || value === "cursor-agent") {
+  if (
+    value === "claude" ||
+    value === "codex" ||
+    value === "grok" ||
+    value === "cursor-agent"
+  ) {
     return value;
   }
   return value === "cursor" ? "cursor-agent" : null;

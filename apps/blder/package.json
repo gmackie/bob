@@ -14,7 +14,7 @@
     "@gmacko/core": "workspace:*",
     "@sentry/cloudflare": "^10.53.1",
     "better-auth": "catalog:",
-    "drizzle-orm": "^0.44.0",
+    "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.8",
     "react": "catalog:react19",
     "react-dom": "catalog:react19",
@@ -30,8 +30,9 @@
     "@types/react-dom": "catalog:react19",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
-    "@vitejs/plugin-rsc": "0.5.24",
-    "vite": "8.0.8",
-    "wrangler": "4.83.0"
+    "@vitejs/plugin-rsc": "0.5.27",
+    "vite": "8.0.16",
+    "wrangler": "4.83.0",
+    "react-server-dom-webpack": "19.2.8"
   }
 }

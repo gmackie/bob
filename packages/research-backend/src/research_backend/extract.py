@@ -24,7 +24,9 @@ def _extract_pdf(path: Path) -> str:
     try:
         import fitz
     except ImportError:
-        raise ImportError("PyMuPDF (fitz) required for PDF extraction. Install with: pip install pymupdf")
+        raise ImportError(
+            "PyMuPDF (fitz) required for PDF extraction. Install with: pip install pymupdf"
+        )
 
     doc = fitz.open(str(path))
     pages = []
@@ -37,6 +39,7 @@ def _extract_pdf(path: Path) -> str:
 def _extract_html(path: Path) -> str:
     """Extract text from HTML, stripping tags."""
     import re
+
     html = path.read_text(encoding="utf-8")
     text = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL)
     text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL)

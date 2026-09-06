@@ -9,6 +9,9 @@
  * module has no app-local or Next dependencies.
  */
 import { Layer } from "effect";
+import { LocalFilesystemAuthority } from "./handlers/local-filesystem-authority";
+import { resolveTrustedLocalFilesystem  } from "./handlers/trusted-local-filesystem";
+import type {TrustedLocalFilesystem} from "./handlers/trusted-local-filesystem";
 
 import { layerGmackoDb } from "@gmacko/core/db";
 import {
@@ -20,6 +23,7 @@ import {
 } from "@gmacko/core/auth";
 
 export interface BobRuntimeLayersInput {
+  readonly localFilesystem?: TrustedLocalFilesystem;
   /** Bob's drizzle handle (NodePgDatabase<bobSchema> / PGlite). */
   readonly db: unknown;
   /** The better-auth instance (`authBundle.authInstance`). */
@@ -61,6 +65,7 @@ export function makeBobRuntimeLayers(
   const tenancyLayer = Layer.provide(layerTenancy, dbLayer);
 
   const runtimeLayer = Layer.mergeAll(
+    Layer.succeed(LocalFilesystemAuthority)((userId, headers) => resolveTrustedLocalFilesystem(input.localFilesystem, userId, headers)),
     dbLayer,
     sessionsLayer,
     apiKeysLayer,

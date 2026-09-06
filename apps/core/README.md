@@ -25,7 +25,7 @@ See `.env.example` for the full list. Required vars boot-time-fail-fast via `@gm
 ## Architecture
 
 - `src/server/env.ts` — Schema-validated env loader. Required vars (`BETTER_AUTH_SECRET`, `GMACKO_SECRET_ENCRYPTION_KEY`) fail at module load if absent.
-- `src/server/layers.ts` — composes the gmacko service Layers (auth, projects, secrets, agent, realtime). Single source of truth for the server-side runtime. Holds the singleton PGlite handle + drizzle instance + better-auth instance.
+- `src/server/layers.ts` — composes the gmacko service Layers (auth, projects, secrets, agent, realtime). Single source of truth for the server-side runtime. Shares the configured PGlite/Postgres connection, migrations and better-auth instance.
 - `src/server/handlers/` — real RPC handlers backed by service calls. Replaces the `@gmacko/contracts/stubs/*` mocks at runtime. Each handler invokes the corresponding service via `Effect.provide` of the composed runtime layer.
 - `src/app/api/rpc/route.ts` — mounts the merged `RpcGroup` (Auth + Projects + Secrets + Agent) at `/api/rpc` via `RpcServer.layerHttp` + `RpcSerialization.layerNdjson` for chunked streaming.
 - `src/app/api/auth/[...all]/route.ts` — better-auth Next.js route handler. Re-exports the better-auth instance's GET/POST handlers per the official Next.js convention.
@@ -42,13 +42,9 @@ The webpack config in `next.config.ts` carries two non-default knobs that are lo
 - **`serverExternalPackages`** — `@electric-sql/pglite`, `postgres`, `pg`, `drizzle-orm` are loaded via Node's native `require` at runtime rather than bundled into the SSR build.
 - **`@gmacko/db/migrate` subpath** — `@gmacko/db`'s root barrel deliberately does NOT re-export `runMigrations` / `migrate`; consumers import them via the dedicated `@gmacko/db/migrate` subpath. `migrate.ts` pulls in `drizzle-orm/pglite/migrator` (which has top-level `node:fs`/`node:path`/`node:url` imports) and webpack's tree-shaking does not strip them from a transpiled root barrel that's reached transitively via the contracts chain.
 
-### Known issues
+### Verification scope
 
-- `next build` (default Turbopack) currently fails to resolve subpath imports inside workspace packages (e.g. `@gmacko/contracts/groups/agent.ts → "../schemas/agent.js"`) despite the `turbopack.resolveAlias` map. Use `next build --webpack` for production builds.
-- `next build --webpack` compiles successfully but TypeScript checking surfaces two pre-existing errors in legacy OODA pages:
-  - `src/app/graph/page.tsx:60` — readonly array variance.
-  - `src/components/voice-input.tsx:32-33` — possibly-undefined access.
-  Neither blocks `next dev`. Fixing them is out of scope for phase 6K (the related OODA refactor lives in a future phase).
+See [DEPLOY.md](./DEPLOY.md) for supported procedures and explicit PGlite/Postgres acceptance. Production Turbopack build parity remains unverified; the HTTP smoke uses webpack.
 
 ## Tests
 
@@ -64,4 +60,3 @@ The webpack config in `next.config.ts` carries two non-default knobs that are lo
 - `chat_conversations.projectId` FK column.
 - `session_secret_usages.sessionId → chat_conversations.id` FK promotion.
 - Turbopack production build parity (the workspace `.js → .ts` alias is honored in dev but not in `next build`).
-- Cleanup of pre-existing OODA TypeScript errors so `next build` runs to completion without manual TS overrides.

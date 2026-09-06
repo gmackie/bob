@@ -23,7 +23,9 @@ def parse_grok_export(data: dict[str, Any]) -> list[ChatConversation]:
             )
             for message in thread.get("messages", [])
         ]
-        conversation_id = str(thread.get("id") or "").strip() or _fallback_conversation_id(thread, messages)
+        conversation_id = str(thread.get("id") or "").strip() or _fallback_conversation_id(
+            thread, messages
+        )
         normalized.append(
             ChatConversation(
                 provider="grok",

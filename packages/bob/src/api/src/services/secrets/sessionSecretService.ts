@@ -1,3 +1,6 @@
+import { TRPCError } from "@trpc/server";
+import { requireWorkspaceAccess  } from "./workspaceAccess";
+import type {WorkspaceAccessDatabase} from "./workspaceAccess";
 import { and, eq } from "@bob/db";
 import {
   chatConversations,
@@ -39,7 +42,7 @@ function readOptionalStringField(value: unknown, field: string): string | null {
 }
 
 export interface DatabaseLike {
-  query: {
+  query: WorkspaceAccessDatabase["query"] & {
     chatConversations?: {
       findFirst: (args: unknown) => Promise<ChatConversationRow | undefined>;
     };
@@ -62,6 +65,7 @@ export interface DatabaseLike {
   insert(table: typeof sessionSecretUsages): {
     values: (values: unknown) => {
       returning: () => Promise<SessionSecretUsageRow[]>;
+      onConflictDoNothing: (args: unknown) => { returning: () => Promise<SessionSecretUsageRow[]> };
     };
   };
   insert(table: typeof projectDeploySecretBindings): {
@@ -110,21 +114,22 @@ export class SessionSecretService {
     });
 
     if (!session) {
-      throw new Error("Session not found or not owned by this user");
+      throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
     }
 
     return session;
   }
 
-  async requireOwnedProject(projectId: string) {
+  async requireOwnedProject(projectId: string, userId: string) {
     const project = await this.db.query.projects?.findFirst({
       where: eq(projects.id, projectId),
     });
 
     if (!project) {
-      throw new Error("Project not found");
+      throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
     }
 
+    await requireWorkspaceAccess(this.db, userId, project.workspaceId);
     return project;
   }
 
@@ -189,7 +194,7 @@ export class SessionSecretService {
     });
 
     if (existing?.userId !== input.userId) {
-      throw new Error("Session secret not found");
+      throw new TRPCError({ code: "NOT_FOUND", message: "Session secret not found" });
     }
 
     const deleted = await this.db
@@ -201,6 +206,8 @@ export class SessionSecretService {
   }
 
   async markSecretUsed(input: {
+    usageId?: string;
+    userId: string;
     secretId: string;
     sessionId: string;
     executor: string;
@@ -209,26 +216,36 @@ export class SessionSecretService {
     exitCode?: number;
     durationMs?: number;
   }) {
-    const [usage] = await this.db
-      .insert(sessionSecretUsages)
-      .values({
-        id: crypto.randomUUID(),
-        secretId: input.secretId,
-        sessionId: input.sessionId,
-        executor: input.executor,
-        templateId: input.templateId,
-        commandPreview: input.commandPreview,
-        exitCode: input.exitCode,
-        durationMs: input.durationMs,
-      })
-      .returning();
-
-    return usage ?? {
-      secretId: input.secretId,
-      sessionId: input.sessionId,
+    await this.requireOwnedSession(input.sessionId, input.userId);
+    const secret = await this.db.query.sessionSecrets?.findFirst?.({
+      where: and(eq(sessionSecrets.id, input.secretId), eq(sessionSecrets.userId, input.userId), eq(sessionSecrets.sessionId, input.sessionId)),
+    });
+    if (secret?.userId !== input.userId || secret.sessionId !== input.sessionId) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Session secret not found" });
+    }
+    const values = {
+      id: input.usageId ?? crypto.randomUUID(),
+      secretId: secret.id,
+      sessionId: secret.sessionId,
       executor: input.executor,
-      templateId: input.templateId,
+      templateId: input.templateId ?? null,
+      commandPreview: input.commandPreview ?? null,
+      exitCode: input.exitCode ?? null,
+      durationMs: input.durationMs ?? null,
     };
+    const insertion = this.db.insert(sessionSecretUsages).values(values);
+    const [usage] = input.usageId
+      ? await insertion.onConflictDoNothing({ target: sessionSecretUsages.id }).returning()
+      : await insertion.returning();
+    if (usage) return usage;
+    // A retry is only the same operation if every persisted input matches.
+    // Never return another user's row merely because the supplied UUID exists.
+    const existing = (await this.db.query.sessionSecretUsages?.findMany?.({
+      where: and(eq(sessionSecretUsages.id, values.id), eq(sessionSecretUsages.secretId, secret.id), eq(sessionSecretUsages.sessionId, secret.sessionId)),
+      limit: 1,
+    }))?.find((row) => row.id === values.id && row.secretId === secret.id && row.sessionId === secret.sessionId);
+    if (existing && (Object.keys(values) as (keyof typeof values)[]).every((key) => (existing[key] ?? null) === (values[key] ?? null))) return existing;
+    throw new TRPCError({ code: "CONFLICT", message: "Secret usage ID already used for another operation" });
   }
 
   async getSecretForExecution(input: { secretId: string; userId: string }) {
@@ -245,7 +262,7 @@ export class SessionSecretService {
         success: false,
         detail: "not found or not owned",
       });
-      throw new Error("Session secret not found");
+      throw new TRPCError({ code: "NOT_FOUND", message: "Session secret not found" });
     }
 
     if (!row.valueCiphertext || !row.valueIv || !row.valueTag) {
@@ -348,7 +365,7 @@ export class SessionSecretService {
         success: false,
         detail: "not found or not owned",
       });
-      throw new Error("Session secret not found");
+      throw new TRPCError({ code: "NOT_FOUND", message: "Session secret not found" });
     }
 
     if (!row.valueCiphertext || !row.valueIv || !row.valueTag) {
@@ -428,6 +445,7 @@ export class SessionSecretService {
   }
 
   async upsertProjectDeployBinding(input: {
+    userId: string;
     projectId: string;
     environment: string;
     label: string;
@@ -436,7 +454,7 @@ export class SessionSecretService {
     transport: string;
     templateId?: string;
   }) {
-    await this.requireOwnedProject(input.projectId);
+    await this.requireOwnedProject(input.projectId, input.userId);
 
     const [binding] = await this.db
       .insert(projectDeploySecretBindings)
@@ -484,11 +502,11 @@ export class SessionSecretService {
     forgegraphKey: string;
     adapter: ForgeGraphSecretAdapter;
   }) {
+    await this.requireOwnedProject(input.projectId, input.userId);
     const secret = await this.getSecretForExecution({
       secretId: input.secretId,
       userId: input.userId,
     });
-    await this.requireOwnedProject(input.projectId);
 
     const promoted = await input.adapter.upsertDeploySecret({
       projectId: input.projectId,
@@ -509,6 +527,7 @@ export class SessionSecretService {
       .returning();
 
     await this.upsertProjectDeployBinding({
+      userId: input.userId,
       projectId: input.projectId,
       environment: input.environment,
       label: secret.label,

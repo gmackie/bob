@@ -90,6 +90,7 @@ export const secretsRouter = {
   markSecretUsed: protectedProcedure
     .input(
       z.object({
+        usageId: z.string().uuid().optional(),
         secretId: z.string(),
         sessionId: z.string().uuid(),
         executor: z.string().min(1).max(32),

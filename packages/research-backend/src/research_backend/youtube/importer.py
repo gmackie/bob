@@ -21,7 +21,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable
 
-from .models import VideoRecord, WatchEvent, is_valid_video_id
 from .manifest import (
     append_import_finished,
     append_import_started,
@@ -29,6 +28,7 @@ from .manifest import (
     known_import_ids,
     manifest_path,
 )
+from .models import VideoRecord, WatchEvent, is_valid_video_id
 from .notes import (
     load_existing,
     merge_record_with_existing,

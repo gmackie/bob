@@ -140,15 +140,15 @@ export const makeAgentHandlers = (ctx: HandlerContext) => {
     "agent.event.stats": ev["event.stats"],
 
     // --- Filesystem (9) ---
-    "agent.filesystem.list": fs["filesystem.list"],
-    "agent.filesystem.read": fs["filesystem.read"],
-    "agent.filesystem.write": fs["filesystem.write"],
-    "agent.filesystem.delete": fs["filesystem.delete"],
-    "agent.filesystem.mkdir": fs["filesystem.mkdir"],
-    "agent.filesystem.move": fs["filesystem.move"],
-    "agent.filesystem.copy": fs["filesystem.copy"],
-    "agent.filesystem.search": fs["filesystem.search"],
-    "agent.filesystem.gitStatus": fs["filesystem.gitStatus"],
+    "agent.filesystem.list": ({ payload }: { payload: Parameters<typeof fs["filesystem.list"]>[0] }) => fs["filesystem.list"](payload),
+    "agent.filesystem.read": ({ payload }: { payload: Parameters<typeof fs["filesystem.read"]>[0] }) => fs["filesystem.read"](payload),
+    "agent.filesystem.write": ({ payload }: { payload: Parameters<typeof fs["filesystem.write"]>[0] }) => fs["filesystem.write"](payload),
+    "agent.filesystem.delete": ({ payload }: { payload: Parameters<typeof fs["filesystem.delete"]>[0] }) => fs["filesystem.delete"](payload),
+    "agent.filesystem.mkdir": ({ payload }: { payload: Parameters<typeof fs["filesystem.mkdir"]>[0] }) => fs["filesystem.mkdir"](payload),
+    "agent.filesystem.move": ({ payload }: { payload: Parameters<typeof fs["filesystem.move"]>[0] }) => fs["filesystem.move"](payload),
+    "agent.filesystem.copy": ({ payload }: { payload: Parameters<typeof fs["filesystem.copy"]>[0] }) => fs["filesystem.copy"](payload),
+    "agent.filesystem.search": ({ payload }: { payload: Parameters<typeof fs["filesystem.search"]>[0] }) => fs["filesystem.search"](payload),
+    "agent.filesystem.gitStatus": ({ payload }: { payload: Parameters<typeof fs["filesystem.gitStatus"]>[0] }) => fs["filesystem.gitStatus"](payload),
 
     // --- Chat (8) ---
     "agent.chat.listConversations": ch["chat.listConversations"],

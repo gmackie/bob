@@ -7,6 +7,12 @@ import { migrate as drizzleMigrate } from "drizzle-orm/pglite/migrator";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+import {
+  createDatabaseConnection,
+  type DatabaseConfig,
+  type DatabaseConnection,
+} from "./client";
+
 const MIGRATIONS_FOLDER = resolve(__dirname, "../../drizzle");
 
 // Apply all drizzle-generated migrations (in `packages/core/drizzle/`) to the
@@ -20,6 +26,59 @@ const MIGRATIONS_FOLDER = resolve(__dirname, "../../drizzle");
 export async function runMigrations(pglite: PGlite): Promise<void> {
   const db = drizzle(pglite);
   await drizzleMigrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+}
+
+/** Initialize once per manager, including migrations; failed attempts close and can retry. */
+export function createDatabaseManager(
+  config: DatabaseConfig,
+  dependencies: {
+    connect?: typeof createDatabaseConnection;
+    migrate?: (connection: DatabaseConnection) => Promise<void>;
+  } = {},
+) {
+  let pending: Promise<DatabaseConnection> | undefined;
+  let closing: Promise<void> | undefined;
+  function get(): Promise<DatabaseConnection> {
+    if (closing) return closing.then(get);
+    if (!pending)
+      pending = (async () => {
+        const connection = await (
+          dependencies.connect ?? createDatabaseConnection
+        )(config);
+        try {
+          if (dependencies.migrate) await dependencies.migrate(connection);
+          else if (connection.driver === "pglite")
+            await runMigrations(connection.client);
+          else {
+            const { migrate } =
+              await import("drizzle-orm/postgres-js/migrator");
+            await migrate(connection.db, {
+              migrationsFolder: MIGRATIONS_FOLDER,
+            });
+          }
+          return connection;
+        } catch (error) {
+          await connection.close();
+          throw error;
+        }
+      })().catch((error) => {
+        pending = undefined;
+        throw error;
+      });
+    return pending;
+  }
+  function close(): Promise<void> {
+    if (closing) return closing;
+    const active = pending;
+    closing = (async () => {
+      if (active) await (await active).close();
+    })().finally(() => {
+      pending = undefined;
+      closing = undefined;
+    });
+    return closing;
+  }
+  return { get, close };
 }
 
 // Backwards-compatible alias for the previous export name.

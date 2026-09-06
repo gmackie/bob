@@ -7,18 +7,14 @@ files:
   - dist-electron/**/*
   - package.json
 extraResources:
-  - from: .packaging/bob-server
-    to: bob-server
+  # Map the parent: electron-builder excludes node_modules at a mapping root.
+  # Nested runtime node_modules (including pnpm's store) must reach the app.
+  - from: .packaging
+    to: .
     filter:
-      - "**/*"
-  - from: .packaging/blder
-    to: blder
-    filter:
-      - "**/*"
-  - from: .packaging/db-migrations
-    to: db-migrations
-    filter:
-      - "**/*"
+      - "bob-server/**/*"
+      - "blder/**/*"
+      - "db-migrations/**/*"
   - from: resources/bin
     to: bin
     filter:

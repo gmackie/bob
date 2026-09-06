@@ -2,12 +2,12 @@
  * Effect-RPC handler functions for the secrets RPCs.
  *
  * Each handler accepts the RPC payload, delegates to the extracted handler
- * function via `wrapHandler`, and returns an Effect value.
+ * function via `wrapAuthorizedHandler`, and returns an Effect value.
  *
  * Phase 7B-4D-beta Task 5.
  */
 import type { HandlerContext } from "../handlers/context.js";
-import { wrapHandler } from "../handlers/bridge.js";
+import { wrapAuthorizedHandler } from "../handlers/authorized-rpc.js";
 import {
   secretsGetSessionSecretManifest,
   secretsGetSessionSecretForExecution,
@@ -24,13 +24,13 @@ export const makeSecretsRpcHandlers = (ctx: HandlerContext) => ({
     payload,
   }: {
     payload: { sessionId: string };
-  }) => wrapHandler(secretsGetSessionSecretManifest, ctx, payload, "secrets"),
+  }) => wrapAuthorizedHandler(secretsGetSessionSecretManifest, ctx, payload, "secrets"),
 
   "secrets.getSessionSecretForExecution": ({
     payload,
   }: {
     payload: { sessionId: string; handle: string };
-  }) => wrapHandler(secretsGetSessionSecretForExecution, ctx, payload, "secrets"),
+  }) => wrapAuthorizedHandler(secretsGetSessionSecretForExecution, ctx, payload, "secrets"),
 
   "secrets.createSessionSecret": ({
     payload,
@@ -51,24 +51,25 @@ export const makeSecretsRpcHandlers = (ctx: HandlerContext) => ({
         >;
       };
     };
-  }) => wrapHandler(secretsCreateSessionSecret, ctx, payload, "secrets"),
+  }) => wrapAuthorizedHandler(secretsCreateSessionSecret, ctx, payload, "secrets"),
 
   "secrets.listSessionSecrets": ({
     payload,
   }: {
     payload: { sessionId: string };
-  }) => wrapHandler(secretsListSessionSecrets, ctx, payload, "secrets"),
+  }) => wrapAuthorizedHandler(secretsListSessionSecrets, ctx, payload, "secrets"),
 
   "secrets.deleteSessionSecret": ({
     payload,
   }: {
     payload: { secretId: string };
-  }) => wrapHandler(secretsDeleteSessionSecret, ctx, payload, "secrets"),
+  }) => wrapAuthorizedHandler(secretsDeleteSessionSecret, ctx, payload, "secrets"),
 
   "secrets.markSecretUsed": ({
     payload,
   }: {
     payload: {
+      usageId?: string;
       secretId: string;
       sessionId: string;
       executor: string;
@@ -77,7 +78,7 @@ export const makeSecretsRpcHandlers = (ctx: HandlerContext) => ({
       exitCode?: number;
       durationMs?: number;
     };
-  }) => wrapHandler(secretsMarkSecretUsed, ctx, payload, "secrets"),
+  }) => wrapAuthorizedHandler(secretsMarkSecretUsed, ctx, payload, "secrets"),
 
   "secrets.upsertProjectDeployBinding": ({
     payload,
@@ -91,7 +92,7 @@ export const makeSecretsRpcHandlers = (ctx: HandlerContext) => ({
       transport: "template" | "http" | "stdin" | "file";
       templateId?: string;
     };
-  }) => wrapHandler(secretsUpsertProjectDeployBinding, ctx, payload, "secrets"),
+  }) => wrapAuthorizedHandler(secretsUpsertProjectDeployBinding, ctx, payload, "secrets"),
 
   "secrets.promoteSessionSecret": ({
     payload,
@@ -102,5 +103,5 @@ export const makeSecretsRpcHandlers = (ctx: HandlerContext) => ({
       environment: "dev" | "staging" | "prod" | "preview";
       forgegraphKey: string;
     };
-  }) => wrapHandler(secretsPromoteSessionSecret, ctx, payload, "secrets"),
+  }) => wrapAuthorizedHandler(secretsPromoteSessionSecret, ctx, payload, "secrets"),
 });

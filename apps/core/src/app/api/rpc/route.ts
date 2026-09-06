@@ -4,11 +4,7 @@ import { Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
-import {
-  authMiddlewareLayer,
-  ensureMigrated,
-  runtimeLayer,
-} from "@/server/layers";
+import { getServerLayers } from "@/server/layers";
 import { GmackoServerGroup, allHandlers } from "@/server/handlers";
 
 // ---------------------------------------------------------------------------
@@ -28,7 +24,7 @@ import { GmackoServerGroup, allHandlers } from "@/server/handlers";
 //   5. `Layer.provide(runtimeLayer)` — every db-backed service the
 //      handlers + middleware ultimately depend on (`Sessions`, `ApiKeys`,
 //      `Tenancy`, `DeviceCodes`, `Projects`, `Secrets`, `AgentSession`,
-//      etc.). Built once at module load in `server/layers.ts`.
+//      etc.). Initialized once on first request by `server/layers.ts`.
 //
 // `HttpRouter.toWebHandler(appLayer)` returns `{ handler, dispose }`. The
 // handler is a `(Request) => Promise<Response>` shape that drops cleanly
@@ -50,35 +46,28 @@ import { GmackoServerGroup, allHandlers } from "@/server/handlers";
 // HTTP server.
 // ---------------------------------------------------------------------------
 
-const serverLayer = RpcServer.layerHttp({
-  group: GmackoServerGroup,
-  path: "/api/rpc",
-  protocol: "http",
-}).pipe(
-  Layer.provide(allHandlers),
-  Layer.provide(authMiddlewareLayer),
-  Layer.provide(RpcSerialization.layerNdjson),
-  Layer.provide(runtimeLayer),
-) as unknown as LayerType.Layer<never, never, HttpRouter.HttpRouter>;
+async function createHandler() {
+  const { authMiddlewareLayer, runtimeLayer } = await getServerLayers();
+  const serverLayer = RpcServer.layerHttp({
+    group: GmackoServerGroup,
+    path: "/api/rpc",
+    protocol: "http",
+  }).pipe(
+    Layer.provide(allHandlers),
+    Layer.provide(authMiddlewareLayer),
+    Layer.provide(RpcSerialization.layerNdjson),
+    Layer.provide(runtimeLayer),
+  ) as unknown as LayerType.Layer<never, never, HttpRouter.HttpRouter>;
 
-const { handler } = HttpRouter.toWebHandler(serverLayer);
-
-// Idempotent migrator. The Layer composition does NOT run migrations — they
-// are gated behind a process-level boolean inside `ensureMigrated()`. We
-// run it on every request; second-and-later calls are a no-op.
-let migrated = false;
-async function ensureMigratedOnce(): Promise<void> {
-  if (migrated) return;
-  await ensureMigrated();
-  migrated = true;
+  return HttpRouter.toWebHandler(serverLayer);
 }
-
-export async function GET(req: Request): Promise<Response> {
-  await ensureMigratedOnce();
-  return handler(req);
+let pending: ReturnType<typeof createHandler> | undefined;
+async function handle(req: Request): Promise<Response> {
+  pending ??= createHandler().catch((error) => {
+    pending = undefined;
+    throw error;
+  });
+  return (await pending).handler(req);
 }
-
-export async function POST(req: Request): Promise<Response> {
-  await ensureMigratedOnce();
-  return handler(req);
-}
+export const GET = handle;
+export const POST = handle;

@@ -2,7 +2,7 @@ import "server-only";
 import { and, eq, asc } from "drizzle-orm";
 import { Effect, Stream } from "effect";
 
-import { AgentRpc } from "@gmacko/core/contracts/groups/agent";
+import { ReferenceAgentRpc as AgentRpc } from "./surface";
 import { CurrentUser } from "@gmacko/core/rpc/context";
 import { AuthMiddleware } from "@gmacko/core/auth";
 import {

@@ -1,3 +1,4 @@
+import type * as ImportedModule0 from "../../root";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -7,7 +8,7 @@ import {
 } from "@bob/db/schema";
 import type { createTRPCContext } from "../../trpc.js";
 
-let appRouter: typeof import("../../root").appRouter;
+let appRouter: typeof ImportedModule0.appRouter;
 
 // The real tRPC context type — the mock db/authApi below are structurally
 // close-enough fakes that only implement the query/insert/update surface

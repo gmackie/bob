@@ -124,7 +124,7 @@ class SessionHarness:
                 seed=self.row.get("seed", []),
                 budget_papers=self.row.get("budget_papers", 60),
                 budget_seconds=self.row.get("budget_seconds", 180),
-                meta=self.row.get("meta"),
+                meta={"vault_schema": "research_vault", **(self.row.get("meta") or {})},
             )
             session.add_response(
                 "from graph_exploration",

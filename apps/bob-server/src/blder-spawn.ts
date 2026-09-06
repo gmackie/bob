@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -29,24 +28,6 @@ export function resolveVinextCli(blderDir: string): string {
   return path.join(blderDir, "node_modules", "vinext", "dist", "cli.js");
 }
 
-function resolveBlderEntryScript(blderDir: string, useDev: boolean): string {
-  if (useDev) {
-    return resolveVinextCli(blderDir);
-  }
-
-  const appRouterEntry = path.join(blderDir, "dist", "server", "index.js");
-  const pagesRouterEntry = path.join(blderDir, "dist", "server", "entry.js");
-  if (fs.existsSync(appRouterEntry)) {
-    return appRouterEntry;
-  }
-  if (fs.existsSync(pagesRouterEntry)) {
-    return pagesRouterEntry;
-  }
-
-  // Fall back to vinext start when dist layout is unknown (e.g. during dev builds).
-  return resolveVinextCli(blderDir);
-}
-
 export function buildBlderLaunchSpec(options: {
   port: number;
   host?: string;
@@ -55,21 +36,10 @@ export function buildBlderLaunchSpec(options: {
 }): BlderLaunchSpec {
   const blderDir = options.blderDir ?? resolveBlderDir();
   const host = options.host ?? "127.0.0.1";
-  const entryScript = resolveBlderEntryScript(blderDir, options.useDev);
-  const usesVinextCli = entryScript.endsWith(
-    `${path.sep}vinext${path.sep}dist${path.sep}cli.js`,
-  );
-
-  const args = usesVinextCli
-    ? [
-        entryScript,
-        options.useDev ? "dev" : "start",
-        "--port",
-        String(options.port),
-        "--hostname",
-        host,
-      ]
-    : [entryScript];
+  // Vinext's emitted index is a request handler, not an executable server.
+  // Its production adapter owns HTTP listening and static/RSC asset serving.
+  const args = [resolveVinextCli(blderDir), options.useDev ? "dev" : "start",
+    "--port", String(options.port), "--hostname", host];
 
   return {
     executable: resolveNodeExecutable(),

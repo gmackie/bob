@@ -1,0 +1,21 @@
+{
+  "name": "bob-execution-daemon",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "ws": "^8.21.0",
+    "@trpc/client": "~11.8.0",
+    "superjson": "2.2.3",
+    "@sentry/node": "^10.53.1",
+    "posthog-node": "^5.33.3",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-node": "^0.222.0",
+    "@opentelemetry/sdk-trace-base": "^2.11.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
+    "@opentelemetry/resources": "^2.11.0",
+    "@opentelemetry/semantic-conventions": "^1.32.0"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

@@ -15,7 +15,9 @@ export interface ShellRealtimeStatusModel {
 
 export function getShellRealtimeStatusModel(
   status: ShellRealtimeConnectionStatus,
+  executionAvailable = true,
 ): ShellRealtimeStatusModel {
+  if (!executionAvailable) return { label: "Local", detail: "Host execution is unavailable in local mode.", tone: "muted" };
   switch (status) {
     case "connected":
       return {

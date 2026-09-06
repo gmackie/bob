@@ -29,7 +29,9 @@ def parse_claude_export(data: Any) -> list[ChatConversation]:
             )
             for message in raw_messages
         ]
-        conversation_id = str(conv.get("id") or conv.get("uuid") or "").strip() or _fallback_conversation_id(conv, messages)
+        conversation_id = str(
+            conv.get("id") or conv.get("uuid") or ""
+        ).strip() or _fallback_conversation_id(conv, messages)
         normalized.append(
             ChatConversation(
                 provider="claude",
@@ -85,27 +87,11 @@ def _parse_attachments(raw_attachments: Any) -> list[ChatAttachment]:
             continue
         attachments.append(
             ChatAttachment(
-                kind=str(
-                    attachment.get("kind")
-                    or attachment.get("type")
-                    or "file"
-                ),
-                name=str(
-                    attachment.get("name")
-                    or attachment.get("file_name")
-                    or ""
-                ),
+                kind=str(attachment.get("kind") or attachment.get("type") or "file"),
+                name=str(attachment.get("name") or attachment.get("file_name") or ""),
                 status=str(attachment.get("status", "referenced_only") or "referenced_only"),
-                mime_type=str(
-                    attachment.get("mime_type")
-                    or attachment.get("file_type")
-                    or ""
-                ),
-                url=str(
-                    attachment.get("url")
-                    or attachment.get("preview_url")
-                    or ""
-                ),
+                mime_type=str(attachment.get("mime_type") or attachment.get("file_type") or ""),
+                url=str(attachment.get("url") or attachment.get("preview_url") or ""),
             )
         )
     return attachments

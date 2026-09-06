@@ -104,7 +104,7 @@ export default function ExecutionSessionScreen() {
   }
 
   if (!sessionId) {
-    return <Redirect href={getMobileTasksDashboardHref(selectedWorkspaceId) as never} />;
+    return <Redirect href={getMobileTasksDashboardHref(selectedWorkspaceId)} />;
   }
 
   const backAction = getMobileDetailBackAction({
@@ -129,7 +129,7 @@ export default function ExecutionSessionScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={backAction.accessibilityLabel}
-          onPress={() => router.replace(backAction.href as never)}
+          onPress={() => router.replace(backAction.href)}
           className="rounded-md px-3 py-2 active:opacity-70"
           style={{ backgroundColor: colors.secondary }}
         >

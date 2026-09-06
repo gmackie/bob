@@ -15,14 +15,15 @@
  * * Zod validates responses for `getDiveStatus` because the tRPC
  *   caller eventually exposes the row verbatim and we don't want a
  *   schema drift between Python and TS to surface as a runtime cast
- *   error deep in a React component. `getDiveResults` is validated by
- *   the tRPC output schema instead (its shape is richer and mostly
- *   pass-through).
+ *   error deep in a React component. `getDiveResults` also validates the
+ *   versioned result envelope at this boundary; the tRPC route passes it through.
  * * `null` on 404.  Callers convert to `TRPCError({code: "NOT_FOUND"})`
  *   at the router layer. Keeping the client 404-aware means we avoid
  *   inventing a new sentinel error type just for this case.
  */
 import { z } from "zod";
+
+import { DiveResultsResponseSchema } from "../../contracts/v1/dive-results";
 
 import { researchServiceHeaders } from "../../research-sidecar";
 
@@ -59,14 +60,7 @@ export interface SpawnDiveResponse {
   status: "queued";
 }
 
-export interface DiveResults {
-  exploration_id: string;
-  status: string;
-  summary_md: string | null;
-  papers: Record<string, unknown>[];
-  clusters: Record<string, unknown>[];
-  edge_counts_by_kind: Record<string, number>;
-}
+export type DiveResults = z.infer<typeof DiveResultsResponseSchema>;
 
 export class ResearchBackendClient {
   constructor(
@@ -116,6 +110,6 @@ export class ResearchBackendClient {
         `get dive results failed: ${res.status} ${await res.text()}`,
       );
     }
-    return (await res.json()) as DiveResults;
+    return DiveResultsResponseSchema.parse(await res.json());
   }
 }

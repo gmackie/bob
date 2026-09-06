@@ -1,3 +1,5 @@
+import type { Href } from "expo-router";
+
 /**
  * The settings index: rows that push to sub-screens.
  *
@@ -24,7 +26,7 @@ export interface SettingsRow {
   label: string;
   /** The current setting, shown inline so the index answers on its own. */
   value: string;
-  href: string;
+  href: Extract<Href, string>;
   /** Draws the eye when something is wrong, e.g. a provider is not ready. */
   needsAttention: boolean;
 }
@@ -38,10 +40,15 @@ export interface SettingsIndexInput {
   theme: "light" | "dark" | "system";
 }
 
-const THEME_LABELS = { light: "Light", dark: "Dark", system: "System" } as const;
+const THEME_LABELS = {
+  light: "Light",
+  dark: "Dark",
+  system: "System",
+} as const;
 
 export function buildSettingsIndex(input: SettingsIndexInput): SettingsRow[] {
-  const allProvidersReady = input.providerReadyCount === input.providerTotalCount;
+  const allProvidersReady =
+    input.providerReadyCount === input.providerTotalCount;
 
   return [
     {

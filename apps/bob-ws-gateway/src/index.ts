@@ -3,16 +3,20 @@ import { WebSocketServer } from "ws";
 import { db } from "@bob/db/client";
 import { sessionEvents, eventLog } from "@bob/db/schema";
 import {
-  captureCriticalFailure,
   initNodeObservability,
   resolveObservabilityConfig,
   shutdownNodeObservability,
 } from "@bob/observability";
 
-import { PersistenceWriter, type SessionEventRecord } from "./persistence.js";
+import { EventPersistence, type SessionEventRecord } from "./persistence.js";
 import { OutboxWorker } from "./outbox.js";
 import { Relay } from "./relay.js";
-import { createNudgeHandler, createWorkspaceEventHandler, readJsonBody, bearerFrom } from "./nudge.js";
+import {
+  createNudgeHandler,
+  createWorkspaceEventHandler,
+  readJsonBody,
+  bearerFrom,
+} from "./nudge.js";
 import { startFgEventsBridge } from "./fg-events.js";
 import {
   assertNoAuthBypassInProduction,
@@ -47,7 +51,12 @@ function auditInternal(
   void db
     .insert(eventLog)
     .values({ userId: principal.userId, eventType, payload })
-    .catch((err) => console.error(`[ws-gateway] internal audit write failed (${eventType}):`, err));
+    .catch((err) =>
+      console.error(
+        `[ws-gateway] internal audit write failed (${eventType}):`,
+        err,
+      ),
+    );
 }
 
 /**
@@ -67,7 +76,9 @@ function principalMayActAs(
 try {
   assertNoAuthBypassInProduction();
 } catch (err) {
-  console.error(`[ws-gateway] FATAL: ${err instanceof Error ? err.message : err}`);
+  console.error(
+    `[ws-gateway] FATAL: ${err instanceof Error ? err.message : err}`,
+  );
   process.exit(1);
 }
 
@@ -80,7 +91,11 @@ const observabilityConfig = resolveObservabilityConfig({
 });
 initNodeObservability(observabilityConfig);
 
-if (!NUDGE_SHARED_SECRET && process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET !== "false" && process.env.NODE_ENV !== "test") {
+if (
+  !NUDGE_SHARED_SECRET &&
+  process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET !== "false" &&
+  process.env.NODE_ENV !== "test"
+) {
   console.error(
     "[ws-gateway] FATAL: NUDGE_SHARED_SECRET env var is required " +
       "(or set BOB_ALLOW_LEGACY_NUDGE_SECRET=false once every internal caller uses an API key)",
@@ -88,41 +103,22 @@ if (!NUDGE_SHARED_SECRET && process.env.BOB_ALLOW_LEGACY_NUDGE_SECRET !== "false
   process.exit(1);
 }
 
-// Persistence: writes session events to Postgres in batches
-const writer = new PersistenceWriter({
-  batchSize: 50,
-  flushIntervalMs: 100,
-  onBatchWrite: async (batch) => {
-    await db.insert(sessionEvents).values(
-      batch.map((e) => ({
-        sessionId: e.sessionId,
-        seq: e.seq,
-        direction: e.direction,
-        eventType: e.eventType,
-        payload: e.payload,
-      })),
-    );
-  },
-  onError: (err, events) => {
-    console.error(`[ws-gateway] Failed to persist ${events.length} events:`, err);
-    captureCriticalFailure({
-      surface: "gateway",
-      operation: "persist_session_events",
-      error: err,
-      alertId: "gateway-persistence-failure",
-      tenant: observabilityConfig.tenantId
-        ? { tenantId: observabilityConfig.tenantId }
-        : undefined,
-      metadata: { batchSize: events.length },
+// Legacy producers have no durable producer ACK. Their server acceptance boundary
+// is the database commit; failures propagate before relay fanout. New sendSeq
+// envelopes use the relay's transactional, idempotent persist-then-ACK path.
+const writer = new EventPersistence(async (event) => {
+  await db
+    .insert(sessionEvents)
+    .values(event)
+    .onConflictDoNothing({
+      target: [sessionEvents.sessionId, sessionEvents.seq],
     });
-  },
 });
-writer.start();
 
 const relay = new Relay({
   heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
   persistEvent: (event: SessionEventRecord) => {
-    writer.enqueue(event);
+    return writer.write(event);
   },
   validateBrowserToken,
   validateDaemonAuth,
@@ -139,12 +135,18 @@ if (FG_API_TOKEN) {
     baseUrl: FG_API_URL,
     token: FG_API_TOKEN,
     onEvents: (events) => {
-      const sent = relay.broadcastGlobalInvalidation("external_pipeline_changed", {
-        source: "forgegraph",
-        types: events.map((e) => e.type),
-        events: events.slice(0, 20),
-      });
-      if (sent) console.log(`[fg-events] ${events.length} event(s) → ${sent} wall(s): ${events.map((e) => e.type).join(", ")}`);
+      const sent = relay.broadcastGlobalInvalidation(
+        "external_pipeline_changed",
+        {
+          source: "forgegraph",
+          types: events.map((e) => e.type),
+          events: events.slice(0, 20),
+        },
+      );
+      if (sent)
+        console.log(
+          `[fg-events] ${events.length} event(s) → ${sent} wall(s): ${events.map((e) => e.type).join(", ")}`,
+        );
     },
   });
 } else {
@@ -161,7 +163,9 @@ const nudgeHandler = createNudgeHandler({
   resolveWorkspaceOwner: workspaceOwnerId,
   onAudit: auditInternal,
   onNudge: (body) =>
-    relay.nudgeSession(body as unknown as Parameters<typeof relay.nudgeSession>[0]),
+    relay.nudgeSession(
+      body as unknown as Parameters<typeof relay.nudgeSession>[0],
+    ),
 });
 const workspaceEventHandler = createWorkspaceEventHandler({
   authorize: validateInternalBearer,
@@ -210,23 +214,46 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "Unauthorized" }));
       return;
     }
-    const body = await readJsonBody(req) as { userId?: string; sessionId?: string; message?: string } | null;
+    const body = (await readJsonBody(req)) as {
+      userId?: string;
+      sessionId?: string;
+      message?: string;
+    } | null;
     if (!body?.userId || !body?.sessionId || !body?.message) {
       res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Missing userId, sessionId, or message" }));
+      res.end(
+        JSON.stringify({ error: "Missing userId, sessionId, or message" }),
+      );
       return;
     }
     // A per-user API key may only act on its own sessions. Without this an
     // api-key holder could steer any other user's run by supplying their id.
     if (!principalMayActAs(principal, body.userId)) {
-      auditInternal(principal, "internal.denied", { endpoint: "session-send", targetUserId: body.userId, sessionId: body.sessionId });
+      auditInternal(principal, "internal.denied", {
+        endpoint: "session-send",
+        targetUserId: body.userId,
+        sessionId: body.sessionId,
+      });
       res.writeHead(403, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Forbidden: key does not own this user's sessions" }));
+      res.end(
+        JSON.stringify({
+          error: "Forbidden: key does not own this user's sessions",
+        }),
+      );
       return;
     }
-    auditInternal(principal, "internal.session_send", { targetUserId: body.userId, sessionId: body.sessionId });
-    const delivered = await relay.sendToSession(body.sessionId, body.userId, body.message);
-    res.writeHead(delivered ? 200 : 404, { "Content-Type": "application/json" });
+    auditInternal(principal, "internal.session_send", {
+      targetUserId: body.userId,
+      sessionId: body.sessionId,
+    });
+    const delivered = await relay.sendToSession(
+      body.sessionId,
+      body.userId,
+      body.message,
+    );
+    res.writeHead(delivered ? 200 : 404, {
+      "Content-Type": "application/json",
+    });
     res.end(JSON.stringify({ ok: delivered }));
     return;
   }
@@ -243,7 +270,7 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "Unauthorized" }));
       return;
     }
-    const body = await readJsonBody(req) as {
+    const body = (await readJsonBody(req)) as {
       workspaceId?: string;
       action?: "start" | "code" | "cancel";
       requestId?: string;
@@ -252,7 +279,9 @@ const server = createServer(async (req, res) => {
     } | null;
     if (!body?.workspaceId || !body?.action || !body?.requestId) {
       res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Missing workspaceId, action, or requestId" }));
+      res.end(
+        JSON.stringify({ error: "Missing workspaceId, action, or requestId" }),
+      );
       return;
     }
 
@@ -263,7 +292,9 @@ const server = createServer(async (req, res) => {
         workspaceId: body.workspaceId,
       });
       res.writeHead(403, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Forbidden: not this workspace's owner" }));
+      res.end(
+        JSON.stringify({ error: "Forbidden: not this workspace's owner" }),
+      );
       return;
     }
 
@@ -276,16 +307,27 @@ const server = createServer(async (req, res) => {
         res.end(JSON.stringify({ error: "Unknown provider" }));
         return;
       }
-      message = { type: "agent_auth_start" as const, requestId: body.requestId, provider };
+      message = {
+        type: "agent_auth_start" as const,
+        requestId: body.requestId,
+        provider,
+      };
     } else if (body.action === "code") {
       if (!body.value) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Missing value" }));
         return;
       }
-      message = { type: "agent_auth_input" as const, requestId: body.requestId, value: body.value };
+      message = {
+        type: "agent_auth_input" as const,
+        requestId: body.requestId,
+        value: body.value,
+      };
     } else {
-      message = { type: "agent_auth_cancel" as const, requestId: body.requestId };
+      message = {
+        type: "agent_auth_cancel" as const,
+        requestId: body.requestId,
+      };
     }
 
     // Audit the action, never the code itself.
@@ -296,8 +338,14 @@ const server = createServer(async (req, res) => {
     });
 
     const delivered = relay.requestAgentAuth(body.workspaceId, message);
-    res.writeHead(delivered ? 200 : 503, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(delivered ? { ok: true } : { error: "Host daemon is not connected" }));
+    res.writeHead(delivered ? 200 : 503, {
+      "Content-Type": "application/json",
+    });
+    res.end(
+      JSON.stringify(
+        delivered ? { ok: true } : { error: "Host daemon is not connected" },
+      ),
+    );
     return;
   }
 
@@ -315,7 +363,7 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "Unauthorized" }));
       return;
     }
-    const body = await readJsonBody(req) as {
+    const body = (await readJsonBody(req)) as {
       workspaceId?: string;
       action?: string;
       requestId?: string;
@@ -340,7 +388,9 @@ const server = createServer(async (req, res) => {
         workspaceId: body.workspaceId,
       });
       res.writeHead(403, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Forbidden: not this workspace's owner" }));
+      res.end(
+        JSON.stringify({ error: "Forbidden: not this workspace's owner" }),
+      );
       return;
     }
 
@@ -354,8 +404,14 @@ const server = createServer(async (req, res) => {
       requestId: body.requestId,
       action,
     });
-    res.writeHead(delivered ? 200 : 503, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(delivered ? { ok: true } : { error: "Host daemon is not connected" }));
+    res.writeHead(delivered ? 200 : 503, {
+      "Content-Type": "application/json",
+    });
+    res.end(
+      JSON.stringify(
+        delivered ? { ok: true } : { error: "Host daemon is not connected" },
+      ),
+    );
     return;
   }
 
@@ -367,19 +423,33 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "Unauthorized" }));
       return;
     }
-    const body = await readJsonBody(req) as { userId?: string; sessionId?: string } | null;
+    const body = (await readJsonBody(req)) as {
+      userId?: string;
+      sessionId?: string;
+    } | null;
     if (!body?.userId || !body?.sessionId) {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Missing userId or sessionId" }));
       return;
     }
     if (!principalMayActAs(principal, body.userId)) {
-      auditInternal(principal, "internal.denied", { endpoint: "session-stop", targetUserId: body.userId, sessionId: body.sessionId });
+      auditInternal(principal, "internal.denied", {
+        endpoint: "session-stop",
+        targetUserId: body.userId,
+        sessionId: body.sessionId,
+      });
       res.writeHead(403, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Forbidden: key does not own this user's sessions" }));
+      res.end(
+        JSON.stringify({
+          error: "Forbidden: key does not own this user's sessions",
+        }),
+      );
       return;
     }
-    auditInternal(principal, "internal.session_stop", { targetUserId: body.userId, sessionId: body.sessionId });
+    auditInternal(principal, "internal.session_stop", {
+      targetUserId: body.userId,
+      sessionId: body.sessionId,
+    });
     const result = await relay.requestSessionStop(body.userId, body.sessionId);
     if (result === "not_found") {
       res.writeHead(404, { "Content-Type": "application/json" });
@@ -419,9 +489,16 @@ async function shutdown(signal: string) {
   outboxWorker.stop();
   server.close();
   wss.clients.forEach((ws) => ws.close());
-  await writer.stop();
+  let exitCode = 0;
+  try {
+    await relay.drain();
+    await writer.stop();
+  } catch (error) {
+    console.error("[ws-gateway] Incomplete persistence shutdown", error);
+    exitCode = 1;
+  }
   await shutdownNodeObservability();
-  process.exit(0);
+  process.exit(exitCode);
 }
 
 process.on("SIGTERM", () => void shutdown("SIGTERM"));

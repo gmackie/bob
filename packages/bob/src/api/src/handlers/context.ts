@@ -6,7 +6,16 @@ import type { Db } from "@bob/db/client";
  * Keeps handler signatures independent of the tRPC context shape so they
  * can be called from both tRPC procedures and Effect-RPC handlers.
  */
+/** Granted by a trusted local server composition root, never request JSON.
+ * A workspace runner token is not authority over the API server filesystem. */
+export interface LocalFilesystemCapability {
+  readonly kind: "local-operator";
+  readonly userId: string;
+  readonly roots: readonly string[];
+}
+
 export interface HandlerContext {
+  readonly filesystem?: LocalFilesystemCapability;
   /** Database client — the schema-typed Drizzle instance so `ctx.db.query.*` is typed. */
   readonly db: Db;
   /** Authenticated user's ID. */

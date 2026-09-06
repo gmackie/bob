@@ -1,7 +1,7 @@
 import type { Layer as LayerType } from "effect";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Schema, Option } from "effect";
 import { Rpc, RpcGroup, RpcSerialization, RpcServer } from "effect/unstable/rpc";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter, HttpServerRequest } from "effect/unstable/http";
 
 import { AuthMiddleware } from "@gmacko/core/auth";
 import { CurrentUser } from "@gmacko/core/rpc/context";
@@ -20,6 +20,7 @@ import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
 import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
 
 import type { HandlerContext } from "./handlers/context.js";
+import { LocalFilesystemAuthority } from "./handlers/local-filesystem-authority.js";
 import { makeWorkItemsRpcHandlers } from "./rpc-handlers/workItems.js";
 import { makePlanningRpcHandlers } from "./rpc-handlers/planning.js";
 import { makePlanSessionRpcHandlers } from "./rpc-handlers/planSession.js";
@@ -118,6 +119,11 @@ export function liftHandlers<
       Effect.gen(function* () {
         const db = yield* GmackoDb.asEffect();
         const user = yield* CurrentUser.asEffect();
+        const localAuthority = yield* LocalFilesystemAuthority;
+        const httpRequest = yield* Effect.serviceOption(HttpServerRequest.HttpServerRequest);
+        const filesystem = typeof localAuthority === "function"
+          ? localAuthority(user.userId, Option.isSome(httpRequest) ? httpRequest.value.headers : {})
+          : localAuthority;
         const ctx: HandlerContext = {
           // GmackoDb is typed against the core schema; Bob's handlers expect the
           // Bob-schema-typed `Db`. The underlying runtime client carries both
@@ -125,6 +131,7 @@ export function liftHandlers<
           db: db as unknown as HandlerContext["db"],
           userId: user.userId,
           tenantId: process.env.BOB_TENANT_ID,
+          filesystem,
         };
         const handlers = factory(ctx);
         const handler = handlers[key];

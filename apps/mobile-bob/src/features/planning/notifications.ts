@@ -1,4 +1,8 @@
-import { getNotificationsHref, getWorkItemHref } from "./navigation";
+import {
+  getNotificationsHref,
+  getNotificationTargetHref,
+  getWorkItemHref,
+} from "./navigation";
 
 interface NotificationDestinationInput {
   url: string | null;
@@ -20,6 +24,8 @@ function normalizeInAppPath(url: string): string | null {
 
   try {
     const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+      return null;
     return `${parsed.pathname}${parsed.search}`;
   } catch {
     return null;
@@ -28,10 +34,11 @@ function normalizeInAppPath(url: string): string | null {
 
 export function getNotificationDestination(
   input: NotificationDestinationInput,
-): string {
+) {
   const fromUrl = input.url ? normalizeInAppPath(input.url) : null;
   if (fromUrl) {
-    return fromUrl;
+    const target = getNotificationTargetHref({ url: fromUrl });
+    if (target) return target;
   }
 
   if (input.workItemId) {

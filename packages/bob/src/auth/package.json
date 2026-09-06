@@ -24,6 +24,7 @@
   "dependencies": {
     "@better-auth/expo": "catalog:",
     "@bob/db": "workspace:*",
+    "@bob/schema": "workspace:*",
     "@gmacko/core": "workspace:*",
     "@t3-oss/env-core": "^0.13.8",
     "better-auth": "catalog:",
@@ -38,7 +39,7 @@
     "eslint": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.11"
   },
   "prettier": "@bob/prettier-config"
 }

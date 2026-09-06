@@ -3,10 +3,10 @@ import { randomUUID } from "node:crypto";
 import {
   and,
   asc,
-  desc,
   eq,
   inArray,
   isNotNull,
+  isNull,
   lt,
   lte,
   ne,
@@ -103,7 +103,9 @@ Return exactly one JSON object with these fields:
 Do not include destination, risk, approval, credentials, policy, or delivery instructions in a proposal. OODA derives those server-side and the user must approve the resulting private draft before any durable write.
 Do not wrap the JSON object in a Markdown code fence.`;
 
-function researchResultText(result: Record<string, unknown> | null): string | null {
+function researchResultText(
+  result: Record<string, unknown> | null,
+): string | null {
   if (!result) return null;
   for (const key of ["response", "summary"] as const) {
     const value = result[key];
@@ -662,16 +664,42 @@ export async function enqueueHostTurn(
   if (!source || source.event.type !== "user_turn") throw notFound("User turn");
 
   const fingerprint = stableStringify(input);
-  let execution = await findExecution(db, ownerId, input);
-  if (execution) {
-    if (execution.commandFingerprint !== fingerprint)
+  const existing = await findExecution(db, ownerId, input);
+  if (existing) {
+    if (existing.commandFingerprint !== fingerprint)
       throw idempotencyConflict();
-    return queuedReceipt(execution, true);
+    if (existing.status !== "queued" || existing.contextPackId)
+      return queuedReceipt(existing, true);
   }
 
+  // Preparation precedes admission. A crash can leave an unused context pack,
+  // but never an accepted, permanently unclaimable execution. The unique event
+  // and command keys arbitrate concurrent preparers only once context is durable.
   const now = options.now ?? new Date();
-  try {
-    const [created] = await db
+  const projection = await rebuildStoredConversationProjections(
+    db,
+    ownerId,
+    input.conversationId,
+    source.event.branchId,
+  );
+  const contextSources = await withVisibleResearchResults(
+    db,
+    input.conversationId,
+    projection,
+    source.event.sequence,
+    options.contextSources ?? [],
+  );
+  const context = await buildHostContextPack(db, ownerId, {
+    conversationId: input.conversationId,
+    provider: providerId(source.conversation.hostProvider),
+    query: payloadText(source.event.payload) ?? "",
+    sources: contextSources,
+    now,
+    signal: options.signal,
+  });
+
+  return db.transaction(async (tx) => {
+    const [created] = await tx
       .insert(hostTurnExecutions)
       .values({
         ownerId,
@@ -681,63 +709,48 @@ export async function enqueueHostTurn(
         commandFingerprint: fingerprint,
         status: "queued",
         preferredProvider: providerId(source.conversation.hostProvider),
+        contextPackId: context.pack.id,
         leaseExpiresAt: now,
         startedAt: now,
         createdAt: now,
         updatedAt: now,
       })
+      .onConflictDoNothing()
       .returning();
-    if (!created) throw new Error("Host turn queue insert returned no row");
-    execution = created;
-  } catch (error) {
-    if (!isUniqueViolation(error)) throw error;
-    execution = await findExecution(db, ownerId, input);
-    if (!execution) throw error;
-    if (execution.commandFingerprint !== fingerprint)
-      throw idempotencyConflict();
-    return queuedReceipt(execution, true);
-  }
+    if (created) return queuedReceipt(created, false);
 
-  try {
-    const projection = await rebuildStoredConversationProjections(
-      db,
-      ownerId,
-      input.conversationId,
-      source.event.branchId,
-    );
-    const contextSources = await withVisibleResearchResults(
-      db,
-      input.conversationId,
-      projection,
-      source.event.sequence,
-      options.contextSources ?? [],
-    );
-    const context = await buildHostContextPack(db, ownerId, {
-      conversationId: input.conversationId,
-      provider: providerId(source.conversation.hostProvider),
-      query: payloadText(source.event.payload) ?? "",
-      sources: contextSources,
-      now,
-      signal: options.signal,
-    });
-    const [prepared] = await db
-      .update(hostTurnExecutions)
-      .set({ contextPackId: context.pack.id, updatedAt: now })
-      .where(eq(hostTurnExecutions.id, execution.id))
-      .returning();
-    return queuedReceipt(prepared ?? execution, false);
-  } catch (error) {
-    await db
-      .update(hostTurnExecutions)
-      .set({
-        status: "failed",
-        errorCode: "CONTEXT_PACK_FAILED",
-        error: error instanceof Error ? error.message : String(error),
-        updatedAt: now,
-      })
-      .where(eq(hostTurnExecutions.id, execution.id));
-    throw error;
-  }
+    const [winner] = await tx
+      .select()
+      .from(hostTurnExecutions)
+      .where(
+        and(
+          eq(hostTurnExecutions.ownerId, ownerId),
+          eq(hostTurnExecutions.userEventId, input.userEventId),
+        ),
+      )
+      .for("update")
+      .limit(1);
+    if (!winner || winner.commandFingerprint !== fingerprint)
+      throw idempotencyConflict();
+    // Repair pre-upgrade queued/null-context rows on replay. The row lock and
+    // null/status guard prevent a slower preparer overwriting a winner's pack
+    // or an already claimed attempt. No preparation lease/schema is required.
+    if (winner.status === "queued" && !winner.contextPackId) {
+      const [repaired] = await tx
+        .update(hostTurnExecutions)
+        .set({ contextPackId: context.pack.id, updatedAt: now })
+        .where(
+          and(
+            eq(hostTurnExecutions.id, winner.id),
+            eq(hostTurnExecutions.status, "queued"),
+            isNull(hostTurnExecutions.contextPackId),
+          ),
+        )
+        .returning();
+      return queuedReceipt(repaired ?? winner, true);
+    }
+    return queuedReceipt(winner, true);
+  });
 }
 
 export async function claimHostTurn(
@@ -841,21 +854,9 @@ export async function claimHostTurn(
       ...(item.redaction ? { redaction: item.redaction } : {}),
     })),
   );
-  const [previous] = await db
-    .select()
-    .from(hostTurnExecutions)
-    .where(
-      and(
-        eq(hostTurnExecutions.conversationId, execution.conversationId),
-        eq(hostTurnExecutions.status, "completed"),
-        isNotNull(hostTurnExecutions.nativeSessionId),
-      ),
-    )
-    .orderBy(desc(hostTurnExecutions.completedAt))
-    .limit(1);
-  const previousProvider = previous?.provider
-    ? persistedProviderId(previous.provider)
-    : null;
+  // Native session IDs are audit provenance only: provider HOME is disposable.
+  // Never select a conversation-wide session that may contain another branch
+  // or events beyond this turn's watermark. Each claim carries full history.
   return {
     executionId: execution.id,
     conversationId: execution.conversationId,
@@ -869,24 +870,6 @@ export async function claimHostTurn(
       : HOST_SYSTEM_PROMPT,
     sensitivity: source.sensitivity,
     correlationId: source.correlationId,
-    ...(previous && previousProvider && previous.nativeSessionId
-      ? {
-          runtimeSession: {
-            provider: previousProvider,
-            sessionId: previous.nativeSessionId,
-            ...(previous.nativeTurnId ? { turnId: previous.nativeTurnId } : {}),
-            transport:
-              previous.runtimeTransport === "app_server" ||
-              previous.runtimeTransport === "acp"
-                ? previous.runtimeTransport
-                : ("cli" as const),
-            authMode:
-              previous.authMode === "api_key"
-                ? ("api_key" as const)
-                : ("subscription" as const),
-          },
-        }
-      : {}),
     attempt: claimed.attempt,
     leaseToken: claimed.leaseToken,
   };

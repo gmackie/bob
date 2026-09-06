@@ -6,7 +6,7 @@ on:
   pull_request:
 
 env:
-  NODE_VERSION: "22"
+  NODE_VERSION: "24"
 
 jobs:
   research-backend:
@@ -59,6 +59,9 @@ jobs:
       # scripts/ci-check-phase.mjs, every vitest suite appends exact per-test
       # events through the check-events reporter, and the report step folds
       # the stream into `tests` for ForgeGraph (ci/gate → Bob's cockpit).
+      CI_CHECK_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      CI_CHECK_RUN_ID: ${{ github.run_id }}
+      CI_CHECK_ATTEMPT: ${{ github.run_attempt || '1' }}
       FG_CHECK_EVENTS_PATH: ${{ github.workspace }}/.fg/check-events.ndjson
     # No longer needs the forgegraf-docker label / docker-in-docker: postgres
     # is now provided by @gmacko/emulate (a PGlite-backed wire-protocol mock
@@ -90,17 +93,20 @@ jobs:
       - name: Validate deploy install scope
         run: node --test scripts/verify-ci-deploy-install-scope.test.mjs
 
+      - name: Validate Bob execution service runtime
+        run: node --test scripts/bob-execution-runtime.test.mjs
+
       - name: Validate OODA runner Node runtime
         run: node --test scripts/verify-ooda-runner-node-runtime.test.mjs
 
       - name: Validate OODA durable-work rollout
         run: node --test scripts/verify-ooda-durable-work-rollout.test.mjs
 
+      - name: Validate acyclic workspace build graph
+        run: node --test scripts/bob-build-graph.test.mjs
+
       - name: Validate Bob/OODA product boundary
         run: node --test scripts/verify-product-boundary.test.mjs
-
-      - name: Validate the deployable gate
-        run: node --test scripts/verify-ci-deployable-gate.test.mjs
 
       # Drives the real reaper against real dirs and real processes. The bug it
       # guards was entirely in what the script did to the OS, so this must run
@@ -109,6 +115,19 @@ jobs:
         run: node --test scripts/worktree-reap.test.mjs
 
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
+
+      - name: Validate dependency security patches
+        run: node --test scripts/dependency-security.test.mjs
+
+      - name: Validate canonical Bob schema identity
+        run: pnpm exec tsx --test scripts/bob-schema-compatibility.test.mjs
+
+      - name: Validate the deployable gate
+        run: node --test scripts/verify-ci-deployable-gate.test.mjs
+
+
+      - name: Reset CI evidence
+        run: rm -rf .turbo/ci-evidence .turbo/runs
 
       - name: Typecheck
         id: typecheck
@@ -200,7 +219,8 @@ jobs:
         continue-on-error: true
         # The reporter flags reach every package's `vitest run` through turbo's
         # `--`; each suite stamps its own stream (npm_package_name) so counts
-        # sum across packages. Every package test script in this repo is vitest.
+        # sum across Vitest packages. @bob/task-runner uses Node's native
+        # test runner and strips these Vitest-only flags; Turbo records its exit.
         run: node scripts/ci-check-phase.mjs test -- pnpm exec turbo run test --continue --concurrency=1 --summarize -- --no-file-parallelism --reporter=default --reporter=@forgegraph/check-events/reporters/vitest
 
       # Which failures, if any, actually matter for shipping. Reads the turbo
