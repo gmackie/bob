@@ -7,13 +7,15 @@ import type {
 } from "@gmacko/ooda-client/v1";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { Redirect, router } from "expo-router";
+import { Redirect, router, usePathname } from "expo-router";
 import { v4 as uuidv4 } from "uuid";
 
 import type { OodaMessageTimelineItem } from "./ooda-timeline";
 import { Screen } from "~/components/ui";
 import { authClient } from "~/utils/auth";
 import { ContextInspector } from "./components/context-inspector";
+import { MobileNavSheet } from "~/features/navigation/mobile-nav-sheet";
+import { resolveHeaderLeadingAction } from "~/features/navigation/mobile-nav";
 import { ConversationDrawer } from "./components/conversation-drawer";
 import { CorrectionEditor } from "./components/correction-editor";
 import { JobInspector } from "./components/job-inspector";
@@ -51,6 +53,8 @@ export function ChatScreenView({ chat, embedded = false }: ChatScreenViewProps) 
   const tts = useOodaTts(chat.requestTtsSource);
   const vault = useVaultBrowser();
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [navVisible, setNavVisible] = useState(false);
+  const pathname = usePathname();
   const [vaultVisible, setVaultVisible] = useState(false);
   const [contextVisible, setContextVisible] = useState(false);
   const [contextPack, setContextPack] = useState<ContextPackV1 | null>(null);
@@ -460,6 +464,9 @@ export function ChatScreenView({ chat, embedded = false }: ChatScreenViewProps) 
   const activeBranch = chat.branches.find(
     (branch) => branch.id === chat.selectedBranchId,
   );
+  const leadingAction = resolveHeaderLeadingAction({
+    canGoBack: router.canGoBack(),
+  });
   const statusColor =
     chat.status === "connected"
       ? "bg-success"
@@ -471,9 +478,25 @@ export function ChatScreenView({ chat, embedded = false }: ChatScreenViewProps) 
     <Screen className="pt-4">
       <View className="mb-4 flex-row items-center justify-between gap-3">
         {!embedded ? (
-          <Pressable onPress={() => router.back()} className="active:opacity-70">
-            <Text className="text-muted text-base font-semibold">Back</Text>
-          </Pressable>
+          leadingAction === "back" ? (
+            <Pressable
+              onPress={() => router.back()}
+              className="active:opacity-70"
+            >
+              <Text className="text-muted text-base font-semibold">Back</Text>
+            </Pressable>
+          ) : (
+            // /chat is the authenticated home, so there is nothing to pop and
+            // router.back() would silently do nothing. Offer navigation instead.
+            <Pressable
+              onPress={() => setNavVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Open navigation"
+              className="active:opacity-70"
+            >
+              <Text className="text-accent text-base font-semibold">Menu</Text>
+            </Pressable>
+          )
         ) : null}
         <Pressable
           onPress={() => (embedded ? undefined : setDrawerVisible(true))}
@@ -658,6 +681,11 @@ export function ChatScreenView({ chat, embedded = false }: ChatScreenViewProps) 
         </View>
       )}
 
+      <MobileNavSheet
+        visible={navVisible}
+        pathname={pathname}
+        onClose={() => setNavVisible(false)}
+      />
       <ConversationDrawer
         visible={drawerVisible}
         conversations={chat.conversations}
