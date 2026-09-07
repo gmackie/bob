@@ -105,6 +105,9 @@ jobs:
       - name: Validate acyclic workspace build graph
         run: node --test scripts/bob-build-graph.test.mjs
 
+      - name: Validate native mobile OAuth URL handlers
+        run: node --test scripts/verify-mobile-native-url-schemes.test.mjs
+
       - name: Validate Bob/OODA product boundary
         run: node --test scripts/verify-product-boundary.test.mjs
 

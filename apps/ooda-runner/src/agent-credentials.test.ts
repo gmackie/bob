@@ -1,15 +1,28 @@
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
+import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentCredentials } from "./agent-credentials.js";
 
+vi.mock("node:child_process", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  spawn: vi.fn(),
+}));
+
+let child: EventEmitter & { stdin: PassThrough; stdout: PassThrough; stderr: PassThrough; kill: ReturnType<typeof vi.fn> };
 let dir: string;
 let sent: Record<string, unknown>[];
 let creds: AgentCredentials;
 
 beforeEach(() => {
+  vi.mocked(spawn).mockImplementation(() => {
+    child = Object.assign(new EventEmitter(), { stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), kill: vi.fn() });
+    return child as unknown as ReturnType<typeof spawn>;
+  });
   dir = mkdtempSync(join(tmpdir(), "ooda-creds-"));
   process.env.BOB_CREDIT_STATE_PATH = join(dir, "credit-state.json");
   sent = [];
@@ -32,6 +45,8 @@ beforeEach(() => {
 afterEach(() => {
   creds.shutdown();
   delete process.env.BOB_CREDIT_STATE_PATH;
+  vi.clearAllMocks();
+  vi.unstubAllEnvs();
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -97,6 +112,30 @@ describe("AgentCredentials", () => {
     // The abandoned request is told it was cancelled; the new one proceeds.
     expect(sent.some((m) => m.requestId === "req-1" && m.status === "cancelled")).toBe(true);
     expect(sent.some((m) => m.type === "agent_auth_result" && m.requestId === "req-2" && m.ok === false)).toBe(false);
+  });
+
+  it("reports one failed result when the login executable cannot spawn", () => {
+    creds.startAuth("missing-cli", "grok");
+    const failure = Object.assign(new Error("spawn grok ENOENT"), { code: "ENOENT" });
+    expect(() => child.emit("error", failure)).not.toThrow();
+    child.emit("close", -2);
+    expect(sent.filter((message) => message.type === "agent_auth_result")).toEqual([
+      expect.objectContaining({ requestId: "missing-cli", provider: "grok", ok: false, status: "failed" }),
+    ]);
+    creds.shutdown();
+    expect(sent.filter((message) => message.type === "agent_auth_result")).toHaveLength(1);
+  });
+
+  it("handles a real missing login binary without an uncaught child error", async () => {
+    const actual = await vi.importActual<typeof import("node:child_process")>("node:child_process");
+    vi.mocked(spawn).mockImplementationOnce(actual.spawn);
+    // An empty executable search path guarantees no real provider login runs.
+    vi.stubEnv("PATH", dir);
+    creds.startAuth("real-missing-cli", "grok");
+    await vi.waitFor(() => expect(sent).toContainEqual(expect.objectContaining({
+      type: "agent_auth_result", requestId: "real-missing-cli", ok: false, status: "failed",
+    })));
+    expect(sent.filter((message) => message.type === "agent_auth_result")).toHaveLength(1);
   });
 
   it("ignores a code for an unknown request", () => {
