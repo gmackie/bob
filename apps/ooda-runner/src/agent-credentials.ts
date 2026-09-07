@@ -100,7 +100,18 @@ export class AgentCredentials {
             child.stdout.on("data", (d: Buffer) => cb(d.toString()));
             child.stderr.on("data", (d: Buffer) => cb(d.toString()));
           },
-          onExit: (cb) => child.on("close", (code) => cb(code ?? 1)),
+          onExit: (cb) => {
+            // spawn failures are asynchronous error events, followed by close.
+            // Treat both as one failed login rather than an uncaught exception.
+            let finished = false;
+            const finish = (code: number) => {
+              if (finished) return;
+              finished = true;
+              cb(code);
+            };
+            child.on("error", () => finish(1));
+            child.once("close", (code) => finish(code ?? 1));
+          },
         };
       },
       onPrompt: (prompt: AuthPrompt) => {
