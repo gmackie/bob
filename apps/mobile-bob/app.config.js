@@ -133,7 +133,7 @@ module.exports = ({ config }) => {
     name: getAppName(),
     slug: "bob",
     scheme: getScheme(),
-    version: "0.1.0",
+    version: "0.1.1",
     orientation: "default",
     icon: getVariantIcon(),
     userInterfaceStyle: "automatic",
@@ -148,7 +148,7 @@ module.exports = ({ config }) => {
     // version calculated on local machine not equal to runtime version
     // calculated during build." A literal is identical on both sides.
     // Keep this in step with `version` above when the app version changes.
-    runtimeVersion: "0.1.0",
+    runtimeVersion: "0.1.1",
     newArchEnabled: true,
     assetBundlePatterns: ["**/*"],
     ios: {
