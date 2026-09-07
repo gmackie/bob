@@ -12,9 +12,19 @@ import { completeCodexInference } from "./inference-codex";
 function alive(pid: number) {
   try {
     process.kill(pid, 0);
+    if (process.platform === "linux") {
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      return !/^[ZX]$/.test(
+        stat.slice(stat.lastIndexOf(")") + 2).split(" ")[0]!,
+      );
+    }
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (
+      ["ESRCH", "ENOENT"].includes((error as NodeJS.ErrnoException).code ?? "")
+    )
+      return false;
+    throw error;
   }
 }
 it.skipIf(process.platform === "win32")(

@@ -1,14 +1,42 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 import type { ProcessIdentity } from "./durable-journal.js";
+
+/** Signal 0 includes zombies on Linux: only non-exited group members can
+ * still execute work. Keep unreadable /proc state as an error, never success. */
+function linuxGroupHasLiveMembers(groupId: number): boolean {
+  for (const entry of readdirSync("/proc")) {
+    if (!/^\d+$/.test(entry)) continue;
+    try {
+      const stat = readFileSync(`/proc/${entry}/stat`, "utf8");
+      const fields = stat
+        .slice(stat.lastIndexOf(")") + 2)
+        .trim()
+        .split(/\s+/);
+      if (
+        Number(fields[2]) === groupId &&
+        fields[0] !== "Z" &&
+        fields[0] !== "X"
+      )
+        return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+  return false;
+}
 
 export function processFingerprint(pid: number): string | null {
   if (process.platform === "linux") {
     try {
       const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-      const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+      const fields = stat
+        .slice(stat.lastIndexOf(")") + 2)
+        .trim()
+        .split(/\s+/);
+      if (fields[0] === "Z" || fields[0] === "X") return null;
       return `${fields[19]}:${readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim()}`;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
@@ -34,8 +62,14 @@ export function processFingerprint(pid: number): string | null {
 }
 export async function stopRecordedProcess(
   identity: ProcessIdentity,
-  deps = {
+  deps: {
+    fingerprint: (pid: number) => string | null;
+    kill: (pid: number, signal: NodeJS.Signals | 0) => unknown;
+    groupHasLiveMembers?: (pid: number) => boolean;
+  } = {
     fingerprint: processFingerprint,
+    groupHasLiveMembers: (pid) =>
+      process.platform !== "linux" || linuxGroupHasLiveMembers(pid),
     kill: (pid: number, signal: NodeJS.Signals | 0) =>
       process.kill(pid, signal),
   },
@@ -43,7 +77,7 @@ export async function stopRecordedProcess(
   const groupExists = () => {
     try {
       deps.kill(-identity.pid, 0);
-      return true;
+      return deps.groupHasLiveMembers?.(identity.pid) ?? true;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
       throw error;
