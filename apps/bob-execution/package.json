@@ -29,7 +29,7 @@
     "node-pty": "^1.0.0",
     "pg": "^8.17.1",
     "superjson": "catalog:",
-    "ws": "^8.18.0",
+    "ws": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -44,7 +44,7 @@
     "tsup": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.11"
   },
   "prettier": "@bob/prettier-config"
 }

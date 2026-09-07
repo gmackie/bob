@@ -69,6 +69,7 @@ from sqlalchemy import text
 
 from research_backend.clustering import cluster_exploration
 from research_backend.dive.bfs import DiveBudget, DiveResult, run_bfs
+from research_backend.dive.results import persisted_result
 from research_backend.dive.summarize import summarize_dive
 from research_backend.s2.cache import S2Cache
 from research_backend.s2.client import S2Client, get_shared_rate_limiter
@@ -262,6 +263,7 @@ def _load_row(
         "budget_papers": int(row.budget_papers or 60),
         "budget_seconds": int(row.budget_seconds or 180),
         "focus": focus,
+        "vault_schema": meta.get("vault_schema"),
     }
 
 
@@ -340,7 +342,8 @@ def _write_done(
                 UPDATE graph_exploration
                    SET status = 'done',
                        summary_md = :summary_md,
-                       meta = CAST(:meta AS jsonb),
+                       meta = COALESCE(meta, '{}'::jsonb)
+                           || jsonb_build_object('result', CAST(:meta AS jsonb)),
                        errors_json = CAST(:errors AS jsonb),
                        finished_at = NOW()
                  WHERE id = :id
@@ -350,7 +353,7 @@ def _write_done(
             {
                 "id": exploration_id,
                 "summary_md": summary_md,
-                "meta": json.dumps(meta),
+                "meta": json.dumps(persisted_result(meta, errors)),
                 "errors": json.dumps(errors),
             },
         )
@@ -379,8 +382,11 @@ def _write_error(
     }
     meta_sql = "meta"
     if meta is not None:
-        meta_sql = "CAST(:meta AS jsonb)"
-        payload["meta"] = json.dumps(meta)
+        meta_sql = (
+            "COALESCE(meta, '{}'::jsonb) "
+            "|| jsonb_build_object('result', CAST(:meta AS jsonb))"
+        )
+        payload["meta"] = json.dumps(persisted_result(meta, errors))
     stmt = text(
         f"""
         UPDATE graph_exploration
@@ -389,7 +395,7 @@ def _write_error(
                errors_json = CAST(:errors AS jsonb),
                meta = {meta_sql},
                finished_at = NOW()
-         WHERE id = :id
+         WHERE id = :id AND status = 'running'
         """
     )
     with session_factory() as session:
@@ -477,6 +483,10 @@ async def run_dive(
         row = await asyncio.to_thread(_load_row, session_factory, exploration_id)
         if row is None:
             raise DiveError("exploration row vanished after claim")
+        if row["vault_schema"] not in _VALID_SCHEMAS or row["vault_schema"] != vault_schema:
+            raise DiveError(
+                "exploration vault identity is missing or does not match the requested vault"
+            )
         seeds_raw: list[str] = row["seed"]
         focus: str = row["focus"]
         row_budget = DiveBudget(
@@ -634,6 +644,8 @@ async def run_dive(
             **clusters,
             "clusters": enriched_cluster_list,
         }
+
+        meta_so_far["cluster_summary"] = enriched_clusters
 
         # ---- Step 9: summarize ---------------------------------------
         summary_md: str | None = None

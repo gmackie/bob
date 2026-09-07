@@ -88,7 +88,7 @@ function ProviderRunRow({
     <Pressable
       accessibilityRole={href ? "button" : undefined}
       accessibilityLabel={href ? `Open run ${row.accessibilityLabel}` : undefined}
-      onPress={href ? () => router.push(href as never) : undefined}
+      onPress={href ? () => router.push(href) : undefined}
       className="py-3 active:opacity-70"
       style={{
         borderBottomWidth: isLast ? 0 : 1,
@@ -203,7 +203,7 @@ export default function ProviderDetailScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back to tasks"
-            onPress={() => router.replace(getMobileTasksDashboardHref(selectedWorkspaceId) as never)}
+            onPress={() => router.replace(getMobileTasksDashboardHref(selectedWorkspaceId))}
             className="rounded-md px-3 py-2 active:opacity-70"
             style={{ backgroundColor: colors.secondary }}
           >

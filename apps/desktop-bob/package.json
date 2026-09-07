@@ -17,17 +17,23 @@
     "dist": "pnpm package",
     "build:daemon": "node scripts/build-daemon.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "build:app": "node scripts/build-node-app.mjs"
   },
   "dependencies": {
-    "electron": "40.6.0"
+    "ws": "catalog:"
   },
   "devDependencies": {
+    "@bob/server": "workspace:*",
     "@bob/tsconfig": "workspace:*",
     "@types/node": "catalog:",
-    "electron-builder": "^25.1.8",
+    "@types/ws": "catalog:",
+    "electron-builder": "^26.15.3",
     "tsdown": "^0.20.3",
     "typescript": "catalog:",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.11",
+    "electron-builder-squirrel-windows": "26.15.3",
+    "electron": "41.10.3",
+    "yaml": "^2.9.0"
   }
 }

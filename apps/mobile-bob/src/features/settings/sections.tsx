@@ -10,27 +10,20 @@
  * Extracted verbatim from app/settings.tsx; behaviour is unchanged.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
-import { router, Stack } from "expo-router";
+import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type {
-  MobileSettingsAction,
-  MobileSettingsSectionKey,
-} from "~/features/settings/settings-model";
 import {
-  buildMobileSettingsActions,
   buildMobileSettingsDeviceSummary,
   buildMobileSettingsProviderRows,
   buildWorkspaceSettingRows,
@@ -59,48 +52,6 @@ interface ApiKeyData {
 
 interface CreatedApiKeyData {
   key: string;
-}
-
-function SettingsActionGrid({
-  actions,
-  onActionPress,
-}: {
-  actions: MobileSettingsAction[];
-  onActionPress: (action: MobileSettingsAction) => void;
-}) {
-  return (
-    <View className="mb-4 flex-row flex-wrap gap-3">
-      {actions.map((action) => (
-        <Pressable
-          key={action.key}
-          onPress={() => onActionPress(action)}
-          accessibilityRole="button"
-          accessibilityLabel={action.label}
-          className="border-border rounded-lg border p-3 active:opacity-80"
-          style={{
-            backgroundColor:
-              action.kind === "logout" ? colors.danger + "12" : colors.card,
-            flexBasis: "48%",
-            flexGrow: 1,
-            minWidth: 150,
-          }}
-        >
-          <Text
-            className="text-sm font-semibold"
-            style={{
-              color:
-                action.kind === "logout" ? colors.danger : colors.foreground,
-            }}
-          >
-            {action.label}
-          </Text>
-          <Text className="text-muted mt-2 text-xs leading-5">
-            {action.description}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
-  );
 }
 
 export function AccountSection() {

@@ -72,7 +72,7 @@ export default function RecentOutcomesScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back to tasks"
-            onPress={() => router.replace(getMobileTasksDashboardHref(workspace?.id) as never)}
+            onPress={() => router.replace(getMobileTasksDashboardHref(workspace?.id))}
             className="rounded-md px-3 py-2 active:opacity-70"
             style={{ backgroundColor: colors.secondary }}
           >
@@ -92,7 +92,7 @@ export default function RecentOutcomesScreen() {
               <OutcomeRow
                 key={row.id}
                 item={row}
-                onPress={() => router.push(row.href as never)}
+                onPress={() => router.push(row.href)}
               />
             ))
           ) : (

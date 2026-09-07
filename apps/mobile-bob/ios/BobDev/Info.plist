@@ -7,11 +7,13 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Bob (Dev)</string>
+	<string>$(APP_DISPLAY_NAME)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleIconName</key>
+	<string>$(ASSETCATALOG_COMPILER_APPICON_NAME)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -19,7 +21,7 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>0.1.1</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleURLTypes</key>
@@ -27,8 +29,8 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>bob-dev</string>
-				<string>com.gmacko.bob.dev</string>
+				<string>$(APP_URL_SCHEME)</string>
+				<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 			</array>
 		</dict>
 		<dict>
@@ -63,6 +65,8 @@
 	<string>Expo Dev Launcher uses the local network to discover and connect to development servers running on your computer.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Allow Bob to use the camera to scan the sign-in QR code from Bob web.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Allow Bob to attach screenshots and images from your photo library to work items.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Allow Bob to use the microphone for voice prompts.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

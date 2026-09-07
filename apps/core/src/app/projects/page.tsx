@@ -9,9 +9,15 @@ function ProjectsInner() {
   const client = useRpcClient();
   const qc = useQueryClient();
 
+  const identity = useQuery({
+    queryKey: ["auth", "whoAmI"],
+    queryFn: () => client.auth.whoAmI(),
+  });
   const projects = useQuery({
     queryKey: ["projects", "list"],
-    queryFn: () => client.projects.list(),
+    queryFn: () =>
+      client.projects.list({ workspaceId: identity.data!.tenantId }),
+    enabled: Boolean(identity.data),
   });
 
   const [slug, setSlug] = useState("");
@@ -31,24 +37,43 @@ function ProjectsInner() {
 
       <section>
         <h2>Create</h2>
-        <form onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            create.mutate();
+          }}
+        >
           <label>
             Slug{" "}
-            <input value={slug} onChange={(e) => setSlug(e.target.value)} required />
+            <input
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              required
+            />
           </label>
           <label>
             Name{" "}
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
           </label>
-          <button type="submit" disabled={create.isPending}>Create</button>
-          {create.error && <p role="alert">{(create.error as Error).message}</p>}
+          <button type="submit" disabled={create.isPending}>
+            Create
+          </button>
+          {create.error && (
+            <p role="alert">{(create.error as Error).message}</p>
+          )}
         </form>
       </section>
 
       <section>
         <h2>List</h2>
         {projects.isLoading && <p>Loading…</p>}
-        {projects.error && <p role="alert">{(projects.error as Error).message}</p>}
+        {projects.error && (
+          <p role="alert">{(projects.error as Error).message}</p>
+        )}
         <ul>
           {projects.data?.map((p) => (
             <li key={p.id}>

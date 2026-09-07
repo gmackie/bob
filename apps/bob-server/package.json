@@ -15,14 +15,22 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@bob/blder": "workspace:*",
-    "@bob/db": "workspace:*",
     "commander": "^12.1.0"
   },
   "devDependencies": {
     "@bob/tsconfig": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.11"
+  },
+  "exports": {
+    "./process-tree": {
+      "types": "./dist/process-tree.d.ts",
+      "default": "./src/process-tree.ts"
+    },
+    "./startup-timeout": {
+      "types": "./dist/startup-timeout.d.ts",
+      "default": "./src/startup-timeout.ts"
+    }
   }
 }

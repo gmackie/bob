@@ -157,7 +157,7 @@ function handleNotificationResponse(
 
   const targetHref = getNotificationTargetHref(data);
   if (targetHref) {
-    router.push(targetHref as never);
+    router.push(targetHref);
   }
 }
 

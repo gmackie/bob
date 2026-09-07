@@ -1,3 +1,4 @@
+import type * as ImportedModule0 from "../../root";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { createTRPCContext } from "../../trpc.js";
@@ -70,7 +71,7 @@ vi.mock("../../services/git/prService", () => ({
   createDraftPr: vi.fn(),
 }));
 
-let appRouter: typeof import("../../root").appRouter;
+let appRouter: typeof ImportedModule0.appRouter;
 let createDraftPrMock: ReturnType<typeof vi.fn>;
 
 const createCaller = () =>

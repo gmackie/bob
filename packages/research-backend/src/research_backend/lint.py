@@ -92,24 +92,29 @@ def _check_provenance(slug: str, content: str, raw_files: set[str]) -> list[Lint
     citations = re.findall(r"\[source:\s*([^\]]+)\]", content)
 
     if not citations:
-        issues.append(LintIssue(
-            "error",
-            slug,
-            "No [source: filename] citations found. Every factual claim must cite its source.",
-            "Add [source: filename] citations to factual claims.",
-        ))
+        issues.append(
+            LintIssue(
+                "error",
+                slug,
+                "No [source: filename] citations found. Every factual claim must cite its source.",
+                "Add [source: filename] citations to factual claims.",
+            )
+        )
         return issues
 
     # Check each citation references a real source
     for cite in citations:
         cite = cite.strip()
         if cite not in raw_files:
-            issues.append(LintIssue(
-                "warning",
-                slug,
-                f"Citation references '{cite}' but no such file is available to this KB.",
-                f"Check if '{cite}' exists in raw/ or configured external_sources, or fix the citation.",
-            ))
+            issues.append(
+                LintIssue(
+                    "warning",
+                    slug,
+                    f"Citation references '{cite}' but no such file is available to this KB.",
+                    f"Check if '{cite}' exists in raw/ or configured external_sources, "
+                    "or fix the citation.",
+                )
+            )
 
     # Check frontmatter sources list
     fm_sources = re.findall(r"^sources:\s*\[([^\]]*)\]", content, re.MULTILINE)
@@ -117,11 +122,14 @@ def _check_provenance(slug: str, content: str, raw_files: set[str]) -> list[Lint
         listed = [s.strip() for s in fm_sources[0].split(",")]
         for src in listed:
             if src and src not in raw_files:
-                issues.append(LintIssue(
-                    "warning",
-                    slug,
-                    f"Frontmatter lists source '{src}' but no such file is available to this KB.",
-                ))
+                issues.append(
+                    LintIssue(
+                        "warning",
+                        slug,
+                        f"Frontmatter lists source '{src}' "
+                        "but no such file is available to this KB.",
+                    )
+                )
 
     return issues
 
@@ -165,13 +173,17 @@ def _check_wikilinks(slug: str, content: str, all_slugs: set[str]) -> list[LintI
     for link in links:
         # Normalize: could be "concepts/cold-exposure" or just "cold-exposure"
         link_slug = link.split("/")[-1] if "/" in link else link
-        if link_slug not in all_slugs and link not in {f"{d}/{s}" for s in all_slugs for d in ["concepts", "protocols", "entities"]}:
-            issues.append(LintIssue(
-                "info",
-                slug,
-                f"Wikilink [[{link}]] references a non-existent article.",
-                "Create the linked article or fix the link.",
-            ))
+        if link_slug not in all_slugs and link not in {
+            f"{d}/{s}" for s in all_slugs for d in ["concepts", "protocols", "entities"]
+        }:
+            issues.append(
+                LintIssue(
+                    "info",
+                    slug,
+                    f"Wikilink [[{link}]] references a non-existent article.",
+                    "Create the linked article or fix the link.",
+                )
+            )
 
     return issues
 
@@ -181,22 +193,26 @@ def _check_frontmatter(slug: str, content: str, config: KBConfig) -> list[LintIs
     issues = []
 
     if not content.startswith("---"):
-        issues.append(LintIssue(
-            "error",
-            slug,
-            "Missing YAML frontmatter (must start with ---).",
-            "Add frontmatter with title, type, category, sources, last_compiled.",
-        ))
+        issues.append(
+            LintIssue(
+                "error",
+                slug,
+                "Missing YAML frontmatter (must start with ---).",
+                "Add frontmatter with title, type, category, sources, last_compiled.",
+            )
+        )
         return issues
 
     required_fields = ["title", "type", "sources", "last_compiled"]
     for field in required_fields:
         if f"{field}:" not in content.split("---")[1]:
-            issues.append(LintIssue(
-                "warning",
-                slug,
-                f"Missing frontmatter field: {field}",
-            ))
+            issues.append(
+                LintIssue(
+                    "warning",
+                    slug,
+                    f"Missing frontmatter field: {field}",
+                )
+            )
 
     return issues
 
@@ -219,11 +235,13 @@ def _check_orphans(articles: list[tuple[str, Path]]) -> list[LintIssue]:
         if f"[[{slug}" not in all_content and f"[[{full_slug}" not in all_content:
             # Check it's not just the only article
             if len(articles) > 1:
-                issues.append(LintIssue(
-                    "info",
-                    full_slug,
-                    "Orphaned article: no other article links to this one.",
-                    "Add [[wikilinks]] from related articles.",
-                ))
+                issues.append(
+                    LintIssue(
+                        "info",
+                        full_slug,
+                        "Orphaned article: no other article links to this one.",
+                        "Add [[wikilinks]] from related articles.",
+                    )
+                )
 
     return issues

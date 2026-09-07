@@ -46,8 +46,37 @@ describe("planning navigation", () => {
         workspaceId: "workspace-1",
       }),
     ).toBe("/work-items/task-456?workspace=workspace-1");
-    expect(getNotificationTargetHref({ url: "/runs" })).toBe("/runs");
+    expect(getNotificationTargetHref({ url: "/runs" })).toBe("/tasks");
     expect(getNotificationTargetHref({})).toBeNull();
+  });
+
+  it("keeps route identifiers within one encoded path segment", () => {
+    expect(getSessionHref("run/one?other=true")).toBe(
+      "/sessions/run%2Fone%3Fother%3Dtrue",
+    );
+    expect(getProjectHref("project#two")).toBe("/projects/project%23two");
+  });
+
+  it("validates raw notification URLs against current mobile routes", () => {
+    expect(
+      getNotificationTargetHref({ url: "/sessions/run-1?workspace=space-1" }),
+    ).toBe("/sessions/run-1?workspace=space-1");
+    expect(getNotificationTargetHref({ url: "/settings/account" })).toBe(
+      "/settings/account",
+    );
+    for (const url of [
+      "https://example.com",
+      "//example.com",
+      "/missing",
+      "/session/old",
+      "/sessions/%zz",
+      "/\\example.com",
+    ]) {
+      expect(getNotificationTargetHref({ url })).toBeNull();
+    }
+    expect(
+      getNotificationTargetHref({ sessionId: "run-1", workspaceId: "space-1" }),
+    ).toBe("/sessions/run-1?workspace=space-1");
   });
 
   it("deep-links ad-hoc run pushes straight to the session screen", () => {

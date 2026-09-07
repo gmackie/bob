@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -9,6 +9,7 @@ import type {
   AdapterEvent,
   AgentAdapter,
   BuildCommandOptions,
+  ExecuteOptions,
 } from "@gmacko/ooda/agent-adapters";
 
 import { HostTurnWorker } from "../host-turn-worker";
@@ -73,6 +74,99 @@ class HostAdapter implements AgentAdapter {
 }
 
 describe("HostTurnWorker", () => {
+  it("reconstructs sequential and restarted turns from full history after disposable provider state is removed", async () => {
+    const root = join(tmpdir(), `ooda-host-history-${crypto.randomUUID()}`);
+    const trustedHome = join(root, "trusted-home");
+    await mkdir(join(trustedHome, ".grok"), { recursive: true });
+    await writeFile(join(trustedHome, ".grok", "auth.json"), "test-only");
+    const homes: string[] = [];
+    class StatefulAdapter extends HostAdapter {
+      override async execute(
+        command: AdapterCommand,
+        onEvent: (event: AdapterEvent) => void,
+        options?: ExecuteOptions,
+      ) {
+        const home = options!.environment!.HOME!;
+        homes.push(home);
+        const state = join(home, "session-history.json");
+        if (command.runtime?.session?.mode === "resume")
+          await readFile(state, "utf8");
+        await writeFile(state, command.prompt!);
+        return super.execute(command, onEvent);
+      }
+    }
+    const adapter = new StatefulAdapter(
+      "grok",
+      '{"display":"A","speakable":"A"}',
+    );
+    const complete = vi.fn().mockResolvedValue({});
+    const fail = vi.fn().mockResolvedValue({});
+    const claim = vi.fn();
+    const createWorker = () =>
+      new HostTurnWorker({
+        runnerId: "history-runner",
+        scratchRoot: join(root, "scratch"),
+        adapters: new Map([["grok", adapter]]),
+        maxConcurrent: 1,
+        environment: { HOME: trustedHome, PATH: "/usr/bin" },
+        processSandbox: async (command) => command,
+        api: { claim, complete, fail },
+      });
+    let worker = createWorker();
+    try {
+      for (let turn = 1; turn <= 3; turn++) {
+        if (turn === 3) {
+          await worker.stop();
+          worker = createWorker();
+        }
+        claim.mockResolvedValueOnce({
+          executionId: `history-${turn}`,
+          conversationId: "conversation",
+          userEventId: `event-${turn}`,
+          contextPackId: "context",
+          preferredProvider: "grok",
+          providerOrder: ["grok"],
+          messages:
+            turn === 1
+              ? [{ role: "user", content: "Remember A" }]
+              : [
+                  { role: "user", content: "Remember A" },
+                  { role: "assistant", content: "A" },
+                  { role: "user", content: `Question ${turn}` },
+                ],
+          system: "OODA",
+          sensitivity: "general",
+          correlationId: `correlation-${turn}`,
+          attempt: 1,
+          leaseToken: "11111111-1111-4111-8111-111111111111",
+          ...(turn > 1
+            ? {
+                runtimeSession: {
+                  provider: "grok",
+                  sessionId: "grok-session-1",
+                  authMode: "subscription",
+                  transport: "cli",
+                },
+              }
+            : {}),
+        });
+        await worker.poll();
+        await worker.waitForIdle();
+        expect(complete).toHaveBeenCalledTimes(turn);
+        expect(fail).not.toHaveBeenCalled();
+        expect(adapter.commands.at(-1)!.session).toEqual({ mode: "start" });
+        if (turn > 1)
+          expect(adapter.commands.at(-1)!.prompt).toBe(
+            `User:\nRemember A\n\nAssistant:\nA\n\nUser:\nQuestion ${turn}`,
+          );
+        await expect(access(homes.at(-1)!)).rejects.toThrow();
+      }
+    } finally {
+      await worker.stop();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("uses subscription CLIs in constitutional fallback order and records the native session", async () => {
     const root = join(tmpdir(), `ooda-host-worker-${crypto.randomUUID()}`);
     const trustedHome = join(root, "trusted-home");

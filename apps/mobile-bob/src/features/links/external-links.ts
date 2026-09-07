@@ -103,8 +103,8 @@ export function buildExternalLink(
   request: ExternalLinkRequest,
   config: ExternalLinkConfig,
 ): ExternalLink | null {
+  if (!Object.hasOwn(TARGETS, request.target)) return null;
   const spec = TARGETS[request.target];
-  if (!spec) return null;
 
   // A link to a detail screen with no id lands on an error page. Rendering no
   // affordance is better than rendering one that fails.
@@ -122,8 +122,8 @@ export function buildExternalLink(
   // Ids come from server data and can contain slashes; encoding stops one
   // forging extra path segments.
   const suffix = request.id ? `/${encodeURIComponent(request.id)}` : "";
-  const prefix = spec.workspaceScoped
-    ? `dashboard/${encodeURIComponent(request.workspaceSlug!)}/`
+  const prefix = spec.workspaceScoped && request.workspaceSlug
+    ? `dashboard/${encodeURIComponent(request.workspaceSlug)}/`
     : "";
   const path = `${prefix}${spec.path}${suffix}`;
 

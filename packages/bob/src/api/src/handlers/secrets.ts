@@ -98,6 +98,7 @@ export async function secretsDeleteSessionSecret(
 export async function secretsMarkSecretUsed(
   _ctx: HandlerContext,
   input: {
+    usageId?: string;
     secretId: string;
     sessionId: string;
     executor: string;
@@ -108,7 +109,7 @@ export async function secretsMarkSecretUsed(
   },
 ) {
   const service = new SessionSecretService(_ctx.db as unknown as DatabaseLike);
-  return service.markSecretUsed(input);
+  return service.markSecretUsed({ ...input, userId: _ctx.userId });
 }
 
 export async function secretsUpsertProjectDeployBinding(
@@ -124,7 +125,7 @@ export async function secretsUpsertProjectDeployBinding(
   },
 ) {
   const service = new SessionSecretService(_ctx.db as unknown as DatabaseLike);
-  return service.upsertProjectDeployBinding(input);
+  return service.upsertProjectDeployBinding({ ...input, userId: _ctx.userId });
 }
 
 export async function secretsPromoteSessionSecret(

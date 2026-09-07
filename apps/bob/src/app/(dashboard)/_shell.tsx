@@ -12,6 +12,7 @@ import {
 } from "~/components/notifications/notification-panel";
 import { ChatPanelProvider } from "~/components/chat/chat-panel-provider";
 import { ChatPanel } from "~/components/chat/chat-panel";
+import { useExecutionAvailable } from "~/hooks/execution-availability";
 import { useWorkspaceEvents } from "~/hooks/use-workspace-events";
 
 const SIDEBAR_EXPANDED_WIDTH = 240;
@@ -20,7 +21,7 @@ const STORAGE_KEY = "bob:sidebar-collapsed";
 
 export default function BilderShell({ children }: { children: React.ReactNode }) {
   const { connectionState } = useWorkspaceEvents();
-  const realtimeStatus = getShellRealtimeStatusModel(connectionState.status);
+  const realtimeStatus = getShellRealtimeStatusModel(connectionState.status, useExecutionAvailable());
   const [showNotif, setShowNotif] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const unreadCount = useUnreadCount();

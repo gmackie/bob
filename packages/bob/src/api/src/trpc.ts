@@ -1,3 +1,6 @@
+import { resolveTrustedLocalFilesystem  } from "./handlers/trusted-local-filesystem";
+import type {TrustedLocalFilesystem} from "./handlers/trusted-local-filesystem";
+import type { LocalFilesystemCapability } from "./handlers/context";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { z, ZodError } from "zod/v4";
@@ -36,6 +39,9 @@ import {
 export const createTRPCContext = async (opts: {
   headers: Headers;
   authBundle: AuthRuntimeBundle;
+  /** Server composition only; never populated from request headers or JSON. */
+  filesystem?: LocalFilesystemCapability;
+  localFilesystem?: TrustedLocalFilesystem;
 }) => {
   const authApi = opts.authBundle.authInstance.api;
   let defaultUser: {
@@ -74,6 +80,7 @@ export const createTRPCContext = async (opts: {
     authApi,
     session: authContext.session,
     apiKeyAuth: authContext.apiKeyAuth,
+    filesystem: opts.filesystem ?? resolveTrustedLocalFilesystem(opts.localFilesystem, authContext.session?.user.id, opts.headers),
     db,
   };
 };

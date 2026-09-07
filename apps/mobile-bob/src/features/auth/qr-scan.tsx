@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
 
 import { Button } from "~/components/ui";
@@ -41,6 +42,7 @@ const MAX_CODE_RENEWALS = 6;
  *   by the @better-auth/expo client, so success IS a real signed-in session.
  */
 export function QrPairingScreen({ onClose, onClaimed }: QrPairingScreenProps) {
+  const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [state, setState] = useState<PairingState>({ phase: "scanning" });
   // A docked/propped iPad can't point its rear camera at a monitor — the
@@ -54,7 +56,9 @@ export function QrPairingScreen({ onClose, onClaimed }: QrPairingScreenProps) {
   const pollDeadlineRef = useRef<number>(0);
   // Lets the poll loop request a fresh code without referencing the
   // callback before its own declaration.
-  const requestAndPollRef = useRef<((renewalsLeft: number) => void) | null>(null);
+  const requestAndPollRef = useRef<((renewalsLeft: number) => void) | null>(
+    null,
+  );
 
   const stopPolling = useCallback(() => {
     if (pollTimerRef.current) {
@@ -139,7 +143,9 @@ export function QrPairingScreen({ onClose, onClaimed }: QrPairingScreenProps) {
     (renewalsLeft: number) => {
       stopPolling();
       setState((prev) =>
-        prev.phase === "code" ? prev : { phase: "code", userCode: null, expiresAt: null },
+        prev.phase === "code"
+          ? prev
+          : { phase: "code", userCode: null, expiresAt: null },
       );
 
       void authClient
@@ -166,7 +172,8 @@ export function QrPairingScreen({ onClose, onClaimed }: QrPairingScreenProps) {
             if (renewalsLeft <= 0) {
               setState({
                 phase: "error",
-                message: "This screen sat idle for a while. Tap below for a fresh code.",
+                message:
+                  "This screen sat idle for a while. Tap below for a fresh code.",
               });
               return;
             }
@@ -219,7 +226,16 @@ export function QrPairingScreen({ onClose, onClaimed }: QrPairingScreenProps) {
   }, [requestAndPoll]);
 
   return (
-    <View className="bg-background flex-1 pt-6" testID="qr-pairing-screen">
+    <View
+      className="bg-background flex-1"
+      style={{
+        paddingTop: insets.top + 24,
+        paddingBottom: insets.bottom,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+      }}
+      testID="qr-pairing-screen"
+    >
       <View className="flex-row items-center justify-between px-5 pb-4">
         <Text className="text-foreground text-xl font-semibold">
           {state.phase === "code" ? "Enter code on Bob web" : "Scan QR code"}
@@ -228,7 +244,7 @@ export function QrPairingScreen({ onClose, onClaimed }: QrPairingScreenProps) {
           onPress={handleClose}
           accessibilityRole="button"
           accessibilityLabel="Close QR scanner"
-          className="active:opacity-70 px-2 py-1"
+          className="px-2 py-1 active:opacity-70"
         >
           <Text className="text-muted text-base">Cancel</Text>
         </Pressable>
@@ -251,11 +267,14 @@ export function QrPairingScreen({ onClose, onClaimed }: QrPairingScreenProps) {
             Waiting for approval — this signs you in automatically.
           </Text>
           {state.expiresAt ? (
-            <Text className="text-muted2 mt-1 text-center text-xs" testID="qr-pairing-countdown">
+            <Text
+              className="text-muted2 mt-1 text-center text-xs"
+              testID="qr-pairing-countdown"
+            >
               {formatRenewsIn(state.expiresAt - now)}
             </Text>
           ) : null}
-          <Pressable onPress={reset} className="active:opacity-70 mt-8">
+          <Pressable onPress={reset} className="mt-8 active:opacity-70">
             <Text className="text-muted text-sm underline">
               Scan the QR code instead
             </Text>
@@ -271,7 +290,7 @@ export function QrPairingScreen({ onClose, onClaimed }: QrPairingScreenProps) {
               ? "Enable camera in Settings"
               : "Allow camera access"}
           </Button>
-          <Pressable onPress={startCodeFlow} className="active:opacity-70 mt-6">
+          <Pressable onPress={startCodeFlow} className="mt-6 active:opacity-70">
             <Text className="text-muted text-sm underline">
               Can't scan? Enter a code on the web instead
             </Text>
@@ -307,7 +326,10 @@ export function QrPairingScreen({ onClose, onClaimed }: QrPairingScreenProps) {
                     Flip camera ({facing === "back" ? "rear" : "front"})
                   </Text>
                 </Pressable>
-                <Pressable onPress={startCodeFlow} className="active:opacity-70">
+                <Pressable
+                  onPress={startCodeFlow}
+                  className="active:opacity-70"
+                >
                   <Text className="text-muted text-sm underline">
                     Use a code instead
                   </Text>

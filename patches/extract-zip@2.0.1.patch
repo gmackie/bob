@@ -1,0 +1,32 @@
+--- a/index.js
++++ b/index.js
+@@ -127,5 +127,29 @@
+     if (symlink) {
+       const link = await getStream(readStream)
++      // Archive links must stay inside the extraction root, including through
++      // existing symlink ancestors. Preserve ordinary relative bundle links.
++      const target = path.resolve(path.dirname(dest), link)
++      const inside = value => {
++        const relative = path.relative(this.opts.dir, value)
++        return !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`)
++      }
++      if (!inside(target)) throw new Error('Out of bound symlink target')
++      let ancestor = target
++      while (true) {
++        try {
++          await fs.lstat(ancestor)
++          const canonical = await fs.realpath(ancestor)
++          if (!inside(canonical)) throw new Error('Out of bound symlink ancestor')
++          break
++        } catch (err) {
++          if (err.code !== 'ENOENT') throw err
++          // A dangling existing symlink cannot be proven confined.
++          const stat = await fs.lstat(ancestor).catch(() => null)
++          if (stat && stat.isSymbolicLink()) throw new Error('Unresolved symlink ancestor')
++          if (ancestor === this.opts.dir) throw err
++          ancestor = path.dirname(ancestor)
++        }
++      }
+       debug('creating symlink', link, dest)
+       await fs.symlink(link, dest)
+     } else {

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
 
 # YouTube video IDs are exactly 11 characters from [A-Za-z0-9_-].
 # Enforced to prevent path traversal and injection when building filenames.

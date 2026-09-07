@@ -18,7 +18,7 @@
     "@bob/observability": "workspace:*",
     "@bob/ws": "workspace:*",
     "@neondatabase/serverless": "^0.10.4",
-    "drizzle-orm": "^0.44.7",
+    "drizzle-orm": "^0.45.2",
     "pg": "^8.17.1",
     "ws": "catalog:"
   },
@@ -29,6 +29,6 @@
     "tsup": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.11"
   }
 }

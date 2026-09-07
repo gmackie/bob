@@ -138,6 +138,15 @@ describe("nudge handler", () => {
 });
 
 describe("workspace event handler", () => {
+  it("returns failure when asynchronous authorization fanout fails", async () => {
+    const handler = createWorkspaceEventHandler({ authorize: legacyAuth, resolveWorkspaceOwner: noOwner,
+      onEvent: async () => { throw new Error("database unavailable"); } });
+    const req = mockReq({ type: "queue_order_changed", workspaceId: "w1" }, { authorization: "Bearer s3cr3t" });
+    const res = mockRes();
+    await handler(req, res);
+    expect(res._status).toBe(500);
+    expect(JSON.parse(res._body)).toEqual({ error: "Workspace event delivery failed" });
+  });
   it("rejects missing authorization header", async () => {
     const notify = vi.fn();
     const handler = createWorkspaceEventHandler({ authorize: legacyAuth, resolveWorkspaceOwner: noOwner, onEvent: notify });

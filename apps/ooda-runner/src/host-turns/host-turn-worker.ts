@@ -168,13 +168,10 @@ export class HostTurnWorker {
           credentialHome.path,
           prepared.credentialCopies,
         );
-        const resumable =
-          claim.runtimeSession?.provider === provider
-            ? claim.runtimeSession
-            : undefined;
-        const prompt = resumable
-          ? claim.messages.at(-1)!.content
-          : fullTranscript(claim.messages);
+        // Credential HOME and native session artifacts are deliberately disposable.
+        // Even an older gateway's runtimeSession is provenance, not resumable state.
+        // Canonical branch-visible history is the complete input to every attempt.
+        const prompt = fullTranscript(claim.messages);
         const command = adapter.buildCommand({
           prompt,
           workspaceRoot: sandbox.path,
@@ -184,9 +181,7 @@ export class HostTurnWorker {
           permissionMode: prepared.permissionMode,
           billingPolicy: "subscription_only",
           authMode: "subscription",
-          session: resumable
-            ? { mode: "resume", sessionId: resumable.sessionId }
-            : { mode: "start" },
+          session: { mode: "start" },
           correlationId: claim.correlationId,
         });
         const processSandbox =

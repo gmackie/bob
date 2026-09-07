@@ -12,11 +12,21 @@
  * So: every router in the app router must be either exposed at the edge or
  * listed below as a deliberate exclusion, with the reason it cannot run there.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { appRouter } from "@bob/api";
 
 import { edgeRouter } from "../edge-router";
+
+// Inspect the real router registrations without initializing a database. Any
+// database access during registration is unexpected and must still fail.
+vi.mock("@bob/db/client", () => ({
+  db: new Proxy({}, {
+    get(_target, property) {
+      throw new Error(`Router parity must not access the database: ${String(property)}`);
+    },
+  }),
+}));
 
 /**
  * Routers that genuinely cannot run on Workers, and why. Adding to this list is

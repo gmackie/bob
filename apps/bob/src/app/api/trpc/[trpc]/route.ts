@@ -1,3 +1,4 @@
+import { readTrustedLocalFilesystemConfig } from "@bob/api/handlers/trusted-local-filesystem";
 import type { NextRequest } from "next/server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { getHTTPStatusCodeFromError } from "@trpc/server/http";
@@ -68,6 +69,7 @@ const handler = async (req: NextRequest) => {
       createTRPCContext({
         authBundle,
         headers: req.headers,
+        localFilesystem: readTrustedLocalFilesystemConfig(process.env),
       }),
     onError({ error, path, ctx }) {
       // Only surface genuine server faults (5xx). Expected client errors

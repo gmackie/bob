@@ -416,6 +416,7 @@ export async function decideProposal(
   db: OodaDatabase,
   ownerId: string,
   input: ApprovalDecisionV1,
+  options: { now?: () => Date } = {},
 ): Promise<ApprovalDecisionResultV1> {
   return db.transaction(async (tx) => {
     const [owned] = await tx
@@ -467,8 +468,11 @@ export async function decideProposal(
         "The proposal changed before this decision was recorded",
       );
     }
+    // Sample the authoritative clock only after acquiring the proposal lock.
+    // Client decidedAt is retained solely for audit and identical-replay checks.
+    const now = options.now?.() ?? new Date();
     const decidedAt = new Date(input.decidedAt);
-    if (owned.proposal.expiresAt && owned.proposal.expiresAt <= decidedAt) {
+    if (owned.proposal.expiresAt && owned.proposal.expiresAt <= now) {
       throw new OodaKernelProblem("CONFLICT", 409, "The proposal has expired");
     }
     const [decision] = await tx
@@ -488,7 +492,7 @@ export async function decideProposal(
       .set({
         status: input.decision === "approve" ? "approved" : "rejected",
         version: sql`${proposals.version} + 1`,
-        updatedAt: decidedAt,
+        updatedAt: now,
       })
       .where(
         and(
@@ -520,13 +524,14 @@ export async function decideProposal(
             approval: {
               decisionId: decision.id,
               decidedBy: ownerId,
-              decidedAt: input.decidedAt,
+              decidedAt: now.toISOString(),
+              clientDecidedAt: input.decidedAt,
               scope: "single_delivery",
             },
           },
-          availableAt: decidedAt,
-          createdAt: decidedAt,
-          updatedAt: decidedAt,
+          availableAt: now,
+          createdAt: now,
+          updatedAt: now,
         })
         .returning({ id: integrationOutbox.id });
       outboxId = outbox?.id;
@@ -543,7 +548,7 @@ export async function decideProposal(
         .set({
           lifecycleState:
             input.decision === "approve" ? "committed" : "incubating",
-          updatedAt: decidedAt,
+          updatedAt: now,
         })
         .where(eq(memorySeeds.id, opportunityReview.memorySeedId));
     }
@@ -552,7 +557,7 @@ export async function decideProposal(
       .update(conversations)
       .set({
         lastSequence: sql`${conversations.lastSequence} + 1`,
-        updatedAt: decidedAt,
+        updatedAt: now,
       })
       .where(eq(conversations.id, updated.conversationId))
       .returning({ sequence: conversations.lastSequence });
@@ -572,7 +577,7 @@ export async function decideProposal(
       sensitivity: "general",
       correlationId: updated.id,
       idempotencyKey: `approval:${updated.id}:v${input.expectedVersion}`,
-      occurredAt: decidedAt,
+      occurredAt: now,
     });
     return {
       proposal: mapProposal(updated),

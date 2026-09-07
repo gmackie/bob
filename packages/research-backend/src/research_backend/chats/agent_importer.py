@@ -9,7 +9,6 @@ appear alongside ChatGPT/Claude/Grok exports in sources/chats/raw/.
 from __future__ import annotations
 
 import datetime
-import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -19,7 +18,6 @@ from .manifest import (
     append_import_finished,
     append_import_started,
     iter_events,
-    known_import_ids,
     manifest_path,
 )
 from .models import ChatConversation

@@ -1,15 +1,19 @@
+import { getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import path from "node:path";
+
+import { taskRuns } from "@bob/db/schema";
 
 describe("taskRuns run hierarchy schema", () => {
-  it("has parentTaskRunId and runPhase fields in schema", () => {
-    // taskRuns moved to @bob/work-items/schema in Phase 7B-2 Task 12.
-    const source = readFileSync(
-      path.resolve(__dirname, "../../../../../src/work-items/src/schema.ts"),
-      "utf8",
+  it("supports root runs and preserves child runs when their parent is deleted", () => {
+    expect(taskRuns.parentTaskRunId.notNull).toBe(false);
+    expect(taskRuns.parentTaskRunId.getSQLType()).toBe("uuid");
+    expect(taskRuns.runPhase.notNull).toBe(true);
+    expect(taskRuns.runPhase.default).toBe("execute");
+    const foreignKey = getTableConfig(taskRuns).foreignKeys.find((key) =>
+      key.reference().columns.includes(taskRuns.parentTaskRunId),
     );
-    expect(source).toContain("parentTaskRunId");
-    expect(source).toContain("runPhase");
+    expect(foreignKey?.reference().foreignTable).toBe(taskRuns);
+    expect(foreignKey?.reference().foreignColumns).toEqual([taskRuns.id]);
+    expect(foreignKey?.onDelete).toBe("set null");
   });
 });

@@ -1,21 +1,25 @@
-import { getPlanningHref } from "../planning/navigation";
-import type { ProviderKey, TaskLaneKey } from "./dashboard";
-import type { RunningNowWorkItemTarget } from "./dashboard";
-import type { TabletShellMode } from "./shell";
-import type { TasksLeftRailTab } from "./shell";
+import type { Href } from "expo-router";
+
+import type {
+  ProviderKey,
+  RunningNowWorkItemTarget,
+  TaskLaneKey,
+} from "./dashboard";
+import type { TabletShellMode, TasksLeftRailTab } from "./shell";
 import type { MobileWorkItemEntryView } from "./work-item-entry";
+import { appendWorkspaceParam, getPlanningHref } from "../planning/navigation";
 
 export interface MobileShellModeAction {
   key: TabletShellMode;
   label: "OODA" | "Planning" | "Tasks";
-  href: string;
+  href: Extract<Href, string>;
   isActive: boolean;
 }
 
 export interface MobileShellGlobalAction {
   key: "settings";
   label: "Settings";
-  href: string;
+  href: Extract<Href, string>;
   accessibilityLabel: "Open settings";
 }
 
@@ -31,24 +35,13 @@ export type MobileDetailBackSource =
 export interface MobileDetailBackAction {
   label: "Planning" | "Tasks" | "Priority Queue" | "Recent Outcomes";
   accessibilityLabel: string;
-  href: string;
-}
-
-function appendWorkspaceParam(path: string, workspaceId?: string | null): string {
-  if (!workspaceId) return path;
-
-  const [pathname = path, queryString = ""] = path.split("?");
-  const params = new URLSearchParams(queryString);
-  params.set("workspace", workspaceId);
-  const query = params.toString();
-
-  return query ? `${pathname}?${query}` : pathname;
+  href: Extract<Href, string>;
 }
 
 export function getTabletDashboardHref(
   mode: TabletShellMode = "tasks",
   workspaceId?: string | null,
-): string {
+) {
   if (mode === "ooda") {
     return appendWorkspaceParam("/chat", workspaceId);
   }
@@ -72,18 +65,18 @@ export function getTabletDashboardSelectionReset(): {
 export function getMobileTaskTabHref(
   tab: TasksLeftRailTab,
   workspaceId?: string | null,
-): string {
+) {
   return appendWorkspaceParam(
     tab === "recent-outcomes" ? "/tasks/outcomes" : "/tasks/queue",
     workspaceId,
   );
 }
 
-export function getMobileTasksDashboardHref(workspaceId?: string | null): string {
+export function getMobileTasksDashboardHref(workspaceId?: string | null) {
   return getTabletDashboardHref("tasks", workspaceId);
 }
 
-export function getMobilePlanningDashboardHref(workspaceId?: string | null): string {
+export function getMobilePlanningDashboardHref(workspaceId?: string | null) {
   return getTabletDashboardHref("planning", workspaceId);
 }
 
@@ -171,14 +164,14 @@ export function getMobileDetailBackAction(
 export function getTabletTaskLaneHref(
   lane: TaskLaneKey,
   workspaceId?: string | null,
-): string {
+) {
   return appendWorkspaceParam(`/tasks?lane=${lane}`, workspaceId);
 }
 
 export function getTabletTaskLaneWorkItemHref(
   target: RunningNowWorkItemTarget,
   workspaceId?: string | null,
-): string {
+) {
   return getTabletWorkItemHref(target.workItemId, target.view, workspaceId);
 }
 
@@ -186,57 +179,72 @@ export function getTabletWorkItemHref(
   workItemId: string,
   view: MobileWorkItemEntryView,
   workspaceId?: string | null,
-): string {
-  return appendWorkspaceParam(`/work-items/${workItemId}?view=${view}`, workspaceId);
+) {
+  return appendWorkspaceParam(
+    `/work-items/${encodeURIComponent(workItemId)}?view=${view}`,
+    workspaceId,
+  );
 }
 
 export function getTabletSessionHref(
   sessionId: string,
   workspaceId?: string | null,
-): string {
-  return appendWorkspaceParam(`/sessions/${sessionId}`, workspaceId);
+) {
+  return appendWorkspaceParam(
+    `/sessions/${encodeURIComponent(sessionId)}`,
+    workspaceId,
+  );
 }
 
 export function getTabletPlanningSessionHref(
   sessionId: string,
   workspaceId?: string | null,
-): string {
-  return appendWorkspaceParam(`/planning/sessions/${sessionId}`, workspaceId);
+) {
+  return appendWorkspaceParam(
+    `/planning/sessions/${encodeURIComponent(sessionId)}`,
+    workspaceId,
+  );
 }
 
 export function getTabletProviderHref(
   provider: ProviderKey,
   workspaceId?: string | null,
-): string {
+) {
   return appendWorkspaceParam(`/providers/${provider}`, workspaceId);
 }
 
-export function getTabletSettingsHref(workspaceId?: string | null): string {
+export function getTabletSettingsHref(workspaceId?: string | null) {
   return appendWorkspaceParam("/settings", workspaceId);
 }
 
 export function getTabletProjectsHref(
   workspaceId?: string | null,
   filter?: string | null,
-): string {
+) {
   const params = new URLSearchParams();
   if (filter) params.set("filter", filter);
   if (workspaceId) params.set("workspace", workspaceId);
   const query = params.toString();
 
-  return query ? `/projects?${query}` : "/projects";
+  return query ? (`/projects?${query}` as const) : ("/projects" as const);
 }
 
 export function getMobilePlanningFilterHref(
   filter: string,
   workspaceId?: string | null,
-): string {
-  return appendWorkspaceParam(`/planning?filter=${filter}`, workspaceId);
+) {
+  return appendWorkspaceParam(
+    `/planning?filter=${encodeURIComponent(filter)}`,
+    workspaceId,
+  );
 }
 
 export function getTabletProjectHref(
   projectId: string,
   workspaceId?: string | null,
-): string {
-  return appendWorkspaceParam(`/projects/${projectId}`, workspaceId);
+) {
+  return appendWorkspaceParam(
+    `/projects/${encodeURIComponent(projectId)}`,
+    workspaceId,
+  );
 }

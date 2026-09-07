@@ -97,7 +97,6 @@ def _parse_rollout(
     """Parse a single JSONL rollout file into a ChatConversation."""
     messages: list[ChatMessage] = []
     session_model = ""
-    session_cwd = ""
 
     with open(rollout_path, encoding="utf-8") as f:
         for line in f:
@@ -115,7 +114,6 @@ def _parse_rollout(
 
             if event_type == "session_meta":
                 session_model = str(payload.get("model", ""))
-                session_cwd = str(payload.get("cwd", ""))
                 continue
 
             if event_type == "response_item":
@@ -151,7 +149,6 @@ def _parse_rollout(
 
     created_at = _unix_to_iso(meta.get("created_at", 0))
     updated_at = _unix_to_iso(meta.get("updated_at", 0))
-    model_provider = str(meta.get("model_provider", ""))
     model = str(meta.get("model", session_model))
 
     assistant_models = _collect_assistant_models(messages)
@@ -177,7 +174,6 @@ def _parse_response_item(
 ) -> ChatMessage | None:
     """Parse a response_item event into a ChatMessage."""
     role = payload.get("role")
-    item_type = payload.get("type", "")
 
     # User or assistant messages
     if role in ("user", "assistant"):

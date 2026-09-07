@@ -1,3 +1,4 @@
+import type * as ImportedModule0 from "../planningProvider.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "@bob/db/client";
 
@@ -30,8 +31,8 @@ vi.mock("@bob/db/schema", () => ({
 }));
 
 describe("resolvePlanningProvider", () => {
-  let resolvePlanningProvider: typeof import("../planningProvider.js").resolvePlanningProvider;
-  let PlanningProviderError: typeof import("../planningProvider.js").PlanningProviderError;
+  let resolvePlanningProvider: typeof ImportedModule0.resolvePlanningProvider;
+  let PlanningProviderError: typeof ImportedModule0.PlanningProviderError;
 
   beforeEach(async () => {
     vi.clearAllMocks();

@@ -154,6 +154,7 @@ export const integrationsRouter = {
     .mutation(({ ctx, input }) =>
       runKernel(() =>
         claimExternalStatus(ctx.db, input, {
+          eligibleOwnerIds: configuredRolloutOwnerIds(),
           ownerEligible: (ownerId) =>
             resolveOodaRolloutPolicy(ownerId).capabilities.portfolio_evidence,
         }),

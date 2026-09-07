@@ -35,28 +35,28 @@ export default function PlanningScreen() {
     <TabletPlanningDashboard
       sessions={gateway.sessions}
       onOpenPlanningSession={(sessionId) => {
-        router.push(getMobilePlanningSessionHref(sessionId, selectedWorkspaceId) as never);
+        router.push(getMobilePlanningSessionHref(sessionId, selectedWorkspaceId));
       }}
       onOpenSummaryTarget={(target) => {
         if (target.type === "projects-dashboard") {
-          router.push(getTabletProjectsHref(selectedWorkspaceId, target.filter) as never);
+          router.push(getTabletProjectsHref(selectedWorkspaceId, target.filter));
           return;
         }
 
-        router.push(getMobilePlanningFilterHref(target.filter, selectedWorkspaceId) as never);
+        router.push(getMobilePlanningFilterHref(target.filter, selectedWorkspaceId));
       }}
       onOpenNavigationAction={(action) => {
         const href =
           action.key === "projects"
             ? getTabletProjectsHref(selectedWorkspaceId)
             : getTabletDashboardHref("planning", selectedWorkspaceId);
-        router.push(href as never);
+        router.push(href);
       }}
       onOpenMode={(mode) =>
-        router.push(getTabletDashboardHref(mode, selectedWorkspaceId) as never)
+        router.push(getTabletDashboardHref(mode, selectedWorkspaceId))
       }
       onOpenSettings={() =>
-        router.push(getTabletSettingsHref(selectedWorkspaceId) as never)
+        router.push(getTabletSettingsHref(selectedWorkspaceId))
       }
     />
   );

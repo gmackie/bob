@@ -1,3 +1,5 @@
+import type { Href } from "expo-router";
+
 export interface PlanningWorkspaceSummary {
   id: string;
   name: string;
@@ -43,7 +45,7 @@ export interface PlanningDashboardAction {
   title: string;
   subtitle: string | null;
   ctaLabel: string;
-  href: string;
+  href: Extract<Href, string>;
   tone: DashboardItemTone;
 }
 
@@ -53,40 +55,147 @@ export interface PlanningAttentionItem {
   title: string;
   subtitle: string | null;
   badge: string;
-  href: string;
+  href: Extract<Href, string>;
   tone: DashboardItemTone;
 }
 
-export function getPlanningHref(): string {
-  return "/planning";
+export function getPlanningHref() {
+  return "/planning" as const;
 }
 
-export function getAgentChatHref(): string {
-  return "/chat";
+export function getAgentChatHref() {
+  return "/chat" as const;
 }
 
-export function getProjectHref(projectId: string, workspaceId?: string | null): string {
-  if (!workspaceId) return `/projects/${projectId}`;
+export function getProjectHref(projectId: string, workspaceId?: string | null) {
+  if (!workspaceId)
+    return `/projects/${encodeURIComponent(projectId)}` as const;
   const params = new URLSearchParams({ workspace: workspaceId });
-  return `/projects/${projectId}?${params.toString()}`;
+  return `/projects/${encodeURIComponent(projectId)}?${params.toString()}` as const;
 }
 
-function appendWorkspaceParam(path: string, workspaceId?: string | null): string {
+export function appendWorkspaceParam<const Path extends `${string}?${string}`>(
+  path: Path,
+  workspaceId?: string | null,
+): Path | `${Path}&workspace=${string}`;
+export function appendWorkspaceParam<const Path extends string>(
+  path: Path,
+  workspaceId?: string | null,
+): Path | `${Path}?workspace=${string}`;
+export function appendWorkspaceParam(
+  path: string,
+  workspaceId?: string | null,
+): string {
   if (!workspaceId) return path;
-  const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}workspace=${encodeURIComponent(workspaceId)}`;
+  return `${path}${path.includes("?") ? "&" : "?"}workspace=${encodeURIComponent(workspaceId)}`;
 }
 
-export function getWorkItemHref(workItemId: string, workspaceId?: string | null): string {
-  return appendWorkspaceParam(`/work-items/${workItemId}`, workspaceId);
+export function getWorkItemHref(
+  workItemId: string,
+  workspaceId?: string | null,
+) {
+  return appendWorkspaceParam(
+    `/work-items/${encodeURIComponent(workItemId)}`,
+    workspaceId,
+  );
 }
 
-export function getTaskWorkspaceHref(workItemId: string, workspaceId?: string | null): string {
-  return appendWorkspaceParam(`/work-items/${workItemId}/workspace`, workspaceId);
+export function getTaskWorkspaceHref(
+  workItemId: string,
+  workspaceId?: string | null,
+) {
+  return appendWorkspaceParam(
+    `/work-items/${encodeURIComponent(workItemId)}/workspace`,
+    workspaceId,
+  );
 }
 
-export function getSessionHref(sessionId: string, workspaceId?: string | null): string {
-  return appendWorkspaceParam(`/sessions/${sessionId}`, workspaceId);
+export function getSessionHref(sessionId: string, workspaceId?: string | null) {
+  return appendWorkspaceParam(
+    `/sessions/${encodeURIComponent(sessionId)}`,
+    workspaceId,
+  );
+}
+
+const NOTIFICATION_STATIC_ROUTES = [
+  "/",
+  "/home",
+  "/chat",
+  "/planning",
+  "/tasks",
+  "/tasks/queue",
+  "/tasks/outcomes",
+  "/projects",
+  "/pull-requests",
+  "/nodes",
+  "/notifications",
+  "/settings",
+  "/settings/account",
+  "/settings/api-keys",
+  "/settings/appearance",
+  "/settings/device",
+  "/settings/notifications",
+  "/settings/providers",
+  "/settings/workspace",
+] as const satisfies readonly Extract<Href, string>[];
+
+function withSearch<const Path extends string>(path: Path, search: string) {
+  return search ? (`${path}?${search}` as const) : path;
+}
+
+/** Push payloads are untrusted strings, not proof that a mobile route exists. */
+function getNotificationUrlHref(
+  value?: string | null,
+): Extract<Href, string> | null {
+  if (!value?.startsWith("/") || value.startsWith("//") || value.includes("\\"))
+    return null;
+  try {
+    const url = new URL(value, "https://mobile.invalid");
+    const pathname = url.pathname === "/runs" ? "/tasks" : url.pathname;
+    const search = url.searchParams.toString();
+    const fixed = NOTIFICATION_STATIC_ROUTES.find(
+      (route) => route === pathname,
+    );
+    if (fixed) return withSearch(fixed, search);
+    const parts = pathname.split("/");
+    const id = parts[2];
+    if (!id) return null;
+    // Decode then encode a single segment so identifiers cannot inject routes or queries.
+    const segment = encodeURIComponent(decodeURIComponent(id));
+    if (parts.length === 3) {
+      switch (parts[1]) {
+        case "projects":
+          return withSearch(`/projects/${segment}`, search);
+        case "work-items":
+          return withSearch(`/work-items/${segment}`, search);
+        case "sessions":
+          return withSearch(`/sessions/${segment}`, search);
+        case "providers":
+          return withSearch(`/providers/${segment}`, search);
+      }
+    }
+    if (
+      parts.length === 4 &&
+      parts[1] === "work-items" &&
+      parts[3] === "workspace"
+    ) {
+      return withSearch(`/work-items/${segment}/workspace`, search);
+    }
+    if (
+      parts.length === 4 &&
+      parts[1] === "planning" &&
+      parts[2] === "sessions" &&
+      parts[3]
+    ) {
+      return withSearch(
+        `/planning/sessions/${encodeURIComponent(decodeURIComponent(parts[3]))}`,
+        search,
+      );
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function getNotificationTargetHref(data: {
@@ -94,16 +203,17 @@ export function getNotificationTargetHref(data: {
   workspaceId?: string | null;
   sessionId?: string | null;
   url?: string | null;
-}): string | null {
-  if (data.workItemId) return getWorkItemHref(data.workItemId, data.workspaceId);
+}): Extract<Href, string> | null {
+  if (data.workItemId)
+    return getWorkItemHref(data.workItemId, data.workspaceId);
   // Ad-hoc runs (blocked/host_unknown/terminal pushes) have no work item —
   // deep-link straight to the run screen so a tap never dead-ends.
-  if (data.sessionId) return `/sessions/${data.sessionId}`;
-  return data.url ?? null;
+  if (data.sessionId) return getSessionHref(data.sessionId, data.workspaceId);
+  return getNotificationUrlHref(data.url);
 }
 
-export function getNotificationsHref(): string {
-  return "/notifications";
+export function getNotificationsHref() {
+  return "/notifications" as const;
 }
 
 export function groupActiveTaskStatuses(workItems: PlanningWorkItemSummary[]): {
@@ -145,7 +255,7 @@ function getWorkItemPriority(status: string): number {
 function getWorkItemActionHref(
   item: PlanningWorkItemSummary,
   workspaceId?: string | null,
-): string {
+) {
   return item.kind === "task"
     ? getTaskWorkspaceHref(item.id, workspaceId)
     : getWorkItemHref(item.id, workspaceId);
@@ -169,7 +279,7 @@ export function groupPlanningWorkItems(workItems: PlanningWorkItemSummary[]) {
 }
 
 function buildWorkItemSubtitle(item: PlanningWorkItemSummary): string {
-  return `${item.identifier} · ${item.status.replace(/_/g, " ")}`;
+  return `${item.identifier} · ${item.status.replace(/_/g, " ")}` as const;
 }
 
 function buildAttentionItems(input: {

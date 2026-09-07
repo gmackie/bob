@@ -1,3 +1,4 @@
+import type * as ImportedModule0 from "../../root";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { createTRPCContext } from "../../trpc.js";
@@ -8,7 +9,7 @@ import type { createTRPCContext } from "../../trpc.js";
 // construction site so every caller.* call below stays fully typed.
 type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
 
-let appRouter: typeof import("../../root").appRouter;
+let appRouter: typeof ImportedModule0.appRouter;
 
 const queryMocks = {
   agentRunsFindMany: vi.fn(),

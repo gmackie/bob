@@ -81,6 +81,31 @@ describe("promoteNote", () => {
     expect(prov.artifactId).toBe(result.artifactId);
   });
 
+  it("treats shell syntax in a promotion title as literal data", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ooda-promote-literal-"));
+    tempDirs.push(root);
+    initVaultRepo(root);
+    const title =
+      'Result $(touch injected-command) `touch injected-backtick` "quotes"';
+    const result = await promoteNote({
+      storageRoot: root,
+      threadDir: join(root, "literal"),
+      sessionId: "literal-session",
+      kind: "observation",
+      title,
+      content: "Safe result",
+      provenance: {
+        capabilityId: "test",
+        operationId: "test",
+        sourceType: "agent",
+        queryOrInputRef: "test",
+      },
+    });
+    expect(existsSync(join(root, "injected-command"))).toBe(false);
+    expect(existsSync(join(root, "injected-backtick"))).toBe(false);
+    expect(readFileSync(result.notePath, "utf8")).toContain(title);
+  });
+
   it("generates deterministic artifact IDs for same content", async () => {
     const root = mkdtempSync(join(tmpdir(), "ooda-determ-"));
     tempDirs.push(root);

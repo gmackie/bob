@@ -1,3 +1,4 @@
+import type * as ImportedModule0 from "../../root";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { sessionCookieScopes as mockSessionCookieScopes } from "@bob/db/schema";
@@ -5,7 +6,7 @@ import type { createTRPCContext } from "../../trpc.js";
 
 const TEST_KEY = "test-cookie-encryption-key-32chs";
 
-let appRouter: typeof import("../../root").appRouter;
+let appRouter: typeof ImportedModule0.appRouter;
 
 // The real tRPC context type — test callers below construct a structurally
 // close-enough fake (mock db/authApi) and cast through `unknown` rather than

@@ -10,15 +10,23 @@ import type { ExternalLinkConfig } from "./external-links";
  * that fail — see buildExternalLink.
  */
 export function useExternalLinkConfig(): ExternalLinkConfig {
-  const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, unknown>;
+  return resolveExternalLinkConfig(Constants.expoConfig?.extra ?? {});
+}
+
+function configuredString(value: unknown, fallback: string): string {
+  if (value === undefined || value === null) return fallback;
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export function resolveExternalLinkConfig(extra: Record<string, unknown>): ExternalLinkConfig {
 
   return {
-    forgegraphScheme: String(extra.forgegraphScheme ?? "forgegraph"),
-    forgegraphWebOrigin: String(extra.forgegraphWebOrigin ?? "https://forgegraf.com"),
+    forgegraphScheme: configuredString(extra.forgegraphScheme, "forgegraph"),
+    forgegraphWebOrigin: configuredString(extra.forgegraphWebOrigin, "https://forgegraf.com"),
     // KanBanger (linear-clone) ships an Expo app whose scheme is still the
     // default "my-app", so there is no real custom scheme to target yet — the
     // https fallback carries these links until it has one.
-    kanbangerScheme: String(extra.kanbangerScheme ?? "kanbanger"),
-    kanbangerWebOrigin: String(extra.kanbangerWebOrigin ?? "https://tasks.gmac.io"),
+    kanbangerScheme: configuredString(extra.kanbangerScheme, "kanbanger"),
+    kanbangerWebOrigin: configuredString(extra.kanbangerWebOrigin, "https://tasks.gmac.io"),
   };
 }

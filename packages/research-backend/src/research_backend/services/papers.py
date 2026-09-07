@@ -43,7 +43,10 @@ class AccessResolver:
 
     def annotate_result(self, result):
         if self.unpaywall and result.doi:
-            candidates = [item.model_dump() if hasattr(item, "model_dump") else item for item in result.access_candidates]
+            candidates = [
+                item.model_dump() if hasattr(item, "model_dump") else item
+                for item in result.access_candidates
+            ]
             for candidate in self.unpaywall.resolve(result.doi):
                 if candidate not in candidates:
                     candidates.append(candidate)
@@ -88,7 +91,9 @@ class PaperService:
             self.session.commit()
 
         self.session.exec(delete(PaperSourceTable).where(PaperSourceTable.paper_id == paper.id))
-        self.session.exec(delete(AccessCandidateTable).where(AccessCandidateTable.paper_id == paper.id))
+        self.session.exec(
+            delete(AccessCandidateTable).where(AccessCandidateTable.paper_id == paper.id)
+        )
         for item in payload.source_refs:
             self.session.add(
                 PaperSourceTable(
@@ -142,9 +147,13 @@ class PaperService:
         payload = self._serialize_paper(paper)
         from research_backend.services.search import SearchResult
 
-        result = SearchResult(**payload.model_dump(exclude={"id", "document_asset", "latest_summary"}))
+        result = SearchResult(
+            **payload.model_dump(exclude={"id", "document_asset", "latest_summary"})
+        )
         resolved = access_resolver.annotate_result(result)
-        self.session.exec(delete(AccessCandidateTable).where(AccessCandidateTable.paper_id == paper.id))
+        self.session.exec(
+            delete(AccessCandidateTable).where(AccessCandidateTable.paper_id == paper.id)
+        )
         for item in resolved.access_candidates:
             candidate = AccessCandidate.model_validate(item)
             self.session.add(
@@ -161,7 +170,9 @@ class PaperService:
         self.session.commit()
         return self.get_paper(paper.id)
 
-    def download_asset(self, paper_id: str, *, url: str | None, file_path: str | None) -> DocumentAsset:
+    def download_asset(
+        self, paper_id: str, *, url: str | None, file_path: str | None
+    ) -> DocumentAsset:
         paper = self.session.get(PaperTable, paper_id)
         if not paper:
             raise HTTPException(status_code=404, detail="Paper not found")
@@ -270,7 +281,9 @@ class PaperService:
                 artifact.summary_md = result.summary_md
                 artifact.extraction_json = result.extraction_json
                 self.session.add(artifact)
-                self._record_usage("summarize", {"paper_id": paper.id, "deduped": True, "recovered": True})
+                self._record_usage(
+                    "summarize", {"paper_id": paper.id, "deduped": True, "recovered": True}
+                )
                 self.session.commit()
                 self.session.refresh(artifact)
                 return self._artifact_payload(paper.id, artifact)
@@ -348,7 +361,9 @@ class PaperService:
         return {"id": collection.id, "name": collection.name, "paper_count": 0}
 
     def list_collections(self) -> dict:
-        collections = list(self.session.exec(select(CollectionTable).order_by(CollectionTable.created_at.desc())))
+        collections = list(
+            self.session.exec(select(CollectionTable).order_by(CollectionTable.created_at.desc()))
+        )
         results = []
         for collection in collections:
             count = self.session.exec(
@@ -373,11 +388,17 @@ class PaperService:
             )
         ).first()
         if existing is None:
-            self.session.add(CollectionItemTable(collection_id=collection_id, paper_id=payload.paper_id))
-            self._record_usage("collection_assign", {"collection_id": collection_id, "paper_id": payload.paper_id})
+            self.session.add(
+                CollectionItemTable(collection_id=collection_id, paper_id=payload.paper_id)
+            )
+            self._record_usage(
+                "collection_assign", {"collection_id": collection_id, "paper_id": payload.paper_id}
+            )
             self.session.commit()
         count = self.session.exec(
-            select(func.count(CollectionItemTable.id)).where(CollectionItemTable.collection_id == collection_id)
+            select(func.count(CollectionItemTable.id)).where(
+                CollectionItemTable.collection_id == collection_id
+            )
         ).one()
         return {"id": collection.id, "name": collection.name, "paper_count": count}
 
@@ -386,7 +407,9 @@ class PaperService:
         merged.update({item.key: item.value for item in self.session.exec(select(SettingTable))})
         return merged
 
-    def update_settings(self, payload: SettingsPayload, defaults: dict[str, str] | None = None) -> dict:
+    def update_settings(
+        self, payload: SettingsPayload, defaults: dict[str, str] | None = None
+    ) -> dict:
         for key, value in payload.model_dump(exclude_none=True).items():
             setting = self.session.get(SettingTable, key)
             if setting is None:
@@ -400,16 +423,15 @@ class PaperService:
 
     def get_usage(self) -> dict:
         rows = self.session.exec(
-            select(UsageEventTable.kind, func.count(UsageEventTable.id)).group_by(UsageEventTable.kind)
+            select(UsageEventTable.kind, func.count(UsageEventTable.id)).group_by(
+                UsageEventTable.kind
+            )
         ).all()
         return {"events": {kind: count for kind, count in rows}}
 
     def export_library_json(self) -> LibraryExport:
         collections = self.list_collections()["results"]
-        papers = [
-            self._paper_input_from_detail(item)
-            for item in self.list_library()["results"]
-        ]
+        papers = [self._paper_input_from_detail(item) for item in self.list_library()["results"]]
         return LibraryExport(papers=papers, collections=collections)
 
     def export_library_bibtex(self) -> str:
@@ -457,7 +479,9 @@ class PaperService:
 
     def _find_existing(self, payload: PaperInput) -> PaperTable | None:
         if payload.doi:
-            existing = self.session.exec(select(PaperTable).where(PaperTable.doi == payload.doi)).first()
+            existing = self.session.exec(
+                select(PaperTable).where(PaperTable.doi == payload.doi)
+            ).first()
             if existing:
                 return existing
         return self.session.exec(
@@ -472,14 +496,18 @@ class PaperService:
             self.session.exec(select(PaperSourceTable).where(PaperSourceTable.paper_id == paper.id))
         )
         access_candidates = list(
-            self.session.exec(select(AccessCandidateTable).where(AccessCandidateTable.paper_id == paper.id))
+            self.session.exec(
+                select(AccessCandidateTable).where(AccessCandidateTable.paper_id == paper.id)
+            )
         )
         asset = self.session.exec(
             select(DocumentAssetTable).where(DocumentAssetTable.paper_id == paper.id)
         ).first()
         summary = self.session.exec(
             select(AnalysisArtifactTable)
-            .where(AnalysisArtifactTable.paper_id == paper.id, AnalysisArtifactTable.kind == "summary")
+            .where(
+                AnalysisArtifactTable.paper_id == paper.id, AnalysisArtifactTable.kind == "summary"
+            )
             .order_by(AnalysisArtifactTable.created_at.desc())
         ).first()
         return PaperDetailResponse(
@@ -544,7 +572,9 @@ class PaperService:
             "created_at": artifact.created_at,
         }
 
-    def _get_artifact(self, paper_id: str, *, kind: str, model: str) -> AnalysisArtifactTable | None:
+    def _get_artifact(
+        self, paper_id: str, *, kind: str, model: str
+    ) -> AnalysisArtifactTable | None:
         return self.session.exec(
             select(AnalysisArtifactTable).where(
                 AnalysisArtifactTable.paper_id == paper_id,

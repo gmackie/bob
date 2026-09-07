@@ -1,5 +1,6 @@
 "use client";
 
+import { DateTime } from "effect";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -31,10 +32,19 @@ function SecretsInner() {
 
       <section>
         <h2>Create</h2>
-        <form onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            create.mutate();
+          }}
+        >
           <label>
             Name{" "}
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
           </label>
           <label>
             Plaintext{" "}
@@ -45,19 +55,29 @@ function SecretsInner() {
               required
             />
           </label>
-          <button type="submit" disabled={create.isPending}>Create</button>
-          {create.error && <p role="alert">{(create.error as Error).message}</p>}
+          <button type="submit" disabled={create.isPending}>
+            Create
+          </button>
+          {create.error && (
+            <p role="alert">{(create.error as Error).message}</p>
+          )}
         </form>
       </section>
 
       <section>
         <h2>List (envelopes only — no plaintext)</h2>
         {secrets.isLoading && <p>Loading…</p>}
-        {secrets.error && <p role="alert">{(secrets.error as Error).message}</p>}
+        {secrets.error && (
+          <p role="alert">{(secrets.error as Error).message}</p>
+        )}
         <ul>
           {secrets.data?.map((s) => (
             <li key={s.id}>
-              <code>{s.name}</code> · uses {s.usesRemaining ?? "∞"} · created {new Date(s.createdAt).toLocaleString()}
+              <code>{s.name}</code> · uses {s.usesRemaining ?? "∞"} · created{" "}
+              {(DateTime.isDateTime(s.createdAt)
+                ? DateTime.toDateUtc(s.createdAt)
+                : new Date(s.createdAt)
+              ).toLocaleString()}
             </li>
           ))}
         </ul>

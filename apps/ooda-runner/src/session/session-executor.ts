@@ -90,6 +90,8 @@ export interface ExecuteSessionInput {
    */
   threadId?: string;
   systemPrompt?: string;
+  model?: string;
+  signal?: AbortSignal;
   onEvent: (event: AdapterEvent) => void;
 }
 
@@ -172,6 +174,7 @@ export class SessionExecutor {
         workspaceRoot: threadDir,
         systemPrompt: input.systemPrompt,
         images: input.images,
+        model: input.model,
       });
 
       // Capture output
@@ -190,7 +193,7 @@ export class SessionExecutor {
       // Execute
       let result: { exitCode: number };
       try {
-        result = await this.adapter.execute(command, wrappedOnEvent);
+        result = await this.adapter.execute(command, wrappedOnEvent, { signal: input.signal });
         await recordRun(result.exitCode === 0 ? "success" : "failure");
       } catch (error) {
         await recordRun("failure");

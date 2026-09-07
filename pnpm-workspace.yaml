@@ -12,9 +12,9 @@ catalog:
   '@tailwindcss/vite': ^4.1.16
   '@tanstack/react-form': ^1.23.8
   '@tanstack/react-query': ^5.90.8
-  '@trpc/client': ~11.7.2
-  '@trpc/server': 11.7.2
-  '@trpc/tanstack-react-query': ~11.7.2
+  '@trpc/client': ~11.8.1
+  '@trpc/server': 11.8.0
+  '@trpc/tanstack-react-query': ~11.8.1
   '@types/node': ^22.18.12
   '@types/ws': ^8.18.1
   '@vitejs/plugin-react': 5.1.0
@@ -29,8 +29,8 @@ catalog:
   tsx: 4.21.0
   typescript: ^5.9.3
   trpc-to-openapi: ^3.2.0
-  vite: 7.1.12
-  ws: ^8.18.0
+  vite: 7.3.5
+  ws: ^8.21.3
   zod: ^4.1.12
   zod-openapi: ^5.4.6
 
@@ -38,24 +38,12 @@ catalogs:
   react19:
     '@types/react': ~19.1.17
     '@types/react-dom': ~19.1.0
-    react: 19.2.5
-    react-dom: 19.2.5
+    react: 19.2.8
+    react-dom: 19.2.8
 
 linkWorkspacePackages: true
 
-onlyBuiltDependencies:
-  - '@swc/core'
-  - '@tailwindcss/oxide'
-  - electron
-  - esbuild
-  - node-pty
-  - sqlite3
-
-overrides:
-  '@types/minimatch': 5.1.2
-  lightningcss: 1.30.1
-  vite: 7.1.12
-  zod: ^4.1.12
+# Build approvals and security overrides are centralized in package.json#pnpm.
 
 publicHoistPattern:
   - '@ianvs/prettier-plugin-sort-imports'

@@ -4,6 +4,8 @@ import {
   access,
   cp,
   mkdir,
+  lstat,
+  realpath,
   readdir,
   readFile,
   rename,
@@ -12,6 +14,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { devNull } from "node:os";
 import { promisify } from "node:util";
 import { TRPCError } from "@trpc/server";
 
@@ -104,17 +107,53 @@ function asUtf8(value: string | Buffer | undefined): string {
   return typeof value === "string" ? value : value.toString("utf8");
 }
 
-function ensurePath(value: string, field = "path"): string {
-  if (!value.trim()) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: `${field} must not be empty`,
-    });
+function within(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+}
+
+async function ensurePath(ctx: HandlerContext, value: string, field = "path"): Promise<string> {
+  if (ctx.filesystem?.kind !== "local-operator" || ctx.filesystem.userId !== ctx.userId || !ctx.filesystem.roots.length) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Local operator filesystem capability required" });
   }
-  return path.resolve(value);
+  if (!value.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: `${field} must not be empty` });
+  const candidate = path.resolve(value);
+  for (const trusted of ctx.filesystem.roots) {
+    const lexicalRoot = path.resolve(trusted);
+    const root = await realpath(lexicalRoot);
+    const relative = within(lexicalRoot, candidate) ? path.relative(lexicalRoot, candidate)
+      : within(root, candidate) ? path.relative(root, candidate) : null;
+    if (relative === null) continue;
+    // Resolve the trusted root once, then reject symlinks at every component,
+    // including dangling links and a destination's nearest existing parent.
+    let current = root;
+    for (const part of relative.split(path.sep).filter(Boolean)) {
+      current = path.join(current, part);
+      try {
+        if ((await lstat(current)).isSymbolicLink()) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Filesystem symlink traversal is not allowed" });
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    }
+    return path.join(root, relative);
+  }
+  throw new TRPCError({ code: "FORBIDDEN", message: "Path is outside the local operator roots" });
+}
+
+async function requireMutablePath(ctx: HandlerContext, value: string): Promise<string> {
+  const result = await ensurePath(ctx, value);
+  const authority = ctx.filesystem;
+  if (!authority) throw new TRPCError({ code: "FORBIDDEN", message: "Local filesystem authority is required" });
+  for (const root of authority.roots) {
+    if (result === await realpath(root)) throw new TRPCError({ code: "FORBIDDEN", message: "Cannot replace or remove an operator root" });
+  }
+  return result;
 }
 
 function mapFsError(error: unknown): never {
+  if (error instanceof TRPCError) throw error;
   const err = error as NodeJS.ErrnoException;
   if (err.code === "ENOENT") {
     throw new TRPCError({ code: "NOT_FOUND", message: err.message });
@@ -139,9 +178,10 @@ function mapFsError(error: unknown): never {
 async function toEntry(
   parentPath: string,
   name: string,
-): Promise<FilesystemEntry> {
+): Promise<FilesystemEntry | null> {
   const entryPath = path.join(parentPath, name);
-  const info = await stat(entryPath);
+  const info = await lstat(entryPath);
+  if (info.isSymbolicLink()) return null;
   const modified = info.mtime.toISOString();
   return {
     name,
@@ -159,7 +199,7 @@ export async function filesystemList(
   input: FilesystemListInput,
 ): Promise<FilesystemEntry[]> {
   try {
-    const directoryPath = ensurePath(input.path);
+    const directoryPath = await ensurePath(_ctx, input.path);
     const names = await readdir(directoryPath);
     const visibleNames = input.showHidden
       ? names
@@ -169,7 +209,7 @@ export async function filesystemList(
       visibleNames.map((name) => toEntry(directoryPath, name)),
     );
 
-    return entries.sort((a, b) => {
+    return entries.filter((entry): entry is FilesystemEntry => entry !== null).sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
       return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
     });
@@ -183,7 +223,7 @@ export async function filesystemRead(
   input: FilesystemReadInput,
 ): Promise<{ content: string }> {
   try {
-    const filePath = ensurePath(input.path);
+    const filePath = await ensurePath(_ctx, input.path);
     const buffer = await readFile(filePath);
     return {
       content:
@@ -201,7 +241,7 @@ export async function filesystemWrite(
   input: FilesystemWriteInput,
 ): Promise<{ success: true }> {
   try {
-    const filePath = ensurePath(input.path);
+    const filePath = await ensurePath(_ctx, input.path);
     if (input.createDirs !== false) {
       await mkdir(path.dirname(filePath), { recursive: true });
     }
@@ -217,7 +257,7 @@ export async function filesystemDelete(
   input: FilesystemDeleteInput,
 ): Promise<{ success: true }> {
   try {
-    await rm(ensurePath(input.path), {
+    await rm(await requireMutablePath(_ctx, input.path), {
       recursive: input.recursive === true,
       force: false,
     });
@@ -232,7 +272,7 @@ export async function filesystemMkdir(
   input: FilesystemMkdirInput,
 ): Promise<{ success: true }> {
   try {
-    await mkdir(ensurePath(input.path), {
+    await mkdir(await ensurePath(_ctx, input.path), {
       recursive: input.recursive !== false,
     });
     return { success: true };
@@ -246,8 +286,10 @@ export async function filesystemMove(
   input: FilesystemMoveInput,
 ): Promise<{ success: true }> {
   try {
-    const source = ensurePath(input.source, "source");
-    const destination = ensurePath(input.destination, "destination");
+    const source = await requireMutablePath(_ctx, input.source);
+    const destination = await requireMutablePath(_ctx, input.destination);
+    await requireUnlinkedTree(source);
+    await requireUnlinkedTree(destination);
     await mkdir(path.dirname(destination), { recursive: true });
     await rename(source, destination);
     return { success: true };
@@ -256,13 +298,27 @@ export async function filesystemMove(
   }
 }
 
+async function requireUnlinkedTree(value: string): Promise<void> {
+  let info;
+  try { info = await lstat(value); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+  if (info.isSymbolicLink()) throw new TRPCError({ code: "FORBIDDEN", message: "Cannot copy or move a tree containing symlinks" });
+  if (info.isDirectory()) {
+    for (const child of await readdir(value)) await requireUnlinkedTree(path.join(value, child));
+  }
+}
+
 export async function filesystemCopy(
   _ctx: HandlerContext,
   input: FilesystemCopyInput,
 ): Promise<{ success: true }> {
   try {
-    const source = ensurePath(input.source, "source");
-    const destination = ensurePath(input.destination, "destination");
+    const source = await requireMutablePath(_ctx, input.source);
+    const destination = await requireMutablePath(_ctx, input.destination);
+    await requireUnlinkedTree(source);
+    await requireUnlinkedTree(destination);
     await mkdir(path.dirname(destination), { recursive: true });
     await cp(source, destination, { recursive: true, force: true });
     return { success: true };
@@ -296,7 +352,8 @@ async function walkSearch(
 ): Promise<void> {
   if (results.length >= maxResults) return;
 
-  const info = await stat(rootPath);
+  const info = await lstat(rootPath);
+  if (info.isSymbolicLink()) return;
   if (info.isFile()) {
     const result = await searchFile(rootPath, pattern);
     if (result) results.push(result);
@@ -326,7 +383,7 @@ export async function filesystemSearch(
   try {
     const results: FilesystemSearchResult[] = [];
     await walkSearch(
-      ensurePath(input.path),
+      await ensurePath(_ctx, input.path),
       input.pattern,
       input.maxResults ?? 100,
       results,
@@ -363,12 +420,24 @@ export async function filesystemGitStatus(
   input: FilesystemGitStatusInput,
 ): Promise<FilesystemGitStatusEntry[]> {
   try {
-    const rootPath = ensurePath(input.path);
+    const rootPath = await ensurePath(_ctx, input.path);
     await access(rootPath, constants.R_OK);
+    // Status must not discover a parent checkout or follow a worktree's Git
+    // metadata outside the grant. Disable executable fsmonitor hooks and
+    // ambient Git path overrides before inspecting repository metadata.
+    const gitEnv = { ...process.env };
+    for (const key of Object.keys(gitEnv)) {
+      if (key.startsWith("GIT_")) delete gitEnv[key];
+    }
+    Object.assign(gitEnv, { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_COUNT: "0", GIT_OPTIONAL_LOCKS: "0" });
+    const args = ["-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "-C", rootPath];
+    const { stdout: locations } = await execFileAsync("git", [...args, "rev-parse", "--path-format=absolute", "--show-toplevel", "--absolute-git-dir", "--git-common-dir"], { env: gitEnv, maxBuffer: 1024 * 1024 });
+    const directories = asUtf8(locations).trim().split(/\r?\n/);
+    for (const directory of directories) await ensurePath(_ctx, directory);
+    for (const directory of directories.slice(1)) await requireUnlinkedTree(directory);
     const { stdout } = await execFileAsync(
-      "git",
-      ["-C", rootPath, "status", "--porcelain=v1", "--untracked-files=all"],
-      { maxBuffer: 1024 * 1024 },
+      "git", [...args, "status", "--porcelain=v1", "--untracked-files=all"],
+      { env: gitEnv, maxBuffer: 1024 * 1024 },
     );
     const output = asUtf8(stdout);
 
@@ -378,6 +447,7 @@ export async function filesystemGitStatus(
       .map(parseGitStatusLine)
       .filter((entry): entry is FilesystemGitStatusEntry => entry !== null);
   } catch (error) {
+    if (error instanceof TRPCError) throw error;
     const err = error as NodeJS.ErrnoException & { stderr?: string | Buffer };
     if (err.code === "ENOENT") mapFsError(error);
     throw new TRPCError({

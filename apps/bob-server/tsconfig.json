@@ -9,7 +9,7 @@
     "lib": ["ES2022"],
     "skipLibCheck": true,
     "noEmit": false,
-    "declaration": false,
+    "declaration": true,
     "types": ["node"]
   },
   "include": ["src/**/*.ts"],

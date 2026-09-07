@@ -15,7 +15,6 @@
 import { Effect } from "effect";
 import type { HandlerContext } from "../handlers/context.js";
 import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
-import { BobNotFoundError } from "@gmacko/bob/contracts";
 import { makeSecretsRpcHandlers } from "../rpc-handlers/secrets.js";
 
 /**

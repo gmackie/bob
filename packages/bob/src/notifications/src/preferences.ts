@@ -110,8 +110,8 @@ export function isWithinQuietHours(quiet: QuietHours, now: Date): boolean {
 export function resolveNotificationDelivery(query: DeliveryQuery): boolean {
   const { type, channel, masters, overrides, quietHours, now = new Date() } = query;
 
+  if (!Object.hasOwn(DEFAULT_NOTIFICATION_PREFERENCES, type)) return false;
   const defaults = DEFAULT_NOTIFICATION_PREFERENCES[type];
-  if (!defaults) return false;
 
   const wanted = overrides[type]?.[channel] ?? defaults[channel];
   if (!wanted) return false;

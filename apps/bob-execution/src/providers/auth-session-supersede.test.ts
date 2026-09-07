@@ -15,10 +15,10 @@
  * Clicking "Sign in" IS the operator saying "start over". So a new start
  * supersedes the old session rather than refusing.
  */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
+import type { AuthPty } from "./auth-session.js";
 import { AuthSessionManager } from "./auth-session.js";
-import type { AuthPty } from "./auth-driver.js";
 
 function makeManager() {
   const killed: string[] = [];

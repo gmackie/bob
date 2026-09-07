@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const validateApiKeyMock = vi.fn();
 const getSessionMock = vi.fn();
@@ -27,6 +27,9 @@ vi.mock("~/auth/server", () => ({
 }));
 
 describe("device heartbeat route", () => {
+  let GET: typeof import("./route").GET;
+  // Load the full router graph once; route assertions keep the normal deadline.
+  beforeAll(async () => { ({ GET } = await import("./route")); }, 30_000);
   beforeEach(() => {
     validateApiKeyMock.mockReset();
     getSessionMock.mockReset();
@@ -36,7 +39,6 @@ describe("device heartbeat route", () => {
   });
 
   it("rejects requests without a bearer API key", async () => {
-    const { GET } = await import("./route");
 
     const response = await GET(
       new Request("https://bob.example.com/api/v1/device/heartbeat"),
@@ -63,7 +65,6 @@ describe("device heartbeat route", () => {
       },
     ]);
 
-    const { GET } = await import("./route");
 
     const response = await GET(
       new Request("https://bob.example.com/api/v1/device/heartbeat", {
@@ -102,7 +103,6 @@ describe("device heartbeat route", () => {
       },
     ]);
 
-    const { GET } = await import("./route");
 
     const response = await GET(
       new Request("https://bob.example.com/api/v1/device/heartbeat", {

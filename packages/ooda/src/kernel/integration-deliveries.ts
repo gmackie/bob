@@ -1,4 +1,5 @@
 import { and, asc, eq, gt, inArray, lt, lte, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import {
   ExternalReceiptV1Schema,
@@ -87,52 +88,83 @@ export async function claimExternalStatus(
   input: ClaimExternalStatusInputV1,
   options: {
     now?: Date;
+    eligibleOwnerIds?: string[];
     ownerEligible?: (ownerId: string) => boolean;
   } = {},
 ): Promise<ClaimExternalStatusResultV1> {
+  const links = alias(externalLinks, "status_link");
+  if (options.eligibleOwnerIds?.length === 0) return null;
   const now = options.now ?? new Date();
   const staleBefore = new Date(now.getTime() - input.leaseSeconds * 1_000);
-  return db.transaction(async (tx) => {
-    const candidates = await tx
-      .select({ link: externalLinks, ownerId: conversations.ownerId })
-      .from(externalLinks)
-      .innerJoin(
-        conversations,
-        eq(conversations.id, externalLinks.conversationId),
-      )
+  const claimable = and(
+    inArray(links.destination, input.destinations),
+    eq(links.status, "active"),
+    lte(links.nextStatusCheckAt, now),
+    or(
+      sql`${links.statusClaimedAt} is null`,
+      lt(links.statusClaimedAt, staleBefore),
+    ),
+    options.eligibleOwnerIds
+      ? inArray(conversations.ownerId, options.eligibleOwnerIds)
+      : undefined,
+  );
+  let cursor: { due: string; created: string; id: string } | undefined;
+  // Scan denied pages without locks; lock/revalidate only an eligible row.
+  // UUID is the final tie-breaker so equal timestamps cannot starve the tail.
+  while (true) {
+    const page = await db
+      .select({
+        link: links,
+        ownerId: conversations.ownerId,
+        due: sql<string>`${links.nextStatusCheckAt}::text`,
+        created: sql<string>`${links.createdAt}::text`,
+      })
+      .from(links)
+      .innerJoin(conversations, eq(conversations.id, links.conversationId))
       .where(
         and(
-          inArray(externalLinks.destination, input.destinations),
-          eq(externalLinks.status, "active"),
-          lte(externalLinks.nextStatusCheckAt, now),
-          or(
-            sql`${externalLinks.statusClaimedAt} is null`,
-            lt(externalLinks.statusClaimedAt, staleBefore),
-          ),
+          claimable,
+          cursor
+            ? sql`(${links.nextStatusCheckAt}, ${links.createdAt}, ${links.id}) > (${cursor.due}::timestamptz, ${cursor.created}::timestamptz, ${cursor.id}::uuid)`
+            : undefined,
         ),
       )
       .orderBy(
-        asc(externalLinks.nextStatusCheckAt),
-        asc(externalLinks.createdAt),
+        asc(links.nextStatusCheckAt),
+        asc(links.createdAt),
+        asc(links.id),
       )
-      .for("update", { skipLocked: true })
       .limit(20);
-    const candidate = candidates.find(
-      ({ ownerId }) => options.ownerEligible?.(ownerId) ?? true,
-    );
-    if (!candidate) return null;
-    const [claimed] = await tx
-      .update(externalLinks)
-      .set({
-        statusClaimedAt: now,
-        statusClaimedBy: input.runnerId,
-        statusError: null,
-        updatedAt: now,
-      })
-      .where(eq(externalLinks.id, candidate.link.id))
-      .returning();
-    return { link: mapExternalLink(claimed!) };
-  });
+    if (!page.length) return null;
+    for (const candidate of page) {
+      if (!(options.ownerEligible?.(candidate.ownerId) ?? true)) continue;
+      const result = await db.transaction(async (tx) => {
+        const [current] = await tx
+          .select({ link: links, ownerId: conversations.ownerId })
+          .from(links)
+          .innerJoin(conversations, eq(conversations.id, links.conversationId))
+          .where(and(claimable, eq(links.id, candidate.link.id)))
+          .for("update", { of: links, skipLocked: true })
+          .limit(1);
+        if (!current || !(options.ownerEligible?.(current.ownerId) ?? true))
+          return null;
+        const [claimed] = await tx
+          .update(links)
+          .set({
+            statusClaimedAt: now,
+            statusClaimedBy: input.runnerId,
+            statusError: null,
+            updatedAt: now,
+          })
+          .where(eq(links.id, current.link.id))
+          .returning();
+        return { link: mapExternalLink(claimed!) };
+      });
+      if (result) return result;
+    }
+    const last = page.at(-1)!;
+    cursor = { due: last.due, created: last.created, id: last.link.id };
+  }
 }
 
 export async function completeExternalStatus(
@@ -299,78 +331,102 @@ export async function claimIntegrationDelivery(
   ) {
     return null;
   }
+  const outbox = alias(integrationOutbox, "claim_outbox");
   const now = options.now ?? new Date();
   const staleBefore = new Date(now.getTime() - input.leaseSeconds * 1_000);
-  return db.transaction(async (tx) => {
-    const candidates = await tx
-      .select({ delivery: integrationOutbox, ownerId: conversations.ownerId })
-      .from(integrationOutbox)
-      .innerJoin(proposals, eq(proposals.id, integrationOutbox.proposalId))
-      .innerJoin(
-        conversations,
-        eq(conversations.id, proposals.conversationId),
-      )
+  const claimable = and(
+    inArray(outbox.destination, input.destinations),
+    options.eligibleOwnerIds
+      ? inArray(conversations.ownerId, options.eligibleOwnerIds)
+      : undefined,
+    options.eligibleProposalKinds
+      ? inArray(proposals.kind, options.eligibleProposalKinds)
+      : undefined,
+    lte(outbox.availableAt, now),
+    or(
+      eq(outbox.status, "pending"),
+      and(eq(outbox.status, "delivering"), lt(outbox.claimedAt, staleBefore)),
+    ),
+  );
+  let cursor: { due: string; created: string; id: string } | undefined;
+  while (true) {
+    const page = await db
+      .select({
+        delivery: outbox,
+        ownerId: conversations.ownerId,
+        due: sql<string>`${outbox.availableAt}::text`,
+        created: sql<string>`${outbox.createdAt}::text`,
+      })
+      .from(outbox)
+      .innerJoin(proposals, eq(proposals.id, outbox.proposalId))
+      .innerJoin(conversations, eq(conversations.id, proposals.conversationId))
       .where(
         and(
-          inArray(integrationOutbox.destination, input.destinations),
-          options.eligibleOwnerIds
-            ? inArray(conversations.ownerId, options.eligibleOwnerIds)
+          claimable,
+          cursor
+            ? sql`(${outbox.availableAt}, ${outbox.createdAt}, ${outbox.id}) > (${cursor.due}::timestamptz, ${cursor.created}::timestamptz, ${cursor.id}::uuid)`
             : undefined,
-          options.eligibleProposalKinds
-            ? inArray(proposals.kind, options.eligibleProposalKinds)
-            : undefined,
-          lte(integrationOutbox.availableAt, now),
-          or(
-            eq(integrationOutbox.status, "pending"),
-            and(
-              eq(integrationOutbox.status, "delivering"),
-              lt(integrationOutbox.claimedAt, staleBefore),
-            ),
-          ),
         ),
       )
-      .orderBy(
-        asc(integrationOutbox.availableAt),
-        asc(integrationOutbox.createdAt),
-      )
-      .for("update", { skipLocked: true })
+      .orderBy(asc(outbox.availableAt), asc(outbox.createdAt), asc(outbox.id))
       .limit(20);
-    const eligibleCandidates = candidates.map((candidate) => ({
-      ...candidate,
-      proposal: ProposalV1Schema.parse(candidate.delivery.payload.proposal),
-    }));
-    const candidate = eligibleCandidates.find(
-      ({ ownerId, proposal }) =>
-        options.ownerEligible?.(ownerId, proposal) ?? true,
-    );
-    if (!candidate) return null;
-
-    const proposalValue = candidate.proposal;
-    const attempt = candidate.delivery.attemptCount + 1;
-    const [claimed] = await tx
-      .update(integrationOutbox)
-      .set({
-        status: "delivering",
-        attemptCount: attempt,
-        claimedAt: now,
-        claimedBy: input.runnerId,
-        lastError: null,
-        updatedAt: now,
-      })
-      .where(eq(integrationOutbox.id, candidate.delivery.id))
-      .returning();
-    await tx.insert(deliveryAttempts).values({
-      outboxId: candidate.delivery.id,
-      attempt,
-      status: "started",
-      startedAt: now,
-    });
-    await tx
-      .update(proposals)
-      .set({ status: "delivering", updatedAt: now })
-      .where(eq(proposals.id, candidate.delivery.proposalId));
-    return { delivery: mapDelivery(claimed!), proposal: proposalValue };
-  });
+    if (!page.length) return null;
+    for (const candidate of page) {
+      const proposed = ProposalV1Schema.parse(
+        candidate.delivery.payload.proposal,
+      );
+      if (!(options.ownerEligible?.(candidate.ownerId, proposed) ?? true))
+        continue;
+      const result = await db.transaction(async (tx) => {
+        const [current] = await tx
+          .select({ delivery: outbox, ownerId: conversations.ownerId })
+          .from(outbox)
+          .innerJoin(proposals, eq(proposals.id, outbox.proposalId))
+          .innerJoin(
+            conversations,
+            eq(conversations.id, proposals.conversationId),
+          )
+          .where(and(claimable, eq(outbox.id, candidate.delivery.id)))
+          .for("update", { of: outbox, skipLocked: true })
+          .limit(1);
+        if (!current) return null;
+        const proposalValue = ProposalV1Schema.parse(
+          current.delivery.payload.proposal,
+        );
+        if (!(options.ownerEligible?.(current.ownerId, proposalValue) ?? true))
+          return null;
+        const attempt = current.delivery.attemptCount + 1;
+        const [claimed] = await tx
+          .update(outbox)
+          .set({
+            status: "delivering",
+            attemptCount: attempt,
+            claimedAt: now,
+            claimedBy: input.runnerId,
+            lastError: null,
+            updatedAt: now,
+          })
+          .where(eq(outbox.id, current.delivery.id))
+          .returning();
+        await tx
+          .insert(deliveryAttempts)
+          .values({
+            outboxId: current.delivery.id,
+            attempt,
+            status: "started",
+            startedAt: now,
+          });
+        await tx
+          .update(proposals)
+          .set({ status: "delivering", updatedAt: now })
+          .where(eq(proposals.id, current.delivery.proposalId));
+        return { delivery: mapDelivery(claimed!), proposal: proposalValue };
+      });
+      if (result) return result;
+    }
+    const last = page.at(-1)!;
+    cursor = { due: last.due, created: last.created, id: last.delivery.id };
+  }
 }
 
 export async function completeIntegrationDelivery(

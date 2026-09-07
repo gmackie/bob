@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .models import ChatConversation, ChatMessage
+from .models import ChatConversation
 from .providers import parse_chatgpt_export, parse_claude_export, parse_grok_export
 
 

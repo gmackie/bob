@@ -1,19 +1,21 @@
+import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 import { expoClient } from "@better-auth/expo/client";
 import { createAuthClient } from "better-auth/react";
 
+import { getAuthBaseUrl } from "~/config/env";
 import {
   createDevAuthSession,
   getDevAuthBypassCookie,
   isDevAuthBypassEnabled,
 } from "./dev-auth-bypass";
-import { getAuthBaseUrl } from "~/config/env";
+import { getMobileAuthScheme } from "./oauth";
 
 const realAuthClient = createAuthClient({
   baseURL: getAuthBaseUrl(),
   plugins: [
     expoClient({
-      scheme: "bob",
+      scheme: getMobileAuthScheme(Constants.expoConfig?.scheme),
       storagePrefix: "bob",
       storage: SecureStore,
     }),

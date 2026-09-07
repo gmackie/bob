@@ -28,9 +28,52 @@
       "@types/react": "19.1.17",
       "@types/react-dom": "19.1.0",
       "node-gyp": "^10.0.0",
-      "react": "19.2.5",
-      "react-dom": "19.2.5",
-      "lightningcss": "1.32.0"
+      "react": "19.2.8",
+      "react-dom": "19.2.8",
+      "lightningcss": "1.32.0",
+      "tar@<7.5.21": "7.5.21",
+      "h3@<1.15.9": "1.15.9",
+      "lodash@<4.18.0": "4.18.0",
+      "postcss@<8.5.23": "8.5.23",
+      "@xmldom/xmldom@<0.8.15": "0.8.15",
+      "ws@>=8 <8.21.0": "8.21.0",
+      "qs@<6.16.0": "6.16.0",
+      "kysely@>=0.28 <0.28.17": "0.28.17",
+      "brace-expansion@<2": "1.1.18",
+      "brace-expansion@>=2 <3": "2.1.4",
+      "brace-expansion@>=4 <6": "5.0.9",
+      "shell-quote@<1.9.0": "1.9.0",
+      "undici@>=6 <7": "6.28.0",
+      "undici@>=7 <8": "7.29.0",
+      "js-yaml@>=4 <4.3.1": "4.3.1",
+      "@babel/core@>=7 <7.29.6": "7.29.6",
+      "hono@<4.12.34": "4.12.34",
+      "dompurify@<3.4.13": "3.4.13",
+      "fast-uri@>=3 <3.1.6": "3.1.6",
+      "builder-util-runtime@<9.7.0": "9.7.0",
+      "app-builder-lib@>=26 <26.15.3": "26.15.3",
+      "ip-address@>=10 <10.3.1": "10.3.1",
+      "nanoid@>=3 <3.3.18": "3.3.18",
+      "@hono/node-server@<1.19.15": "1.19.15",
+      "browserslist@<4.28.7": "4.28.7",
+      "fflate@>=0.7 <0.8": "0.7.5",
+      "fflate@>=0.6 <0.7": "0.6.11",
+      "fflate@>=0.4 <0.5": "0.4.9",
+      "toml@>=4 <4.2.0": "4.2.0",
+      "@simplewebauthn/server@>=13 <13.3.2": "13.3.2",
+      "uuid@>=11 <12": "11.1.1",
+      "uuid@>=13 <14": "13.0.1",
+      "tmp@<0.2.7": "0.2.7",
+      "@better-auth/cli>drizzle-orm": "0.45.2",
+      "electron-builder-squirrel-windows": "26.15.3",
+      "react-native-markdown-display>markdown-it": "14.2.0",
+      "linkify-it@>=5 <5.0.2": "5.0.2",
+      "uuid@>=7 <11": "11.1.1",
+      "query-string>decode-uri-component": "0.5.0",
+      "effect>toml": "4.2.0",
+      "miniflare>sharp": "0.35.4",
+      "esbuild@>=0.27 <0.28.1": "0.28.1",
+      "@esbuild-kit/core-utils>esbuild": "0.25.12"
     },
     "onlyBuiltDependencies": [
       "@swc/core",
@@ -39,7 +82,23 @@
       "esbuild",
       "node-pty",
       "sqlite3"
-    ]
+    ],
+    "patchedDependencies": {
+      "image-size@1.2.1": "patches/image-size@1.2.1.patch",
+      "extract-zip@2.0.1": "patches/extract-zip@2.0.1.patch"
+    },
+    "packageExtensions": {
+      "drizzle-kit@0.31.10": {
+        "dependencies": {
+          "drizzle-orm": "^0.45.2"
+        }
+      },
+      "better-auth@1.4.0-beta.9": {
+        "dependencies": {
+          "drizzle-orm": "^0.45.2"
+        }
+      }
+    }
   },
   "devDependencies": {
     "@forgegraph/check-events": "^0.1.7",
@@ -48,7 +107,7 @@
     "@oxlint/plugins": "1.78.0",
     "oxlint": "1.78.0",
     "tsx": "catalog:",
-    "turbo": "^2.8.0",
+    "turbo": "^2.10.12",
     "typescript": "^5.9.0"
   }
 }

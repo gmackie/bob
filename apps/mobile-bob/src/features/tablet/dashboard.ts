@@ -1,5 +1,6 @@
-import { buildExecutionQueue, formatStatusLabel } from "./queue";
 import type { TabletQueueItem } from "./queue";
+import { appendWorkspaceParam } from "../planning/navigation";
+import { buildExecutionQueue, formatStatusLabel } from "./queue";
 
 export type ProviderKey = "claude" | "codex" | "grok" | "cursor-agent";
 export type DashboardTone = "default" | "warning" | "danger" | "success";
@@ -196,20 +197,41 @@ const ACTIVE_RUN_STATUSES = new Set([
   // Lease expired: contact lost, process fate unknown — still active.
   "host_unknown",
 ]);
-const COMPLETED_RUN_STATUSES = new Set(["completed", "done", "stopped", "idle"]);
-const FAILED_RUN_STATUSES = new Set(["failed", "error", "interrupted", "cancelled", "canceled"]);
+const COMPLETED_RUN_STATUSES = new Set([
+  "completed",
+  "done",
+  "stopped",
+  "idle",
+]);
+const FAILED_RUN_STATUSES = new Set([
+  "failed",
+  "error",
+  "interrupted",
+  "cancelled",
+  "canceled",
+]);
 const REVIEW_RUN_STATUSES = new Set(["in_review", "review"]);
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const WORK_ITEM_IDENTIFIER_PATTERN = /^[A-Za-z][A-Za-z0-9]*-\d+$/;
-const STARTING_SESSION_STATUSES = new Set(["starting", "provisioning", "pending"]);
+const STARTING_SESSION_STATUSES = new Set([
+  "starting",
+  "provisioning",
+  "pending",
+]);
 const FAILED_SESSION_STATUSES = new Set(["error", "failed", "interrupted"]);
 const QUEUED_WORK_STATUSES = new Set(["ready", "todo", "backlog", "draft"]);
 const REVIEW_WORK_STATUSES = new Set(["in_review", "review"]);
 const BLOCKED_WORK_STATUSES = new Set(["blocked"]);
 const FAILED_WORK_STATUSES = new Set(["error", "failed", "interrupted"]);
 const ACTIVE_WORK_STATUSES = new Set(["in_progress", "running"]);
-const DONE_WORK_STATUSES = new Set(["done", "completed", "cancelled", "canceled", "stopped"]);
+const DONE_WORK_STATUSES = new Set([
+  "done",
+  "completed",
+  "cancelled",
+  "canceled",
+  "stopped",
+]);
 const ACTIVE_AGENT_WORK_STATUSES = new Set([
   "queued",
   "running",
@@ -245,12 +267,6 @@ const COMPLETED_AGENT_OUTCOME_STATUSES = new Set([
   "stopped",
 ]);
 
-function appendWorkspaceParam(path: string, workspaceId?: string | null): string {
-  if (!workspaceId) return path;
-  const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}workspace=${encodeURIComponent(workspaceId)}`;
-}
-
 function getProvider(agentType: string): ProviderKey {
   const normalized = agentType.toLowerCase();
   if (normalized.includes("cursor")) return "cursor-agent";
@@ -259,9 +275,16 @@ function getProvider(agentType: string): ProviderKey {
   return "codex";
 }
 
-export function normalizeProviderKey(value: string | string[] | undefined): ProviderKey {
+export function normalizeProviderKey(
+  value: string | string[] | undefined,
+): ProviderKey {
   const raw = Array.isArray(value) ? value[0] : value;
-  if (raw === "claude" || raw === "grok" || raw === "cursor-agent" || raw === "cursor") {
+  if (
+    raw === "claude" ||
+    raw === "grok" ||
+    raw === "cursor-agent" ||
+    raw === "cursor"
+  ) {
     return raw === "cursor" ? "cursor-agent" : raw;
   }
   return "codex";
@@ -274,7 +297,9 @@ export function getTaskDashboardHeaderModel(): TaskDashboardHeaderModel {
   };
 }
 
-export function getProviderRunsScope(workspaceId?: string | null): ProviderRunsScope {
+export function getProviderRunsScope(
+  workspaceId?: string | null,
+): ProviderRunsScope {
   return workspaceId ? { mode: "workspace", workspaceId } : { mode: "all" };
 }
 
@@ -282,7 +307,9 @@ export function filterProviderRuns<T extends { agentType?: string | null }>(
   runs: T[],
   provider: ProviderKey,
 ): T[] {
-  return runs.filter((run) => getProvider(run.agentType ?? "codex") === provider);
+  return runs.filter(
+    (run) => getProvider(run.agentType ?? "codex") === provider,
+  );
 }
 
 export function buildProviderRunGroups<T extends ProviderDetailRun>(
@@ -358,7 +385,12 @@ export function buildProviderRunSectionModels<T extends ProviderDetailRun>(
   ];
 
   return sections
-    .filter((section) => section.key !== "other" || (options.includeEmptyOther ?? false) || section.runs.length > 0)
+    .filter(
+      (section) =>
+        section.key !== "other" ||
+        (options.includeEmptyOther ?? false) ||
+        section.runs.length > 0,
+    )
     .map((section) => ({
       key: section.key,
       title: section.title,
@@ -407,7 +439,10 @@ export function getProviderRunHref(
   workspaceId?: string | null,
 ): string {
   if (isResolvableWorkItemReference(run.workItemId)) {
-    return appendWorkspaceParam(`/work-items/${run.workItemId}?view=outcome`, workspaceId);
+    return appendWorkspaceParam(
+      `/work-items/${run.workItemId}?view=outcome`,
+      workspaceId,
+    );
   }
 
   return appendWorkspaceParam(`/runs/${run.id}`, workspaceId);
@@ -416,11 +451,14 @@ export function getProviderRunHref(
 export function getMobileProviderRunHref(
   run: ProviderDetailRun,
   workspaceId?: string | null,
-): string | null {
+) {
   const target = getProviderRunTarget(run);
 
   if (target.type === "work-item") {
-    return appendWorkspaceParam(`/work-items/${target.workItemId}?view=${target.view}`, workspaceId);
+    return appendWorkspaceParam(
+      `/work-items/${target.workItemId}?view=${target.view}`,
+      workspaceId,
+    );
   }
 
   if (target.type === "execution-session") {
@@ -430,7 +468,9 @@ export function getMobileProviderRunHref(
   return null;
 }
 
-export function getProviderRunTarget(run: ProviderDetailRun): ProviderRunTarget {
+export function getProviderRunTarget(
+  run: ProviderDetailRun,
+): ProviderRunTarget {
   if (run.sessionId && ACTIVE_RUN_STATUSES.has(run.status)) {
     return {
       type: "execution-session",
@@ -456,8 +496,13 @@ export function getProviderRunTarget(run: ProviderDetailRun): ProviderRunTarget 
   return { type: "none" };
 }
 
-function isResolvableWorkItemReference(value: string | null | undefined): value is string {
-  return Boolean(value && (UUID_PATTERN.test(value) || WORK_ITEM_IDENTIFIER_PATTERN.test(value)));
+function isResolvableWorkItemReference(
+  value: string | null | undefined,
+): value is string {
+  return Boolean(
+    value &&
+    (UUID_PATTERN.test(value) || WORK_ITEM_IDENTIFIER_PATTERN.test(value)),
+  );
 }
 
 function getProviderRunStatusTone(status: string): DashboardTone {
@@ -522,15 +567,18 @@ function buildProviderCard(
   const hasFailure = matchingSessions.some((session) =>
     FAILED_SESSION_STATUSES.has(session.status),
   );
-  const usageLimits = snapshot?.usageLimits ?? getDefaultProviderUsageLimits(provider);
+  const usageLimits =
+    snapshot?.usageLimits ?? getDefaultProviderUsageLimits(provider);
 
   return {
     provider,
-    label: provider === "cursor-agent"
-      ? "Cursor"
-      : provider.charAt(0).toUpperCase() + provider.slice(1),
+    label:
+      provider === "cursor-agent"
+        ? "Cursor"
+        : provider.charAt(0).toUpperCase() + provider.slice(1),
     activeCount,
-    queuedOrStartingCount: startingCount + (provider === "codex" ? queuedCount : 0),
+    queuedOrStartingCount:
+      startingCount + (provider === "codex" ? queuedCount : 0),
     limitLabel: snapshot ? "Capacity connected" : "Capacity not connected",
     statusLabel: hasFailure ? "Recent failure" : "Normal",
     tone: hasFailure ? "danger" : activeCount > 0 ? "success" : "default",
@@ -543,22 +591,47 @@ export function buildProviderCapacityCards(input: {
   workItems: TabletDashboardWorkItem[];
   capacitySnapshots?: ProviderCapacitySnapshot[];
 }): ProviderCapacityCard[] {
-  const queuedCount = input.workItems.filter((item) =>
-    item.kind === "task" && QUEUED_WORK_STATUSES.has(item.status),
+  const queuedCount = input.workItems.filter(
+    (item) => item.kind === "task" && QUEUED_WORK_STATUSES.has(item.status),
   ).length;
   const snapshots = new Map(
-    (input.capacitySnapshots ?? []).map((snapshot) => [snapshot.provider, snapshot]),
+    (input.capacitySnapshots ?? []).map((snapshot) => [
+      snapshot.provider,
+      snapshot,
+    ]),
   );
 
   return [
-    buildProviderCard("claude", input.sessions, queuedCount, snapshots.get("claude")),
-    buildProviderCard("codex", input.sessions, queuedCount, snapshots.get("codex")),
-    buildProviderCard("grok", input.sessions, queuedCount, snapshots.get("grok")),
-    buildProviderCard("cursor-agent", input.sessions, queuedCount, snapshots.get("cursor-agent")),
+    buildProviderCard(
+      "claude",
+      input.sessions,
+      queuedCount,
+      snapshots.get("claude"),
+    ),
+    buildProviderCard(
+      "codex",
+      input.sessions,
+      queuedCount,
+      snapshots.get("codex"),
+    ),
+    buildProviderCard(
+      "grok",
+      input.sessions,
+      queuedCount,
+      snapshots.get("grok"),
+    ),
+    buildProviderCard(
+      "cursor-agent",
+      input.sessions,
+      queuedCount,
+      snapshots.get("cursor-agent"),
+    ),
   ];
 }
 
-export function getProviderCapacityStatusLine(card: ProviderCapacityCard): string {
+export function getProviderCapacityStatusLine(
+  card: ProviderCapacityCard,
+): string {
   return `${card.limitLabel} · ${card.statusLabel}`;
 }
 
@@ -587,10 +660,14 @@ function parseProviderUsageLimits(summary: unknown): ProviderUsageLimit[] {
   const observed = (capacity as { observed?: unknown }).observed;
   if (observed && typeof observed === "object") {
     const usage = observed as { inputTokens?: unknown; outputTokens?: unknown };
-    const inputTokens = typeof usage.inputTokens === "number" ? usage.inputTokens : 0;
-    const outputTokens = typeof usage.outputTokens === "number" ? usage.outputTokens : 0;
+    const inputTokens =
+      typeof usage.inputTokens === "number" ? usage.inputTokens : 0;
+    const outputTokens =
+      typeof usage.outputTokens === "number" ? usage.outputTokens : 0;
     return [
-      buildProviderAllowanceLimit((capacity as { allowance?: unknown }).allowance),
+      buildProviderAllowanceLimit(
+        (capacity as { allowance?: unknown }).allowance,
+      ),
       buildProviderUsageLimit({
         label: "Bob observed usage",
         valueLabel: `${inputTokens + outputTokens} tokens`,
@@ -612,13 +689,15 @@ function parseProviderUsageLimits(summary: unknown): ProviderUsageLimit[] {
     };
     if (typeof candidate.label !== "string") return [];
 
-    return [buildProviderUsageLimit({
-      label: candidate.label,
-      remainingPercent: candidate.remainingPercent,
-      usedPercent: candidate.usedPercent,
-      valueLabel: candidate.valueLabel,
-      resetLabel: candidate.resetLabel,
-    })];
+    return [
+      buildProviderUsageLimit({
+        label: candidate.label,
+        remainingPercent: candidate.remainingPercent,
+        usedPercent: candidate.usedPercent,
+        valueLabel: candidate.valueLabel,
+        resetLabel: candidate.resetLabel,
+      }),
+    ];
   });
 }
 
@@ -641,7 +720,8 @@ function buildProviderAllowanceLimit(allowance: unknown): ProviderUsageLimit {
   ) {
     return buildProviderUsageLimit({ label: "Provider allowance" });
   }
-  const unit = typeof value.unit === "string" && value.unit ? ` ${value.unit}` : "";
+  const unit =
+    typeof value.unit === "string" && value.unit ? ` ${value.unit}` : "";
   return buildProviderUsageLimit({
     label: "Provider allowance",
     usedPercent: (value.used / value.limit) * 100,
@@ -681,12 +761,13 @@ function buildProviderUsageLimit(input: {
     usedPercent,
     barPercent: usedPercent ?? remainingPercent ?? 0,
     valueLabel,
-    resetLabel:
-      typeof input.resetLabel === "string" ? input.resetLabel : null,
+    resetLabel: typeof input.resetLabel === "string" ? input.resetLabel : null,
   };
 }
 
-function getDefaultProviderUsageLimits(provider: ProviderKey): ProviderUsageLimit[] {
+function getDefaultProviderUsageLimits(
+  provider: ProviderKey,
+): ProviderUsageLimit[] {
   return provider === "codex"
     ? [
         buildProviderUsageLimit({
@@ -702,17 +783,17 @@ function getDefaultProviderUsageLimits(provider: ProviderKey): ProviderUsageLimi
       ]
     : provider === "cursor-agent"
       ? [
-        buildProviderUsageLimit({
-          label: "Included usage",
-          remainingPercent: null,
-          resetLabel: null,
-        }),
-        buildProviderUsageLimit({
-          label: "On-demand spend",
-          remainingPercent: null,
-          resetLabel: null,
-        }),
-      ]
+          buildProviderUsageLimit({
+            label: "Included usage",
+            remainingPercent: null,
+            resetLabel: null,
+          }),
+          buildProviderUsageLimit({
+            label: "On-demand spend",
+            remainingPercent: null,
+            resetLabel: null,
+          }),
+        ]
       : [
           buildProviderUsageLimit({
             label: "Provider allowance",
@@ -771,7 +852,9 @@ export function buildTaskLaneSummaries(
 export const PROVIDER_CARD_MIN_WIDTH = 180;
 export const LANE_CARD_MIN_WIDTH = 132;
 
-export function getTaskDashboardLayout(screenWidth: number): TaskDashboardLayout {
+export function getTaskDashboardLayout(
+  screenWidth: number,
+): TaskDashboardLayout {
   // The right rail (Running now) costs 280pt + gutters; only keep it beside
   // the main column when 4 provider cards still fit at their minimum width.
   const showRightRail = screenWidth >= 1180;
@@ -803,21 +886,31 @@ export function getProviderCardBasis(input: {
   comfortableWidth?: number;
 }): number | undefined {
   const { rowWidth, cardCount, minWidth, gap } = input;
-  const comfortableWidth = input.comfortableWidth ?? PROVIDER_CARD_COMFORTABLE_WIDTH;
+  const comfortableWidth =
+    input.comfortableWidth ?? PROVIDER_CARD_COMFORTABLE_WIDTH;
   if (rowWidth <= 0 || cardCount <= 0) return undefined;
   // Only keep a single row when every card gets a comfortable width;
   // squeezing them to the bare minimum ellipsizes every label.
-  const fitsOneRow = cardCount * comfortableWidth + (cardCount - 1) * gap <= rowWidth;
+  const fitsOneRow =
+    cardCount * comfortableWidth + (cardCount - 1) * gap <= rowWidth;
   if (fitsOneRow) return undefined;
-  const perRow = Math.max(1, Math.min(2, Math.floor((rowWidth + gap) / (minWidth + gap))));
+  const perRow = Math.max(
+    1,
+    Math.min(2, Math.floor((rowWidth + gap) / (minWidth + gap))),
+  );
   // -1 guards against sub-pixel rounding pushing the last column to a new line.
   return Math.floor((rowWidth - gap * (perRow - 1)) / perRow) - 1;
 }
 
-export function getProviderCapacityAccessibilityLabel(card: ProviderCapacityCard): string {
+export function getProviderCapacityAccessibilityLabel(
+  card: ProviderCapacityCard,
+): string {
   const usage = card.usageLimits.map((limit) => {
-    const value = limit.valueLabel ??
-      (limit.remainingPercent === null ? "Unavailable" : `${limit.remainingPercent}% remaining`);
+    const value =
+      limit.valueLabel ??
+      (limit.remainingPercent === null
+        ? "Unavailable"
+        : `${limit.remainingPercent}% remaining`);
     return `${limit.label}: ${value}`;
   });
   return `${card.label}. ${usage.join(". ")}. Open provider detail`;
@@ -831,26 +924,38 @@ export function filterTaskLaneWorkItems(
   workItems: TabletDashboardWorkItem[],
   lane: TaskLaneKey,
 ): TabletDashboardWorkItem[] {
-  const ordered = buildExecutionQueue(workItems).filter((item) => item.kind === "task");
+  const ordered = buildExecutionQueue(workItems).filter(
+    (item) => item.kind === "task",
+  );
 
   switch (lane) {
     case "needs-attention":
       return ordered.filter((item) => {
         if (BLOCKED_WORK_STATUSES.has(item.status)) return true;
         if (FAILED_WORK_STATUSES.has(item.status)) return true;
-        return item.agentStatus ? FAILED_AGENT_WORK_STATUSES.has(item.agentStatus.status) : false;
+        return item.agentStatus
+          ? FAILED_AGENT_WORK_STATUSES.has(item.agentStatus.status)
+          : false;
       });
     case "ready":
       return ordered.filter(
         (item) =>
           QUEUED_WORK_STATUSES.has(item.status) &&
-          !(item.agentStatus && ACTIVE_AGENT_WORK_STATUSES.has(item.agentStatus.status)) &&
-          !(item.agentStatus && FAILED_AGENT_WORK_STATUSES.has(item.agentStatus.status)),
+          !(
+            item.agentStatus &&
+            ACTIVE_AGENT_WORK_STATUSES.has(item.agentStatus.status)
+          ) &&
+          !(
+            item.agentStatus &&
+            FAILED_AGENT_WORK_STATUSES.has(item.agentStatus.status)
+          ),
       );
     case "active":
       return ordered.filter((item) => {
         if (ACTIVE_WORK_STATUSES.has(item.status)) return true;
-        return item.agentStatus ? ACTIVE_AGENT_WORK_STATUSES.has(item.agentStatus.status) : false;
+        return item.agentStatus
+          ? ACTIVE_AGENT_WORK_STATUSES.has(item.agentStatus.status)
+          : false;
       });
     case "review":
       return ordered.filter((item) => REVIEW_WORK_STATUSES.has(item.status));
@@ -924,7 +1029,9 @@ export function buildRecentOutcomeWorkItems(
       if (DONE_WORK_STATUSES.has(item.status)) return true;
       if (FAILED_WORK_STATUSES.has(item.status)) return true;
       if (REVIEW_WORK_STATUSES.has(item.status)) return true;
-      return item.agentStatus ? TERMINAL_AGENT_OUTCOME_STATUSES.has(item.agentStatus.status) : false;
+      return item.agentStatus
+        ? TERMINAL_AGENT_OUTCOME_STATUSES.has(item.agentStatus.status)
+        : false;
     })
     .sort((left, right) => completionTime(right) - completionTime(left))
     .slice(0, limit);
@@ -961,7 +1068,10 @@ export function getRecentOutcomeRowModel(
         ? "danger"
         : "accent",
     agentLabel: workItem.agentStatus?.agentType ?? workItem.kind,
-    lastUpdatedLabel: formatLastUpdatedLabel(workItem.completedAt ?? workItem.updatedAt, now),
+    lastUpdatedLabel: formatLastUpdatedLabel(
+      workItem.completedAt ?? workItem.updatedAt,
+      now,
+    ),
     accessibilityLabel: `${workItem.identifier} ${workItem.title}, ${statusLabel}`,
   };
 }
@@ -974,7 +1084,9 @@ export function buildActiveWorkItems(
     .filter((item) => {
       if (item.kind !== "task") return false;
       if (ACTIVE_WORK_STATUSES.has(item.status)) return true;
-      return item.agentStatus ? ACTIVE_AGENT_WORK_STATUSES.has(item.agentStatus.status) : false;
+      return item.agentStatus
+        ? ACTIVE_AGENT_WORK_STATUSES.has(item.agentStatus.status)
+        : false;
     })
     .slice(0, limit);
 }
@@ -986,7 +1098,10 @@ export function buildRunningNowEntries(input: {
   limit?: number;
 }): RunningNowEntry[] {
   const now = input.now ?? new Date();
-  const activeWorkItems = buildActiveWorkItems(input.workItems, Number.MAX_SAFE_INTEGER);
+  const activeWorkItems = buildActiveWorkItems(
+    input.workItems,
+    Number.MAX_SAFE_INTEGER,
+  );
   const activeWorkItemIds = new Set(activeWorkItems.map((item) => item.id));
   const workItemEntries = activeWorkItems.map((item) => {
     const status = getTaskLaneRowStatus(item, "active");
@@ -1023,7 +1138,10 @@ export function buildRunningNowEntries(input: {
           ? trimmedTitle
           : session.agentType || session.sessionId;
       const statusLabel = formatStatusLabel(session.status);
-      const lastUpdatedLabel = formatLastUpdatedLabel(session.lastActivityAt, now);
+      const lastUpdatedLabel = formatLastUpdatedLabel(
+        session.lastActivityAt,
+        now,
+      );
 
       return {
         entry: {
@@ -1071,7 +1189,8 @@ export function getTaskLaneWorkItemTarget(
   if (
     lane === "needs-attention" &&
     (FAILED_WORK_STATUSES.has(workItem.status) ||
-      (workItem.agentStatus && FAILED_AGENT_WORK_STATUSES.has(workItem.agentStatus.status)))
+      (workItem.agentStatus &&
+        FAILED_AGENT_WORK_STATUSES.has(workItem.agentStatus.status)))
   ) {
     return {
       workItemId: workItem.id,

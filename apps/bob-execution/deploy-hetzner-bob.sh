@@ -9,6 +9,15 @@ REMOTE_DIR="/opt/bob/execution-daemon"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
+# node:sqlite is a runtime dependency. Verify the exact systemd executable as
+# its service user before building/staging or mutating any remote files. The
+# host system Node can be older than Bob's provisioned runtime.
+node -e 'if (Number(process.versions.node.split(".")[0]) < 24) process.exit(1); require("node:sqlite")'
+ssh "${SSH_TARGET}" /usr/sbin/runuser -u bob -- /home/bob/.local/bin/node <<'NODE_CHECK'
+if (Number(process.versions.node.split(".")[0]) < 24) process.exit(1);
+require("node:sqlite");
+NODE_CHECK
+
 echo "==> Building execution daemon..."
 cd "${REPO_ROOT}"
 pnpm --filter @bob/execution run build:daemon
@@ -23,19 +32,11 @@ mkdir -p "${DEPLOY_STAGE}/dist/daemon"
 cp apps/bob-execution/dist/daemon/*.js "${DEPLOY_STAGE}/dist/daemon/"
 cp apps/bob-execution/bob-execution.service "${DEPLOY_STAGE}/"
 
-cat > "${DEPLOY_STAGE}/package.json" << 'PKGJSON'
-{
-  "name": "bob-execution-daemon",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "ws": "^8.18.0"
-  }
-}
-PKGJSON
+cp "${SCRIPT_DIR}/daemon-runtime-package.json" "${DEPLOY_STAGE}/package.json"
+cp "${SCRIPT_DIR}/daemon-runtime-package-lock.json" "${DEPLOY_STAGE}/package-lock.json"
 
 cd "${DEPLOY_STAGE}"
-npm install --omit=dev 2>&1 | tail -5
+npm ci --omit=dev --ignore-scripts --registry=https://registry.npmjs.org 2>&1 | tail -5
 
 echo "==> Deploying to ${SSH_TARGET}:${REMOTE_DIR}..."
 ssh "${SSH_TARGET}" "mkdir -p ${REMOTE_DIR}"
@@ -44,6 +45,7 @@ rsync -avz --delete \
   "${DEPLOY_STAGE}/dist" \
   "${DEPLOY_STAGE}/node_modules" \
   "${DEPLOY_STAGE}/package.json" \
+  "${DEPLOY_STAGE}/package-lock.json" \
   "${SSH_TARGET}:${REMOTE_DIR}/"
 
 echo "==> Installing systemd service..."

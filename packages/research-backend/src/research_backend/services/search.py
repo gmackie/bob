@@ -21,12 +21,16 @@ class SearchResult(BaseModel):
     def dedupe_key(self) -> str:
         if self.doi:
             return self.doi.lower()
-        normalized_title = "".join(ch.lower() for ch in self.title if ch.isalnum() or ch.isspace()).strip()
+        normalized_title = "".join(
+            ch.lower() for ch in self.title if ch.isalnum() or ch.isspace()
+        ).strip()
         return f"{normalized_title}:{self.year or 'unknown'}"
 
     def merged(self, other: "SearchResult") -> "SearchResult":
         source_refs = [SourceRef.model_validate(item).model_dump() for item in self.source_refs]
-        access_candidates = [AccessCandidate.model_validate(item).model_dump() for item in self.access_candidates]
+        access_candidates = [
+            AccessCandidate.model_validate(item).model_dump() for item in self.access_candidates
+        ]
 
         for item in other.source_refs:
             candidate = SourceRef.model_validate(item).model_dump()
@@ -75,13 +79,19 @@ class SearchGateway:
                 warnings.append(ProviderWarning(provider=provider.name, message=str(exc)))
                 continue
             for raw_result in results:
-                result = raw_result if isinstance(raw_result, SearchResult) else SearchResult(**raw_result)
+                result = (
+                    raw_result
+                    if isinstance(raw_result, SearchResult)
+                    else SearchResult(**raw_result)
+                )
                 key = result.dedupe_key()
                 merged[key] = merged[key].merged(result) if key in merged else result
 
         resolved_results = list(merged.values())
         if self.access_resolver:
-            resolved_results = [self.access_resolver.annotate_result(result) for result in resolved_results]
+            resolved_results = [
+                self.access_resolver.annotate_result(result) for result in resolved_results
+            ]
 
         resolved_results.sort(key=lambda item: ((item.year or 0) * -1, item.title.lower()))
         return SearchResponse(results=resolved_results, warnings=warnings)

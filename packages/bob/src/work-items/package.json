@@ -27,11 +27,9 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@bob/auth": "workspace:*",
-    "@bob/git": "workspace:*",
     "@bob/projects": "workspace:*",
-    "@bob/tenancy": "workspace:*",
-    "drizzle-orm": "^0.44.7",
+    "@bob/schema": "workspace:*",
+    "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.8.3",
     "zod": "catalog:"
   },
@@ -42,7 +40,7 @@
     "eslint": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.11"
   },
   "prettier": "@bob/prettier-config"
 }

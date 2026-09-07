@@ -9,11 +9,6 @@
       "pnpm": "10.12.1",
       "ios": {
         "resourceClass": "m-medium"
-      },
-      "env": {
-        "SENTRY_ORG": "${SENTRY_ORG}",
-        "SENTRY_PROJECT": "${SENTRY_PROJECT_MOBILE}",
-        "SENTRY_AUTH_TOKEN": "${SENTRY_AUTH_TOKEN}"
       }
     },
     "development": {
@@ -23,10 +18,7 @@
       "env": {
         "APP_ENV": "development",
         "API_URL": "http://localhost:3000",
-        "AUTH_URL": "http://localhost:3000",
-        "SENTRY_DSN": "${EXPO_PUBLIC_SENTRY_DSN_DEV}",
-        "POSTHOG_KEY": "${EXPO_PUBLIC_POSTHOG_KEY_DEV}",
-        "POSTHOG_HOST": "${EXPO_PUBLIC_POSTHOG_HOST}"
+        "AUTH_URL": "http://localhost:3000"
       },
       "ios": {
         "simulator": true,
@@ -54,12 +46,7 @@
       "extends": "base",
       "distribution": "internal",
       "env": {
-        "APP_ENV": "staging",
-        "API_URL": "${STAGING_API_URL}",
-        "AUTH_URL": "${STAGING_API_URL}",
-        "SENTRY_DSN": "${EXPO_PUBLIC_SENTRY_DSN_STAGING}",
-        "POSTHOG_KEY": "${EXPO_PUBLIC_POSTHOG_KEY_STAGING}",
-        "POSTHOG_HOST": "${EXPO_PUBLIC_POSTHOG_HOST}"
+        "APP_ENV": "staging"
       },
       "ios": {
         "enterpriseProvisioning": "adhoc"
@@ -82,10 +69,7 @@
         "APP_ENV": "staging",
         "API_URL": "https://bob.blder.bot",
         "AUTH_URL": "https://bob.blder.bot",
-        "GATEWAY_PUBLIC_URL": "wss://ws.blder.bot",
-        "SENTRY_DSN": "${EXPO_PUBLIC_SENTRY_DSN_STAGING}",
-        "POSTHOG_KEY": "${EXPO_PUBLIC_POSTHOG_KEY_STAGING}",
-        "POSTHOG_HOST": "${EXPO_PUBLIC_POSTHOG_HOST}"
+        "GATEWAY_PUBLIC_URL": "wss://ws.blder.bot"
       },
       "channel": "beta-production"
     },
@@ -94,27 +78,23 @@
       "autoIncrement": true,
       "env": {
         "APP_ENV": "production",
-        "API_URL": "${PRODUCTION_API_URL}",
-        "AUTH_URL": "${PRODUCTION_API_URL}",
-        "SENTRY_DSN": "${EXPO_PUBLIC_SENTRY_DSN_PROD}",
-        "POSTHOG_KEY": "${EXPO_PUBLIC_POSTHOG_KEY_PROD}",
-        "POSTHOG_HOST": "${EXPO_PUBLIC_POSTHOG_HOST}"
+        "APP_VARIANT": "production"
       },
       "ios": {
-        "enterpriseProvisioning": "universal"
+        "buildConfiguration": "Release-production"
       },
       "android": {
         "buildType": "app-bundle"
       },
-      "channel": "production"
+      "channel": "production",
+      "distribution": "store"
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "appleId": "${APPLE_ID}",
-        "ascAppId": "${ASC_APP_ID}",
-        "appleTeamId": "${APPLE_TEAM_ID}"
+        "ascAppId": "6787732773",
+        "appleTeamId": "P4SWQXAB5H"
       },
       "android": {
         "serviceAccountKeyPath": "./google-services.json",
@@ -123,9 +103,8 @@
     },
     "beta": {
       "ios": {
-        "appleId": "${APPLE_ID}",
-        "ascAppId": "${ASC_APP_ID}",
-        "appleTeamId": "${APPLE_TEAM_ID}"
+        "ascAppId": "6787732773",
+        "appleTeamId": "P4SWQXAB5H"
       },
       "android": {
         "serviceAccountKeyPath": "./google-services.json",

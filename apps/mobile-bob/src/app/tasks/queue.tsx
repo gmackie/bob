@@ -85,7 +85,7 @@ export default function PriorityQueueScreen() {
           queryKey: trpc.workItem.list.queryKey(listInput),
         });
         if (typeof result.sessionId === "string") {
-          router.push(getSessionHref(result.sessionId, workspace?.id) as never);
+          router.push(getSessionHref(result.sessionId, workspace?.id));
         }
       },
     }),
@@ -132,7 +132,7 @@ export default function PriorityQueueScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back to tasks"
-            onPress={() => router.replace(getMobileTasksDashboardHref(workspace?.id) as never)}
+            onPress={() => router.replace(getMobileTasksDashboardHref(workspace?.id))}
             className="rounded-md px-3 py-2 active:opacity-70"
             style={{ backgroundColor: colors.secondary }}
           >
@@ -189,7 +189,7 @@ export default function PriorityQueueScreen() {
                 key={item.id}
                 item={item}
                 index={index}
-                onOpen={() => router.push(getMobileQueueWorkItemHref(item.id, workspace?.id) as never)}
+                onOpen={() => router.push(getMobileQueueWorkItemHref(item.id, workspace?.id))}
                 onMove={moveItem}
                 canMoveUp={canMoveQueueItem(orderedRows, item.id, "up")}
                 canMoveDown={canMoveQueueItem(orderedRows, item.id, "down")}

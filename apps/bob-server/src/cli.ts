@@ -12,6 +12,7 @@ export type CliArgs = {
   bootstrapFd: number | undefined;
   noBrowser: boolean;
   baseDir: string;
+  filesystemRoots?: string[];
 };
 
 export function parseArgs(argv: string[]): CliArgs {
@@ -35,6 +36,7 @@ export function parseArgs(argv: string[]): CliArgs {
       "Persistence dir",
       path.join(os.homedir(), ".bob"),
     )
+    .option("--filesystem-root <path>", "Grant local operator access to this root (repeatable)", (value: string, previous: string[]) => [...previous, value], [])
     .option("--no-browser", "Do not auto-open browser on start")
     .allowExcessArguments(false)
     .exitOverride();
@@ -51,6 +53,7 @@ export function parseArgs(argv: string[]): CliArgs {
       typeof opts.bootstrapFd === "number" ? opts.bootstrapFd : undefined,
     // commander inverts --no-browser into opts.browser=false
     noBrowser: opts.browser === false,
+    filesystemRoots: opts.filesystemRoot as string[],
     baseDir:
       typeof opts.baseDir === "string"
         ? opts.baseDir
@@ -71,12 +74,13 @@ export async function main(argv: string[]): Promise<void> {
       "--auth-token (or --bootstrap-fd) is required when --host is not loopback",
     );
   }
+  if (args.noBrowser && !authToken) throw new Error("Headless startup requires --auth-token or --bootstrap-fd");
   const resolvedToken = authToken ?? crypto.randomBytes(32).toString("hex");
 
-  const { url, stop } = await startServer({ ...args, authToken: resolvedToken });
+  const { url, stop, upstreamProcessGroupId } = await startServer({ ...args, authToken: resolvedToken });
 
   // Emit the ready line in a single JSON object so Electron can parse it.
-  console.log(JSON.stringify({ ready: true, url, authToken: resolvedToken }));
+  console.log(JSON.stringify({ ready: true, url, execution: "local-only", upstreamProcessGroupId }));
 
   const shutdown = async (signal: NodeJS.Signals) => {
     console.error(`[bob-server] received ${signal}, shutting down`);

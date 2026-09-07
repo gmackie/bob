@@ -25,7 +25,8 @@ what the evidence is:
 - [transcript:video-id] — transcript text from a YouTube video.
 - [video-metadata:video-id] — video title/channel/watch history only.
 - [watch-signal:query] — attention-data observation (e.g. "user rewatched X 3 times").
-- [chat:provider/canonical-id] — normalized exported conversation; useful for prior reasoning and synthesis, lower confidence than primary sources.
+- [chat:provider/canonical-id] — normalized exported conversation; \
+useful for prior reasoning and synthesis, lower confidence than primary sources.
 If evidence is metadata-only, do not fabricate content. Say what is known
 (that the user watched it, when, how often) and nothing more.
 Treat assistant chat output as provisional unless corroborated by stronger sources."""
@@ -41,7 +42,8 @@ Based on the index above, I've loaded these relevant articles:
 
 Answer the question using ONLY information from these articles.
 Cite sources with the provenance notation from the system prompt
-([wiki:slug], [transcript:video-id], [video-metadata:video-id], [watch-signal:query], [chat:provider/canonical-id]).
+([wiki:slug], [transcript:video-id], [video-metadata:video-id], [watch-signal:query], \
+[chat:provider/canonical-id]).
 If you can't answer from the available articles, explain what's missing."""
 
 

@@ -4,7 +4,12 @@ import { useState } from "react";
 
 import { Button } from "@gmacko/core/ui/button";
 
-export function LoginForm() {
+export function LoginForm({ localAccountAuth = false }: { localAccountAuth?: boolean }) {
+  if (localAccountAuth) return <LocalLoginForm />;
+  return <HostedLoginForm />;
+}
+
+function HostedLoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ssoEmail, setSsoEmail] = useState("");
@@ -125,4 +130,35 @@ export function LoginForm() {
       </form>
     </div>
   );
+}
+
+
+function LocalLoginForm() {
+  const [creating, setCreating] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setLoading(true); setError(null);
+    try {
+      const response = await fetch(`/api/auth/${creating ? "sign-up" : "sign-in"}/email`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.get("email"), password: form.get("password"), ...(creating ? { name: form.get("name") } : {}) }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(typeof result === "object" && result !== null && "message" in result && typeof result.message === "string" ? result.message : "Unable to sign in");
+      window.location.href = "/settings";
+    } catch (error) { setError(error instanceof Error ? error.message : "Unable to sign in"); setLoading(false); }
+  }
+  return <form onSubmit={submit} className="flex flex-col gap-4 rounded-2xl border border-border bg-secondary p-7">
+    <h2 className="text-2xl font-semibold">{creating ? "Create a local account" : "Sign in to this device"}</h2>
+    <p className="text-sm text-muted-foreground">This account and its data stay on this device. It is separate from your hosted Bob account.</p>
+    {creating && <label>Name<input className="mt-1 w-full rounded border p-2" name="name" required autoComplete="name" /></label>}
+    <label>Email<input className="mt-1 w-full rounded border p-2" name="email" type="email" required autoComplete="username" /></label>
+    <label>Password<input className="mt-1 w-full rounded border p-2" name="password" type="password" required minLength={8} autoComplete={creating ? "new-password" : "current-password"} /></label>
+    {error && <p role="alert" className="text-destructive">{error}</p>}
+    <Button disabled={loading} type="submit">{loading ? "Please wait…" : creating ? "Create account" : "Sign in"}</Button>
+    <Button disabled={loading} type="button" variant="outline" onClick={() => { setCreating(!creating); setError(null); }}>{creating ? "Use an existing local account" : "Create a local account"}</Button>
+  </form>;
 }

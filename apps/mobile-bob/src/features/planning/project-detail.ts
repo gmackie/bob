@@ -1,3 +1,5 @@
+import type { Href } from "expo-router";
+
 import { getWorkItemHref } from "./navigation";
 import { getMobileProjectQueryRefreshOptions } from "./project-status";
 
@@ -14,7 +16,7 @@ export interface ProjectWorkItemRow {
   title: string;
   subtitle: string;
   actionLabel: string;
-  href: string;
+  href: Extract<Href, string>;
 }
 
 export function getMobileProjectDetailQueryRefreshOptions(): {
@@ -81,10 +83,10 @@ export function getProjectWorkItemAction(input: {
 function getQueueForwardWorkItemHref(
   workItemId: string,
   workspaceId?: string | null,
-): string {
+) {
   const params = new URLSearchParams({ view: "queue" });
   if (workspaceId) params.set("workspace", workspaceId);
-  return `/work-items/${workItemId}?${params.toString()}`;
+  return `/work-items/${encodeURIComponent(workItemId)}?${params.toString()}` as const;
 }
 
 function formatProjectStatus(status: string): string {

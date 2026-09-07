@@ -275,7 +275,7 @@ export default function ProjectDetailScreen() {
                 title={item.title}
                 subtitle={item.subtitle}
                 right={<Text className="text-sm text-muted">{item.actionLabel}</Text>}
-                onPress={() => router.push(item.href as never)}
+                onPress={() => router.push(item.href)}
                 showDivider={index < workItemRows.length - 1}
               />
             ))

@@ -1,3 +1,4 @@
+import type * as ImportedModule0 from "../../root";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -11,7 +12,7 @@ import type { createTRPCContext } from "../../trpc.js";
 // single construction site so every caller.* call below stays fully typed.
 type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
 
-let appRouter: typeof import("../../root").appRouter;
+let appRouter: typeof ImportedModule0.appRouter;
 
 const queryMocks = {
   projectsFindFirst: vi.fn(),
@@ -201,7 +202,8 @@ describe("project router", () => {
       stale: false,
       discoveryStatus: "discovered",
     });
-    queryMocks.workspacesFindFirst.mockResolvedValueOnce({
+    // Authorization and result hydration each read this persisted workspace.
+    queryMocks.workspacesFindFirst.mockResolvedValue({
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       name: "Acme Workspace",
       slug: "acme",

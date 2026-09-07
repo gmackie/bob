@@ -33,7 +33,9 @@ const PROBE_CACHE_MS = 5 * 60_000;
 
 function runCommand(command: string, args: string[]) {
   return new Promise<{ code: number; stdout: string; stderr: string }>((resolve, reject) => {
-    execFile(command, args, { timeout: PROBE_TIMEOUT_MS }, (error, stdout, stderr) => {
+    // Read-only probes must end even when a provider CLI ignores SIGTERM.
+    // Interactive login sessions use their separate lifecycle below.
+    execFile(command, args, { timeout: PROBE_TIMEOUT_MS, killSignal: "SIGKILL" }, (error, stdout, stderr) => {
       if (error && "code" in error && error.code === "ENOENT") {
         reject(error instanceof Error ? error : new Error("command not found"));
         return;
@@ -100,7 +102,18 @@ export class AgentCredentials {
             child.stdout.on("data", (d: Buffer) => cb(d.toString()));
             child.stderr.on("data", (d: Buffer) => cb(d.toString()));
           },
-          onExit: (cb) => child.on("close", (code) => cb(code ?? 1)),
+          onExit: (cb) => {
+            // spawn failures are asynchronous error events, followed by close.
+            // Treat both as one failed login rather than an uncaught exception.
+            let finished = false;
+            const finish = (code: number) => {
+              if (finished) return;
+              finished = true;
+              cb(code);
+            };
+            child.on("error", () => finish(1));
+            child.once("close", (code) => finish(code ?? 1));
+          },
         };
       },
       onPrompt: (prompt: AuthPrompt) => {

@@ -1,3 +1,4 @@
+import { mobileTrustedOrigins } from "./trusted-origins";
 import { cache } from "react";
 import { headers } from "next/headers";
 
@@ -19,6 +20,10 @@ const publicSiteUrl =
   "http://localhost:5173";
 
 const baseUrl = safeOrigin(publicSiteUrl);
+export const localAccountAuth = process.env.BOB_DESKTOP_LOCAL_AUTH === "1" &&
+  process.env.BOB_DB_DRIVER === "pglite" &&
+  new URL(baseUrl).protocol === "http:" &&
+  ["127.0.0.1", "localhost", "[::1]"].includes(new URL(baseUrl).hostname);
 
 export const authBundle: AuthRuntimeBundle = createAuthRuntime({
   db,
@@ -35,12 +40,13 @@ export const authBundle: AuthRuntimeBundle = createAuthRuntime({
   appleClientId: process.env.AUTH_APPLE_ID,
   appleClientSecret: process.env.AUTH_APPLE_SECRET,
   appBundleIdentifier: "com.gmacko.bob",
-  cookieDomain: ".blder.bot",
+  cookieDomain: localAccountAuth ? undefined : ".blder.bot",
+  emailAndPassword: localAccountAuth ? { enabled: true, requireEmailVerification: false } : undefined,
   trustedOrigins: [
     "https://blder.bot",
     "https://bob.blder.bot",
     "https://ooda.blder.bot",
-    "bob://",
+    ...mobileTrustedOrigins,
     ...(process.env.TRUSTED_ORIGINS?.split(",").map((o) => o.trim()) ?? []),
   ],
 });

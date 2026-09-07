@@ -177,7 +177,7 @@ export class RunOutcomeLatch {
     if (!this.store) return;
     let stored: unknown;
     try {
-      stored = this.store.read() ?? {};
+      stored = this.store.read();
     } catch {
       return;
     }

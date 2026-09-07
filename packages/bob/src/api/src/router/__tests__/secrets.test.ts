@@ -1,3 +1,4 @@
+import type * as ImportedModule0 from "../../root";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -26,7 +27,7 @@ vi.mock("../../services/forgegraph/config", () => ({
   requireForgeGraphClient: () => forgeGraphSecretClient,
 }));
 
-let appRouter: typeof import("../../root").appRouter;
+let appRouter: typeof ImportedModule0.appRouter;
 
 // Loose "row bag" mocks: these hold whatever partial values each test's
 // insert()/update() call happens to pass, not the full DB row shape (no
@@ -40,6 +41,8 @@ const bindingRows: MockRow[] = [];
 const queryMocks = {
   chatConversationsFindFirst: vi.fn(),
   projectsFindFirst: vi.fn(),
+  workspaceMembersFindFirst: vi.fn(),
+  workspacesFindFirst: vi.fn(),
   sessionSecretsFindFirst: vi.fn(),
   sessionSecretsFindMany: vi.fn(),
   sessionSecretUsagesFindMany: vi.fn(),
@@ -53,6 +56,8 @@ const makeDbMock = () => ({
     projects: {
       findFirst: queryMocks.projectsFindFirst,
     },
+    workspaceMembers: { findFirst: queryMocks.workspaceMembersFindFirst },
+    workspaces: { findFirst: queryMocks.workspacesFindFirst },
     sessionSecrets: {
       findFirst: queryMocks.sessionSecretsFindFirst,
       findMany: queryMocks.sessionSecretsFindMany,
@@ -162,6 +167,7 @@ beforeEach(() => {
   bindingRows.length = 0;
   Object.values(queryMocks).forEach((mock) => mock.mockReset());
   queryMocks.sessionSecretUsagesFindMany.mockResolvedValue([]);
+  queryMocks.workspaceMembersFindFirst.mockResolvedValue({ id: "member-1" });
   forgeGraphSecretClient.upsertDeploySecret.mockReset();
   forgeGraphSecretClient.listDeploySecrets.mockReset();
 });
@@ -202,6 +208,8 @@ describe("session secret schema and router", () => {
       throw new Error("expected the created secret row to have a string id");
     }
 
+    queryMocks.chatConversationsFindFirst.mockResolvedValueOnce({ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", userId: "user-1" });
+    queryMocks.sessionSecretsFindFirst.mockResolvedValueOnce(secretRows[0]);
     await caller.secrets.markSecretUsed({
       secretId: createdSecretId,
       sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -385,7 +393,9 @@ describe("session secret schema and router", () => {
     expect(bindingRows).toHaveLength(1);
   });
 
-  it("promotes a session secret into a ForgeGraph deploy secret binding", async () => {
+  it.each(["owner", "member"])("allows a workspace %s to promote a session secret into a ForgeGraph deploy binding", async (role) => {
+    queryMocks.workspacesFindFirst.mockResolvedValue({ ownerUserId: role === "owner" ? "user-1" : "user-2" });
+    queryMocks.workspaceMembersFindFirst.mockResolvedValue(role === "owner" ? undefined : { id: "member-1" });
     const encrypted = encryptSessionSecretValue("ghp_secret", "secret-1");
     secretRows.push({
       id: "secret-1",

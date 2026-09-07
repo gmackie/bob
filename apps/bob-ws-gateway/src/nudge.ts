@@ -51,7 +51,7 @@ export interface WorkspaceEventConfig {
   authorize: (bearer: string) => Promise<InternalPrincipal | null>;
   resolveWorkspaceOwner: (workspaceId: string) => Promise<string | null>;
   onAudit?: (principal: InternalPrincipal, action: string, payload: Record<string, unknown>) => void;
-  onEvent: (body: WorkspaceEventBody) => void;
+  onEvent: (body: WorkspaceEventBody) => void | Promise<void>;
 }
 
 /**
@@ -174,14 +174,20 @@ export function createWorkspaceEventHandler(cfg: WorkspaceEventConfig) {
       return;
     }
 
-    cfg.onEvent({
-      type: event.type as ServerWorkspaceInvalidationType,
-      workspaceId: event.workspaceId,
-      entityId: typeof event.entityId === "string" ? event.entityId : undefined,
-      payload: event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
-        ? event.payload
-        : undefined,
-    });
+    try {
+      await cfg.onEvent({
+        type: event.type as ServerWorkspaceInvalidationType,
+        workspaceId: event.workspaceId,
+        entityId: typeof event.entityId === "string" ? event.entityId : undefined,
+        payload: event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+          ? event.payload
+          : undefined,
+      });
+    } catch {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Workspace event delivery failed" }));
+      return;
+    }
 
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: true }));

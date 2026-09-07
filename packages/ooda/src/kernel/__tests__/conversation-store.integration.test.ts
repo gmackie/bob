@@ -63,6 +63,36 @@ const HAS_DB = Boolean(DATABASE_URL);
 const sql = HAS_DB ? postgres(DATABASE_URL!, { max: 20 }) : null;
 const db = sql ? drizzle({ client: sql, schema, casing: "snake_case" }) : null;
 
+async function hostFixture(owner: string) {
+  const { conversation, branch } = await createConversation(db!, owner, {
+    title: owner,
+    hostProvider: "grok",
+    hostProfile: "daily",
+    sensitivityCeiling: "personal",
+    ttsPolicy: "allowed",
+    idempotencyKey: `${owner}-conversation`,
+  });
+  const user = await appendConversationEvent(db!, owner, {
+    conversationId: conversation.id,
+    branchId: branch.id,
+    type: "user_turn",
+    actor: { type: "user", id: owner },
+    payload: { display: owner },
+    sensitivity: "personal",
+    correlationId: owner,
+    idempotencyKey: `${owner}-user`,
+    occurredAt: "2026-09-06T10:00:00.000Z",
+  });
+  return {
+    conversation,
+    input: {
+      conversationId: conversation.id,
+      userEventId: user.event.id,
+      idempotencyKey: `${owner}-turn`,
+    },
+  };
+}
+
 function migration(name: string): string {
   return readFileSync(
     fileURLToPath(new URL(`../../../drizzle/${name}`, import.meta.url)),
@@ -106,6 +136,453 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
   afterAll(async () => {
     await sql!`drop schema if exists ooda cascade`;
     await sql!.end({ timeout: 2 });
+  });
+
+  it("rejects a new approval after server expiry despite a backdated client decision", async () => {
+    const owner = "owner-expiry";
+    const conversation = await createConversation(db!, owner, {
+      title: "Expired decision",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "expiry-conversation",
+    });
+    const created = await createProposal(db!, owner, {
+      conversationId: conversation.conversation.id,
+      kind: "bob_project",
+      destination: "bob",
+      risk: "durable_work",
+      preview: {
+        name: "Expiry",
+        desiredOutcome: "Reject stale decisions",
+        acceptanceCriteria: ["Server time wins"],
+      },
+      rationale: "Test expiry",
+      confidence: 1,
+      policySnapshot: { version: "v1" },
+      expiresAt: "2026-09-06T12:00:00.000Z",
+      idempotencyKey: "expiry-proposal",
+    });
+    await expect(
+      decideProposal(
+        db!,
+        owner,
+        {
+          proposalId: created.proposal.id,
+          decision: "approve",
+          expectedVersion: 1,
+          scope: "single_delivery",
+          decidedAt: "2026-09-05T12:00:00.000Z",
+        },
+        { now: () => new Date("2026-09-06T12:00:00.000Z") },
+      ),
+    ).rejects.toThrow(/expired/);
+    expect((await getProposal(db!, owner, created.proposal.id)).status).toBe(
+      "awaiting_approval",
+    );
+  });
+
+  it("uses server time for delivery despite clock skew and preserves accepted concurrent replay after expiry", async () => {
+    const owner = "owner-clock-skew";
+    const conversation = await createConversation(db!, owner, {
+      title: "Clock skew",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "clock-conversation",
+    });
+    const created = await createProposal(db!, owner, {
+      conversationId: conversation.conversation.id,
+      kind: "bob_project",
+      destination: "bob",
+      risk: "durable_work",
+      preview: {
+        name: "Clock",
+        desiredOutcome: "Immediate delivery",
+        acceptanceCriteria: ["Clock skew has no authority"],
+      },
+      rationale: "Test clock",
+      confidence: 1,
+      policySnapshot: { version: "v1" },
+      expiresAt: "2026-09-06T12:00:00.000Z",
+      idempotencyKey: "clock-proposal",
+    });
+    const input = {
+      proposalId: created.proposal.id,
+      decision: "approve" as const,
+      expectedVersion: 1,
+      scope: "single_delivery" as const,
+      decidedAt: "2030-01-01T12:00:00.000Z",
+    };
+    const now = new Date("2026-09-06T11:59:59.000Z");
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        decideProposal(db!, owner, input, { now: () => now }),
+      ),
+    );
+    expect(results.filter((r) => !r.replayed)).toHaveLength(1);
+    expect(new Set(results.map((r) => r.outboxId)).size).toBe(1);
+    const accepted = results.find((r) => !r.replayed)!;
+    const [outbox] = await db!
+      .select()
+      .from(schema.integrationOutbox)
+      .where(eq(schema.integrationOutbox.id, accepted.outboxId!));
+    expect(outbox!.availableAt).toEqual(now);
+    expect(outbox!.createdAt).toEqual(now);
+    expect(accepted.proposal.updatedAt).toBe(now.toISOString());
+    const [audit] = await db!
+      .select()
+      .from(schema.approvalDecisions)
+      .where(eq(schema.approvalDecisions.id, accepted.decisionId));
+    expect(audit!.decidedAt.toISOString()).toBe(input.decidedAt);
+    expect(
+      await decideProposal(db!, owner, input, {
+        now: () => new Date("2031-01-01"),
+      }),
+    ).toEqual({ ...accepted, replayed: true });
+    await expect(
+      decideProposal(
+        db!,
+        owner,
+        { ...input, decision: "reject" },
+        { now: () => now },
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("claims forks and older queued turns with canonical history and no unrelated native resume", async () => {
+    const owner = "owner-branch-queue";
+    const { conversation, branch } = await createConversation(db!, owner, {
+      title: "Branch lineage",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "branch-queue-conversation",
+    });
+    const append = async (content: string, branchId = branch.id) =>
+      appendConversationEvent(db!, owner, {
+        conversationId: conversation.id,
+        branchId,
+        type: "user_turn",
+        actor: { type: "user", id: owner },
+        payload: { display: content },
+        sensitivity: "personal",
+        correlationId: content,
+        idempotencyKey: content,
+        occurredAt: "2026-09-06T10:00:00.000Z",
+      });
+    const a = await append("A");
+    const b = await append("B must stay on the original branch");
+    // A later completed provider session exists, but the queued A watermark and fork C cannot inherit it.
+    await db!
+      .insert(schema.hostTurnExecutions)
+      .values({
+        ownerId: owner,
+        conversationId: conversation.id,
+        userEventId: b.event.id,
+        idempotencyKey: "native-b",
+        commandFingerprint: "fixture-b",
+        status: "completed",
+        provider: "grok",
+        nativeSessionId: "future-branch-b",
+        completedAt: new Date(),
+        leaseExpiresAt: new Date(),
+      });
+    await enqueueHostTurn(db!, owner, {
+      conversationId: conversation.id,
+      userEventId: a.event.id,
+      idempotencyKey: "older-a",
+    });
+    const old = await claimHostTurn(db!, {
+      runnerId: "old-runner",
+      providers: ["grok"],
+      leaseSeconds: 90,
+    });
+    expect(old!.messages).toEqual([{ role: "user", content: "A" }]);
+    expect(old!.runtimeSession).toBeUndefined();
+    const fork = await forkConversation(db!, owner, {
+      conversationId: conversation.id,
+      parentBranchId: branch.id,
+      forkEventId: a.event.id,
+      name: "C fork",
+      reason: "Test branch isolation",
+      idempotencyKey: "fork-c",
+    });
+    const c = await append("C", fork.branch.id);
+    await enqueueHostTurn(db!, owner, {
+      conversationId: conversation.id,
+      userEventId: c.event.id,
+      idempotencyKey: "fork-c-turn",
+    });
+    const claim = await claimHostTurn(db!, {
+      runnerId: "fork-runner",
+      providers: ["grok"],
+      leaseSeconds: 90,
+    });
+    expect(claim!.messages).toEqual([
+      { role: "user", content: "A" },
+      { role: "user", content: "C" },
+    ]);
+    expect(claim!.runtimeSession).toBeUndefined();
+    // Prevent these deliberately unfinished test runs from interfering with subsequent queue fixtures.
+    await db!
+      .update(schema.hostTurnExecutions)
+      .set({ status: "failed" })
+      .where(eq(schema.hostTurnExecutions.conversationId, conversation.id));
+  });
+
+  it("does not admit a queued host turn until its context is durable", async () => {
+    const owner = "owner-preparing";
+    const { conversation, branch } = await createConversation(db!, owner, {
+      title: "Preparation",
+      hostProvider: "grok",
+      hostProfile: "daily",
+      sensitivityCeiling: "personal",
+      ttsPolicy: "allowed",
+      idempotencyKey: "preparation-conversation",
+    });
+    const user = await appendConversationEvent(db!, owner, {
+      conversationId: conversation.id,
+      branchId: branch.id,
+      type: "user_turn",
+      actor: { type: "user", id: owner },
+      payload: { display: "Prepare safely" },
+      sensitivity: "personal",
+      correlationId: "preparing",
+      idempotencyKey: "preparation-user",
+      occurredAt: "2026-09-06T10:00:00.000Z",
+    });
+    let release!: () => void;
+    let entered!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const inspecting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const pending = enqueueHostTurn(
+      db!,
+      owner,
+      {
+        conversationId: conversation.id,
+        userEventId: user.event.id,
+        idempotencyKey: "preparation-turn",
+      },
+      {
+        contextSources: [
+          {
+            id: "held-source",
+            inspect: async () => {
+              entered();
+              await blocked;
+              return [];
+            },
+          },
+        ],
+      },
+    );
+    try {
+      await inspecting;
+      const rows = await db!
+        .select()
+        .from(schema.hostTurnExecutions)
+        .where(eq(schema.hostTurnExecutions.ownerId, owner));
+      expect(rows).toHaveLength(0);
+    } finally {
+      release();
+      await pending;
+    }
+    const receipt = await pending;
+    expect(receipt.contextPackId).toBeDefined();
+    await db!
+      .update(schema.hostTurnExecutions)
+      .set({ status: "failed" })
+      .where(eq(schema.hostTurnExecutions.id, receipt.executionId));
+  });
+
+  it("recovers a crash after context persistence into one claimable execution under concurrent replay", async () => {
+    const owner = "owner-admission-crash";
+    const { conversation, input } = await hostFixture(owner);
+    // Inject failure precisely at admission, after the real context transaction committed.
+    await sql!
+      .unsafe(`CREATE FUNCTION ooda.fail_test_admission() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW.owner_id = 'owner-admission-crash' THEN RAISE EXCEPTION 'simulated admission crash'; END IF; RETURN NEW; END $$`);
+    await sql!.unsafe(
+      `CREATE TRIGGER fail_test_admission BEFORE INSERT ON ooda.host_turn_executions FOR EACH ROW EXECUTE FUNCTION ooda.fail_test_admission()`,
+    );
+    try {
+      await expect(enqueueHostTurn(db!, owner, input)).rejects.toThrow();
+    } finally {
+      await sql!.unsafe(
+        "DROP TRIGGER fail_test_admission ON ooda.host_turn_executions",
+      );
+    }
+    expect(
+      await db!
+        .select()
+        .from(schema.hostTurnExecutions)
+        .where(eq(schema.hostTurnExecutions.ownerId, owner)),
+    ).toHaveLength(0);
+    expect(
+      await db!
+        .select()
+        .from(schema.contextPacks)
+        .where(eq(schema.contextPacks.conversationId, conversation.id)),
+    ).toHaveLength(1);
+    const receipts = await Promise.all(
+      Array.from({ length: 4 }, () => enqueueHostTurn(db!, owner, input)),
+    );
+    expect(receipts.filter((r) => !r.replayed)).toHaveLength(1);
+    expect(new Set(receipts.map((r) => r.executionId)).size).toBe(1);
+    expect(new Set(receipts.map((r) => r.contextPackId)).size).toBe(1);
+    const queued = receipts[0]!;
+    // Lost HTTP receipt after admission is replayable without changing selected context.
+    expect(await enqueueHostTurn(db!, owner, input)).toEqual({
+      ...queued,
+      replayed: true,
+    });
+    const first = await claimHostTurn(
+      db!,
+      { runnerId: "crash-first", providers: ["grok"], leaseSeconds: 90 },
+      { now: new Date("2026-09-06T10:01:00Z") },
+    );
+    const second = await claimHostTurn(
+      db!,
+      { runnerId: "crash-reclaimer", providers: ["grok"], leaseSeconds: 90 },
+      { now: new Date("2026-09-06T10:02:31Z") },
+    );
+    expect(second!.executionId).toBe(queued.executionId);
+    expect(second!.attempt).toBe(first!.attempt + 1);
+    const completion = {
+      executionId: queued.executionId,
+      runnerId: "crash-first",
+      leaseToken: first!.leaseToken,
+      provider: "grok" as const,
+      model: "test",
+      providerResponseId: "test-response",
+      response: '{"display":"Done","speakable":"Done"}',
+      failures: [],
+      idempotencyKey: "stale-completion",
+      occurredAt: "2026-09-06T10:02:32.000Z",
+    };
+    await expect(completeHostTurn(db!, completion)).rejects.toThrow(/lease/);
+    await completeHostTurn(db!, {
+      ...completion,
+      runnerId: "crash-reclaimer",
+      leaseToken: second!.leaseToken,
+      idempotencyKey: "current-completion",
+    });
+  });
+
+  it("repairs a historical null-context admission without a slow preparer overwriting its claimed winner", async () => {
+    const owner = "owner-legacy-preparation";
+    const { input } = await hostFixture(owner);
+    await db!
+      .insert(schema.hostTurnExecutions)
+      .values({
+        ownerId: owner,
+        conversationId: input.conversationId,
+        userEventId: input.userEventId,
+        idempotencyKey: input.idempotencyKey,
+        commandFingerprint: stableStringify(input),
+        status: "queued",
+        preferredProvider: "grok",
+        leaseExpiresAt: new Date(),
+      });
+    let release!: () => void;
+    let entered!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const inspecting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const slow = enqueueHostTurn(db!, owner, input, {
+      contextSources: [
+        {
+          id: "slow",
+          inspect: async () => {
+            entered();
+            await blocked;
+            return [];
+          },
+        },
+      ],
+    });
+    try {
+      await inspecting;
+      const fast = await enqueueHostTurn(db!, owner, input);
+      expect(fast.contextPackId).toBeDefined();
+      const claim = await claimHostTurn(db!, {
+        runnerId: "legacy-winner",
+        providers: ["grok"],
+        leaseSeconds: 90,
+      });
+      expect(claim!.executionId).toBe(fast.executionId);
+      release();
+      expect(await slow).toMatchObject({
+        executionId: fast.executionId,
+        contextPackId: fast.contextPackId,
+        status: "running",
+        replayed: true,
+      });
+      await db!
+        .update(schema.hostTurnExecutions)
+        .set({ status: "failed" })
+        .where(eq(schema.hostTurnExecutions.id, fast.executionId));
+    } finally {
+      release();
+      await slow;
+    }
+  });
+
+  it("claims external status beyond denied pages with disjoint concurrent leases", async () => {
+    const now = new Date("2020-01-01T12:00:00Z");
+    const allowed: string[] = [];
+    for (let index = 0; index < 25; index++) {
+      const owner = `status-page-${index}`;
+      const { conversation } = await hostFixture(owner);
+      const [link] = await db!.insert(schema.externalLinks).values({ conversationId: conversation.id,
+        destination: "bob", externalType: "task", externalId: `status-${index}`, deepLink: `https://test.invalid/${index}`,
+        idempotencyKey: `status-page-${index}`, status: "active", createdAt: new Date(now.getTime() + index), nextStatusCheckAt: now,
+      }).returning();
+      if (index >= 23) allowed.push(link!.id);
+    }
+    const results = await Promise.all(["status-a", "status-b"].map((runnerId) => claimExternalStatus(db!, {
+      runnerId, destinations: ["bob"], leaseSeconds: 90,
+    }, { now, ownerEligible: (owner) => owner === "status-page-23" || owner === "status-page-24" })));
+    expect(results.map((r) => r!.link.id).sort()).toEqual(allowed.sort());
+    await expect(claimExternalStatus(db!, { runnerId: "status-denied", destinations: ["bob"], leaseSeconds: 90 },
+      { now, ownerEligible: () => false })).resolves.toBeNull();
+    for (let index = 0; index < 25; index++) await db!.delete(schema.conversations).where(eq(schema.conversations.ownerId, `status-page-${index}`));
+  });
+
+  it("claims deliveries beyond callback-denied pages with disjoint concurrent leases", async () => {
+    const now = new Date("2020-01-02T12:00:00Z");
+    const allowed: string[] = [];
+    for (let index = 0; index < 25; index++) {
+      const owner = `delivery-page-${index}`;
+      const { conversation } = await hostFixture(owner);
+      const proposal = await createProposal(db!, owner, {
+        conversationId: conversation.id, kind: "bob_project", destination: "bob", risk: "durable_work",
+        preview: { name: owner, acceptanceCriteria: ["Fair callback selection"] },
+        rationale: "Test fairness", confidence: 1, policySnapshot: { version: "v1" }, idempotencyKey: owner,
+      });
+      const approved = await decideProposal(db!, owner, { proposalId: proposal.proposal.id, decision: "approve",
+        expectedVersion: 1, scope: "single_delivery", decidedAt: now.toISOString() }, { now: () => new Date(now.getTime() + index) });
+      if (index >= 23) allowed.push(approved.outboxId!);
+    }
+    const results = await Promise.all(["delivery-a", "delivery-b"].map((runnerId) => claimIntegrationDelivery(db!, {
+      runnerId, destinations: ["bob"], leaseSeconds: 90,
+    }, { now: new Date(now.getTime() + 100), ownerEligible: (owner) => owner === "delivery-page-23" || owner === "delivery-page-24" })));
+    expect(results.map((r) => r!.delivery.id).sort()).toEqual(allowed.sort());
+    await expect(claimIntegrationDelivery(db!, { runnerId: "delivery-denied", destinations: ["bob"], leaseSeconds: 90 },
+      { now, eligibleOwnerIds: [], ownerEligible: () => true })).resolves.toBeNull();
+    // This test covers acquisition; remove its pending fixtures before unrelated global-queue tests.
+    for (let index = 0; index < 25; index++) await db!.delete(schema.conversations).where(eq(schema.conversations.ownerId, `delivery-page-${index}`));
   });
 
   it("creates a replay-safe conversation with its root branch", async () => {
@@ -2183,7 +2660,9 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       rationale: "Proceed with this one project.",
       decidedAt: "2026-08-07T16:00:00.000Z",
     };
-    const approved = await decideProposal(db!, "owner-proposals", decision);
+    const approved = await decideProposal(db!, "owner-proposals", decision, {
+      now: () => new Date("2026-08-07T16:00:00.000Z"),
+    });
     const decisionReplay = await decideProposal(
       db!,
       "owner-proposals",
@@ -2267,7 +2746,7 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       expectedVersion: 1,
       scope: "single_delivery",
       decidedAt: "2026-08-07T17:00:00.000Z",
-    });
+    }, { now: () => new Date("2026-08-07T17:00:00.000Z") });
     const claim = await claimIntegrationDelivery(
       db!,
       { runnerId: "delivery-runner", destinations: ["bob"], leaseSeconds: 90 },
@@ -2418,7 +2897,7 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
         expectedVersion: 1,
         scope: "single_delivery",
         decidedAt,
-      });
+      }, { now: () => new Date(decidedAt) });
     };
 
     const denied = [];
@@ -2498,7 +2977,7 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       expectedVersion: 1,
       scope: "single_delivery",
       decidedAt: "2026-08-07T18:00:00.000Z",
-    });
+    }, { now: () => new Date("2026-08-07T18:00:00.000Z") });
     const claim = await claimIntegrationDelivery(
       db!,
       { runnerId: "repair-runner", destinations: ["bob"], leaseSeconds: 90 },

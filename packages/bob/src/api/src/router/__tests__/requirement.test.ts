@@ -1,3 +1,4 @@
+import type * as ImportedModule0 from "../../root";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { createTRPCContext } from "../../trpc.js";
@@ -60,7 +61,7 @@ const mockDb = {
 
 vi.mock("@bob/db/client", () => ({ db: mockDb }));
 
-let appRouter: typeof import("../../root").appRouter;
+let appRouter: typeof ImportedModule0.appRouter;
 
 const createCaller = () =>
   appRouter.createCaller({

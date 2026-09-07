@@ -57,7 +57,7 @@ describe("buildBlderLaunchSpec", () => {
     expect(spec.cwd).toBe(blderDir);
   });
 
-  it("uses the App Router production entry when present", () => {
+  it("starts the HTTP adapter even when the App Router handler exists", () => {
     const blderDir = makeTempDir();
     const entry = path.join(blderDir, "dist", "server", "index.js");
     fs.mkdirSync(path.dirname(entry), { recursive: true });
@@ -69,11 +69,11 @@ describe("buildBlderLaunchSpec", () => {
       useDev: false,
     });
 
-    expect(spec.args).toEqual([entry]);
+    expect(spec.args).toEqual([resolveVinextCli(blderDir), "start", "--port", "9876", "--hostname", "127.0.0.1"]);
     expect(resolveVinextCli(blderDir)).toContain("vinext/dist/cli.js");
   });
 
-  it("uses the Pages Router production entry when present", () => {
+  it("starts the HTTP adapter even when the Pages Router handler exists", () => {
     const blderDir = makeTempDir();
     const entry = path.join(blderDir, "dist", "server", "entry.js");
     fs.mkdirSync(path.dirname(entry), { recursive: true });
@@ -85,6 +85,6 @@ describe("buildBlderLaunchSpec", () => {
       useDev: false,
     });
 
-    expect(spec.args).toEqual([entry]);
+    expect(spec.args).toEqual([resolveVinextCli(blderDir), "start", "--port", "5555", "--hostname", "127.0.0.1"]);
   });
 });

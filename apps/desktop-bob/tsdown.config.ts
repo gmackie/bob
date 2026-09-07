@@ -7,6 +7,7 @@ const shared = {
   target: "node22",
   platform: "node" as const,
   external: ["electron"],
+  noExternal: [/^@bob\/server(?:\/|$)/, "ws"],
   dts: false,
   outExtensions: () => ({ js: ".js" }),
 };

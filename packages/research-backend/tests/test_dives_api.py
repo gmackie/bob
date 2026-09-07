@@ -435,10 +435,10 @@ def test_get_dive_results_edge_counts_grouped_by_kind(
     assert body["papers"] == []
 
 
-def test_get_dive_results_defaults_vault_schema_when_meta_missing(
+def test_get_dive_results_rejects_unresolved_vault_provenance(
     client: TestClient, session: FakeSession
 ) -> None:
-    """meta without vault_schema falls back to research_vault, not an error."""
+    """Historical missing identity must not read an invented vault."""
     exp_id = uuid.uuid4()
     session.add_response(
         "from graph_exploration",
@@ -457,7 +457,7 @@ def test_get_dive_results_defaults_vault_schema_when_meta_missing(
     session.add_response("research_vault.sources", _FakeResult(rows=[]))
 
     resp = client.get(f"/dives/{exp_id}/results")
-    assert resp.status_code == 200
+    assert resp.status_code == 409
     body = resp.json()
-    assert body["clusters"] == []
-    assert body["edge_counts_by_kind"] == {}
+    assert body["detail"]["code"] == "UNRESOLVED_VAULT_PROVENANCE"
+    assert not any("graph_edge" in statement.lower() for statement, _ in session.calls)
