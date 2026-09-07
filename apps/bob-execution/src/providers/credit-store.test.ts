@@ -45,8 +45,10 @@ describe("FileCreditStore", () => {
     expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 
-  it("does not throw when the directory is unwritable", () => {
-    const store = new FileCreditStore("/proc/nonexistent/credit-state.json");
+  it("does not throw when the parent cannot be a directory", () => {
+    const parentFile = join(dir, "not-a-directory");
+    writeFileSync(parentFile, "fixture");
+    const store = new FileCreditStore(join(parentFile, "credit-state.json"));
     expect(() => store.write({ grok: { detail: "x", at: "now" } })).not.toThrow();
   });
 });
