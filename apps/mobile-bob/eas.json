@@ -94,7 +94,8 @@
     "production": {
       "ios": {
         "ascAppId": "6787732773",
-        "appleTeamId": "P4SWQXAB5H"
+        "appleTeamId": "P4SWQXAB5H",
+        "bundleIdentifier": "com.gmacko.bob"
       },
       "android": {
         "serviceAccountKeyPath": "./google-services.json",
