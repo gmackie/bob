@@ -229,6 +229,7 @@ export class RunnerServer {
   private trpc: RunnerTRPCClient;
   private runnerId: string | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private pollInFlight = false;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private reapTimer: ReturnType<typeof setInterval> | null = null;
   private activeSessions = new Set<string>();
@@ -326,6 +327,10 @@ export class RunnerServer {
     return this.adapters.get(id);
   }
 
+  listAdapterIds(): string[] {
+    return [...new Set([...this.adapters.keys(), ...(process.env.XAI_API_KEY?.trim() ? ["grok"] : [])])];
+  }
+
   createExecutor(adapterId: string): SessionExecutor {
     const adapter = this.adapters.get(adapterId);
     if (!adapter) {
@@ -367,13 +372,24 @@ export class RunnerServer {
       void this.heartbeat();
     }, HEARTBEAT_INTERVAL_MS);
 
-    // Start session polling loop
+    // A slow tick must not pin another full session/event traversal every 2s.
+    // Keep terminal sessions in that traversal: users can promote their output.
     this.pollTimer = setInterval(() => {
-      void this.pollForSessions();
-      void this.agentJobWorker?.poll();
-      void this.hostTurnWorker?.poll();
-      void this.integrationDeliveryWorker?.poll();
-      void this.externalStatusWorker?.poll();
+      if (this.pollInFlight) return;
+      this.pollInFlight = true;
+      void (async () => {
+        try {
+          await this.pollForSessions();
+          await this.agentJobWorker?.poll();
+          await this.hostTurnWorker?.poll();
+          await this.integrationDeliveryWorker?.poll();
+          await this.externalStatusWorker?.poll();
+        } catch (error) {
+          console.warn("[runner] poll failed:", error);
+        } finally {
+          this.pollInFlight = false;
+        }
+      })();
     }, POLL_INTERVAL_MS);
 
     // Start stale-session reaper loop

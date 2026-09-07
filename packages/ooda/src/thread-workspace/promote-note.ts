@@ -1,6 +1,6 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -84,14 +84,26 @@ ${input.content}
   writeFileSync(provenancePath, JSON.stringify(provRecord, null, 2));
 
   // Atomic git commit: both note and provenance together
-  execSync("git add -A", { cwd: input.storageRoot, stdio: "pipe" });
-  execSync(
-    `git -c user.name="OODA" -c user.email="ooda@local" commit -m "Promote: ${input.title}"`,
+  execFileSync("git", ["add", "-A"], { cwd: input.storageRoot, stdio: "pipe" });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=OODA",
+      "-c",
+      "user.email=ooda@local",
+      "commit",
+      "-m",
+      `Promote: ${input.title}`,
+    ],
     { cwd: input.storageRoot, stdio: "pipe" },
   );
 
   try {
-    execSync("git push origin", { cwd: input.storageRoot, stdio: "pipe" });
+    execFileSync("git", ["push", "origin"], {
+      cwd: input.storageRoot,
+      stdio: "pipe",
+    });
   } catch {
     // offline — will sync on next push
   }
