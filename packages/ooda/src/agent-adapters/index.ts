@@ -55,3 +55,5 @@ export {
   type BuddyMcpSessionHandle,
   type McpServerConfig,
 } from "./buddy-mcp-server";
+
+export { spawnAdapterProcess, killProcessTree } from "./process-tree";

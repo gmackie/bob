@@ -10,8 +10,17 @@
  * commit subject. Everything here is best-effort: a watcher error degrades to
  * no events, never to a failed session.
  */
-import { openSync, closeSync, readSync, statSync, watch, type FSWatcher } from "node:fs";
-import { join } from "node:path";
+import {
+  openSync,
+  closeSync,
+  readSync,
+  statSync,
+  lstatSync,
+  readdirSync,
+  watch,
+  type FSWatcher,
+} from "node:fs";
+import { join, relative } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -25,7 +34,10 @@ const execFileAsync = promisify(execFile);
  * vitest/jest reporters, a bare `fg-check`) writes the package default `.fg/`.
  * Tail both so every producer streams.
  */
-export const CHECK_EVENT_FILES = [".bob/check-events.ndjson", ".fg/check-events.ndjson"] as const;
+export const CHECK_EVENT_FILES = [
+  ".bob/check-events.ndjson",
+  ".fg/check-events.ndjson",
+] as const;
 
 export const IGNORED_SEGMENTS = new Set([
   "node_modules",
@@ -67,7 +79,19 @@ export interface FileChangesPayload {
 /** Should a changed path be reported at all? */
 export function isInteresting(relPath: string): boolean {
   if (!relPath || relPath.startsWith("..")) return false;
-  return !relPath.split(/[\\/]/).some((seg) => IGNORED_SEGMENTS.has(seg) || seg.endsWith(".swp") || seg.endsWith("~"));
+  return !relPath
+    .split(/[\\/]/)
+    .some(
+      (seg) =>
+        IGNORED_SEGMENTS.has(seg) || seg.endsWith(".swp") || seg.endsWith("~"),
+    );
+}
+
+/** A directory name we must never descend into or register a watch for. */
+function isIgnoredDir(name: string): boolean {
+  return (
+    IGNORED_SEGMENTS.has(name) || name.endsWith(".swp") || name.endsWith("~")
+  );
 }
 
 /** Parse `git diff --numstat` output. Binary files show "-" and count as 0. */
@@ -86,7 +110,9 @@ export function parseNumstat(out: string): NumstatEntry[] {
 }
 
 /** Rank touched paths: most recently touched first, then most often. */
-export function rankTouched(counts: Map<string, { n: number; last: number }>): string[] {
+export function rankTouched(
+  counts: Map<string, { n: number; last: number }>,
+): string[] {
   return [...counts.entries()]
     .sort((a, b) => b[1].last - a[1].last || b[1].n - a[1].n)
     .map(([p]) => p)
@@ -118,7 +144,10 @@ export interface WorktreeWatchHandle {
 export function watchWorktree(opts: WorktreeWatchOptions): WorktreeWatchHandle {
   const interval = opts.intervalMs ?? 2000;
   const pending = new Map<string, { n: number; last: number }>();
-  let watcher: FSWatcher | null = null;
+  const watchers = new Map<
+    string,
+    { watcher: FSWatcher; ino: number; dev: number }
+  >();
   let timer: NodeJS.Timeout | null = null;
   let flushing = false;
   let stopped = false;
@@ -126,7 +155,11 @@ export function watchWorktree(opts: WorktreeWatchOptions): WorktreeWatchHandle {
   // Tail the check-events files regardless of fs events — cheap stat per
   // tick, read only the new bytes, carry a partial trailing line until its
   // newline arrives, and reset on truncation/recreation.
-  const tails = CHECK_EVENT_FILES.map((rel) => ({ path: join(opts.path, rel), offset: 0, carry: "" }));
+  const tails = CHECK_EVENT_FILES.map((rel) => ({
+    path: join(opts.path, rel),
+    offset: 0,
+    carry: "",
+  }));
   const drainCheckEvents = () => {
     if (!opts.emitCheck) return;
     for (const t of tails) {
@@ -163,23 +196,44 @@ export function watchWorktree(opts: WorktreeWatchOptions): WorktreeWatchHandle {
     pending.clear();
     try {
       const [numstat, last] = await Promise.all([
-        execFileAsync("git", ["diff", "--numstat", `${opts.baseBranch}...HEAD`], { cwd: opts.path, timeout: 5000 })
+        execFileAsync(
+          "git",
+          ["diff", "--numstat", `${opts.baseBranch}...HEAD`],
+          { cwd: opts.path, timeout: 5000 },
+        )
           .then((r) => r.stdout)
           .catch(() => ""),
-        execFileAsync("git", ["log", "-1", "--format=%s"], { cwd: opts.path, timeout: 5000 })
+        execFileAsync("git", ["log", "-1", "--format=%s"], {
+          cwd: opts.path,
+          timeout: 5000,
+        })
           .then((r) => r.stdout.trim() || null)
           .catch(() => null),
       ]);
       // Uncommitted edits: add the working-tree diff on top of committed ahead-of-base.
-      const wt = await execFileAsync("git", ["diff", "--numstat"], { cwd: opts.path, timeout: 5000 })
+      const wt = await execFileAsync("git", ["diff", "--numstat"], {
+        cwd: opts.path,
+        timeout: 5000,
+      })
         .then((r) => r.stdout)
         .catch(() => "");
       const merged = new Map<string, NumstatEntry>();
       for (const e of [...parseNumstat(numstat), ...parseNumstat(wt)]) {
         const cur = merged.get(e.path);
-        merged.set(e.path, cur ? { path: e.path, added: cur.added + e.added, removed: cur.removed + e.removed } : e);
+        merged.set(
+          e.path,
+          cur
+            ? {
+                path: e.path,
+                added: cur.added + e.added,
+                removed: cur.removed + e.removed,
+              }
+            : e,
+        );
       }
-      const entries = [...merged.values()].sort((a, b) => b.added + b.removed - (a.added + a.removed));
+      const entries = [...merged.values()].sort(
+        (a, b) => b.added + b.removed - (a.added + a.removed),
+      );
       opts.emit({
         touched,
         files: entries.length,
@@ -191,26 +245,100 @@ export function watchWorktree(opts: WorktreeWatchOptions): WorktreeWatchHandle {
         baseBranch: opts.baseBranch,
       });
     } catch (err) {
-      opts.log?.(`[worktree-watch] flush failed: ${err instanceof Error ? err.message : String(err)}`);
+      opts.log?.(
+        `[worktree-watch] flush failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     } finally {
       flushing = false;
     }
   };
 
+  // Watch each directory non-recursively, walking the tree ourselves and
+  // skipping IGNORED_SEGMENTS (node_modules, .git, dist, ...) at EVERY level. A
+  // single recursive fs.watch registers a descriptor per directory — ~50k on a
+  // big JS monorepo's node_modules — which exhausted inotify (ENOSPC) and leaked
+  // ~1GB of heap per session, OOM-crashing the runner. Skipping the heavy dirs
+  // keeps this to a few hundred watches.
+  const dropTree = (dir: string): void => {
+    for (const [path, entry] of watchers) {
+      if (path !== dir && !path.startsWith(`${dir}/`)) continue;
+      entry.watcher.close();
+      watchers.delete(path);
+    }
+  };
+  const watchDir = (dir: string): void => {
+    if (stopped) return;
+    let identity;
+    try {
+      identity = lstatSync(dir);
+    } catch {
+      dropTree(dir);
+      return;
+    }
+    if (!identity.isDirectory()) {
+      dropTree(dir);
+      return;
+    }
+    const previous = watchers.get(dir);
+    if (previous?.ino === identity.ino && previous.dev === identity.dev) return;
+    if (previous) dropTree(dir);
+    let w: FSWatcher;
+    try {
+      w = watch(dir, (event, filename) => {
+        if (!filename) return;
+        const name = filename.toString();
+        const full = join(dir, name);
+        const rel = relative(opts.path, full);
+        if (isInteresting(rel)) {
+          const cur = pending.get(rel);
+          pending.set(rel, { n: (cur?.n ?? 0) + 1, last: Date.now() });
+        }
+        // A newly created directory needs its own watch (a non-recursive watch
+        // does not see into it) — walk it, still skipping ignored dirs.
+        if (event === "rename" && !isIgnoredDir(name)) {
+          try {
+            if (lstatSync(full).isDirectory()) walk(full);
+          } catch {
+            // A removed inode must not block registration at the same path.
+            dropTree(full);
+          }
+        }
+      });
+    } catch (err) {
+      opts.log?.(
+        `[worktree-watch] watch(${dir}) failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
+    w.on("error", (err) => {
+      dropTree(dir);
+      opts.log?.(
+        `[worktree-watch] watcher error (file events off for this dir): ${err.message}`,
+      );
+    });
+    watchers.set(dir, { watcher: w, ino: identity.ino, dev: identity.dev });
+  };
+
+  const walk = (dir: string): void => {
+    watchDir(dir);
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.isDirectory() && !isIgnoredDir(e.name)) walk(join(dir, e.name));
+    }
+  };
+
   try {
-    watcher = watch(opts.path, { recursive: true }, (_event, filename) => {
-      if (!filename) return;
-      const rel = filename.toString();
-      if (!isInteresting(rel)) return;
-      const cur = pending.get(rel);
-      pending.set(rel, { n: (cur?.n ?? 0) + 1, last: Date.now() });
-    });
-    watcher.on("error", (err) => {
-      opts.log?.(`[worktree-watch] watcher error (file events off for this session): ${err.message}`);
-    });
+    walk(opts.path);
     timer = setInterval(() => void flush(), interval);
   } catch (err) {
-    opts.log?.(`[worktree-watch] could not start: ${err instanceof Error ? err.message : String(err)}`);
+    opts.log?.(
+      `[worktree-watch] could not start: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   return {
@@ -219,11 +347,14 @@ export function watchWorktree(opts: WorktreeWatchOptions): WorktreeWatchHandle {
       drainCheckEvents();
       stopped = true;
       if (timer) clearInterval(timer);
-      try {
-        watcher?.close();
-      } catch {
-        /* ignore */
+      for (const entry of watchers.values()) {
+        try {
+          entry.watcher.close();
+        } catch {
+          /* ignore */
+        }
       }
+      watchers.clear();
     },
   };
 }
