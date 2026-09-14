@@ -148,6 +148,13 @@
       "when": 1786476478004,
       "tag": "0020_reconcile_migrated_agent_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1789408850460,
+      "tag": "0021_session_model_effort",
+      "breakpoints": true
     }
   ]
 }

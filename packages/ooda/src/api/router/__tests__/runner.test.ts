@@ -105,6 +105,50 @@ describe("runnerRouter user-facing enqueue mutations", () => {
     ]);
   });
 
+  it("stores a requested model and reasoning effort on the session", async () => {
+    vi.stubEnv("OODA_RUNNER_SECRET", "runner-secret");
+    const session = { id: "session-2" };
+    const { db, inserted } = createInsertDb([session]);
+    const caller = createCaller({ db });
+
+    await caller.runner.sendPrompt({
+      threadId: "11111111-1111-4111-8111-111111111111",
+      runnerId: "22222222-2222-4222-8222-222222222222",
+      adapterId: "claude",
+      toolProfileId: "default",
+      prompt: "Write the arc.",
+      model: "sonnet",
+      reasoningEffort: "medium",
+    });
+
+    expect(inserted[0]).toEqual({
+      threadId: "11111111-1111-4111-8111-111111111111",
+      runnerId: "22222222-2222-4222-8222-222222222222",
+      adapterId: "claude",
+      toolProfileId: "default",
+      model: "sonnet",
+      reasoningEffort: "medium",
+      status: "pending",
+    });
+  });
+
+  it("rejects a reasoning effort the adapters do not understand", async () => {
+    vi.stubEnv("OODA_RUNNER_SECRET", "runner-secret");
+    const { db } = createInsertDb([{ id: "session-3" }]);
+    const caller = createCaller({ db });
+    await expect(
+      caller.runner.sendPrompt({
+        threadId: "11111111-1111-4111-8111-111111111111",
+        runnerId: "22222222-2222-4222-8222-222222222222",
+        adapterId: "claude",
+        toolProfileId: "default",
+        prompt: "x",
+        // SAFETY: deliberately invalid input to exercise the zod boundary.
+        reasoningEffort: "maximum" as "high",
+      }),
+    ).rejects.toThrow();
+  });
+
   it("lets an authenticated client request promotion without the runner secret", async () => {
     vi.stubEnv("OODA_RUNNER_SECRET", "runner-secret");
     const event = { id: "event-1" };

@@ -76,6 +76,13 @@ export const runnerSession = pgTable("runner_session", (t) => ({
     .references(() => runnerDevice.id, { onDelete: "cascade" }),
   adapterId: t.varchar({ length: 64 }).notNull(),
   toolProfileId: t.varchar({ length: 64 }).notNull(),
+  /**
+   * Model the dispatcher asked for, passed to the adapter CLI. Null = the
+   * adapter's own default, which is every session before this column.
+   */
+  model: t.varchar({ length: 128 }),
+  /** Reasoning effort the dispatcher asked for: low | medium | high. */
+  reasoningEffort: t.varchar({ length: 16 }),
   status: sessionStatusEnum().notNull().default("pending"),
   startedAt: t.timestamp({ mode: "date", withTimezone: true }),
   completedAt: t.timestamp({ mode: "date", withTimezone: true }),

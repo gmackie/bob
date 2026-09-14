@@ -690,6 +690,8 @@ export class RunnerServer {
     threadId: string;
     adapterId: string;
     toolProfileId: string;
+    model?: string | null;
+    reasoningEffort?: string | null;
   }): Promise<void> {
     console.log(`[runner] executing session ${session.id}`);
 
@@ -757,6 +759,12 @@ export class RunnerServer {
         prompt: promptEvent.content,
         images: promptImages,
         toolProfileId: session.toolProfileId,
+        // The dispatcher's per-session model and effort (null on sessions
+        // created before the columns existed: the adapter default applies).
+        ...(session.model ? { model: session.model } : {}),
+        ...(isReasoningEffort(session.reasoningEffort)
+          ? { reasoningEffort: session.reasoningEffort }
+          : {}),
         onEvent: (event) => {
           if (event.type === "stdout") {
             bobLog += event.data;
@@ -980,4 +988,11 @@ export class RunnerServer {
     this.externalStatusWorker = null;
     await this.buddyMcpServer.stop();
   }
+}
+
+/** A stored session effort the adapters understand; anything else is dropped. */
+function isReasoningEffort(
+  value: string | null | undefined,
+): value is "low" | "medium" | "high" {
+  return value === "low" || value === "medium" || value === "high";
 }
