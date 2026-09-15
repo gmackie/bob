@@ -1,20 +1,22 @@
+import { initTelemetry, isTelemetryEnabled } from "@gmacko/core/telemetry/node";
 import * as Sentry from "@sentry/node";
+import { SentryPropagator } from "@sentry/opentelemetry";
 import { PostHog } from "posthog-node";
 
 import type { ObservabilityConfig } from "./config.js";
+import type { FailureContext } from "./failures.js";
+import type {
+  IdentityContext,
+  TenantIdentity,
+  UserIdentity,
+} from "./identity.js";
 import {
   buildFailurePayload,
   getFailureDistinctId,
   getFailureEventName,
   getFailureSentryTags,
 } from "./failures.js";
-import type { FailureContext } from "./failures.js";
 import { buildIdentityProperties } from "./identity.js";
-import type {
-  IdentityContext,
-  TenantIdentity,
-  UserIdentity,
-} from "./identity.js";
 
 let activeConfig: ObservabilityConfig | null = null;
 let posthogClient: PostHog | null = null;
@@ -29,10 +31,28 @@ export function initNodeObservability(config: ObservabilityConfig): void {
   activeConfig = config;
 
   if (config.sentry.enabled && config.sentry.dsn) {
+    const sharedTelemetry = isTelemetryEnabled();
     Sentry.init({
       dsn: config.sentry.dsn,
       environment: config.environment,
-      tracesSampleRate: config.sentry.tracesSampleRate,
+      // OTLP owns spans and sampling when configured. Sentry retains error
+      // reporting and isolated scopes through the shared context manager.
+      ...(sharedTelemetry
+        ? {
+            skipOpenTelemetrySetup: true,
+            tracesSampleRate: 0,
+            defaultIntegrations:
+              Sentry.getDefaultIntegrationsWithoutPerformance().map(
+                (integration) =>
+                  integration.name === "Http"
+                    ? Sentry.httpIntegration({
+                        spans: false,
+                        tracePropagation: false,
+                      })
+                    : integration,
+              ),
+          }
+        : { tracesSampleRate: config.sentry.tracesSampleRate }),
       initialScope: {
         tags: {
           service: config.serviceName,
@@ -40,6 +60,13 @@ export function initNodeObservability(config: ObservabilityConfig): void {
         },
       },
     });
+    if (sharedTelemetry) {
+      initTelemetry({
+        serviceName: config.serviceName,
+        contextManager: new Sentry.SentryContextManager(),
+        textMapPropagator: new SentryPropagator(),
+      });
+    }
     sentryInitialized = true;
     console.log(
       `[observability] Sentry initialized (service=${config.serviceName}, env=${config.environment})`,
@@ -74,7 +101,10 @@ export async function shutdownNodeObservability(): Promise<void> {
   activeConfig = null;
 }
 
-export function identifyUser(user: UserIdentity, tenant?: TenantIdentity): void {
+export function identifyUser(
+  user: UserIdentity,
+  tenant?: TenantIdentity,
+): void {
   const context: IdentityContext = { user, tenant };
 
   if (sentryInitialized) {
@@ -173,7 +203,12 @@ export function trackEvent(
   if (!posthogClient) return;
 
   posthogClient.capture({
-    distinctId: getFailureDistinctId({ surface: "api", operation: event, error: "", ...context }),
+    distinctId: getFailureDistinctId({
+      surface: "api",
+      operation: event,
+      error: "",
+      ...context,
+    }),
     event,
     properties: {
       ...properties,

@@ -40,7 +40,9 @@
   },
   "dependencies": {
     "@sentry/node": "^10.53.1",
-    "posthog-node": "^5.33.3"
+    "posthog-node": "^5.33.3",
+    "@gmacko/core": "workspace:*",
+    "@sentry/opentelemetry": "^10.64.0"
   },
   "devDependencies": {
     "@bob/eslint-config": "workspace:*",

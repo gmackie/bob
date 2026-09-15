@@ -542,6 +542,9 @@ importers:
       '@bob/ws':
         specifier: workspace:*
         version: link:../../packages/bob/src/ws
+      '@gmacko/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@neondatabase/serverless':
         specifier: ^0.10.4
         version: 0.10.4
@@ -1671,9 +1674,15 @@ importers:
 
   packages/bob/src/observability:
     dependencies:
+      '@gmacko/core':
+        specifier: workspace:*
+        version: link:../../../core
       '@sentry/node':
         specifier: ^10.53.1
         version: 10.64.0(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/exporter-trace-otlp-http@0.222.0(@opentelemetry/api@1.9.1))
+      '@sentry/opentelemetry':
+        specifier: ^10.64.0
+        version: 10.64.0(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.9.0(@opentelemetry/api@1.9.1))
       posthog-node:
         specifier: ^5.33.3
         version: 5.33.3(rxjs@7.8.2)
@@ -1932,6 +1941,21 @@ importers:
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.1
+      '@opentelemetry/core':
+        specifier: ^2.11.0
+        version: 2.11.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-trace-otlp-http':
+        specifier: ^0.222.0
+        version: 0.222.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources':
+        specifier: ^2.11.0
+        version: 2.11.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-node':
+        specifier: ^0.222.0
+        version: 0.222.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base':
+        specifier: ^2.11.0
+        version: 2.11.0(@opentelemetry/api@1.9.1)
       '@radix-ui/react-icons':
         specifier: ^1.3.2
         version: 1.3.2(react@19.2.8)

@@ -4,6 +4,7 @@
  * Wraps vinext's app-router-entry, binds Hyperdrive to DATABASE_URL.
  */
 import { runWithDb } from "../src/lib/db-client-lazy";
+import { wrapFetch } from "@gmacko/core/telemetry/worker";
 
 let appRouterEntryPromise = null;
 const getAppRouterEntry = async () => {
@@ -48,7 +49,7 @@ function bindWorkerEnvToNodeEnv(env) {
 }
 
 export default {
-  async fetch(request, env) {
+  fetch: wrapFetch(async (request, env, ctx) => {
     const databaseUrl = bindWorkerEnvToNodeEnv(env);
     const handler = await getAppRouterEntry();
     const url = new URL(request.url);
@@ -83,5 +84,5 @@ export default {
         { status: 500 },
       );
     }
-  },
+  }, { serviceName: "ooda" }),
 };

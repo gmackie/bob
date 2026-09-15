@@ -806,6 +806,7 @@ export default Sentry.withSentry(
           handler.fetch(request, runtimeEnv, ctx),
         );
       },
+      { serviceName: "bob" },
     ),
   },
 );

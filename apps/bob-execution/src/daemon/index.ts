@@ -138,8 +138,6 @@ const observabilityConfig = resolveObservabilityConfig({
 initNodeObservability(observabilityConfig);
 initTelemetry({
   serviceName: "bob-execution",
-  disabled:
-    !process.env.OTEL_EXPORTER_OTLP_ENDPOINT && !process.env.SIGNOZ_ENDPOINT,
 });
 if (observabilityConfig.tenantId || BOB_WORKSPACE_ID) {
   identifyTenant({
@@ -1333,7 +1331,10 @@ async function gracefulShutdown(): Promise<void> {
       "[executor] Shutdown incomplete: unconfirmed process exits; journal retained",
     );
   ws?.close();
-  await Promise.all([shutdownNodeObservability(), shutdownTelemetry()]);
+  await Promise.all([
+    shutdownNodeObservability(),
+    shutdownTelemetry().catch(() => console.error("[telemetry] shutdown flush failed")),
+  ]);
   journal.close();
   process.exit(storageFailure || !drained ? 1 : 0);
 }
@@ -1347,7 +1348,6 @@ console.log(`[executor] Gateway: ${GATEWAY_WS_URL}`);
 console.log(`[executor] Workspace: ${BOB_WORKSPACE_ID}`);
 console.log(`[executor] Max concurrent: ${MAX_CONCURRENT}`);
 
-initTelemetry({ serviceName: "bob-daemon", serviceVersion: "0.1.0" });
 
 // Recover active markers even when every running frame was already ACKed.
 for (const active of journal.activeSessions()) {
