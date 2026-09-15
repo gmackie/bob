@@ -19,6 +19,50 @@ Requirements:
 Context: Codex flagged this as a critical gap for batch creation. Single-task creation
 (planning one task at a time) works fine without backoff. Batch dispatch is the risk.
 
+## ooda-runner never reaps its PrivateTmp — 30 GB on hetzner-bob, and it wedged ForgeGraph CI
+
+**Status:** Open (Bob code — `apps/ooda-runner`)
+**Priority:** P1 (it took out an unrelated system; it will recur)
+**Depends on:** nothing
+**Added:** 2026-09-10 (found while debugging ForgeGraph CI failures)
+
+**What:** `ooda-runner.service` on hetzner-bob accumulates session scratch in its
+systemd `PrivateTmp` and nothing ever removes it. Measured 2026-09-10:
+
+    /tmp                                                          31G
+    └── systemd-private-…-ooda-runner.service-l7UlLC              30G   ← live instance
+        └── tmp/gsplat_check_venv                                5.5G
+            cpuverify, testenv, venv_check, vt506             ~1.1G each
+
+Python virtualenvs, one per session, going back to when the service last started
+(Sep 7 16:40). A second, orphaned private dir from a Sep 6 instance was still
+present too (37M) — systemd only removes those on a clean stop.
+
+**Why it matters beyond disk:** hetzner-bob is also a ForgeGraph CI runner. At 99%
+full (2.7 GB free of 226 GB) the Postgres that ForgeGraph's api database test suite
+spawns could not write, so it died and came back "in recovery mode". Every CI run on
+that node failed at the same step, with zero failing tests, which reads exactly like
+a flake — three PRs were red before anyone looked at `df`. Reclaiming space made the
+same commits green with no code change.
+
+It also cannot self-heal: the node's `forgegraph-store-prune` timer defers whenever
+an Actions job is active, and the failures trigger retries that keep one active.
+
+**Where to start:** the venvs are created by what the adapters execute during a
+session, not by ooda-runner's own code (its only `/tmp` use in `apps/ooda-runner/src`
+is `mkdtemp` inside tests). So the fix belongs where a session's workspace is torn
+down — remove the session scratch dir on completion, and sweep orphans on startup
+for sessions that are no longer claimed. A `TMPDIR` per session under a known root
+would make both straightforward.
+
+**Caveats:** do not simply delete the live `systemd-private-…` dir out from under the
+running service. `PrivateTmp=true` means that path *is* its `/tmp`; a running session
+may be using it. Reap per session, or restart the service during a quiet window.
+
+**Not fixed here:** ForgeGraph side got a mitigation (a critical-disk floor so the
+pruner stops deferring once builds are already failing, ForgeGraph PR #565), but that
+only limits the blast radius. The 30 GB is this repo's to reclaim.
+
 ## pgbouncer in front of hetzner-master Postgres
 
 **Status:** Deferred (own workstream — shared ForgeGraph infra, not Bob code)
