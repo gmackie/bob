@@ -213,6 +213,11 @@ export class CodexAdapter implements AgentAdapter {
   buildCommand(opts: BuildCommandOptions): AdapterCommand {
     const args = ["app-server"];
     args.push(...buildCodexMcpConfigArgs(this.mcpServers));
+    if (opts.reasoningEffort) {
+      // A config override after the subcommand, the same mechanism the MCP
+      // servers above use; the value is a TOML string.
+      args.push("-c", `model_reasoning_effort="${opts.reasoningEffort}"`);
+    }
     return {
       binary: "codex",
       args,

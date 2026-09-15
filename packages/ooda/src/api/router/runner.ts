@@ -158,6 +158,10 @@ export const runnerRouter = {
         adapterId: z.string(),
         toolProfileId: z.string(),
         prompt: z.string().min(1),
+        // Per-session model and reasoning effort, both optional and additive:
+        // a dispatcher that sends neither gets exactly today's session.
+        model: z.string().trim().min(1).max(128).optional(),
+        reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
         // Images attached to the prompt (vision). Base64 (no data: prefix).
         images: z
           .array(
@@ -180,6 +184,8 @@ export const runnerRouter = {
           runnerId: input.runnerId,
           adapterId: input.adapterId,
           toolProfileId: input.toolProfileId,
+          ...(input.model ? { model: input.model } : {}),
+          ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
           status: "pending",
         })
         .returning();

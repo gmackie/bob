@@ -175,6 +175,22 @@ describe("ClaudeAdapter", () => {
     expect(command.args[toolsIdx + 1]).toBe("Read,Bash");
   });
 
+  it("passes the dispatcher's reasoning effort as --effort, and omits it when unset", () => {
+    const adapter = new ClaudeAdapter();
+    const withEffort = adapter.buildCommand({
+      prompt: "x",
+      workspaceRoot: "/tmp/ws",
+      model: "sonnet",
+      reasoningEffort: "low",
+    });
+    const effortIdx = withEffort.args.indexOf("--effort");
+    expect(effortIdx).toBeGreaterThan(-1);
+    expect(withEffort.args[effortIdx + 1]).toBe("low");
+
+    const without = adapter.buildCommand({ prompt: "x", workspaceRoot: "/tmp/ws" });
+    expect(without.args).not.toContain("--effort");
+  });
+
   it("omits model/tools flags when the persona doesn't set them", () => {
     const adapter = new ClaudeAdapter();
     const command = adapter.buildCommand({

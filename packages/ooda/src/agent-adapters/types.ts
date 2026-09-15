@@ -87,6 +87,12 @@ export interface BuildCommandOptions {
   images?: PromptImage[];
   /** Persona-selected model (e.g. a specific Claude model id). */
   model?: string;
+  /**
+   * How hard the agent reasons for this session. Claude Code maps it to
+   * `--effort`; Codex to the `model_reasoning_effort` config override.
+   * Absent = the CLI's default.
+   */
+  reasoningEffort?: "low" | "medium" | "high";
   /** Persona-restricted tool allowlist passed to the agent CLI. */
   allowedTools?: string[];
   /**

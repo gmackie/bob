@@ -91,6 +91,8 @@ export interface ExecuteSessionInput {
   threadId?: string;
   systemPrompt?: string;
   model?: string;
+  /** Dispatcher-requested reasoning effort for this session. */
+  reasoningEffort?: "low" | "medium" | "high";
   signal?: AbortSignal;
   onEvent: (event: AdapterEvent) => void;
 }
@@ -175,6 +177,7 @@ export class SessionExecutor {
         systemPrompt: input.systemPrompt,
         images: input.images,
         model: input.model,
+        ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
       });
 
       // Capture output

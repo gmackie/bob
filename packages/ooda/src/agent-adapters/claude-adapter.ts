@@ -118,6 +118,9 @@ export class ClaudeAdapter implements AgentAdapter {
     if (opts.model) {
       args.push("--model", opts.model);
     }
+    if (opts.reasoningEffort) {
+      args.push("--effort", opts.reasoningEffort);
+    }
 
     const requestedSession = opts.session ?? { mode: "start" as const };
     const nativeSessionId = requestedSession.sessionId ?? randomUUID();

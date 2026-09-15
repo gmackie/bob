@@ -179,6 +179,18 @@ describe("CodexAdapter", () => {
     expect(command.cwd).toBe("/tmp/threads/sleep");
   });
 
+  it("sets model_reasoning_effort through a config override when effort is requested", () => {
+    const adapter = new CodexAdapter();
+    const command = adapter.buildCommand({
+      prompt: "p",
+      workspaceRoot: "/tmp/ws",
+      reasoningEffort: "high",
+    });
+    const idx = command.args.indexOf('model_reasoning_effort="high"');
+    expect(idx).toBeGreaterThan(0);
+    expect(command.args[idx - 1]).toBe("-c");
+  });
+
   it("adds no MCP overrides when no servers are registered", () => {
     const adapter = new CodexAdapter();
     const command = adapter.buildCommand({
