@@ -1,3 +1,4 @@
+import { runWithWorkerTrace } from "@gmacko/core/telemetry/deep";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -2309,6 +2310,32 @@ describe.skipIf(!HAS_DB)("OODA conversation store", () => {
       }),
     ]);
     expect(claim?.contextItems[1]).not.toHaveProperty("content");
+  });
+
+  it("restores a queued trace from a fresh connection and keeps it across idempotent create and lease recovery", async () => {
+    const owner = `trace-owner-${crypto.randomUUID()}`;
+    const { conversation } = await createConversation(db!, owner, {
+      title: "Durable trace", hostProvider: "grok", hostProfile: "daily",
+      sensitivityCeiling: "personal", ttsPolicy: "allowed", idempotencyKey: owner,
+    });
+    const input = { conversationId: conversation.id, class: "read_only_research" as const,
+      prompt: "Private request", idempotencyKey: `${owner}-job` };
+    const trace = { traceId: "1".repeat(32), spanId: "2".repeat(16), sampled: true };
+    const created = await runWithWorkerTrace(trace, undefined, () => {}, () => createAgentJob(db!, owner, input));
+    const replay = await createAgentJob(db!, owner, input);
+    expect(replay).toMatchObject({ replayed: true, job: { id: created.job.id } });
+    const freshSql = postgres(DATABASE_URL!, { max: 1 });
+    try {
+      const freshDb = drizzle({ client: freshSql, schema, casing: "snake_case" });
+      const claimInput = { runnerId: "trace-worker", providers: ["codex"], classes: ["read_only_research" as const], leaseSeconds: 30 };
+      const now = new Date();
+      const first = await claimAgentJob(freshDb, claimInput, { now, eligibleOwnerIds: [owner] });
+      const second = await claimAgentJob(freshDb, { ...claimInput, runnerId: "trace-recovery" }, { now: new Date(now.getTime() + 31_000), eligibleOwnerIds: [owner] });
+      expect(JSON.parse(JSON.stringify(first)).traceCarrier).toEqual({ traceparent: `00-${trace.traceId}-${trace.spanId}-01` });
+      expect(second?.traceCarrier).toEqual(first?.traceCarrier);
+      expect(second?.attempt).toBe(2);
+      await expect(getAgentJob(freshDb, "wrong-owner", created.job.id)).rejects.toMatchObject({ status: 404 });
+    } finally { await freshSql.end(); }
   });
 
   it("reclaims an expired job and fences the stale runner lease", async () => {

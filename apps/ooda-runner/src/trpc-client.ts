@@ -1,14 +1,19 @@
-import { createTRPCClient, httpBatchLink, type TRPCClient } from "@trpc/client";
+import { createTRPCClient, httpLink, type TRPCClient } from "@trpc/client";
+import { tracedFetch } from "@gmacko/core/telemetry/deep";
 import SuperJSON from "superjson";
 
 import type { AppRouter } from "@gmacko/ooda/api";
 import type { ResearchTRPCSurface } from "@gmacko/ooda/buddy-tools";
 
-export function createRunnerTRPCClient(serverUrl: string): TRPCClient<AppRouter> {
+export function createRunnerTRPCClient(
+  serverUrl: string,
+): TRPCClient<AppRouter> {
   return createTRPCClient<AppRouter>({
     links: [
-      httpBatchLink({
+      httpLink({
         transformer: SuperJSON,
+        fetch: (input, init) =>
+          tracedFetch(input, init, { service: "ooda", baseUrl: serverUrl }),
         url: `${serverUrl}/api/trpc`,
         headers() {
           const h: Record<string, string> = { "x-trpc-source": "runner" };

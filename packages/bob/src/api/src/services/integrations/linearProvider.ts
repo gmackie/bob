@@ -1,4 +1,5 @@
-import { LinearClient } from "@linear/sdk";
+import type { LinearClient } from "@linear/sdk";
+import { createTracedLinearClient } from "./tracedLinearClient.js";
 import { eq } from "@bob/db";
 import type { Db } from "@bob/db/client";
 import { taskRuns, workItemArtifacts } from "@bob/db/schema";
@@ -55,7 +56,7 @@ export class LinearPlanningProvider implements PlanningProvider {
   ) {
     // NULL apiUrl keeps the SDK default (api.linear.app); set it to drive a
     // Linear-API-compatible instance (e.g. Kanbanger) with the same SDK.
-    this.client = new LinearClient({
+    this.client = createTracedLinearClient({
       apiKey,
       ...(linearApiUrl ? { apiUrl: linearApiUrl } : {}),
     });
