@@ -5,6 +5,8 @@
  * Follows the OpenCodeClient pattern: Bearer auth, timeouts, single retry on 5xx.
  */
 
+import { tracedFetch } from "@gmacko/core/telemetry/deep";
+
 import type { ForgeGraphConfig } from "./config";
 
 // ── App types ────────────────────────────────────────────────────────
@@ -78,7 +80,13 @@ export interface FgActivity {
 
 export interface FgReadinessVerdict {
   workItemId: string;
-  verdict: "ready" | "blocked" | "incomplete" | "failed" | "not-linked" | "error";
+  verdict:
+    | "ready"
+    | "blocked"
+    | "incomplete"
+    | "failed"
+    | "not-linked"
+    | "error";
   evidence?: unknown;
   blockers?: string[];
   nextAction?: string;
@@ -148,6 +156,17 @@ export interface ListWorkItemsFilters {
   offset?: number;
 }
 
+export interface FgTraceReferenceInput {
+  taskRunId: string;
+  attemptId: string;
+  traceId: string;
+  rootSpanId: string;
+  outcome: "running" | "success" | "error";
+  captureState: "pending" | "sampled_out" | "captured" | "unavailable";
+  services: string[];
+  durationMs?: number;
+}
+
 // ── Client ────────────────────────────────────────────────────────────
 
 export class ForgeGraphClient {
@@ -155,6 +174,16 @@ export class ForgeGraphClient {
 
   constructor(config: ForgeGraphConfig) {
     this.config = config;
+  }
+
+  async recordTrace(
+    workItemId: string,
+    reference: FgTraceReferenceInput,
+  ): Promise<unknown> {
+    return this.post(
+      `/api/fg/work-items/${encodeURIComponent(workItemId)}/traces`,
+      { ...reference, workItemId },
+    );
   }
 
   // ── Apps ──────────────────────────────────────────────────────────
@@ -170,7 +199,9 @@ export class ForgeGraphClient {
 
   // ── Work Items ────────────────────────────────────────────────────
 
-  async listWorkItems(filters: ListWorkItemsFilters = {}): Promise<FgWorkItem[]> {
+  async listWorkItems(
+    filters: ListWorkItemsFilters = {},
+  ): Promise<FgWorkItem[]> {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(filters)) {
       if (v !== undefined && v !== null) params.set(k, String(v));
@@ -183,7 +214,9 @@ export class ForgeGraphClient {
     return this.get<FgWorkItem>(`/api/fg/work-items/${id}`);
   }
 
-  async getWorkItemByExternalId(externalId: string): Promise<FgWorkItem | null> {
+  async getWorkItemByExternalId(
+    externalId: string,
+  ): Promise<FgWorkItem | null> {
     const items = await this.listWorkItems({ externalId });
     return items[0] ?? null;
   }
@@ -192,7 +225,10 @@ export class ForgeGraphClient {
     return this.post<FgWorkItem>("/api/fg/work-items", input);
   }
 
-  async updateWorkItem(id: string, input: UpdateWorkItemInput): Promise<FgWorkItem> {
+  async updateWorkItem(
+    id: string,
+    input: UpdateWorkItemInput,
+  ): Promise<FgWorkItem> {
     return this.patch<FgWorkItem>(`/api/fg/work-items/${id}`, input);
   }
 
@@ -215,23 +251,40 @@ export class ForgeGraphClient {
     );
   }
 
-  async createArtifact(workItemId: string, input: CreateArtifactInput): Promise<FgArtifact> {
-    return this.post<FgArtifact>(`/api/fg/work-items/${workItemId}/artifacts`, input);
+  async createArtifact(
+    workItemId: string,
+    input: CreateArtifactInput,
+  ): Promise<FgArtifact> {
+    return this.post<FgArtifact>(
+      `/api/fg/work-items/${workItemId}/artifacts`,
+      input,
+    );
   }
 
   // ── Dependencies ──────────────────────────────────────────────────
 
   async listDependencies(workItemId: string): Promise<FgDependency[]> {
-    return this.get<FgDependency[]>(`/api/fg/work-items/${workItemId}/dependencies`);
+    return this.get<FgDependency[]>(
+      `/api/fg/work-items/${workItemId}/dependencies`,
+    );
   }
 
-  async addDependency(workItemId: string, dependsOnWorkItemId: string): Promise<FgDependency> {
-    return this.post<FgDependency>(`/api/fg/work-items/${workItemId}/dependencies`, {
-      dependsOnWorkItemId,
-    });
+  async addDependency(
+    workItemId: string,
+    dependsOnWorkItemId: string,
+  ): Promise<FgDependency> {
+    return this.post<FgDependency>(
+      `/api/fg/work-items/${workItemId}/dependencies`,
+      {
+        dependsOnWorkItemId,
+      },
+    );
   }
 
-  async removeDependency(workItemId: string, dependsOnWorkItemId: string): Promise<void> {
+  async removeDependency(
+    workItemId: string,
+    dependsOnWorkItemId: string,
+  ): Promise<void> {
     await this.request(`/api/fg/work-items/${workItemId}/dependencies`, {
       method: "DELETE",
       body: JSON.stringify({ dependsOnWorkItemId }),
@@ -240,13 +293,24 @@ export class ForgeGraphClient {
 
   // ── Activities ────────────────────────────────────────────────────
 
-  async listActivities(workItemId: string, limit?: number): Promise<FgActivity[]> {
+  async listActivities(
+    workItemId: string,
+    limit?: number,
+  ): Promise<FgActivity[]> {
     const qs = limit ? `?limit=${limit}` : "";
-    return this.get<FgActivity[]>(`/api/fg/work-items/${workItemId}/activities${qs}`);
+    return this.get<FgActivity[]>(
+      `/api/fg/work-items/${workItemId}/activities${qs}`,
+    );
   }
 
-  async recordActivity(workItemId: string, input: RecordActivityInput): Promise<FgActivity> {
-    return this.post<FgActivity>(`/api/fg/work-items/${workItemId}/activities`, input);
+  async recordActivity(
+    workItemId: string,
+    input: RecordActivityInput,
+  ): Promise<FgActivity> {
+    return this.post<FgActivity>(
+      `/api/fg/work-items/${workItemId}/activities`,
+      input,
+    );
   }
 
   // ── Changeset Linkage ─────────────────────────────────────────────
@@ -259,7 +323,9 @@ export class ForgeGraphClient {
   }
 
   async unlinkChangeset(workItemId: string): Promise<void> {
-    await this.request(`/api/fg/work-items/${workItemId}/link`, { method: "DELETE" });
+    await this.request(`/api/fg/work-items/${workItemId}/link`, {
+      method: "DELETE",
+    });
   }
 
   // ── Readiness ─────────────────────────────────────────────────────
@@ -271,7 +337,9 @@ export class ForgeGraphClient {
   }
 
   async getBulkReadiness(workItemIds: string[]): Promise<FgReadinessVerdict[]> {
-    return this.post<FgReadinessVerdict[]>("/api/fg/work-items/readiness", { workItemIds });
+    return this.post<FgReadinessVerdict[]>("/api/fg/work-items/readiness", {
+      workItemIds,
+    });
   }
 
   async upsertDeploySecret(input: {
@@ -318,7 +386,10 @@ export class ForgeGraphClient {
     return resp.json() as Promise<T>;
   }
 
-  private async request(path: string, options: RequestInit = {}): Promise<Response> {
+  private async request(
+    path: string,
+    options: RequestInit = {},
+  ): Promise<Response> {
     const url = `${this.config.baseUrl}${path}`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -327,26 +398,40 @@ export class ForgeGraphClient {
     };
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.config.timeoutMs);
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      this.config.timeoutMs,
+    );
 
     try {
-      const response = await fetch(url, {
-        ...options,
-        headers: headers,
-        signal: controller.signal,
-      });
+      const response = await tracedFetch(
+        url,
+        {
+          ...options,
+          headers: headers,
+          signal: controller.signal,
+        },
+        { service: "forgegraph", baseUrl: this.config.baseUrl },
+      );
 
       if (response.status >= 500 && response.status < 600) {
         // Single retry on 5xx
         clearTimeout(timeoutId);
         const retryController = new AbortController();
-        const retryTimeout = setTimeout(() => retryController.abort(), this.config.timeoutMs);
+        const retryTimeout = setTimeout(
+          () => retryController.abort(),
+          this.config.timeoutMs,
+        );
         try {
-          const retry = await fetch(url, {
-            ...options,
-            headers: headers,
-            signal: retryController.signal,
-          });
+          const retry = await tracedFetch(
+            url,
+            {
+              ...options,
+              headers: headers,
+              signal: retryController.signal,
+            },
+            { service: "forgegraph", baseUrl: this.config.baseUrl },
+          );
           if (!retry.ok) {
             const text = await retry.text().catch(() => "");
             throw new Error(`ForgeGraph ${response.status}: ${text}`);

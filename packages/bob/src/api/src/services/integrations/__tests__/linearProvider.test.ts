@@ -9,6 +9,7 @@ const mockIssueSearch = vi.fn();
 const mockTeam = vi.fn();
 
 interface MockLinearClientInstance {
+  client: { request: ReturnType<typeof vi.fn> };
   createIssue: typeof mockCreateIssue;
   issue: typeof mockIssue;
   issues: typeof mockIssues;
@@ -20,6 +21,7 @@ interface MockLinearClientInstance {
 
 vi.mock("@linear/sdk", () => {
   function MockLinearClient(this: MockLinearClientInstance) {
+    this.client = { request: vi.fn() };
     this.createIssue = mockCreateIssue;
     this.issue = mockIssue;
     this.issues = mockIssues;

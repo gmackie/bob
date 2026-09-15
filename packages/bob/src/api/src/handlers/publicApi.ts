@@ -1,3 +1,4 @@
+import { captureTraceCarrier, validateTraceCarrier } from "@gmacko/core/telemetry/deep";
 /**
  * PublicApi handler functions — pure business logic extracted from the tRPC
  * publicApi router.
@@ -22,6 +23,7 @@ import {
   repositories,
   runArtifacts,
   taskRuns,
+  workspaceIntegrations,
   tenantMembers,
   tenants,
   workItems,
@@ -575,7 +577,7 @@ export async function publicApiCreateRun(
 ) {
   // workItemId accepts any string — ForgeGraph work items may use UUIDs,
   // short identifiers (e.g. "BOB-27"), or ForgeGraph-native IDs.
-  // We store as-is and resolve at display time.
+  // Unmapped external identifiers remain valid for legacy record-only runs.
 
   const workspace = await ctx.db.query.workspaces.findFirst({
     where: eq(workspaces.id, input.workspaceId),
@@ -599,20 +601,37 @@ export async function publicApiCreateRun(
     metric: "activeAgents",
   });
 
-  // Resolve the effective agent when the caller didn't pin one explicitly:
-  // work-item override -> project default -> workspace default -> fallback.
+  let sessionId: string | undefined;
+  let sessionWorkItemId: string | undefined;
+  if (typeof input.agentConfig?.sessionId === "string") {
+    if (!UUID_RE.test(input.agentConfig.sessionId)) throw new TRPCError({ code: "BAD_REQUEST" });
+    const session = await ctx.db.query.chatConversations.findFirst({
+      where: eq(chatConversations.id, input.agentConfig.sessionId),
+      columns: { id: true, workItemId: true },
+    });
+    if (!session?.workItemId) throw new TRPCError({ code: "NOT_FOUND" });
+    sessionId = session.id;
+    sessionWorkItemId = session.workItemId;
+  }
+  // A session binds the actual work item. Otherwise resolve the supplied key
+  // inside the authorized workspace, including when the agent is pinned.
+  const wi = await ctx.db.query.workItems.findFirst({
+    where: and(
+      eq(workItems.workspaceId, input.workspaceId),
+      sessionWorkItemId ? eq(workItems.id, sessionWorkItemId)
+        : UUID_RE.test(input.workItemId) ? eq(workItems.id, input.workItemId)
+        : eq(workItems.externalId, input.workItemId),
+    ),
+    columns: { id: true, workspaceId: true, agentTypeOverride: true, projectId: true },
+  });
+  if ((wi?.workspaceId !== input.workspaceId) && (sessionId || UUID_RE.test(input.workItemId))) {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+  const resolvedWorkItemId = wi?.id ?? input.workItemId;
   let agentType = input.agentType;
   if (!agentType) {
     let workItemOverride: string | null = null;
     let projectDefault: string | null = null;
-    // Match by UUID when given one, else by externalId (Linear/ForgeGraph
-    // synced items pass an external identifier like "BOB-27").
-    const wi = await ctx.db.query.workItems.findFirst({
-      where: UUID_RE.test(input.workItemId)
-        ? eq(workItems.id, input.workItemId)
-        : eq(workItems.externalId, input.workItemId),
-      columns: { agentTypeOverride: true, projectId: true },
-    });
     if (wi) {
       workItemOverride = wi.agentTypeOverride ?? null;
       if (wi.projectId) {
@@ -633,7 +652,8 @@ export async function publicApiCreateRun(
   const [run] = await ctx.db
     .insert(agentRuns)
     .values({
-      workItemId: input.workItemId,
+      workItemId: resolvedWorkItemId,
+      ...(sessionId ? { sessionId } : {}),
       workspaceId: input.workspaceId,
       tenantId: workspace.tenantId,
       agentType,
@@ -789,7 +809,7 @@ export async function publicApiDispatchExecution(
   const personaMetadata: Record<string, unknown> = {
     autonomyLevel: input.autonomyLevel ?? "full",
     ...(input.model ? { model: input.model } : {}),
-    ...(input.ooda ? { metadata: { ooda: input.ooda } } : {}),
+    metadata: { ...(input.ooda ? { ooda: input.ooda } : {}), traceCarrier: captureTraceCarrier() },
   };
 
   const workingDirectory =
@@ -1393,12 +1413,95 @@ export async function publicApiCreateArtifact(
       workspaceId: true,
       workItemId: true,
       sessionId: true,
+      agentConfig: true,
+      status: true,
     },
   });
   if (!run?.tenantId) {
     throw new TRPCError({ code: "NOT_FOUND" });
   }
   await assertTenantAccess(ctx.db, ctx.userId, run.tenantId);
+
+  // Trace references are metadata-only artifacts. Ownership and destinations are
+  // derived here, after authorization, rather than accepted from the runner.
+  if (input.metadata?.kind === "trace_reference") {
+    const { traceId, spanId, sampled } = input.metadata;
+    if (typeof traceId !== "string" || typeof spanId !== "string" || typeof sampled !== "boolean" ||
+      !validateTraceCarrier({ traceparent: `00-${traceId}-${spanId}-${sampled ? "01" : "00"}` })) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid trace reference" });
+    }
+    const storageKey = `trace:${input.runId}:${traceId}:${spanId}`;
+    const sessionId = run.sessionId ?? (typeof run.agentConfig?.sessionId === "string" ? run.agentConfig.sessionId : undefined);
+    const taskRun = sessionId && run.workItemId && run.workspaceId
+      ? await ctx.db.query.taskRuns.findFirst({
+          where: and(eq(taskRuns.sessionId, sessionId), eq(taskRuns.workItemId, run.workItemId)),
+          columns: { id: true, sessionId: true, planningProvider: true, planningItemId: true },
+        })
+      : undefined;
+    const artifact = await ctx.db.transaction(async (tx) => {
+      // Serialize retries for this run without requiring a new database index.
+      await tx.select({ id: agentRuns.id }).from(agentRuns)
+        .where(eq(agentRuns.id, input.runId)).for("update");
+      const existing = await tx.query.runArtifacts.findFirst({
+        where: and(eq(runArtifacts.runId, input.runId), eq(runArtifacts.storageKey, storageKey)),
+      });
+      if (existing) return existing;
+      const { assertWithinQuotaOrThrow } = await import("../services/quotas/index.js");
+      await assertWithinQuotaOrThrow({ db: ctx.db, tenantId: run.tenantId, metric: "storageBytes", delta: 1024 });
+      const [artifact] = await tx.insert(runArtifacts).values({
+        runId: input.runId,
+        type: "test-report",
+        storageKey,
+        metadata: {
+          kind: "trace_reference", traceId, spanId, sampled,
+          captureState: sampled ? "pending" : "sampled_out",
+          runId: input.runId, workspaceId: run.workspaceId,
+          workItemId: run.workItemId, sessionId: taskRun?.sessionId ?? run.sessionId,
+          ...(taskRun ? { taskRunId: taskRun.id } : {}),
+        },
+      }).returning();
+      return artifact;
+    });
+    // A replay retries the external reference too, after the local transaction
+    // commits. Never send Bob IDs as ForgeGraph work-item IDs.
+    if (taskRun && run.workItemId) {
+      try {
+        const { getForgeGraphClient } = await import("../services/forgegraph/config");
+        const fg = getForgeGraphClient();
+        if (fg) {
+          const { resolveForgeGraphId } = await import("../services/forgegraph/idResolver");
+          const fgId = await resolveForgeGraphId(fg, run.workItemId);
+          if (fgId) await fg.recordTrace(fgId, {
+            taskRunId: taskRun.id, attemptId: spanId, traceId, rootSpanId: spanId,
+            outcome: run.status === "completed" ? "success" : run.status === "failed" ? "error" : "running", captureState: sampled ? "pending" : "sampled_out", services: ["bob-ws-gateway"],
+          });
+        }
+      } catch {
+        console.warn("[trace-report] External reference unavailable; local reference retained");
+      }
+    }
+    if (taskRun?.planningProvider === "linear" && run.workspaceId) {
+      try {
+        const integration = await ctx.db.query.workspaceIntegrations.findFirst({
+          where: and(eq(workspaceIntegrations.workspaceId, run.workspaceId), eq(workspaceIntegrations.provider, "linear"), eq(workspaceIntegrations.enabled, true)),
+        });
+        if (integration?.apiKey && integration.linearApiUrl) {
+          const { reportKanbangerTrace } = await import("../services/integrations/traceReport");
+          await reportKanbangerTrace({ apiUrl: integration.linearApiUrl, apiKey: integration.apiKey }, taskRun.planningItemId, {
+            taskRunId: taskRun.id, attemptId: spanId, traceId, rootSpanId: spanId,
+            outcome: run.status === "completed" ? "success" : run.status === "failed" ? "error" : "running",
+            captureState: sampled ? "pending" : "sampled_out", services: ["bob"],
+          });
+        }
+      } catch { console.warn("[trace-report] Planning reference unavailable; local reference retained"); }
+    }
+    if (run.workspaceId) await notifyWorkspaceEvent({
+      type: "session_event_appended", workspaceId: run.workspaceId,
+      entityId: taskRun?.sessionId ?? input.runId,
+      payload: { changed: ["artifact"], runId: input.runId, artifactId: artifact?.id ?? null, artifactType: "test-report", workItemId: run.workItemId },
+    });
+    return artifact;
+  }
 
   const sizeBytes =
     typeof input.metadata?.sizeBytes === "number" &&

@@ -1,3 +1,4 @@
+import { withTraceSpan, getTraceReference } from "@gmacko/core/telemetry/deep";
 import type { AgentAdapter } from "@gmacko/ooda/agent-adapters";
 import type {
   AgentJobClassV1,
@@ -96,7 +97,25 @@ export class AgentJobWorker {
     if (!claim || !this.config.adapters.has(claim.job.provider)) return;
 
     const controller = new AbortController();
-    const promise = this.execute(claim, controller).finally(() => {
+    const promise = withTraceSpan(
+      "job.attempt",
+      () => this.execute(claim, controller),
+      {
+        carrier: claim.traceCarrier,
+        kind: "consumer",
+        link: true,
+        attributes: {
+          "job.id": claim.job.id,
+          "attempt.id": `${claim.job.id}:${claim.attempt}`,
+          "retry.count": claim.attempt - 1,
+          "queue.wait_ms": Math.max(
+            0,
+            Date.now() - Date.parse(claim.job.createdAt),
+          ),
+          "messaging.operation": "process",
+        },
+      },
+    ).finally(() => {
       this.active.delete(claim.job.id);
     });
     this.active.set(claim.job.id, { controller, promise });
@@ -178,51 +197,70 @@ export class AgentJobWorker {
     controlTimer.unref?.();
 
     try {
-      const result = await executor.execute({
-        jobId: claim.job.id,
-        class: claim.job.class,
-        provider: claim.job.provider,
-        prompt: buildAgentJobPrompt(claim.prompt, claim.contextItems),
-        billingPolicy: claim.job.billingPolicy,
-        authMode: "subscription",
-        session: claim.job.runtimeSession
-          ? {
-              mode: "resume",
-              sessionId: claim.job.runtimeSession.sessionId,
-            }
-          : { mode: "start" },
-        correlationId: claim.job.correlationId ?? claim.job.id,
-        capabilities: claim.job.capabilities,
-        budget: claim.job.budget,
-        signal: controller.signal,
-        onEvent: (event) => {
-          if (event.type === "stdout" || event.type === "stderr") {
-            void record(
-              "progress",
-              {
-                stream: event.type,
-                display: event.data.slice(0, 20_000),
-              },
-              event.timestamp,
-            );
-          } else if (
-            event.type === "tool_call" ||
-            event.type === "tool_result"
-          ) {
-            void record(
-              event.type,
-              { tool: event.tool ?? event.data },
-              event.timestamp,
-            );
-          } else if (event.type === "runtime_session" && event.runtimeSession) {
-            void record(
-              "runtime_session",
-              { runtimeSession: event.runtimeSession },
-              event.timestamp,
-            );
-          }
-        },
-      });
+      const trace = getTraceReference();
+      if (trace) {
+        await record("artifact", {
+          kind: "trace_reference",
+          ...trace,
+          captureState: trace.sampled ? "pending" : "sampled_out",
+          jobId: claim.job.id,
+          conversationId: claim.job.conversationId,
+          attempt: claim.attempt,
+        }).catch(() => undefined);
+      }
+      const result = await withTraceSpan(
+        "job.execute",
+        () =>
+          executor.execute({
+            jobId: claim.job.id,
+            class: claim.job.class,
+            provider: claim.job.provider,
+            prompt: buildAgentJobPrompt(claim.prompt, claim.contextItems),
+            billingPolicy: claim.job.billingPolicy,
+            authMode: "subscription",
+            session: claim.job.runtimeSession
+              ? {
+                  mode: "resume",
+                  sessionId: claim.job.runtimeSession.sessionId,
+                }
+              : { mode: "start" },
+            correlationId: claim.job.correlationId ?? claim.job.id,
+            capabilities: claim.job.capabilities,
+            budget: claim.job.budget,
+            signal: controller.signal,
+            onEvent: (event) => {
+              if (event.type === "stdout" || event.type === "stderr") {
+                void record(
+                  "progress",
+                  {
+                    stream: event.type,
+                    display: event.data.slice(0, 20_000),
+                  },
+                  event.timestamp,
+                );
+              } else if (
+                event.type === "tool_call" ||
+                event.type === "tool_result"
+              ) {
+                void record(
+                  event.type,
+                  { tool: event.tool ?? event.data },
+                  event.timestamp,
+                );
+              } else if (
+                event.type === "runtime_session" &&
+                event.runtimeSession
+              ) {
+                void record(
+                  "runtime_session",
+                  { runtimeSession: event.runtimeSession },
+                  event.timestamp,
+                );
+              }
+            },
+          }),
+        { attributes: { "job.id": claim.job.id } },
+      );
       await writes;
       if (result.exitCode === 0) {
         await record("completed", {
