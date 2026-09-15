@@ -144,8 +144,17 @@ export const runnerRouter = {
     .input(z.object({ runnerId: z.string() }))
     .output(z.any())
     .query(({ ctx, input }) => {
+      // Active sessions only. The runner polls this every 2s to find work
+      // (pending to claim, running to monitor); terminal sessions are handled
+      // by the reaper. Returning ALL sessions made this O(total sessions) and,
+      // combined with the per-session getSessionEvents loop, let poll ticks
+      // pile up — ~2.6M rows pinned by suspended iterators, and the runner
+      // OOM'd every few hours.
       return ctx.db.query.runnerSession.findMany({
-        where: eq(runnerSession.runnerId, input.runnerId),
+        where: and(
+          eq(runnerSession.runnerId, input.runnerId),
+          sql`${runnerSession.status}::text in ('pending', 'running')`,
+        ),
       });
     }),
 
