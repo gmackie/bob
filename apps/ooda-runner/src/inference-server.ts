@@ -1,3 +1,4 @@
+import { traceHttpRequest } from "@gmacko/core/telemetry/node";
 import {
   createServer,
   type IncomingMessage,
@@ -259,7 +260,7 @@ export function startInferenceServer(
   runner: RunnerServer,
   config: RunnerConfig,
 ): ReturnType<typeof createServer> {
-  const server = createServer(async (req, res) => {
+  const server = createServer(traceHttpRequest(async (req, res) => {
     try {
       const url = req.url?.split("?")[0] ?? "/";
 
@@ -317,7 +318,7 @@ export function startInferenceServer(
         error: { message, type: "server_error" },
       });
     }
-  });
+  }, ["/health", "/v1/chat/completions"]));
 
   server.listen(config.port, config.inferenceHost || "127.0.0.1", () => {
     console.log(`[runner] inference HTTP listening on :${config.port}`);

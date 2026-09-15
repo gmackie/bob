@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   applyRuntimeAuthEnv,
@@ -108,13 +108,23 @@ describe("worker runtime env helpers", () => {
   });
 
   it("wrapFetch tolerates a missing Cloudflare env in Node-hosted vinext", async () => {
-    const response = await wrapFetch(async () => new Response("ok"))(
-      new Request("http://127.0.0.1/api/health"),
-      undefined as never,
-      { waitUntil() {} },
-    );
-
-    expect(response.status).toBe(200);
-    expect(await response.text()).toBe("ok");
+    const sent = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({}));
+    const pending: Promise<unknown>[] = [];
+    try {
+      const response = await wrapFetch(async () => new Response("ok"))(
+        new Request("http://127.0.0.1/api/health"),
+        undefined,
+        { waitUntil(promise) { pending.push(promise); } },
+      );
+      await Promise.all(pending);
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("ok");
+      const payload = JSON.parse(String(sent.mock.calls[0]?.[1]?.body));
+      expect(payload.resourceSpans[0].resource.attributes).toContainEqual({
+        key: "service.name", value: { stringValue: "bob" },
+      });
+    } finally {
+      sent.mockRestore();
+    }
   });
 });

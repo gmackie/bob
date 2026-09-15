@@ -105,7 +105,9 @@
     "./mobile-shell": "./src/mobile-shell/index.ts",
     "./desktop-shell": "./src/desktop-shell/index.ts",
     "./models": "./src/models/index.ts",
-    "./inference": "./src/inference/index.ts"
+    "./inference": "./src/inference/index.ts",
+    "./telemetry/node": "./src/telemetry/node.ts",
+    "./telemetry/worker": "./src/telemetry/worker.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
@@ -131,7 +133,12 @@
     "radix-ui": "^1.4.3",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.0.0",
-    "zod": "^4.0.0"
+    "zod": "^4.0.0",
+    "@opentelemetry/sdk-node": "^0.222.0",
+    "@opentelemetry/sdk-trace-base": "^2.11.0",
+    "@opentelemetry/resources": "^2.11.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
+    "@opentelemetry/core": "^2.11.0"
   },
   "peerDependencies": {
     "@tanstack/react-query": "^5.91.0",

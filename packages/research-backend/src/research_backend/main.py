@@ -18,6 +18,7 @@ from research_backend.routes.extraction import router as extraction_router
 from research_backend.routes.kb import router as kb_router
 from research_backend.routes.search import router as search_router
 from research_backend.routes.youtube import router as youtube_router
+from research_backend.telemetry import configure_telemetry
 
 
 def create_app(overrides: dict[str, str] | None = None) -> FastAPI:
@@ -43,6 +44,8 @@ def create_app(overrides: dict[str, str] | None = None) -> FastAPI:
         finally:
             dive_scheduler.shutdown()
             engine.dispose()
+            if app.state.telemetry_provider is not None:
+                app.state.telemetry_provider.shutdown()
 
     app = FastAPI(title="OODA Research Backend", version="0.1.0", lifespan=lifespan)
 
@@ -75,6 +78,7 @@ def create_app(overrides: dict[str, str] | None = None) -> FastAPI:
     app.include_router(extraction_router)
     app.include_router(youtube_router)
 
+    app.state.telemetry_provider = configure_telemetry(app)
     return app
 
 

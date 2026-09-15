@@ -19,6 +19,7 @@ export default defineConfig({
     "@trpc/client",
     "superjson",
     "@sentry/node",
+    "@sentry/opentelemetry",
     "posthog-node",
     /^@opentelemetry\//,
   ],

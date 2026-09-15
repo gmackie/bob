@@ -1,3 +1,4 @@
+import { initTelemetry, shutdownTelemetry, traceHttpRequest } from "@gmacko/core/telemetry/node";
 import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
 import { db } from "@bob/db/client";
@@ -174,8 +175,10 @@ const workspaceEventHandler = createWorkspaceEventHandler({
   onEvent: (body) => relay.notifyWorkspaceEvent(body),
 });
 
+initTelemetry({ serviceName: "bob-ws-gateway" });
+
 // HTTP server (handles /health and /internal/nudge)
-const server = createServer(async (req, res) => {
+const server = createServer(traceHttpRequest(async (req, res) => {
   if (!req.url) {
     res.writeHead(404);
     res.end();
@@ -463,7 +466,7 @@ const server = createServer(async (req, res) => {
 
   res.writeHead(404);
   res.end();
-});
+}, ["/health", "/internal/nudge", "/internal/workspace-event", "/internal/session-send"]));
 
 // WebSocket server mounted on /sessions
 const wss = new WebSocketServer({ noServer: true });
@@ -497,7 +500,10 @@ async function shutdown(signal: string) {
     console.error("[ws-gateway] Incomplete persistence shutdown", error);
     exitCode = 1;
   }
-  await shutdownNodeObservability();
+  await Promise.all([
+    shutdownNodeObservability(),
+    shutdownTelemetry().catch(() => console.error("[telemetry] shutdown flush failed")),
+  ]);
   process.exit(exitCode);
 }
 

@@ -65,3 +65,35 @@ native pgvector rows before asking Ollama to generate anything. Invalid legacy
 dimensions, byte lengths, or non-finite values fail closed; Ollama is used only
 for sources that genuinely have no legacy vector. This keeps historical search
 geometry intact and makes the backfill resumable with `ON CONFLICT` semantics.
+
+### OpenTelemetry traces
+
+Tracing is opt-in. Configure the service environment (`/etc/ooda/research-backend.env`):
+
+```sh
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+OTEL_SERVICE_NAME=ooda-research-backend
+OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=production
+```
+
+The exporter uses OTLP HTTP/protobuf and appends `/v1/traces` to the base endpoint.
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` overrides it with an exact traces URL; standard
+OTLP headers and TLS settings are handled by the SDK. `OTEL_SDK_DISABLED=true`
+disables tracing. No endpoint means no exporter. Install with `uv sync --frozen
+--no-dev` and restart the service after updating its environment.
+
+FastAPI server spans include health probes and authentication failures, preserve
+incoming W3C `traceparent`, and record response status. Only registered route templates (or `/{unmatched}`), HTTP methods, and response
+status are exported as span attributes. Raw paths, query values, request bodies,
+request/response headers, exception events, and error descriptions are omitted;
+error status and trace timing remain available. Export failures log generic
+diagnostics so collector URLs and credentials do not enter application logs. Export runs in the background with
+a three-second network timeout; service shutdown drains the span queue. Set
+`OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG` using standard SDK settings if
+sampling is needed. The default parent-based sampler preserves upstream sampling.
+
+Local export verification uses a real HTTP receiver and decodes OTLP protobuf:
+
+```sh
+DATABASE_URL=postgresql://unused uv run --extra dev pytest tests/test_telemetry.py tests/test_health.py
+```
