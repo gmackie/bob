@@ -15,7 +15,7 @@ import {
   SELECTED_WORKSPACE_KEY,
 } from "~/features/settings/workspace-selection";
 import { colors } from "~/lib/colors";
-import { trpc } from "~/utils/api";
+import { trpc, rpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
 
 interface TabletSettingsPaneProps {
@@ -40,7 +40,7 @@ export function TabletSettingsPane({
     null,
   );
   const { data: memberships, isLoading } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
+    rpc("projects.workspace.list").queryOptions(undefined, { staleTime: 60_000 }),
   );
   const preferencesQuery = useQuery(
     trpc.settings.getPreferences.queryOptions(undefined, { staleTime: 60_000 }),
@@ -88,13 +88,13 @@ export function TabletSettingsPane({
     setSelectedWorkspaceId(workspaceId);
     void AsyncStorage.setItem(SELECTED_WORKSPACE_KEY, workspaceId).then(() => {
       void queryClient.invalidateQueries({
-        queryKey: trpc.workspace.list.queryKey(),
+        queryKey: rpc("projects.workspace.list").queryKey(),
       });
       void queryClient.invalidateQueries({
         queryKey: trpc.project.list.queryKey(),
       });
       void queryClient.invalidateQueries({
-        queryKey: trpc.workItem.list.queryKey(),
+        queryKey: rpc("workItem.list").queryKey(),
       });
       router.replace(
         buildWorkspaceSelectionPath(

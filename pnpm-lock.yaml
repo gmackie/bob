@@ -665,6 +665,9 @@ importers:
 
   apps/desktop-bob:
     dependencies:
+      '@gmacko/bob-client':
+        specifier: workspace:*
+        version: link:../../packages/bob-client
       ws:
         specifier: 'catalog:'
         version: 8.21.3
@@ -675,12 +678,18 @@ importers:
       '@bob/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/bob-typescript
+      '@gmacko/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@types/node':
         specifier: 'catalog:'
         version: 22.19.17
       '@types/ws':
         specifier: 'catalog:'
         version: 8.18.1
+      effect:
+        specifier: 4.0.0-beta.43
+        version: 4.0.0-beta.43
       electron:
         specifier: 41.10.3
         version: 41.10.3
@@ -1225,6 +1234,9 @@ importers:
       '@gmacko/core':
         specifier: workspace:*
         version: link:../core
+      '@tanstack/react-query':
+        specifier: 'catalog:'
+        version: 5.99.0(react@19.2.8)
       effect:
         specifier: 4.0.0-beta.43
         version: 4.0.0-beta.43

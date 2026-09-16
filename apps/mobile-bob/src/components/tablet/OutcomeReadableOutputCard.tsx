@@ -9,7 +9,7 @@ import {
 } from "~/features/tablet/work-item-entry";
 import type {MobileReadableOutcomeEvent, MobileWorkItemOutcomeRun} from "~/features/tablet/work-item-entry";
 import { colors } from "~/lib/colors";
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 
 interface OutcomeReadableOutputCardProps {
   workItemId: string;
@@ -21,7 +21,7 @@ export function OutcomeReadableOutputCard({
   onOpenSession,
 }: OutcomeReadableOutputCardProps) {
   const runsQuery = useQuery(
-    trpc.agentRun.listByWorkItem.queryOptions(
+    rpc("agent.run.listByWorkItem").queryOptions(
       { workItemId, limit: 10 },
       { enabled: Boolean(workItemId), refetchInterval: 10_000 },
     ),
@@ -32,7 +32,7 @@ export function OutcomeReadableOutputCard({
   const latestRun = selectLatestMobileSessionBackedOutcomeRun(runs);
   const sessionId = latestRun?.sessionId ?? "";
   const eventsQuery = useQuery(
-    trpc.session.getEvents.queryOptions(
+    rpc("agent.session.getEvents").queryOptions(
       { sessionId, limit: 200 },
       { enabled: Boolean(sessionId), refetchInterval: 5_000 },
     ),

@@ -29,7 +29,7 @@ import type {
   MobileProjectStatusRow,
 } from "~/features/planning/project-status";
 import { authClient } from "~/utils/auth";
-import { trpc } from "~/utils/api";
+import { trpc, rpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
 
 interface WorkItemEntry {
@@ -78,7 +78,7 @@ export default function ProjectDetailScreen() {
   );
 
   const rawWorkItemsQuery = useQuery(
-    trpc.workItem.list.queryOptions(
+    rpc("workItem.list").queryOptions(
       {
         workspaceId: (projectQuery.data as ProjectData | undefined)?.project.workspaceId ?? "",
         projectId,

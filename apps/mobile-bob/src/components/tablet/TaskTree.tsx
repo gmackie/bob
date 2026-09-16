@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Text, View, Pressable, ActivityIndicator } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
 import { hapticLight } from "~/lib/haptics";
 
@@ -26,7 +26,7 @@ function TaskTreeNode({ item, workspaceId, depth }: TaskTreeNodeProps) {
   const [expanded, setExpanded] = useState(false);
   const hasChildren = (item.childCount ?? 0) > 0;
 
-  const childrenQuery = useQuery(trpc.workItem.list.queryOptions(
+  const childrenQuery = useQuery(rpc("workItem.list").queryOptions(
     { workspaceId, parentId: item.id, limit: 50 },
     { enabled: expanded && hasChildren },
   ));
@@ -106,13 +106,13 @@ interface TaskTreeProps {
 
 export function TaskTree({ workItemId, workspaceId: providedWsId }: TaskTreeProps) {
   // If workspaceId not provided, fetch the work item to get it
-  const itemQuery = useQuery(trpc.workItem.get.queryOptions(
+  const itemQuery = useQuery(rpc("workItem.get").queryOptions(
     { id: workItemId },
     { enabled: Boolean(workItemId) && !providedWsId },
   ));
   const workspaceId = providedWsId ?? (itemQuery.data as { workspaceId?: string } | undefined)?.workspaceId;
 
-  const childrenQuery = useQuery(trpc.workItem.list.queryOptions(
+  const childrenQuery = useQuery(rpc("workItem.list").queryOptions(
     { workspaceId: workspaceId ?? "", parentId: workItemId, limit: 50 },
     { enabled: Boolean(workItemId && workspaceId) },
   ));

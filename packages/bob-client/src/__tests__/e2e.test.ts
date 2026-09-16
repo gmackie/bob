@@ -1,3 +1,5 @@
+import { QueryClient } from "@tanstack/react-query";
+import { createBobQueryClient } from "../query.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { AddressInfo } from "node:net";
@@ -146,6 +148,7 @@ async function writeWebResponse(
   }
 }
 
+const receivedCredentials: Array<string | undefined> = [];
 let server: Server;
 let baseURL: string;
 let disposeHandler: (() => Promise<void>) | null = null;
@@ -156,6 +159,7 @@ beforeAll(async () => {
 
   server = createServer(async (req, res) => {
     try {
+      receivedCredentials.push(req.headers.authorization);
       const body = await readNodeRequestBody(req);
       const webRequest = buildWebRequest(req, body, "http://127.0.0.1");
       const webResponse = await (handler as (request: Request) => Promise<Response>)(
@@ -224,4 +228,29 @@ describe("@gmacko/bob-client e2e round-trip against Effect stub server", () => {
       user: { id: "user_stub_abc" },
     });
   });
+});
+
+it("resolves authentication anew for each request, including logout", async () => {
+  let credential: string | undefined = "Bearer first";
+  const client = createBobRpcClient({
+    baseURL,
+    headers: (): Record<string, string> => credential ? { authorization: credential } : {},
+  });
+  await client.workItems.statusCounts({ workspaceId: "stub-ws-1" });
+  expect(receivedCredentials.at(-1)).toBe("Bearer first");
+  credential = "Bearer second";
+  await client.workItems.statusCounts({ workspaceId: "stub-ws-1" });
+  expect(receivedCredentials.at(-1)).toBe("Bearer second");
+  credential = undefined;
+  await client.workItems.statusCounts({ workspaceId: "stub-ws-1" });
+  expect(receivedCredentials.at(-1)).toBeUndefined();
+});
+
+it("runs contract-derived query and mutation options through Effect serialization", async () => {
+  const rpc = createBobQueryClient({ baseURL });
+  const cache = new QueryClient();
+  await expect(cache.fetchQuery(rpc("workItem.statusCounts").queryOptions({ workspaceId: "ws" }))).resolves.toEqual({});
+  const mutation = cache.getMutationCache().build(cache, rpc("workItem.dispatch").mutationOptions());
+  await expect(mutation.execute({ workItemId: "work", agentType: "codex" })).resolves.toMatchObject({ status: "pending" });
+  cache.clear();
 });

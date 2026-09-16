@@ -15,7 +15,7 @@ import {
 import { getMobileTasksDashboardHref } from "~/features/tablet/navigation";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { authClient } from "~/utils/auth";
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
 
 interface ProviderRun {
@@ -160,18 +160,18 @@ export default function ProviderDetailScreen() {
   // Results are consumed as ProviderRun[] below; cast to one branch's shape.
   const runsQueryOptions = (
     scope.mode === "workspace"
-      ? trpc.agentRun.list.queryOptions(
+      ? rpc("agent.run.list").queryOptions(
           { workspaceId: scope.workspaceId, limit: 100 },
           { enabled: Boolean(session), refetchInterval: 10_000 },
         )
-      : trpc.agentRun.listAll.queryOptions(
+      : rpc("agent.run.listAll").queryOptions(
           { limit: 100 },
           { enabled: Boolean(session), refetchInterval: 10_000 },
         )
-  ) as ReturnType<typeof trpc.agentRun.listAll.queryOptions>;
+  );
   const runsQuery = useQuery(runsQueryOptions);
   const runs = useMemo(
-    () => filterProviderRuns((runsQuery.data ?? []) as ProviderRun[], provider),
+    () => filterProviderRuns([...(runsQuery.data ?? [])] as ProviderRun[], provider),
     [provider, runsQuery.data],
   );
   const groups = useMemo(() => buildProviderRunGroups(runs), [runs]);

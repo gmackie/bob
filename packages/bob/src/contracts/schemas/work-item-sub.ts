@@ -70,13 +70,14 @@ export const NotificationRecordSchema = Schema.Struct({
 });
 
 export const TaskRunRecordSchema = Schema.Struct({
+  branch: Schema.optional(Schema.NullOr(Schema.String)),
   id: Schema.String,
   userId: Schema.String,
   workItemId: Schema.optional(Schema.NullOr(Schema.String)),
   sessionId: Schema.optional(Schema.NullOr(Schema.String)),
   status: Schema.String,
   createdAt: Schema.optional(Schema.String),
-  updatedAt: Schema.optional(Schema.String),
+  updatedAt: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 export const LifecycleEventRecordSchema = Schema.Struct({

@@ -9,6 +9,14 @@ export const ProjectSummarySchema = Schema.Struct({
   id: Schema.String,
   key: Schema.String,
   name: Schema.String,
+  defaultAgentType: Schema.optional(Schema.NullOr(Schema.String)),
+});
+
+const RelatedWorkItemSchema = Schema.Struct({
+  id: Schema.String,
+  identifier: Schema.String,
+  title: Schema.String,
+  status: Schema.String,
 });
 
 export const WorkItemRecordSchema = Schema.Struct({
@@ -16,9 +24,23 @@ export const WorkItemRecordSchema = Schema.Struct({
   identifier: Schema.optional(Schema.String),
   title: Schema.String,
   description: Schema.optional(Schema.NullOr(Schema.String)),
-  kind: Schema.String,
+  kind: WorkItemKindEnum,
   status: Schema.String,
   priority: Schema.optional(Schema.String),
+  queueSortOrder: Schema.optional(Schema.NullOr(Schema.Number)),
+  agentTypeOverride: Schema.optional(Schema.NullOr(Schema.String)),
+  externalId: Schema.optional(Schema.NullOr(Schema.String)),
+  agentStatus: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        sessionId: Schema.String,
+        status: Schema.String,
+        agentType: Schema.String,
+      }),
+    ),
+  ),
+  dependencies: Schema.optional(Schema.Array(RelatedWorkItemSchema)),
+  dependents: Schema.optional(Schema.Array(RelatedWorkItemSchema)),
   sequenceNumber: Schema.optional(Schema.NullOr(Schema.Number)),
   projectId: Schema.optional(Schema.NullOr(Schema.String)),
   ownerUserId: Schema.optional(Schema.NullOr(Schema.String)),
@@ -26,7 +48,12 @@ export const WorkItemRecordSchema = Schema.Struct({
   parentId: Schema.optional(Schema.NullOr(Schema.String)),
   project: Schema.optional(Schema.NullOr(ProjectSummarySchema)),
   createdAt: Schema.optional(Schema.String),
-  updatedAt: Schema.optional(Schema.String),
+  updatedAt: Schema.optional(Schema.NullOr(Schema.String)),
+});
+
+export const WorkItemDisplaySchema = Schema.Struct({
+  ...WorkItemRecordSchema.fields,
+  identifier: Schema.String,
 });
 
 export const CommentRecordSchema = Schema.Struct({
@@ -37,7 +64,7 @@ export const CommentRecordSchema = Schema.Struct({
   body: Schema.String,
   bodyHtml: Schema.optional(Schema.NullOr(Schema.String)),
   createdAt: Schema.optional(Schema.String),
-  updatedAt: Schema.optional(Schema.String),
+  updatedAt: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 export const ArtifactRecordSchema = Schema.Struct({
@@ -62,7 +89,7 @@ export const ArtifactRecordSchema = Schema.Struct({
 
 export const GetWorkItemResultSchema = Schema.NullOr(
   Schema.Struct({
-    workItem: WorkItemRecordSchema,
+    workItem: WorkItemDisplaySchema,
     currentArtifacts: Schema.Array(ArtifactRecordSchema),
     childCount: Schema.Number,
   }),

@@ -7,7 +7,7 @@ import {
 } from "~/features/tablet/work-item-entry";
 import type {MobileWorkItemOutcomeRun} from "~/features/tablet/work-item-entry";
 import { colors } from "~/lib/colors";
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 
 interface LinkedExecutionRunsCardProps {
   workItemId: string;
@@ -23,7 +23,7 @@ export function LinkedExecutionRunsCard({
   onOpenSession,
 }: LinkedExecutionRunsCardProps) {
   const runsQuery = useQuery(
-    trpc.agentRun.listByWorkItem.queryOptions(
+    rpc("agent.run.listByWorkItem").queryOptions(
       { workItemId, limit: 20 },
       { enabled: Boolean(workItemId), refetchInterval: 10_000 },
     ),

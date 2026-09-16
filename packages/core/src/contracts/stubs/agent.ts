@@ -393,12 +393,9 @@ const handlers = AgentRpc.of({
   "agent.session.getWorkflowState": ({ sessionId }) =>
     sessionId === STUB_SESSION_ID
       ? Effect.succeed({
-          sessionId,
-          status: "implementing" as const,
-          message: "Working on task",
-          phase: null,
-          progress: null,
-          updatedAt: STUB_DATE,
+          workflowStatus: "implementing",
+          statusMessage: "Working on task",
+          awaitingInput: null,
         })
       : Effect.fail(new NotFoundError({ entity: "Session", id: sessionId })),
 

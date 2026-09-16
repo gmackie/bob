@@ -8,7 +8,7 @@ import { overridesFromRows } from "@bob/notifications/preferences-rows";
 import { summariseNotificationPreferences } from "~/features/settings/notification-matrix-model";
 import { buildSettingsIndex } from "~/features/settings/settings-index-model";
 import { SETTINGS_SECTIONS } from "~/features/settings/settings-shell-model";
-import { trpc } from "~/utils/api";
+import { trpc, rpc } from "~/utils/api";
 
 /**
  * Settings index — the phone's entry point.
@@ -32,7 +32,7 @@ export default function SettingsIndexScreen() {
     trpc.settings.listNotificationPreferences.queryOptions(undefined),
   );
   const { data: apiKeys } = useQuery(trpc.settings.listApiKeys.queryOptions(undefined));
-  const { data: workspaces } = useQuery(trpc.workspace.list.queryOptions(undefined));
+  const { data: workspaces } = useQuery(rpc("projects.workspace.list").queryOptions(undefined));
 
   const prefs = preferences as
     | { pushNotifications?: boolean; emailNotifications?: boolean; theme?: string }

@@ -23,7 +23,7 @@ import {
 import { Input } from "@gmacko/core/ui/input";
 import { Textarea } from "@gmacko/core/ui/textarea";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 interface CreateWorkItemDialogProps {
   open: boolean;
@@ -59,7 +59,7 @@ export function CreateWorkItemDialog({
   projects = [],
 }: CreateWorkItemDialogProps) {
   const router = useRouter();
-  const trpc = useTRPC();
+  const rpc = useBobQueryClient();
 
   const [kind, setKind] = useState<"issue" | "epic" | "task">("task");
   const [title, setTitle] = useState("");
@@ -69,7 +69,7 @@ export function CreateWorkItemDialog({
   const [priority, setPriority] = useState("no_priority");
 
   const createTask = useMutation(
-    trpc.planning.createTask.mutationOptions({
+    rpc("planning.createTask").mutationOptions({
       onSuccess: (data) => {
         toast(`Created ${data.identifier}`);
         onOpenChange(false);

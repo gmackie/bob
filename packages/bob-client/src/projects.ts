@@ -1,3 +1,5 @@
+import type { Rpc } from "effect/unstable/rpc";
+import type { ProjectsWorkspaceListRpc } from "@gmacko/core/contracts/groups/projects";
 import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
 
 import type { ClientRuntime } from "./internal/runtime.js";
@@ -19,7 +21,7 @@ export interface ProjectsClient extends Record<string, unknown> {
   readonly setDefaultAgent: RpcMethod;
   readonly dismissDir: RpcMethod;
   readonly workspace: {
-    readonly list: RpcMethod;
+    readonly list: RpcMethod<void, Rpc.Success<typeof ProjectsWorkspaceListRpc>>;
     readonly create: RpcMethod;
     readonly rename: RpcMethod;
     readonly setDefaultAgent: RpcMethod;

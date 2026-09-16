@@ -30,7 +30,7 @@ import {
 } from "~/features/settings/settings-model";
 import { SELECTED_WORKSPACE_KEY } from "~/features/settings/workspace-selection";
 import { colors } from "~/lib/colors";
-import { trpc } from "~/utils/api";
+import { trpc, rpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
 import type { ProviderKey } from "~/features/tablet/dashboard";
 
@@ -145,7 +145,7 @@ export function WorkspacesSection() {
     null,
   );
   const { data: memberships, isLoading } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
+    rpc("projects.workspace.list").queryOptions(undefined, { staleTime: 60_000 }),
   );
 
   useEffect(() => {
@@ -167,13 +167,13 @@ export function WorkspacesSection() {
     setSelectedWorkspaceId(workspaceId);
     void AsyncStorage.setItem(SELECTED_WORKSPACE_KEY, workspaceId).then(() => {
       void queryClient.invalidateQueries({
-        queryKey: trpc.workspace.list.queryKey(),
+        queryKey: rpc("projects.workspace.list").queryKey(),
       });
       void queryClient.invalidateQueries({
         queryKey: trpc.project.list.queryKey(),
       });
       void queryClient.invalidateQueries({
-        queryKey: trpc.workItem.list.queryKey(),
+        queryKey: rpc("workItem.list").queryKey(),
       });
     });
   };

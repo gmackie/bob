@@ -36,7 +36,7 @@ import {
   normalizeMobileWorkItemEntryView,
 } from "~/features/tablet/work-item-entry";
 import { colors } from "~/lib/colors";
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
 
 const PIPELINE_STAGES = [
@@ -106,44 +106,44 @@ export default function WorkItemDetailScreen() {
   const [commentDraft, setCommentDraft] = useState("");
 
   const workItemQuery = useQuery(
-    trpc.workItem.get.queryOptions(
+    rpc("workItem.get").queryOptions(
       { id: workItemId },
       { enabled: Boolean(session && workItemId) },
     ),
   );
 
   const commentsQuery = useQuery(
-    trpc.comment.listByWorkItem.queryOptions(
+    rpc("workItem.comment.list").queryOptions(
       { workItemId },
       { enabled: Boolean(session && workItemId) },
     ),
   );
 
   const createCommentMutation = useMutation(
-    trpc.comment.create.mutationOptions({
+    rpc("workItem.comment.create").mutationOptions({
       onSuccess: async () => {
         setCommentDraft("");
         await queryClient.invalidateQueries({
-          queryKey: trpc.comment.listByWorkItem.queryKey({ workItemId }),
+          queryKey: rpc("workItem.comment.list").queryKey({ workItemId }),
         });
       },
     }),
   );
 
   const promoteToTaskMutation = useMutation(
-    trpc.workItem.promoteToTask.mutationOptions({
+    rpc("workItem.promoteToTask").mutationOptions({
       onSuccess: async () => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.workItem.get.queryKey({ id: workItemId }),
+          queryKey: rpc("workItem.get").queryKey({ id: workItemId }),
         });
       },
     }),
   );
   const dispatchTaskMutation = useMutation(
-    trpc.workItem.dispatch.mutationOptions({
+    rpc("workItem.dispatch").mutationOptions({
       onSuccess: async (result) => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.workItem.get.queryKey({ id: workItemId }),
+          queryKey: rpc("workItem.get").queryKey({ id: workItemId }),
         });
         const workspaceId = workItemQuery.data?.workItem.workspaceId ?? null;
         router.push(
@@ -166,21 +166,21 @@ export default function WorkItemDetailScreen() {
     limit: 50,
   };
   const childItemsQuery = useQuery(
-    trpc.workItem.list.queryOptions(childListInput, {
+    rpc("workItem.list").queryOptions(childListInput, {
       enabled: Boolean(
         session && workItemId && workItemQuery.data?.workItem.kind !== "task",
       ),
     }),
   );
   const dispatchChildTaskMutation = useMutation(
-    trpc.workItem.dispatch.mutationOptions({
+    rpc("workItem.dispatch").mutationOptions({
       onSuccess: async () => {
         await Promise.all([
           queryClient.invalidateQueries({
-            queryKey: trpc.workItem.list.queryKey(childListInput),
+            queryKey: rpc("workItem.list").queryKey(childListInput),
           }),
           queryClient.invalidateQueries({
-            queryKey: trpc.workItem.get.queryKey({ id: workItemId }),
+            queryKey: rpc("workItem.get").queryKey({ id: workItemId }),
           }),
         ]);
       },
@@ -500,7 +500,7 @@ export default function WorkItemDetailScreen() {
                       setDispatching(false);
                     }
                     await queryClient.invalidateQueries({
-                      queryKey: trpc.workItem.list.queryKey(childListInput),
+                      queryKey: rpc("workItem.list").queryKey(childListInput),
                     });
                   }}
                 >

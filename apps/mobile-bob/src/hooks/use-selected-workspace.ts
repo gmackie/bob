@@ -9,7 +9,7 @@ import {
 } from "~/features/settings/workspace-selection";
 import type { SelectableWorkspaceMembership } from "~/features/settings/workspace-selection";
 import { authClient } from "~/utils/auth";
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 
 export function useSelectedWorkspace() {
   const { data: session } = authClient.useSession();
@@ -20,7 +20,7 @@ export function useSelectedWorkspace() {
     : (rawWorkspaceParam as string | undefined);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const workspacesQuery = useQuery(
-    trpc.workspace.list.queryOptions(undefined, {
+    rpc("projects.workspace.list").queryOptions(undefined, {
       enabled: Boolean(session),
       staleTime: 60_000,
     }),

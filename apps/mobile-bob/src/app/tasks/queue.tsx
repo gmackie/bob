@@ -22,7 +22,7 @@ import { getMobileQueueWorkItemHref } from "~/features/tablet/work-item-entry";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { colors } from "~/lib/colors";
 import { authClient } from "~/utils/auth";
-import { trpc } from "~/utils/api";
+import { trpc, rpc } from "~/utils/api";
 
 export default function PriorityQueueScreen() {
   const { data: session, isPending } = authClient.useSession();
@@ -31,13 +31,13 @@ export default function PriorityQueueScreen() {
   const listInput = { workspaceId: workspace?.id ?? "", limit: 100 };
   const [localOrder, setLocalOrder] = useState<string[]>([]);
   const workItemsQuery = useQuery(
-    trpc.workItem.list.queryOptions(
+    rpc("workItem.list").queryOptions(
       listInput,
       { enabled: Boolean(workspace?.id), refetchInterval: 10_000 },
     ),
   );
   const rows = useMemo(
-    () => buildPriorityQueueItems((workItemsQuery.data ?? []) as TabletQueueItem[]),
+    () => buildPriorityQueueItems([...(workItemsQuery.data ?? [])] as TabletQueueItem[]),
     [workItemsQuery.data],
   );
   const header = getMobilePriorityQueueHeaderModel();
@@ -73,16 +73,16 @@ export default function PriorityQueueScreen() {
     trpc.workItems.reorderQueue.mutationOptions({
       onSuccess: async () => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.workItem.list.queryKey(listInput),
+          queryKey: rpc("workItem.list").queryKey(listInput),
         });
       },
     }),
   );
   const dispatchMutation = useMutation(
-    trpc.workItem.dispatch.mutationOptions({
+    rpc("workItem.dispatch").mutationOptions({
       onSuccess: async (result) => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.workItem.list.queryKey(listInput),
+          queryKey: rpc("workItem.list").queryKey(listInput),
         });
         if (typeof result.sessionId === "string") {
           router.push(getSessionHref(result.sessionId, workspace?.id));

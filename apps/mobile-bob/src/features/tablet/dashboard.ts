@@ -809,7 +809,7 @@ function getDefaultProviderUsageLimits(
 }
 
 export function buildTaskLaneSummaries(
-  workItems: TabletDashboardWorkItem[],
+  workItems: readonly TabletDashboardWorkItem[],
 ): TaskLaneSummary[] {
   const needsAttention = filterTaskLaneWorkItems(workItems, "needs-attention");
   const ready = filterTaskLaneWorkItems(workItems, "ready");
@@ -921,7 +921,7 @@ export function getTabletDashboardSectionOrder(): TabletDashboardSectionKey[] {
 }
 
 export function filterTaskLaneWorkItems(
-  workItems: TabletDashboardWorkItem[],
+  workItems: readonly TabletDashboardWorkItem[],
   lane: TaskLaneKey,
 ): TabletDashboardWorkItem[] {
   const ordered = buildExecutionQueue(workItems).filter(
@@ -998,7 +998,7 @@ function getTaskLaneRowStatus(
 }
 
 export function buildRecentlyCompletedWorkItems(
-  workItems: TabletDashboardWorkItem[],
+  workItems: readonly TabletDashboardWorkItem[],
   limit = 5,
 ): TabletDashboardWorkItem[] {
   return workItems
@@ -1020,7 +1020,7 @@ export function getRecentlyCompletedRowModel(
 }
 
 export function buildRecentOutcomeWorkItems(
-  workItems: TabletDashboardWorkItem[],
+  workItems: readonly TabletDashboardWorkItem[],
   limit = 8,
 ): TabletDashboardWorkItem[] {
   return workItems
@@ -1077,7 +1077,7 @@ export function getRecentOutcomeRowModel(
 }
 
 export function buildActiveWorkItems(
-  workItems: TabletDashboardWorkItem[],
+  workItems: readonly TabletDashboardWorkItem[],
   limit = 8,
 ): TabletDashboardWorkItem[] {
   return buildExecutionQueue(workItems)

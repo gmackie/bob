@@ -59,7 +59,7 @@ export function WorkspaceAgentsSection() {
   const { data: workspaceMemberships, isLoading } = useQuery({
     queryKey: ["rpc", "projects.workspace.list"],
     queryFn: () =>
-      rpc.projects.workspace.list() as Promise<WorkspaceMembership[]>,
+      rpc.projects.workspace.list() as Promise<readonly WorkspaceMembership[]>,
   });
 
   if (isLoading) {

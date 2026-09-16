@@ -75,7 +75,7 @@ export interface TabletLeftRailProjectSummary {
 
 export interface TabletLeftRailBadgeInput {
   sessions: TabletShellSession[];
-  workItems: TabletQueueItem[];
+  workItems: readonly TabletQueueItem[];
   projects: TabletLeftRailProjectSummary[];
 }
 
@@ -621,7 +621,7 @@ export function buildShellSessionRows<T extends TabletShellSession>(
 }
 
 export function buildRecentOutcomeRailRows(input: {
-  workItems: TabletQueueItem[];
+  workItems: readonly TabletQueueItem[];
   sessions: TabletShellSession[];
   workspaceId?: string | null;
   now?: Date;
@@ -682,7 +682,7 @@ export function buildRecentOutcomeRailRows(input: {
 }
 
 export function buildTabletShellSessionsFromAgentRuns(
-  runs: TabletAgentRunSessionInput[],
+  runs: readonly TabletAgentRunSessionInput[],
 ): TabletShellSession[] {
   return runs.flatMap((run) => {
     if (!run.sessionId) return [];

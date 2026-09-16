@@ -21,7 +21,8 @@
     "build:app": "node scripts/build-node-app.mjs"
   },
   "dependencies": {
-    "ws": "catalog:"
+    "ws": "catalog:",
+    "@gmacko/bob-client": "workspace:*"
   },
   "devDependencies": {
     "@bob/server": "workspace:*",
@@ -34,6 +35,8 @@
     "vitest": "^4.1.11",
     "electron-builder-squirrel-windows": "26.15.3",
     "electron": "41.10.3",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "effect": "4.0.0-beta.43",
+    "@gmacko/core": "workspace:*"
   }
 }

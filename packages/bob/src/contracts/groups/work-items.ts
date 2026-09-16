@@ -8,6 +8,7 @@ import { BobNotFoundError, BobForbiddenError, BobConflictError } from "../errors
 import {
   WorkItemKindEnum,
   WorkItemRecordSchema,
+  WorkItemDisplaySchema,
   ArtifactRecordSchema,
   CommentRecordSchema,
   GetWorkItemResultSchema,
@@ -42,7 +43,7 @@ export const WorkItemListRpc = Rpc.make("workItem.list", {
     statuses: Schema.optional(Schema.Array(Schema.String)),
     limit: Schema.optional(Schema.Number),
   }),
-  success: Schema.Array(WorkItemRecordSchema),
+  success: Schema.Array(WorkItemDisplaySchema),
   error: BobNotFoundError,
 });
 

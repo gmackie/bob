@@ -24,7 +24,7 @@ import type {MobileProjectAutomationKey, MobileProjectConfigurationManagementGro
 import type { MobileWorkItemEntryView } from "~/features/tablet/work-item-entry";
 import { formatStatusLabel } from "~/features/tablet/queue";
 import { colors } from "~/lib/colors";
-import { trpc } from "~/utils/api";
+import { trpc, rpc } from "~/utils/api";
 
 interface ProjectWorkItem {
   id: string;
@@ -67,7 +67,7 @@ export function TabletProjectPane({
   );
   const projectData = projectQuery.data as ProjectData | undefined;
   const workItemsQuery = useQuery(
-    trpc.workItem.list.queryOptions(
+    rpc("workItem.list").queryOptions(
       {
         workspaceId: projectData?.project.workspaceId ?? "",
         projectId,

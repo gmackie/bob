@@ -101,7 +101,7 @@ function toRow(item: HomeWorkItemInput): HomeRow {
 
 function section(
   key: HomeSectionKey,
-  items: HomeWorkItemInput[],
+  items: readonly HomeWorkItemInput[],
   limit: number,
 ): HomeSection {
   // Freshest first: on a phone the top of each list is all that gets read.
@@ -118,7 +118,7 @@ function section(
 }
 
 export function buildHomeTriage(
-  input: { workItems: HomeWorkItemInput[] },
+  input: { workItems: readonly HomeWorkItemInput[] },
   options: { limit?: number } = {},
 ): HomeTriage {
   const limit = options.limit ?? HOME_SECTION_LIMIT;

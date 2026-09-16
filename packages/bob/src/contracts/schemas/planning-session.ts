@@ -31,7 +31,7 @@ export const PlanSessionRecordSchema = Schema.Struct({
   planningProjectId: Schema.optional(Schema.NullOr(Schema.String)),
   planningProjectName: Schema.optional(Schema.NullOr(Schema.String)),
   createdAt: Schema.optional(Schema.String),
-  updatedAt: Schema.optional(Schema.String),
+  updatedAt: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 /** Plan draft record from the plan_drafts table. */

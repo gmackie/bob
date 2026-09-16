@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { GatewaySession } from "~/hooks/use-gateway";
 import type { ConnectionState } from "@bob/ws";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
-import { trpc } from "~/utils/api";
+import { trpc, rpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
 import { OodaConversationsTab } from "./OodaConversationsTab";
 import { EmptyState } from "~/components/ui";
@@ -518,7 +518,7 @@ function ItemsTab({
   const { workspace: primaryWorkspace } = useSelectedWorkspace();
   const listInput = { workspaceId: primaryWorkspace?.id ?? "", limit: 30 };
 
-  const workItemsQuery = useQuery(trpc.workItem.list.queryOptions(
+  const workItemsQuery = useQuery(rpc("workItem.list").queryOptions(
     listInput,
     getTabletRailWorkItemQueryOptions(Boolean(primaryWorkspace?.id)),
   ));
@@ -527,7 +527,7 @@ function ItemsTab({
     trpc.workItems.reorderQueue.mutationOptions({
       onSuccess: async () => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.workItem.list.queryKey(listInput),
+          queryKey: rpc("workItem.list").queryKey(listInput),
         });
         onRefresh?.();
       },
@@ -535,10 +535,10 @@ function ItemsTab({
   );
 
   const dispatchMutation = useMutation(
-    trpc.workItem.dispatch.mutationOptions({
+    rpc("workItem.dispatch").mutationOptions({
       onSuccess: async (result) => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.workItem.list.queryKey(listInput),
+          queryKey: rpc("workItem.list").queryKey(listInput),
         });
         onRefresh?.();
         if (typeof result.sessionId === "string") {
@@ -548,7 +548,7 @@ function ItemsTab({
     }),
   );
 
-  const workItemRows = (workItemsQuery.data ?? []) as unknown as TabletQueueItem[];
+  const workItemRows = [...(workItemsQuery.data ?? [])] as unknown as TabletQueueItem[];
   const items = buildExecutionQueue(workItemRows);
   const queueItems = buildPriorityQueueItems(workItemRows);
 
@@ -771,7 +771,7 @@ function RecentOutcomeItemsTab({
 }) {
   const { workspace: primaryWorkspace } = useSelectedWorkspace();
   const workItemsQuery = useQuery(
-    trpc.workItem.list.queryOptions(
+    rpc("workItem.list").queryOptions(
       { workspaceId: primaryWorkspace?.id ?? "", limit: 100 },
       getTabletRailWorkItemQueryOptions(Boolean(primaryWorkspace?.id)),
     ),
@@ -964,7 +964,7 @@ export function TabletSidebar({
 }: TabletSidebarProps) {
   const { workspace: primaryWorkspace } = useSelectedWorkspace();
   const workItemsQuery = useQuery(
-    trpc.workItem.list.queryOptions(
+    rpc("workItem.list").queryOptions(
       { workspaceId: primaryWorkspace?.id ?? "", limit: 100 },
       getTabletRailWorkItemQueryOptions(Boolean(primaryWorkspace?.id)),
     ),

@@ -16,19 +16,19 @@ import { getMobileTasksDashboardHref } from "~/features/tablet/navigation";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { colors } from "~/lib/colors";
 import { authClient } from "~/utils/auth";
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 
 export default function RecentOutcomesScreen() {
   const { data: session, isPending } = authClient.useSession();
   const { workspace } = useSelectedWorkspace();
   const workItemsQuery = useQuery(
-    trpc.workItem.list.queryOptions(
+    rpc("workItem.list").queryOptions(
       { workspaceId: workspace?.id ?? "", limit: 100 },
       { enabled: Boolean(workspace?.id), refetchInterval: 10_000 },
     ),
   );
   const sessionsQuery = useQuery(
-    trpc.agentRun.list.queryOptions(
+    rpc("agent.run.list").queryOptions(
       { workspaceId: workspace?.id ?? "", limit: 100 },
       { enabled: Boolean(workspace?.id), refetchInterval: 10_000 },
     ),
@@ -38,7 +38,7 @@ export default function RecentOutcomesScreen() {
       workspaceId: workspace?.id,
       workItems: workItemsQuery.data ?? [],
       sessions: buildTabletShellSessionsFromAgentRuns(
-        (sessionsQuery.data ?? []) as TabletAgentRunSessionInput[],
+        [...(sessionsQuery.data ?? [])] as TabletAgentRunSessionInput[],
       ),
       limit: 100,
     }),

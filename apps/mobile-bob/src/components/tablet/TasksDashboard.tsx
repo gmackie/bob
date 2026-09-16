@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { GatewaySession } from "~/hooks/use-gateway";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
 import { EmptyState } from "~/components/ui";
 import {
@@ -336,24 +336,24 @@ export function TasksDashboard({
   const { width } = useWindowDimensions();
   const { workspace: primaryWorkspace } = useSelectedWorkspace();
   const workItemsQuery = useQuery(
-    trpc.workItem.list.queryOptions(
+    rpc("workItem.list").queryOptions(
       { workspaceId: primaryWorkspace?.id ?? "", limit: 80 },
       { enabled: Boolean(primaryWorkspace?.id), refetchInterval: 10_000 },
     ),
   );
   const workItems = useMemo(
-    () => ((workItemsQuery.data ?? []) as TabletQueueItem[]),
+    () => ([...(workItemsQuery.data ?? [])] as TabletQueueItem[]),
     [workItemsQuery.data],
   );
   const agentRunsQuery = useQuery(
-    trpc.agentRun.list.queryOptions(
+    rpc("agent.run.list").queryOptions(
       { workspaceId: primaryWorkspace?.id ?? "", limit: 100 },
       { enabled: Boolean(primaryWorkspace?.id), refetchInterval: 10_000 },
     ),
   );
   const capacitySnapshots = useMemo(
     () => extractProviderCapacitySnapshotsFromRuns(
-      (agentRunsQuery.data ?? []) as {
+      [...(agentRunsQuery.data ?? [])] as {
         id: string;
         agentType?: string | null;
         summary?: unknown;

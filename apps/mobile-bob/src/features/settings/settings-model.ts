@@ -120,7 +120,7 @@ export function buildMobileSettingsDeviceSummary(input: {
 
 export function buildWorkspaceSettingRows(input: {
   selectedWorkspaceId: string | null;
-  memberships: WorkspaceSettingMembership[];
+  memberships: readonly WorkspaceSettingMembership[];
 }): WorkspaceSettingRow[] {
   const workspaces = input.memberships
     .map((membership) => membership.workspace)

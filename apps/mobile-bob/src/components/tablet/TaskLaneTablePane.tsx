@@ -11,7 +11,7 @@ import type { TaskLaneKey } from "~/features/tablet/dashboard";
 import type { TabletQueueItem } from "~/features/tablet/queue";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { colors } from "~/lib/colors";
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 
 const LANE_TITLE: Record<TaskLaneKey, string> = {
   "needs-attention": "Needs Attention",
@@ -29,13 +29,13 @@ export function TaskLaneTablePane({
 }) {
   const { workspace } = useSelectedWorkspace();
   const workItemsQuery = useQuery(
-    trpc.workItem.list.queryOptions(
+    rpc("workItem.list").queryOptions(
       { workspaceId: workspace?.id ?? "", limit: 100 },
       { enabled: Boolean(workspace?.id), refetchInterval: 10_000 },
     ),
   );
   const workItems = useMemo(
-    () => filterTaskLaneWorkItems((workItemsQuery.data ?? []) as TabletQueueItem[], lane),
+    () => filterTaskLaneWorkItems([...(workItemsQuery.data ?? [])] as TabletQueueItem[], lane),
     [lane, workItemsQuery.data],
   );
 

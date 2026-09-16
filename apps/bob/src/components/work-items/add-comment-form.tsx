@@ -7,7 +7,7 @@ import { toast } from "@gmacko/core/ui/toast";
 import { Button } from "@gmacko/core/ui/button";
 import { Textarea } from "@gmacko/core/ui/textarea";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 interface AddCommentFormProps {
   issueId: string;
@@ -16,10 +16,10 @@ interface AddCommentFormProps {
 export function AddCommentForm({ issueId }: AddCommentFormProps) {
   const [body, setBody] = useState("");
   const router = useRouter();
-  const trpc = useTRPC();
+  const rpc = useBobQueryClient();
 
   const addComment = useMutation(
-    trpc.planning.addComment.mutationOptions({
+    rpc("planning.addComment").mutationOptions({
       onSuccess: () => {
         setBody("");
         router.refresh();

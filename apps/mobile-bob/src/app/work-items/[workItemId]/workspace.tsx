@@ -21,7 +21,7 @@ import {
   summarizeSessionEvents,
   summarizeTaskRuns,
 } from "~/features/planning/task-workspace";
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
 import { getBaseUrl } from "~/utils/base-url";
 import { useGateway } from "~/hooks/use-gateway";
@@ -112,14 +112,14 @@ export default function TaskWorkspaceScreen() {
   const [agentType, setAgentType] = useState<string>("claude");
 
   const workItemQuery = useQuery(
-    trpc.workItem.get.queryOptions(
+    rpc("workItem.get").queryOptions(
       { id: workItemId },
       { enabled: Boolean(session && workItemId) },
     ),
   );
 
   const taskRunsQuery = useQuery(
-    trpc.taskRun.listByWorkItem.queryOptions(
+    rpc("workItem.taskRun.listByWorkItem").queryOptions(
       { workItemId },
       { enabled: Boolean(session && workItemId) },
     ),
@@ -127,7 +127,7 @@ export default function TaskWorkspaceScreen() {
 
   const sessionListInput = useMemo(() => ({ limit: 50 }), []);
   const sessionsQuery = useQuery(
-    trpc.session.list.queryOptions(sessionListInput, {
+    rpc("agent.session.list").queryOptions(sessionListInput, {
       enabled: Boolean(session && workItemId),
     }),
   );
@@ -175,7 +175,7 @@ export default function TaskWorkspaceScreen() {
     null;
 
   const workflowStateQuery = useQuery(
-    trpc.session.getWorkflowState.queryOptions(
+    rpc("agent.session.getWorkflowState").queryOptions(
       { sessionId: linkedSession ?? "" },
       { enabled: Boolean(linkedSession) },
     ),
@@ -184,7 +184,7 @@ export default function TaskWorkspaceScreen() {
   // Historical backfill: one fetch of events that predate our live
   // subscription. Live events stream in over the WS gateway below.
   const eventsQuery = useQuery(
-    trpc.session.getEvents.queryOptions(
+    rpc("agent.session.getEvents").queryOptions(
       { sessionId: linkedSession ?? "", limit: 30 },
       { enabled: Boolean(linkedSession) },
     ),
@@ -230,19 +230,19 @@ export default function TaskWorkspaceScreen() {
     null;
 
   const sendInputMutation = useMutation(
-    trpc.session.sendHeadlessInput.mutationOptions({
+    rpc("agent.session.sendHeadlessInput").mutationOptions({
       onSuccess: async () => {
         setMessageDraft("");
         if (!linkedSession) return;
         await Promise.all([
           queryClient.invalidateQueries({
-            queryKey: trpc.session.getEvents.queryKey({
+            queryKey: rpc("agent.session.getEvents").queryKey({
               sessionId: linkedSession,
               limit: 30,
             }),
           }),
           queryClient.invalidateQueries({
-            queryKey: trpc.session.getWorkflowState.queryKey({
+            queryKey: rpc("agent.session.getWorkflowState").queryKey({
               sessionId: linkedSession,
             }),
           }),
@@ -252,7 +252,7 @@ export default function TaskWorkspaceScreen() {
   );
 
   const dispatchWorkMutation = useMutation(
-    trpc.workItem.dispatch.mutationOptions({
+    rpc("workItem.dispatch").mutationOptions({
       onMutate: () => {
         setExecutionLaunchError(null);
       },
@@ -261,13 +261,13 @@ export default function TaskWorkspaceScreen() {
         setStartedExecutionSessionId(sessionId);
         await Promise.all([
           queryClient.invalidateQueries({
-            queryKey: trpc.session.list.queryKey(sessionListInput),
+            queryKey: rpc("agent.session.list").queryKey(sessionListInput),
           }),
           queryClient.invalidateQueries({
-            queryKey: trpc.taskRun.listByWorkItem.queryKey({ workItemId }),
+            queryKey: rpc("workItem.taskRun.listByWorkItem").queryKey({ workItemId }),
           }),
           queryClient.invalidateQueries({
-            queryKey: trpc.workItem.get.queryKey({ id: workItemId }),
+            queryKey: rpc("workItem.get").queryKey({ id: workItemId }),
           }),
         ]);
       },
@@ -280,11 +280,11 @@ export default function TaskWorkspaceScreen() {
   );
 
   const resolveAwaitingInputMutation = useMutation(
-    trpc.session.resolveAwaitingInput.mutationOptions({
+    rpc("agent.session.resolveAwaitingInput").mutationOptions({
       onSuccess: async () => {
         if (!linkedSession) return;
         await queryClient.invalidateQueries({
-          queryKey: trpc.session.getWorkflowState.queryKey({
+          queryKey: rpc("agent.session.getWorkflowState").queryKey({
             sessionId: linkedSession,
           }),
         });

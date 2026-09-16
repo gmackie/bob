@@ -36,7 +36,7 @@ import type {
   TabletPlanningProject,
 } from "~/features/tablet/planning-dashboard";
 import type { TabletShellMode } from "~/features/tablet/shell";
-import { trpc } from "~/utils/api";
+import { trpc, rpc } from "~/utils/api";
 
 const SUMMARY_TONE_COLORS: Record<TabletPlanningDashboardSummaryTone, string> = {
   default: colors.muted,
@@ -176,10 +176,10 @@ export function TabletPlanningDashboard({
   );
   const primaryProject = projects[0]?.project ?? null;
   const createPlanningSessionMutation = useMutation(
-    trpc.planSession.create.mutationOptions(),
+    rpc("planning.session.create").mutationOptions(),
   );
   const startPlanningSessionMutation = useMutation(
-    trpc.planSession.start.mutationOptions(),
+    rpc("planning.session.start").mutationOptions(),
   );
   const isStarting =
     createPlanningSessionMutation.isPending ||
@@ -227,7 +227,7 @@ export function TabletPlanningDashboard({
       setGoal("");
       setComposerOpen(false);
       await queryClient.invalidateQueries({
-        queryKey: trpc.session.list.queryKey({ limit: 50 }),
+        queryKey: rpc("agent.session.list").queryKey({ limit: 50 }),
       });
       onOpenPlanningSession(sessionId);
     } catch (caught) {

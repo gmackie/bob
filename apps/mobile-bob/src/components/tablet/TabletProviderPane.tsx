@@ -16,7 +16,7 @@ import type {ProviderKey, ProviderRunRowModel, ProviderRunSectionModel} from "~/
 import type { MobileWorkItemEntryView } from "~/features/tablet/work-item-entry";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { colors } from "~/lib/colors";
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 
 interface ProviderRun {
   id: string;
@@ -48,18 +48,18 @@ export function TabletProviderPane({
   // Results are consumed as ProviderRun[] below; cast to one branch's shape.
   const runsQueryOptions = (
     scope.mode === "workspace"
-      ? trpc.agentRun.list.queryOptions(
+      ? rpc("agent.run.list").queryOptions(
           { workspaceId: scope.workspaceId, limit: 100 },
           { enabled: true, refetchInterval: 10_000 },
         )
-      : trpc.agentRun.listAll.queryOptions(
+      : rpc("agent.run.listAll").queryOptions(
           { limit: 100 },
           { enabled: true, refetchInterval: 10_000 },
         )
-  ) as ReturnType<typeof trpc.agentRun.listAll.queryOptions>;
+  );
   const runsQuery = useQuery(runsQueryOptions);
   const runs = useMemo(
-    () => filterProviderRuns((runsQuery.data ?? []) as ProviderRun[], provider),
+    () => filterProviderRuns([...(runsQuery.data ?? [])] as ProviderRun[], provider),
     [provider, runsQuery.data],
   );
   const sections = useMemo(() => buildProviderRunSectionModels(runs), [runs]);
