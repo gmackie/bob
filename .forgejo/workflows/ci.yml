@@ -12,6 +12,7 @@ jobs:
   research-backend:
     name: Research backend
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -80,6 +81,7 @@ jobs:
     # see those packages' test files for the hardcoded connection string, and
     # test/emulate-setup.ts / emulate.config.yaml for how it's now served.
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -359,6 +361,7 @@ jobs:
     # Keep them off the general CI pool so a degraded node cannot consume
     # Wrangler's request timeout before it reaches the API.
     runs-on: forgegraph-worker
+    timeout-minutes: 30
     steps:
       - name: Refuse to deploy when a dependency of this app failed
         if: needs.ci.outputs.deployable != 'true'
@@ -403,6 +406,7 @@ jobs:
     # keeps the same safety property — no deploy on red — but says so.
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: forgegraph-worker
+    timeout-minutes: 30
     steps:
       - name: Refuse to deploy when a dependency of this app failed
         if: needs.ci.outputs.deployable != 'true'
