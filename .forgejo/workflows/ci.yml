@@ -316,7 +316,7 @@ jobs:
             fi
           fi
 
-          HTTP=$(curl -s -o /tmp/fg_report.out -w "%{http_code}" -X POST "https://forgegraf.com/api/fg/ci/report" \
+          HTTP=$(curl -s --retry 3 --retry-all-errors --retry-max-time 45 --connect-timeout 5 --max-time 15 -o /tmp/fg_report.out -w "%{http_code}" -X POST "https://forgegraf.com/api/fg/ci/report" \
             -H "Authorization: Bearer ${FG_CI_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{
@@ -326,7 +326,7 @@ jobs:
               \"branch\": \"${BRANCH}\",
               \"status\": \"${STATUS}\",
               \"runId\": \"${{ github.run_id }}\",
-              \"runUrl\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
+              \"runUrl\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_number }}\",
               \"workflowName\": \"CI\"${TESTS_FIELD}
             }")
           echo "ForgeGraph CI report: HTTP ${HTTP}"
