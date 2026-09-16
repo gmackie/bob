@@ -44,3 +44,19 @@ Telemetry does not record request bodies, authentication headers or query values
 Node request paths use an explicit safe route allowlist; unknown paths retain only
 the HTTP method. Export failures must not change application responses. Runtime
 signal owners await SDK shutdown before process exit.
+
+## Authorized run storage status
+
+The Bob Worker needs `FORGEGRAPH_TRACE_API_TOKEN`, a dedicated platform-service
+bearer accepted by ForgeGraph's `/api/fg/telemetry/trace-presence` endpoint.
+The existing `FG_API_TOKEN` integration credential is not a substitute: it may
+have a different scope and return 403. Keep the trace credential server-only and
+provision it in both the production secret store and deployed Worker bindings.
+`FORGEGRAPH_TRACE_API_URL` defaults to `https://forgegraf.com`; other origins are
+rejected. This configuration is independent of the legacy `FG_API_URL`.
+
+The session and API-key status routes authorize the run before deriving its
+session correlation. Missing credentials and failed storage queries produce
+`unavailable`; they never imply that a trace was stored. Release verification
+must exercise the deployed endpoint using the actual consumer credential and
+confirm an exact owned span returns `stored`.

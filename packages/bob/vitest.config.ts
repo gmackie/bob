@@ -12,7 +12,7 @@ import { defineConfig } from "vitest/config";
 // targets (@bob/api#test, @bob/db#test, …).
 const NESTED_PACKAGES = [
   "agents", "api", "auth", "chat", "ci", "config", "cookies", "db",
-  "execution", "git", "notifications", "projects", "secrets", "settings",
+  "execution", "git", "notifications", "observability", "projects", "secrets", "settings",
   "telemetry", "tenancy", "webhooks", "work-items", "ws",
 ];
 
