@@ -46,6 +46,7 @@ jobs:
     # opening hetzner-bob (which is also the agent host) to every heavy
     # ubuntu-latest job.
     runs-on: forgegraph-ci
+    timeout-minutes: 20
     steps:
       - name: Enqueue Preflight build of this commit
         run: |
