@@ -45,6 +45,7 @@ const createMockDb = () => {
       workspaces: {
         findFirst: vi.fn(),
       },
+      workItems: { findFirst: vi.fn() },
       repositories: {
         findFirst: vi.fn(),
       },

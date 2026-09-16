@@ -1,3 +1,5 @@
+import { withTraceSpan } from "@gmacko/core/telemetry/deep";
+import { readDispatchTrace } from "./trace-dispatch";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { accessSync, constants as fsConstants, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -103,6 +105,11 @@ interface WorktreeContext {
 interface ServerSessionAvailable {
   type: "session_available";
   sessionId: string;
+  /** Gateway-resolved ownership; never inferred from a display identifier. */
+  workspaceId?: string;
+  workItemId?: string;
+  issueId?: string;
+  forgeGraphWorkItemId?: string;
   workingDirectory: string;
   agentType: string;
   title?: string;
@@ -940,6 +947,21 @@ export class BobGatewayConnector {
   }
 
   private async handleSessionAvailable(session: ServerSessionAvailable): Promise<void> {
+    return withTraceSpan("session.dispatch", () => this.executeSessionAvailable(session), {
+      carrier: readDispatchTrace(session.personaConfig),
+      kind: "consumer",
+      link: true,
+      attributes: {
+        "session.id": session.sessionId, "messaging.operation": "process",
+        ...(session.workspaceId ? { "workspace.id": session.workspaceId } : {}),
+        ...(session.workItemId ? { "work_item.id": session.workItemId } : {}),
+        ...(session.issueId ? { "issue.id": session.issueId } : {}),
+        ...(session.forgeGraphWorkItemId ? { "forgegraph.work_item.id": session.forgeGraphWorkItemId } : {}),
+      },
+    });
+  }
+
+  private async executeSessionAvailable(session: ServerSessionAvailable): Promise<void> {
     if (this.activeSessions.size >= this.config.maxConcurrent) {
       console.log(`[bob-gw] At capacity (${this.config.maxConcurrent}), skipping ${session.sessionId}`);
       return;
@@ -965,6 +987,19 @@ export class BobGatewayConnector {
     });
     this.sendStatus(session.sessionId, "starting");
 
+    // Attach the active dispatch trace before setup can fail.
+    // Record an agentRun so this shows in Recent Outcomes (via <agent>), the
+    // same surface the task-runner reports to. workItemId uses the identifier
+    // (publicApiCreateRun matches it to the work item by externalId).
+    const bobRunId = await this.bobReporter
+      .startRun({
+        workItemId: session.workItemId ?? session.identifier ?? session.sessionId,
+        agentType: wantedAgent,
+        title: session.title,
+        agentConfig: { sessionId: session.sessionId },
+      })
+      .catch(() => null);
+
     // When the server mapped a repo + branch, run in an isolated git worktree
     // off that repo so the agent never touches the runner's own checkout and so
     // we can push the branch + open a PR. Otherwise fall back to the legacy dir.
@@ -977,8 +1012,10 @@ export class BobGatewayConnector {
     ) {
       try {
         const repoPath = session.workingDirectory;
-        const baseBranch = await this.detectBaseBranch(repoPath);
-        worktree = await this.setupWorktree(repoPath, session.branch, baseBranch);
+        worktree = await withTraceSpan("session.worktree.prepare", async () => {
+          const baseBranch = await this.detectBaseBranch(repoPath);
+          return this.setupWorktree(repoPath, session.branch!, baseBranch);
+        }, { attributes: { "session.id": session.sessionId } });
         workDir = worktree.path;
         console.log(`[bob-gw] worktree ready: ${workDir} (branch ${worktree.branch})`);
         this.installBobCheck(worktree.path);
@@ -987,6 +1024,7 @@ export class BobGatewayConnector {
         console.error(`[bob-gw] worktree setup failed: ${msg}`);
         this.sendStatus(session.sessionId, "error", { code: "WORKTREE_ERROR", error: msg });
         this.sendEvent(session.sessionId, "error", "system", { code: "WORKTREE_ERROR", message: msg });
+        await this.bobReporter.finishRun(bobRunId, "failed", { code: "WORKTREE_ERROR", error: msg }).catch(() => {});
         this.activeSessions.delete(session.sessionId);
         return;
       }
@@ -994,7 +1032,8 @@ export class BobGatewayConnector {
       workDir = this.resolveWorkDir(session);
       if (!existsSync(workDir)) {
         console.error(`[bob-gw] Working directory not found: ${workDir}`);
-        this.sendStatus(session.sessionId, "error");
+        this.sendStatus(session.sessionId, "error", { code: "WORKING_DIRECTORY_ERROR" });
+        await this.bobReporter.finishRun(bobRunId, "failed", { code: "WORKING_DIRECTORY_ERROR" }).catch(() => {});
         this.activeSessions.delete(session.sessionId);
         return;
       }
@@ -1010,16 +1049,6 @@ export class BobGatewayConnector {
     this.sendStatus(session.sessionId, "running");
     this.sendEvent(session.sessionId, "state", "system", { status: "running" });
 
-    // Record an agentRun so this shows in Recent Outcomes (via <agent>), the
-    // same surface the task-runner reports to. workItemId uses the identifier
-    // (publicApiCreateRun matches it to the work item by externalId).
-    const bobRunId = await this.bobReporter
-      .startRun({
-        workItemId: session.identifier ?? session.sessionId,
-        agentType: adapterId,
-        title: session.title,
-      })
-      .catch(() => null);
     let runOutput = "";
     const collect = (s: string) => {
       runOutput += s;
@@ -1069,11 +1098,13 @@ export class BobGatewayConnector {
       }
     };
     try {
-      if (adapter) {
-        await this.runWithAdapter(session, adapter, workDir, prompt, collect, worktree);
-      } else {
-        await this.runWithCli(session, workDir, prompt, collect);
-      }
+      await withTraceSpan("session.execute", async () => {
+        if (adapter) {
+          await this.runWithAdapter(session, adapter, workDir, prompt, collect, worktree);
+        } else {
+          await this.runWithCli(session, workDir, prompt, collect);
+        }
+      }, { attributes: { "session.id": session.sessionId } });
 
       if (this.stopRequested.has(session.sessionId)) {
         await this.reportInterrupted(session, bobRunId, runOutput, startTime);

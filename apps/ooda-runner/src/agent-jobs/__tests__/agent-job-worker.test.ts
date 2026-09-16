@@ -1,3 +1,4 @@
+import { runWithWorkerTrace } from "@gmacko/core/telemetry/deep";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -82,9 +83,9 @@ class LeaseLostAdapter implements AgentAdapter {
 describe("AgentJobWorker", () => {
   afterEach(async () => {
     await Promise.all(
-      testRoots.splice(0).map((root) =>
-        rm(root, { recursive: true, force: true }),
-      ),
+      testRoots
+        .splice(0)
+        .map((root) => rm(root, { recursive: true, force: true })),
     );
   });
 
@@ -165,7 +166,12 @@ describe("AgentJobWorker", () => {
       processSandbox: async (command) => command,
     });
 
-    await worker.poll();
+    await runWithWorkerTrace(
+      { traceId: "1".repeat(32), spanId: "2".repeat(16), sampled: true },
+      undefined,
+      () => {},
+      () => worker.poll(),
+    );
     await worker.waitForIdle();
 
     expect(claim).toHaveBeenCalledWith({
@@ -191,6 +197,18 @@ describe("AgentJobWorker", () => {
             response: "A concise research result",
           }),
         }),
+      }),
+    );
+    expect(recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "artifact",
+        payload: expect.objectContaining({
+          kind: "trace_reference",
+          jobId: "job-worker-1",
+          attempt: 1,
+          captureState: "pending",
+        }),
+        idempotencyKey: "job-worker-1:attempt:1:event:1",
       }),
     );
     await worker.stop();

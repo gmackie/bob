@@ -208,7 +208,11 @@ test("phase wrapper records only fresh summaries with matching checkout provenan
     new URL("./ci-check-phase.mjs", import.meta.url),
   );
   const dir = mkdtempSync(join(tmpdir(), "gate-wrapper-"));
+  const inheritedEventsPath = process.env.FG_CHECK_EVENTS_PATH;
   try {
+    const parentEventsPath = join(dir, "parent-events.jsonl");
+    writeFileSync(parentEventsPath, "parent evidence\n");
+    process.env.FG_CHECK_EVENTS_PATH = parentEventsPath;
     mkdirSync(join(dir, ".turbo", "runs"), { recursive: true });
     writeFileSync(
       join(dir, ".turbo", "runs", "stale.json"),
@@ -223,6 +227,8 @@ test("phase wrapper records only fresh summaries with matching checkout provenan
     );
     const env = {
       ...process.env,
+      // Negative fixture events must never contaminate the real CI report.
+      FG_CHECK_EVENTS_PATH: join(dir, "fixture-events.jsonl"),
       CI_CHECK_SHA: "current",
       CI_CHECK_RUN_ID: "123",
       CI_CHECK_ATTEMPT: "1",
@@ -287,7 +293,10 @@ test("phase wrapper records only fresh summaries with matching checkout provenan
       readFileSync(join(dir, ".turbo", "ci-evidence", "lint.json"), "utf8"),
     );
     assert.equal(e.exitCode, 7);
+    assert.equal(readFileSync(parentEventsPath, "utf8"), "parent evidence\n");
   } finally {
+    if (inheritedEventsPath === undefined) delete process.env.FG_CHECK_EVENTS_PATH;
+    else process.env.FG_CHECK_EVENTS_PATH = inheritedEventsPath;
     rmSync(dir, { recursive: true, force: true });
   }
 });

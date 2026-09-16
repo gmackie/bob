@@ -1,5 +1,13 @@
 {
   "name": "ooda-blder-bot",
+  "observability": {
+    "traces": {
+      "enabled": true,
+      "destinations": ["signoz-traces"]
+    },
+    "enabled": true,
+    "logs": { "enabled": true, "destinations": ["signoz-logs"] }
+  },
   "main": "./worker/index.js",
   "compatibility_date": "2025-12-01",
   "compatibility_flags": ["nodejs_compat"],

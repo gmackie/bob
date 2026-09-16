@@ -411,6 +411,11 @@ export interface PlanningContext {
 export interface ServerSessionAvailable {
   type: "session_available";
   sessionId: string;
+  /** Gateway-resolved ownership; never inferred from a display identifier. */
+  workspaceId?: string;
+  workItemId?: string;
+  issueId?: string;
+  forgeGraphWorkItemId?: string;
   workingDirectory: string;
   agentType: string;
   title?: string;

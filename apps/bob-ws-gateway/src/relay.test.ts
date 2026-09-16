@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { EventEmitter } from "node:events";
+import { PgDialect } from "drizzle-orm/pg-core";
 import type { ClientMessage, ServerMessage } from "./protocol.js";
 
 // Mock db
@@ -59,7 +60,7 @@ vi.mock("@bob/db/client", () => {
       runnerLeases: { findMany: vi.fn(() => Promise.resolve([])) },
       sessionEvents: { findMany: vi.fn() },
       taskRuns: { findFirst: vi.fn(() => Promise.resolve(null)) },
-      workItems: { findMany: vi.fn(() => Promise.resolve([])) },
+      workItems: { findFirst: vi.fn(), findMany: vi.fn(() => Promise.resolve([])) },
     },
     update: vi.fn(() => makeUpdateChain()),
     select: vi.fn(() => makeSelectChain()),
@@ -152,6 +153,27 @@ describe("Relay", () => {
       expect(err?.type).toBe("error");
       expect((err as any).code).toBe("AUTH_FAILED");
       expect(ws.readyState).toBe(3); // closed
+    });
+  });
+
+  describe("pending execution ownership", () => {
+    it.each(["ws-1", "foreign", null])("only delivers context to its bound workspace: %s", async (workspaceId) => {
+      const ws = new FakeWs();
+      vi.mocked(db.query.chatConversations.findMany).mockResolvedValueOnce([
+        { id: "pending-1", userId: "user-1", status: "pending", sessionType: "execution", workItemId: "item-1", title: "Cached foreign title", agentType: "codex" },
+      ] as never);
+      vi.mocked(db.query.workItems.findFirst).mockImplementationOnce((query) => {
+        const where = query?.where;
+        if (!where || typeof where === "function") throw new Error("Expected scoped predicate");
+        const params = new PgDialect().sqlToQuery(where).params;
+        return Promise.resolve(params.includes("ws-1") ? { description: "Owned context" } : undefined) as never;
+      });
+      const conn = { ws, kind: "daemon", userId: "user-1", workspaceId, deliveredSessions: new Set<string>() };
+      const poll = relay as unknown as { deliverPendingSessionsToDaemon(conn: unknown): Promise<void> };
+      await poll.deliverPendingSessionsToDaemon(conn);
+      const messages = ws.sentOfType("session_available");
+      if (workspaceId === "ws-1") expect(messages).toEqual([expect.objectContaining({ description: "Owned context", workspaceId: "ws-1", workItemId: "item-1" })]);
+      else expect(messages).toEqual([]);
     });
   });
 
@@ -900,6 +922,15 @@ describe("Relay", () => {
       });
       await new Promise((r) => setImmediate(r));
 
+      vi.mocked(db.query.chatConversations.findFirst).mockReset().mockResolvedValue({ workItemId: "item-1" } as never);
+      vi.mocked(db.query.workItems.findFirst).mockReset().mockImplementationOnce((query) => {
+        const where = query?.where;
+        if (!where || typeof where === "function") throw new Error("Expected scoped predicate");
+        const params = new PgDialect().sqlToQuery(where).params;
+        expect(params).toContain("ws-1");
+        return Promise.resolve({ id: "item-1" }) as never;
+      });
+
       await relay.nudgeSession({
         sessionId: "sess-99",
         workspaceId: "ws-1",
@@ -911,6 +942,7 @@ describe("Relay", () => {
       const nudges = daemonWs.sentOfType("session_available");
       expect(nudges.length).toBe(1);
       expect((nudges[0] as any).sessionId).toBe("sess-99");
+      expect(nudges[0]).toMatchObject({ workspaceId: "ws-1", workItemId: "item-1" });
     });
 
     it("silently drops nudge when daemon is offline", () => {

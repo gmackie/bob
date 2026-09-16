@@ -106,6 +106,7 @@
     "./desktop-shell": "./src/desktop-shell/index.ts",
     "./models": "./src/models/index.ts",
     "./inference": "./src/inference/index.ts",
+    "./telemetry/deep": "./src/telemetry/deep.ts",
     "./telemetry/node": "./src/telemetry/node.ts",
     "./telemetry/worker": "./src/telemetry/worker.ts"
   },
