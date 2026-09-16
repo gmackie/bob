@@ -7,6 +7,7 @@
  * Phase 7B-4D-beta Task 10.
  */
 import type { HandlerContext } from "../handlers/context.js";
+import { wrapAuthorizedHandler } from "../handlers/authorized-rpc.js";
 import { wrapHandler } from "../handlers/bridge.js";
 import {
   sessionList,
@@ -105,7 +106,7 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
       toSeq?: number;
       limit: number;
     };
-  }) => wrapHandler(sessionGetEvents, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionGetEvents, ctx, payload, "session"),
 
   "session.getConnections": ({
     payload,

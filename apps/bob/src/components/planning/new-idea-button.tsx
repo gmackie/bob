@@ -8,7 +8,7 @@ import { PlusIcon } from "@radix-ui/react-icons";
 import { Button } from "@gmacko/core/ui/button";
 import { toast } from "@gmacko/core/ui/toast";
 import { getWorkItemEntryPlanSessionHref } from "~/components/work-items/work-item-entry-model";
-import { useTRPC } from "~/trpc/react";
+import { useBobRpcClient } from "~/rpc/react";
 
 interface NewIdeaButtonProps {
   workspaceId: string;
@@ -18,17 +18,24 @@ interface NewIdeaButtonProps {
 
 export function NewIdeaButton({ workspaceId, projectId, className }: NewIdeaButtonProps) {
   const router = useRouter();
-  const trpc = useTRPC();
+  const rpc = useBobRpcClient();
   const [title, setTitle] = useState("");
   const [open, setOpen] = useState(false);
 
   // planning.createTask creates an issue via the remote planning API
-  const createTask = useMutation(
-    trpc.planning.createTask.mutationOptions(),
-  );
-  const createSession = useMutation(
-    trpc.planSession.create.mutationOptions(),
-  );
+  const createTask = useMutation({
+    mutationFn: (input: { projectId: string; title: string; status: string }) =>
+      rpc.planning.createTask(input) as Promise<{ id: string; workItemId?: string }>,
+  });
+  const createSession = useMutation({
+    mutationFn: (input: {
+      workspaceId: string;
+      projectId: string;
+      title: string;
+      workItemId: string;
+      planningSessionType: string;
+    }) => rpc.planning.session.create(input) as Promise<{ id: string }>,
+  });
 
   async function handleCreate() {
     if (!title.trim()) {
@@ -44,16 +51,19 @@ export function NewIdeaButton({ workspaceId, projectId, className }: NewIdeaButt
         status: "backlog",
       });
 
+      const workItemId = task.workItemId ?? task.id;
+
       // Create planning session linked to the new task
       const session = await createSession.mutateAsync({
         workspaceId,
         projectId,
         title: `Shape ${title.trim()}`,
+        workItemId,
         planningSessionType: "office_hours",
       });
 
       // Navigate to split-view
-      router.push(getWorkItemEntryPlanSessionHref(task.id, session.id, workspaceId));
+      router.push(getWorkItemEntryPlanSessionHref(workItemId, session.id, workspaceId));
     } catch (err: any) {
       toast(err.message ?? "Failed to create idea");
     }

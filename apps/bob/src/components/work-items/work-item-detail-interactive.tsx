@@ -14,7 +14,6 @@ import { OpenChatPanelButton } from "~/components/chat/open-chat-panel-button";
 import { KIND_COLOR, formatLabel } from "~/lib/design/colors";
 import { formatRelativeTime } from "~/lib/format/time";
 import { getTaskWorkspaceHref } from "~/lib/planning/task-workspace";
-import { useTRPC } from "~/trpc/react";
 
 import { FeatureBranchView } from "~/components/pull-requests/feature-branch-view";
 import {
@@ -97,7 +96,6 @@ export function WorkItemDetailInteractive({
   entryContext,
 }: WorkItemDetailInteractiveProps) {
   const router = useRouter();
-  const trpc = useTRPC();
   const rpc = useBobRpcClient();
 
   // Personas available to run this dispatch under (empty for workspaces with
@@ -112,7 +110,8 @@ export function WorkItemDetailInteractive({
   });
 
   const updateTask = useMutation(
-    trpc.planning.updateTask.mutationOptions({
+    {
+      mutationFn: (input: { id: string; title?: string; description?: string; status?: string; priority?: string }) => rpc.planning.updateTask(input),
       onSuccess: () => {
         router.refresh();
       },
@@ -121,11 +120,12 @@ export function WorkItemDetailInteractive({
           style: { background: "#1a0000", borderColor: "#f43f5e40" },
         });
       },
-    }),
+    },
   );
   const dispatchWork = useMutation(
-    trpc.workItem.dispatch.mutationOptions({
-      onSuccess: (result: any) => {
+    {
+      mutationFn: rpc.workItems.dispatch,
+      onSuccess: (result) => {
         if (typeof result?.sessionId === "string") {
           router.push(getWorkItemOutcomeSessionHref(result.sessionId, entryContext?.workspaceId));
           return;
@@ -137,11 +137,12 @@ export function WorkItemDetailInteractive({
           style: { background: "#1a0000", borderColor: "#f43f5e40" },
         });
       },
-    }),
+    },
   );
 
   const updateAgent = useMutation(
-    trpc.workItems.update.mutationOptions({
+    {
+      mutationFn: (input: { id: string; agentTypeOverride: string | null }) => rpc.workItems.update(input),
       onSuccess: () => {
         router.refresh();
       },
@@ -150,7 +151,7 @@ export function WorkItemDetailInteractive({
           style: { background: "#1a0000", borderColor: "#f43f5e40" },
         });
       },
-    }),
+    },
   );
 
   const isPending = updateTask.isPending;
@@ -536,30 +537,30 @@ function RelatedWorkItemsList({
   );
 }
 
-function OutcomeReadableOutputPanel({
+export function OutcomeReadableOutputPanel({
   workItemId,
   workspaceId,
 }: {
   workItemId: string;
   workspaceId?: string | null;
 }) {
-  const trpc = useTRPC();
-  const { data: runs, isLoading: runsLoading } = useQuery(
-    trpc.agentRun.listByWorkItem.queryOptions(
-      { workItemId, limit: 10 },
-      { enabled: Boolean(workItemId), refetchInterval: 10_000 },
-    ),
-  );
+  const rpc = useBobRpcClient();
+  const { data: runs, isLoading: runsLoading, isError: runsFailed } = useQuery({
+    queryKey: ["rpc", "agent.run.listByWorkItem", { workItemId, limit: 10 }],
+    queryFn: () => rpc.agent.run.listByWorkItem({ workItemId, limit: 10 }),
+    enabled: Boolean(workItemId),
+    refetchInterval: 10_000,
+  });
   const latestRun = selectLatestSessionBackedOutcomeRun(
     ((runs ?? []) as WorkItemOutcomeRun[]),
   );
   const sessionId = latestRun?.sessionId ?? "";
-  const { data: eventData, isLoading: eventsLoading } = useQuery(
-    trpc.session.getEvents.queryOptions(
-      { sessionId, limit: 200 },
-      { enabled: Boolean(sessionId), refetchInterval: 5_000 },
-    ),
-  );
+  const { data: eventData, isLoading: eventsLoading, isError: eventsFailed } = useQuery({
+    queryKey: ["rpc", "agent.session.getEvents", { sessionId, limit: 200 }],
+    queryFn: () => rpc.agent.session.getEvents({ sessionId, limit: 200 }),
+    enabled: Boolean(sessionId),
+    refetchInterval: 5_000,
+  });
   const events = normalizeSessionEventRecords(eventData);
   const messages = collapseSessionEventsToMessages(events).slice(-6);
   const isLoading = runsLoading || (Boolean(sessionId) && eventsLoading);
@@ -590,6 +591,10 @@ function OutcomeReadableOutputPanel({
           <div className="h-4 animate-pulse rounded bg-muted/50" />
           <div className="h-4 w-2/3 animate-pulse rounded bg-muted/50" />
         </div>
+      ) : runsFailed || eventsFailed ? (
+        <p role="alert" className="mt-4 rounded-lg border border-destructive/30 px-3 py-3 text-sm text-destructive">
+          Could not load execution output. Open the session or try again.
+        </p>
       ) : !latestRun ? (
         <p className="mt-4 rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
           No execution session has been linked to this outcome yet.
@@ -629,13 +634,12 @@ function PlanningSessionsList({
   workItemId: string;
   workspaceId?: string | null;
 }) {
-  const trpc = useTRPC();
-  const { data: sessions } = useQuery(
-    trpc.planSession.listByWorkItem.queryOptions(
-      { workItemId },
-      { staleTime: 10_000 },
-    ),
-  );
+  const rpc = useBobRpcClient();
+  const { data: sessions } = useQuery({
+    queryKey: ["rpc", "planning.session.listByWorkItem", { workItemId }],
+    queryFn: () => rpc.planning.session.listByWorkItem({ workItemId }),
+    staleTime: 10_000,
+  });
   const sessionRows = Array.isArray(sessions) ? (sessions as any[]) : [];
 
   if (sessionRows.length === 0) return null;

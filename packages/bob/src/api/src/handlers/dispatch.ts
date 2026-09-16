@@ -415,19 +415,39 @@ export async function dispatchCreateBatch(
   return { batch, items };
 }
 
+/** Keep inner aliases literal: Drizzle's relational queries rewrite every
+ * interpolated Column to the outer alias, including columns in nested SQL. */
+function reviewItemScope(
+  workItemId: string,
+  workspaceId: string | ReturnType<typeof sql>,
+  planningTaskId: ReturnType<typeof sql>,
+) {
+  return sql`exists (
+    select 1 from work_items review_work_item
+    where (review_work_item.id = ${workItemId} or review_work_item.parent_id = ${workItemId})
+      and review_work_item.workspace_id::text = ${workspaceId}
+      and (review_work_item.id::text = ${planningTaskId}
+        or review_work_item.external_id = ${planningTaskId})
+  )`;
+}
+
 export async function dispatchGetBatch(
   ctx: HandlerContext,
-  input: { batchId: string },
+  input: { batchId: string; workItemId?: string },
 ) {
   const batch = await loadOwnedBatch(ctx.db, ctx.userId, input.batchId);
 
   const rawItems = await ctx.db.query.dispatchItems.findMany({
-    where: eq(dispatchItems.batchId, input.batchId),
+    where: and(
+      eq(dispatchItems.batchId, input.batchId),
+      input.workItemId ? reviewItemScope(input.workItemId, batch.workspaceId, sql`${dispatchItems.planningTaskId}`) : undefined,
+    ),
     orderBy: [dispatchItems.sortOrder],
     with: {
       taskRun: {
         columns: {
           sessionId: true,
+          workItemId: true,
           branch: true,
           status: true,
           createdAt: true,
@@ -440,6 +460,7 @@ export async function dispatchGetBatch(
   const items = rawItems.map(({ taskRun, ...item }) => ({
     ...item,
     sessionId: taskRun?.sessionId ?? null,
+    workItemId: taskRun?.workItemId ?? null,
     branch: taskRun?.branch ?? null,
     runStartedAt: taskRun?.createdAt ?? null,
     runCompletedAt: taskRun?.completedAt ?? null,
@@ -876,16 +897,23 @@ export async function dispatchCheckProgress(
 
 export async function dispatchListBatches(
   ctx: HandlerContext,
-  input: { status?: string; limit: number },
+  input: { status?: string; limit?: number; workItemId?: string },
 ) {
   const filters = [eq(dispatchBatches.userId, ctx.userId)];
   if (input.status) {
     filters.push(eq(dispatchBatches.status, input.status));
   }
+  if (input.workItemId) {
+    filters.push(sql`exists (
+      select 1 from dispatch_items review_dispatch_item
+      where review_dispatch_item.batch_id = ${dispatchBatches.id}
+        and ${reviewItemScope(input.workItemId, sql`${dispatchBatches.workspaceId}`, sql`review_dispatch_item.planning_task_id`)}
+    )`);
+  }
   return ctx.db.query.dispatchBatches.findMany({
     where: and(...filters),
     orderBy: desc(dispatchBatches.createdAt),
-    limit: input.limit,
+    limit: input.limit ?? 5,
   });
 }
 

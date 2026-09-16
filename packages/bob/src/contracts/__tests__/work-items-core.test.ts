@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { WorkItemsRpc } from "../groups/work-items.js";
+import { Schema } from "effect";
+import { WorkItemsRpc, WorkItemUpdateRpc } from "../groups/work-items.js";
 
 describe("WorkItemsRpc — 7B-4C Task 1", () => {
   it("has at least 18 procedures (Task 1 + Task 2 baseline)", () => {
@@ -11,9 +12,17 @@ describe("WorkItemsRpc — 7B-4C Task 1", () => {
     expect(names).toContain("workItem.list");
     expect(names).toContain("workItem.statusCounts");
     expect(names).toContain("workItem.get");
+    expect(names).toContain("workItem.dispatch");
     expect(names).toContain("workItem.update");
     expect(names).toContain("workItem.promoteToTask");
     expect(names).toContain("workItem.comment.list");
     expect(names).toContain("workItem.comment.create");
   });
+});
+
+it("preserves the selected agent and explicit reset across the update wire schema", () => {
+  for (const agentTypeOverride of ["codex", null]) {
+    const payload = { id: "item-1", agentTypeOverride };
+    expect(Schema.decodeUnknownSync(WorkItemUpdateRpc.payloadSchema)(payload)).toEqual(payload);
+  }
 });

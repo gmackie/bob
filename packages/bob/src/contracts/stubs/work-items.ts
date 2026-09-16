@@ -11,6 +11,7 @@ export const WorkItemsStubLayer = WorkItemsRpc.toLayer({
   "workItem.statusCounts": () => Effect.succeed({}),
   "workItem.get": () => Effect.succeed(null),
   "workItem.update": () => Effect.succeed(null),
+  "workItem.dispatch": () => Effect.succeed({ sessionId: "stub-session-1", identifier: "TASK-1", status: "pending" }),
   "workItem.promoteToTask": () => Effect.succeed(null),
   "workItem.comment.list": () => Effect.succeed([]),
   "workItem.comment.create": () =>

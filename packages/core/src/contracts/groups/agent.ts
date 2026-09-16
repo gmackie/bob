@@ -188,7 +188,7 @@ export const AgentRunListByWorkItemRpc = Rpc.make("agent.run.listByWorkItem", {
     limit: Schema.optional(Schema.Number),
   }),
   success: Schema.Array(AgentRunSchema),
-  error: NotFoundError,
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
 });
 
 // --- agent.capture.listTargets -----------------------------------------------
@@ -319,7 +319,7 @@ export const AgentSessionGetEventsRpc = Rpc.make("agent.session.getEvents", {
     events: Schema.Array(SessionEventSchema),
     latestSeq: Schema.Number,
   }),
-  error: NotFoundError,
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
 });
 
 // --- agent.session.getConnections -------------------------------------------

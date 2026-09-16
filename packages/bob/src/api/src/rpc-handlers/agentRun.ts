@@ -10,6 +10,7 @@ import { Effect } from "effect";
 import { RpcError } from "@gmacko/core/rpc/errors";
 
 import type { HandlerContext } from "../handlers/context.js";
+import { wrapAuthorizedHandler } from "../handlers/authorized-rpc.js";
 import { wrapHandler } from "../handlers/bridge.js";
 import {
   agentRunGet,
@@ -68,5 +69,5 @@ export const makeAgentRunRpcHandlers = (ctx: HandlerContext) => ({
     payload,
   }: {
     payload: { workItemId: string; limit: number };
-  }) => wrapHandler(agentRunListByWorkItem, ctx, payload, "agentRun"),
+  }) => wrapAuthorizedHandler(agentRunListByWorkItem, ctx, payload, "agentRun"),
 });

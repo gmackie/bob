@@ -4,7 +4,7 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
-import { BobNotFoundError, BobForbiddenError } from "../errors.js";
+import { BobNotFoundError, BobForbiddenError, BobConflictError } from "../errors.js";
 import {
   WorkItemKindEnum,
   WorkItemRecordSchema,
@@ -71,9 +71,24 @@ export const WorkItemUpdateRpc = Rpc.make("workItem.update", {
     description: Schema.optional(Schema.NullOr(Schema.String)),
     status: Schema.optional(Schema.String),
     priority: Schema.optional(Schema.String),
+    agentTypeOverride: Schema.optional(Schema.NullOr(Schema.String)),
   }),
   success: Schema.NullOr(WorkItemRecordSchema),
-  error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+  error: Schema.Union([BobNotFoundError, BobForbiddenError, BobConflictError]),
+});
+
+export const WorkItemDispatchRpc = Rpc.make("workItem.dispatch", {
+  payload: Schema.Struct({
+    workItemId: Schema.String,
+    agentType: Schema.optional(Schema.String),
+    personaId: Schema.optional(Schema.String),
+  }),
+  success: Schema.Struct({
+    sessionId: Schema.String,
+    identifier: Schema.String,
+    status: Schema.Literal("pending"),
+  }),
+  error: Schema.Union([BobNotFoundError, BobForbiddenError, BobConflictError]),
 });
 
 export const WorkItemPromoteToTaskRpc = Rpc.make("workItem.promoteToTask", {
@@ -420,6 +435,7 @@ export const WorkItemsRpc = RpcGroup.make(
   WorkItemStatusCountsRpc,
   WorkItemGetRpc,
   WorkItemUpdateRpc,
+  WorkItemDispatchRpc,
   WorkItemPromoteToTaskRpc,
   WorkItemCommentListRpc,
   WorkItemCommentCreateRpc,

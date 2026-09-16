@@ -38,7 +38,7 @@ export const makeDispatchRpcHandlers = (ctx: HandlerContext) => ({
   "dispatch.getBatch": ({
     payload,
   }: {
-    payload: { batchId: string };
+    payload: Parameters<typeof dispatchGetBatch>[1];
   }) => wrapHandler(dispatchGetBatch, ctx, payload, "dispatch"),
 
   "dispatch.updateItemAgent": ({
@@ -68,7 +68,7 @@ export const makeDispatchRpcHandlers = (ctx: HandlerContext) => ({
   "dispatch.listBatches": ({
     payload,
   }: {
-    payload: { status?: string; limit: number };
+    payload: Parameters<typeof dispatchListBatches>[1];
   }) => wrapHandler(dispatchListBatches, ctx, payload, "dispatch"),
 
   "dispatch.resetPipelineState": ({

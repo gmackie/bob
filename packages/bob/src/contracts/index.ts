@@ -85,6 +85,7 @@ export {
   WorkItemStatusCountsRpc,
   WorkItemGetRpc,
   WorkItemUpdateRpc,
+  WorkItemDispatchRpc,
   WorkItemPromoteToTaskRpc,
   WorkItemCommentListRpc,
   WorkItemCommentCreateRpc,

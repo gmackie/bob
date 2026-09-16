@@ -1,7 +1,7 @@
 // apps/web/src/components/review/review-page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "@gmacko/core/ui/toast";
@@ -36,6 +36,7 @@ interface RevisionData {
 }
 
 export interface ReviewPageProps {
+  latestExecution?: ReactNode;
   workItemId: string;
   workItemIdentifier: string;
   workItemTitle: string;
@@ -192,6 +193,8 @@ export function ReviewPage(props: ReviewPageProps) {
               <span>{props.items.filter(i => i.status === "completed").length}/{props.items.length} tasks done</span>
             </div>
           </div>
+
+          {props.latestExecution}
 
           {/* Code review cards */}
           {visibleItems.map((item) => {

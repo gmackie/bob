@@ -43,6 +43,10 @@ const sourceFiles = (paths: string[], cwd = repoRoot): string[] => {
 const read = (path: string) => readFileSync(join(repoRoot, path), "utf8");
 
 describe("Bob Effect-RPC migration guardrails", () => {
+  it("does not shadow TypeScript schema sources with generated JavaScript", () => {
+    const files = sourceFiles(["packages/bob/src/schema/src"]);
+    expect(files.filter(file => file.endsWith(".js") && existsSync(join(repoRoot, file.slice(0, -3) + ".ts")))).toEqual([]);
+  });
   it("checks new source files while excluding deleted files and ignored build output", () => {
     const fixture = mkdtempSync(join(tmpdir(), "bob-client-guard-"));
     try {
@@ -131,6 +135,8 @@ describe("Bob Effect-RPC migration guardrails", () => {
 
   it("keeps the first migrated web slices off the tRPC React client", () => {
     const migratedSlices = [
+      "apps/bob/src/components/work-items/work-item-detail-interactive.tsx",
+      "apps/bob/src/components/planning/new-idea-button.tsx",
       "apps/bob/src/app/(dashboard)/planning/page.tsx",
       "apps/bob/src/app/(dashboard)/planning/layout.tsx",
       "apps/bob/src/components/notifications/notification-panel.tsx",
