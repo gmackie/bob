@@ -8,19 +8,19 @@
  * The caller passes the drizzle `db` handle and a better-auth instance; this
  * module has no app-local or Next dependencies.
  */
-import { Layer } from "effect";
-import { LocalFilesystemAuthority } from "./handlers/local-filesystem-authority";
-import { resolveTrustedLocalFilesystem  } from "./handlers/trusted-local-filesystem";
-import type {TrustedLocalFilesystem} from "./handlers/trusted-local-filesystem";
-
-import { layerGmackoDb } from "@gmacko/core/db";
 import {
+  layerApiKeys,
   layerBetterAuth,
   layerSessions,
-  layerApiKeys,
   layerTenancy,
-  layerAuthMiddleware,
 } from "@gmacko/core/auth";
+import { layerGmackoDb } from "@gmacko/core/db";
+import { Layer } from "effect";
+
+import type { TrustedLocalFilesystem } from "./handlers/trusted-local-filesystem";
+import { layerBobAuthMiddleware } from "./bob-auth-middleware";
+import { LocalFilesystemAuthority } from "./handlers/local-filesystem-authority";
+import { resolveTrustedLocalFilesystem } from "./handlers/trusted-local-filesystem";
 
 export interface BobRuntimeLayersInput {
   readonly localFilesystem?: TrustedLocalFilesystem;
@@ -65,7 +65,9 @@ export function makeBobRuntimeLayers(
   const tenancyLayer = Layer.provide(layerTenancy, dbLayer);
 
   const runtimeLayer = Layer.mergeAll(
-    Layer.succeed(LocalFilesystemAuthority)((userId, headers) => resolveTrustedLocalFilesystem(input.localFilesystem, userId, headers)),
+    Layer.succeed(LocalFilesystemAuthority)((userId, headers) =>
+      resolveTrustedLocalFilesystem(input.localFilesystem, userId, headers),
+    ),
     dbLayer,
     sessionsLayer,
     apiKeysLayer,
@@ -73,8 +75,8 @@ export function makeBobRuntimeLayers(
   );
 
   const authMiddlewareLayer = Layer.provide(
-    layerAuthMiddleware,
-    Layer.mergeAll(sessionsLayer, apiKeysLayer, tenancyLayer),
+    layerBobAuthMiddleware,
+    Layer.mergeAll(dbLayer, sessionsLayer, apiKeysLayer, tenancyLayer),
   );
 
   // Widen to the erased `Layer<unknown, unknown, unknown>` boundary that
@@ -84,7 +86,15 @@ export function makeBobRuntimeLayers(
   // R/E/RIn generics computed above are what actually flow through
   // `Layer.provide` at the call site, so this doesn't relax any real check.
   return {
-    runtimeLayer: runtimeLayer as unknown as Layer.Layer<unknown, unknown, unknown>,
-    authMiddlewareLayer: authMiddlewareLayer as unknown as Layer.Layer<unknown, unknown, unknown>,
+    runtimeLayer: runtimeLayer as unknown as Layer.Layer<
+      unknown,
+      unknown,
+      unknown
+    >,
+    authMiddlewareLayer: authMiddlewareLayer as unknown as Layer.Layer<
+      unknown,
+      unknown,
+      unknown
+    >,
   };
 }

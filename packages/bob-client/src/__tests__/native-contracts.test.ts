@@ -115,3 +115,11 @@ it("encodes a freshly inserted planning session before updatedAt is set", async 
   };
   expect(Schema.encodeSync(SessionSchema)(session)).toEqual(session);
 });
+
+it("accepts the workflow states actually supported by Bob", async () => {
+  const { WorkflowStatusEnum } = await import("../../../core/src/contracts/schemas/agent-session.js");
+  for (const status of ["started", "working", "awaiting_input", "blocked", "awaiting_review", "completed"]) {
+    expect(Schema.decodeUnknownSync(WorkflowStatusEnum)(status)).toBe(status);
+  }
+  expect(() => Schema.decodeUnknownSync(WorkflowStatusEnum)("implementing")).toThrow();
+});

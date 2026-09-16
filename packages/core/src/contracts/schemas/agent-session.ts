@@ -41,14 +41,7 @@ export type EventDirection = Schema.Schema.Type<typeof EventDirectionEnum>;
 
 /** Workflow status for agent work-item tracking. */
 export const WorkflowStatusEnum = Schema.Literals([
-  "planning",
-  "implementing",
-  "testing",
-  "reviewing",
-  "awaiting_input",
-  "completed",
-  "failed",
-  "cancelled",
+  "started", "working", "awaiting_input", "blocked", "awaiting_review", "completed",
 ]);
 export type WorkflowStatus = Schema.Schema.Type<typeof WorkflowStatusEnum>;
 

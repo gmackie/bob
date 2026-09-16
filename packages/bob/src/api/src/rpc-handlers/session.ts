@@ -8,7 +8,6 @@
  */
 import type { HandlerContext } from "../handlers/context.js";
 import { wrapAuthorizedHandler } from "../handlers/authorized-rpc.js";
-import { wrapHandler } from "../handlers/bridge.js";
 import {
   sessionList,
   sessionGet,
@@ -45,13 +44,13 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
     payload,
   }: {
     payload: Parameters<typeof sessionList>[1];
-  }) => wrapHandler(sessionList, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionList, ctx, payload, "session"),
 
   "session.get": ({
     payload,
   }: {
     payload: { id: string };
-  }) => wrapHandler(sessionGet, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionGet, ctx, payload, "session"),
 
   "session.create": ({
     payload,
@@ -64,7 +63,7 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
       title?: string;
       personaId?: string;
     };
-  }) => wrapHandler(sessionCreate, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionCreate, ctx, payload, "session"),
 
   "session.bootstrapForChat": ({
     payload,
@@ -77,25 +76,25 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
       title?: string;
       personaId?: string;
     };
-  }) => wrapHandler(sessionBootstrapForChat, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionBootstrapForChat, ctx, payload, "session"),
 
   "session.updateTitle": ({
     payload,
   }: {
     payload: { id: string; title: string };
-  }) => wrapHandler(sessionUpdateTitle, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionUpdateTitle, ctx, payload, "session"),
 
   "session.stop": ({
     payload,
   }: {
     payload: { id: string };
-  }) => wrapHandler(sessionStop, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionStop, ctx, payload, "session"),
 
   "session.delete": ({
     payload,
   }: {
     payload: { id: string };
-  }) => wrapHandler(sessionDelete, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionDelete, ctx, payload, "session"),
 
   "session.getEvents": ({
     payload,
@@ -112,31 +111,31 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
     payload,
   }: {
     payload: { sessionId: string };
-  }) => wrapHandler(sessionGetConnections, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionGetConnections, ctx, payload, "session"),
 
   "session.sendHeadlessInput": ({
     payload,
   }: {
     payload: { sessionId: string; message: string };
-  }) => wrapHandler(sessionSendHeadlessInput, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionSendHeadlessInput, ctx, payload, "session"),
 
   "session.updateStatus": ({
     payload,
   }: {
     payload: Parameters<typeof sessionUpdateStatus>[1];
-  }) => wrapHandler(sessionUpdateStatus, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionUpdateStatus, ctx, payload, "session"),
 
   "session.claimLease": ({
     payload,
   }: {
     payload: { sessionId: string; gatewayId: string; leaseMs: number };
-  }) => wrapHandler(sessionClaimLease, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionClaimLease, ctx, payload, "session"),
 
   "session.releaseLease": ({
     payload,
   }: {
     payload: { sessionId: string };
-  }) => wrapHandler(sessionReleaseLease, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionReleaseLease, ctx, payload, "session"),
 
   "session.recordEvent": ({
     payload,
@@ -148,7 +147,7 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
       eventType: string;
       payload: Record<string, unknown>;
     };
-  }) => wrapHandler(sessionRecordEvent, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionRecordEvent, ctx, payload, "session"),
 
   "session.recordEventBatch": ({
     payload,
@@ -162,19 +161,19 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
         payload: Record<string, unknown>;
       }[];
     };
-  }) => wrapHandler(sessionRecordEventBatch, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionRecordEventBatch, ctx, payload, "session"),
 
   "session.getGatewayWebSocketUrl": ({
     payload,
   }: {
     payload: void;
-  }) => wrapHandler(sessionGetGatewayWebSocketUrl, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionGetGatewayWebSocketUrl, ctx, payload, "session"),
 
   "session.reportWorkflowStatus": ({
     payload,
   }: {
     payload: Parameters<typeof sessionReportWorkflowStatus>[1];
-  }) => wrapHandler(sessionReportWorkflowStatus, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionReportWorkflowStatus, ctx, payload, "session"),
 
   "session.reportTaskProgress": ({
     payload,
@@ -185,13 +184,13 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
       phase?: string;
       progress?: string;
     };
-  }) => wrapHandler(sessionReportTaskProgress, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionReportTaskProgress, ctx, payload, "session"),
 
   "session.linkTaskArtifact": ({
     payload,
   }: {
     payload: Parameters<typeof sessionLinkTaskArtifact>[1];
-  }) => wrapHandler(sessionLinkTaskArtifact, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionLinkTaskArtifact, ctx, payload, "session"),
 
   "session.markTaskReviewReady": ({
     payload,
@@ -202,7 +201,7 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
       summary: string;
       notesForReviewer?: string;
     };
-  }) => wrapHandler(sessionMarkTaskReviewReady, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionMarkTaskReviewReady, ctx, payload, "session"),
 
   "session.recordVerificationResult": ({
     payload,
@@ -213,7 +212,7 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
       summary: string;
       artifactUrl?: string;
     };
-  }) => wrapHandler(sessionRecordVerificationResult, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionRecordVerificationResult, ctx, payload, "session"),
 
   "session.completeTask": ({
     payload,
@@ -224,7 +223,7 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
       prUrl?: string;
       markIssueDone?: boolean;
     };
-  }) => wrapHandler(sessionCompleteTask, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionCompleteTask, ctx, payload, "session"),
 
   "session.requestInput": ({
     payload,
@@ -236,7 +235,7 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
       defaultAction: string;
       timeoutMinutes?: number;
     };
-  }) => wrapHandler(sessionRequestInput, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionRequestInput, ctx, payload, "session"),
 
   "session.resolveAwaitingInput": ({
     payload,
@@ -245,29 +244,29 @@ export const makeSessionRpcHandlers = (ctx: HandlerContext) => ({
       sessionId: string;
       resolution: { type: "human" | "timeout"; value: string };
     };
-  }) => wrapHandler(sessionResolveAwaitingInput, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionResolveAwaitingInput, ctx, payload, "session"),
 
   "session.getWorkflowState": ({
     payload,
   }: {
     payload: { sessionId: string };
-  }) => wrapHandler(sessionGetWorkflowState, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionGetWorkflowState, ctx, payload, "session"),
 
   "session.createVoiceSession": ({
     payload,
   }: {
     payload: { sessionId: string };
-  }) => wrapHandler(sessionCreateVoiceSession, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionCreateVoiceSession, ctx, payload, "session"),
 
   "session.stopVoiceSession": ({
     payload,
   }: {
     payload: { sessionId: string };
-  }) => wrapHandler(sessionStopVoiceSession, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionStopVoiceSession, ctx, payload, "session"),
 
   "session.handleVoiceTranscript": ({
     payload,
   }: {
     payload: { sessionId: string; transcript: string };
-  }) => wrapHandler(sessionHandleVoiceTranscript, ctx, payload, "session"),
+  }) => wrapAuthorizedHandler(sessionHandleVoiceTranscript, ctx, payload, "session"),
 });
