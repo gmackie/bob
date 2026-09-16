@@ -81,7 +81,9 @@ jobs:
     # see those packages' test files for the hardcoded connection string, and
     # test/emulate-setup.ts / emulate.config.yaml for how it's now served.
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Run 1166 spent 20 minutes on passing serial checks and lost reporting.
+    # Keep concurrency bounded, but budget 30 minutes from measured duration.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -134,6 +136,9 @@ jobs:
 
       - name: Validate the deployable gate
         run: node --test scripts/verify-ci-deployable-gate.test.mjs
+
+      - name: Validate independent CI reporting
+        run: node --test scripts/ci-report.test.mjs
 
 
       - name: Reset CI evidence
@@ -259,80 +264,55 @@ jobs:
             exit 1
           fi
 
-      - name: Report CI result to ForgeGraph
+      - name: Preserve CI report
         if: always()
         env:
+          CI_JOB_STATUS: ${{ job.status }}
+          CI_TYPECHECK: ${{ steps.typecheck.outcome }}
+          CI_LINT: ${{ steps.lint.outcome }}
+          CI_TEST: ${{ steps.test.outcome }}
+          CI_REPORT_BRANCH: ${{ github.head_ref || github.ref_name }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        run: node scripts/ci-report.mjs prepare ci-report/report.json
+
+      # v3 uses the artifact protocol supported by this Forgejo installation.
+      - name: Retain report for publication and recovery
+        if: always()
+        uses: https://github.com/actions/upload-artifact@v3
+        with:
+          name: ci-report-${{ github.run_id }}-${{ github.run_attempt || '1' }}
+          path: ci-report/report.json
+          if-no-files-found: error
+          retention-days: 14
+
+  report:
+    name: Publish CI report
+    needs: [ci, research-backend]
+    if: always()
+    runs-on: forgegraph-ci
+    timeout-minutes: 5
+    env:
+      CI_CHECK_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      CI_CHECK_RUN_ID: ${{ github.run_id }}
+      CI_CHECK_ATTEMPT: ${{ github.run_attempt || '1' }}
+      GITHUB_RUN_NUMBER: ${{ github.run_number }}
+      CI_SOURCE_RESULT: ${{ needs.ci.result }}
+      CI_RESEARCH_RESULT: ${{ needs.research-backend.result }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: https://github.com/actions/download-artifact@v3
+        with:
+          name: ci-report-${{ github.run_id }}-${{ github.run_attempt || '1' }}
+          path: ci-report
+      - name: Publish preserved result
+        env:
           FG_CI_TOKEN: ${{ secrets.FG_CI_TOKEN }}
-        run: |
-          if [ "${{ job.status }}" = "success" ]; then
-            STATUS="success"
-          elif [ "${{ job.status }}" = "cancelled" ]; then
-            STATUS="cancelled"
-          else
-            STATUS="failure"
-          fi
-
-          REPO_FULL="${{ github.repository }}"
-          OWNER="${REPO_FULL%%/*}"
-          REPO="${REPO_FULL##*/}"
-          BRANCH="${{ github.head_ref || github.ref_name }}"
-          # On pull_request events github.sha is the test-merge commit, not the branch
-          # head. Report the head SHA so it matches the ForgeGraph changeset's git_sha.
-          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
-
-          if [ -z "${FG_CI_TOKEN}" ]; then
-            echo "::warning::FG_CI_TOKEN is empty — CI result will NOT be reported to ForgeGraph (forge ci status will stay 'unknown')"
-          fi
-
-          # Capture the HTTP status so a failed/unauthenticated report is visible in
-          # the logs instead of being silently swallowed.
-          # Fold the check-events stream into the inline summary ForgeGraph
-          # stores as builds.metadata.tests (exact per-configuration counts +
-          # failing test names). Best-effort: no stream → no `tests` field.
-          TESTS_FIELD=""
-          if [ -f "${FG_CHECK_EVENTS_PATH}" ]; then
-            # Diagnostic: what actually reached the shared stream (per-package
-            # run_finished counts). Cheap, and the only way to see stream
-            # collisions or lost packages from a runner we can't attach to.
-            ls -la "${FG_CHECK_EVENTS_PATH}" || true
-            node --input-type=module -e '
-              import { readFileSync } from "node:fs";
-              import { parseCheckEventLine } from "@forgegraph/check-events";
-              const ev = readFileSync(process.env.FG_CHECK_EVENTS_PATH, "utf8").split("\n").map(parseCheckEventLine).filter(Boolean);
-              const fin = ev.filter((e) => e.event === "run_finished").map((e) => `${e.phase}/${e.stream ?? "-"}=${e.counts ? e.counts.passed + "/" + (e.counts.total ?? "?") : e.status}`);
-              console.log(`check-events stream: ${ev.length} events, ${fin.length} run_finished:`, fin.join(" "));
-            ' || true
-            TESTS_JSON=$(node --input-type=module -e '
-              import { readFileSync } from "node:fs";
-              import { parseCheckEventLine, summarizeChecks } from "@forgegraph/check-events";
-              const events = readFileSync(process.env.FG_CHECK_EVENTS_PATH, "utf8").split("\n").map(parseCheckEventLine).filter(Boolean);
-              const s = summarizeChecks(events);
-              for (const p of s.phases) p.failures = p.failures.slice(0, 20);
-              process.stdout.write(JSON.stringify(s));
-            ' 2>/dev/null || true)
-            if [ -n "${TESTS_JSON}" ]; then
-              echo "check-events summary: ${TESTS_JSON:0:400}"
-              TESTS_FIELD=", \"tests\": ${TESTS_JSON}"
-            fi
-          fi
-
-          HTTP=$(curl -s --retry 3 --retry-all-errors --retry-max-time 45 --connect-timeout 5 --max-time 15 -o /tmp/fg_report.out -w "%{http_code}" -X POST "https://forgegraf.com/api/fg/ci/report" \
-            -H "Authorization: Bearer ${FG_CI_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"owner\": \"${OWNER}\",
-              \"repo\": \"${REPO}\",
-              \"sha\": \"${SHA}\",
-              \"branch\": \"${BRANCH}\",
-              \"status\": \"${STATUS}\",
-              \"runId\": \"${{ github.run_id }}\",
-              \"runUrl\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_number }}\",
-              \"workflowName\": \"CI\"${TESTS_FIELD}
-            }")
-          echo "ForgeGraph CI report: HTTP ${HTTP}"
-          if [ "${HTTP}" -lt 200 ] || [ "${HTTP}" -ge 300 ]; then
-            echo "::warning::ForgeGraph CI report failed (HTTP ${HTTP}): $(cat /tmp/fg_report.out 2>/dev/null)"
-          fi
+        run: node scripts/ci-report.mjs send ci-report/report.json
 
   # Continuous deploy: ship the web app to bob.blder.bot after CI passes on master.
   #
