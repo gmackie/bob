@@ -29,6 +29,8 @@ import {
   isActiveRunStatus,
 } from "~/components/dashboard/provider-runs-model";
 import { useTRPC } from "~/trpc/react";
+import { TraceStorageLink } from "~/components/runs/trace-storage-link";
+import type { RunTraceStatus } from "~/lib/traces/run-trace-status";
 
 // ── Constants ─────────────────────────────────────────────────────────
 
@@ -518,6 +520,20 @@ function DiffTab({ run }: { run: any }) {
 // ── Artifacts Tab ─────────────────────────────────────────────────────
 
 function ArtifactsTab({ run }: { run: any }) {
+  const hasTraces = run.artifacts?.some((artifact: any) => artifact.metadata?.kind === "trace_reference");
+  const storage = useQuery({
+    queryKey: ["run-trace-storage", run.id],
+    enabled: Boolean(hasTraces),
+    queryFn: async (): Promise<RunTraceStatus[]> => {
+      const response = await fetch(`/api/runs/${encodeURIComponent(run.id)}/traces/status`, { cache: "no-store" });
+      if (!response.ok) throw new Error("Trace storage check unavailable");
+      const result = await response.json() as { traces: RunTraceStatus[] };
+      return result.traces;
+    },
+    staleTime: 15_000,
+    refetchInterval: (query) => query.state.data?.some((entry) => entry.state === "pending") ? 5_000 : false,
+    retry: false,
+  });
   if (!run.artifacts?.length) {
     return (
       <Card className="p-8 text-center">
@@ -544,15 +560,9 @@ function ArtifactsTab({ run }: { run: any }) {
             </span>
           </div>
           {artifact.metadata?.kind === "trace_reference" && (
-            <div className="mt-3 flex items-center gap-3 text-sm">
-              <a href={`/api/runs/${encodeURIComponent(run.id)}/traces/${encodeURIComponent(artifact.id)}`}
-                target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                Open trace
-              </a>
-              <span className="text-muted-foreground">
-                {artifact.metadata.captureState === "sampled_out" ? "Not sampled" : "Capture pending verification"}
-              </span>
-            </div>
+            <TraceStorageLink runId={run.id} artifactId={artifact.id}
+              state={artifact.metadata.sampled === false ? "sampled_out" : storage.data?.find((entry) => entry.artifactId === artifact.id)?.state ?? "unavailable"}
+              checking={storage.isFetching} onRefresh={() => { void storage.refetch(); }} />
           )}
           {artifact.metadata && Object.keys(artifact.metadata).length > 0 && (
             <div className="mt-3 rounded bg-muted/50 p-3">
