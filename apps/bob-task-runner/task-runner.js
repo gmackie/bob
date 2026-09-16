@@ -156,6 +156,22 @@ function createRunner(options = {}) {
 
   // Clone failures receive a bounded cooldown; other repositories remain eligible.
   const _cloneFailed = new Map();
+
+  // A startup with a project but no repo (knowledge/ops work) is repo-optional:
+  // its issues run with no clone, no branch, no commit. remoteEntry() returns
+  // null for these (it requires repoSlug), so detect them off the raw config.
+  function isRepoOptional(slug) {
+    const r = _remoteRepos[slug];
+    return !!(r && r.projectId && !r.repoSlug);
+  }
+
+  // A throwaway working directory for repo-optional issues. The agent gets its
+  // instructions from the issue and does API/CLI work; the dir is just a cwd.
+  function scratchDirFor(slug) {
+    const dir = join(STATE_DIR, "scratch", slug);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    return dir;
+  }
   const CLONE_BACKOFF_MS = 5 * 60_000;
 
   // Clone a missing repo at claim time so provisioning a new company needs
@@ -722,6 +738,72 @@ ${issue.description || "No description provided."}
       ]),
     };
   }
+  // Repo-optional lane: knowledge/ops tasks (e.g. "Refresh stale KB entries")
+  // on startups with no code repo. Runs the agent in a scratch dir with the
+  // issue description as instructions — no clone, no branch, no commit. Success
+  // is the agent printing "TASK_RESULT: ok". Mirrors processPlaybookIssue's
+  // no-git flow but with a generic operating prompt instead of the GTM one.
+  async function processRepoOptionalIssue(issue, slug, workDir) {
+    const logFile = join(LOG_DIR, `${issue.identifier}-${Date.now()}.txt`);
+
+    console.log(`[runner] Processing repo-optional issue ${issue.identifier}: ${issue.title}`);
+
+    if (DRY_RUN) {
+      console.log(`[runner] DRY RUN -- would run repo-optional agent here`);
+      return "dry_run";
+    }
+
+    const { id: bobRunId, agentType } = await bobStartRun(issue, slug);
+
+    try {
+      await updateIssueState(issue.id, "started");
+      await addIssueComment(issue.id, `🤖 Bob agent claiming this issue (repo-optional).\n\nRunner: ${agentType}`);
+    } catch (e) {
+      console.log(`[runner] Failed to update Linear: ${e.message}`);
+    }
+
+    const prompt = `You are an AI agent executing an operating task for the ${slug} startup in the BizPulse portfolio.
+
+  This is a knowledge/operations task with NO code repository. You are running in a scratch working directory (${workDir}); do NOT expect a checked-out repo, and do NOT create git branches or commits. The issue description below contains your full instructions. Environment you can rely on:
+  - PULSE_SERVICE_SECRET is set (Authorization: Bearer for BizPulse service endpoints)
+  - PULSE_API_KEY and PULSE_API_URL are set (the \`pulse\` CLI is installed and authenticates with them)
+
+  ## Issue
+  **${issue.title}**
+
+  ${issue.description || "No description provided."}
+
+  ## Ground rules
+  - Do the work described using the pulse CLI / BizPulse API. Verify each call succeeded from its response before moving on.
+  - Do NOT modify or create any git repository.
+  - End your final message with exactly one line: "TASK_RESULT: ok" if every required step succeeded, or "TASK_RESULT: failed — <short reason>" otherwise.`;
+
+    console.log(`[runner] Starting repo-optional agent...`);
+    const result = await runAgent(agentType, workDir, prompt, logFile);
+    console.log(`[runner] Agent exited with code ${result.exitCode}`);
+    await bobPushLog(bobRunId, result.output);
+    try { writeFileSync(logFile, result.output); } catch {}
+
+    const succeeded = result.exitCode === 0 && /TASK_RESULT:\s*ok/i.test(result.output);
+    const tail = result.output.length > 1500 ? result.output.slice(-1500) : result.output;
+
+    if (succeeded) {
+      try {
+        await addIssueComment(issue.id, `✅ Bob agent completed this task.\n\n\`\`\`\n${tail}\n\`\`\``);
+        await updateIssueState(issue.id, "completed");
+      } catch {}
+      await bobFinishRun(bobRunId, "completed", { exitCode: result.exitCode });
+      return "completed";
+    }
+
+    try {
+      await addIssueComment(issue.id, `⚠️ Bob agent did not report success on this task.\n\n\`\`\`\n${tail}\n\`\`\`\nLog: ${logFile}`);
+      await updateIssueState(issue.id, "unstarted");
+    } catch {}
+    await bobFinishRun(bobRunId, "failed", { exitCode: result.exitCode, reason: "no_success_marker" });
+    return "no_success";
+  }
+
   async function processIssue(issue, slug, repoDir) {
     if (DRY_RUN) {
       console.log(
@@ -878,8 +960,9 @@ Do NOT modify unrelated files. Stay focused on this specific issue.`;
 
     for (const slug of targetSlugs) {
       const projectId = projects[slug];
+      const repoOptional = isRepoOptional(slug);
       const repoDir = effectiveRepoDir(slug);
-      if (!projectId || !repoDir) continue;
+      if (!projectId || (!repoDir && !repoOptional)) continue;
       if ((_cloneFailed.get(slug) ?? 0) > now()) continue;
       // Missing dirs are fine when the remote config can clone them at claim
       // time; only skip when we'd have no way to materialize the repo.
@@ -917,7 +1000,7 @@ Do NOT modify unrelated files. Stay focused on this specific issue.`;
           if (stale && issue.title.startsWith("[pulse]")) continue;
           if (stale && !(slug in DEFAULT_PROJECTS)) continue;
           if (!isClaimed(issue.id)) {
-            allCandidates.push({ issue, slug, repoDir });
+            allCandidates.push({ issue, slug, repoDir, repoOptional });
           }
         }
       } catch (e) {
@@ -943,7 +1026,7 @@ Do NOT modify unrelated files. Stay focused on this specific issue.`;
       return nb - na;
     });
 
-    for (const { issue, slug, repoDir } of allCandidates) {
+    for (const { issue, slug, repoDir, repoOptional } of allCandidates) {
       console.log(
         `[runner] Found: ${issue.identifier} (P${issue.priority}) - ${issue.title} [${slug}]`,
       );
@@ -953,7 +1036,17 @@ Do NOT modify unrelated files. Stay focused on this specific issue.`;
         );
         return true;
       }
-      if (!ensureRepoDir(slug)) {
+      let workDir = repoDir;
+      if (repoOptional) {
+        // Knowledge/ops task on a startup with no repo: run in a scratch dir,
+        // no clone. This is what makes "Refresh stale KB entries" and other
+        // targetSystem:"manual" audit issues claimable instead of failing on a
+        // repo they never needed.
+        workDir = scratchDirFor(slug);
+        console.log(
+          `[runner] ${issue.identifier} is repo-optional (${slug} has no repo) — scratch dir ${workDir}`,
+        );
+      } else if (!ensureRepoDir(slug)) {
         console.log(
           `[runner] Repo unavailable for ${slug}; trying next candidate`,
         );
@@ -961,7 +1054,14 @@ Do NOT modify unrelated files. Stay focused on this specific issue.`;
       }
       markClaimed(issue.id, slug);
       try {
-        const status = await processIssue(issue, slug, repoDir);
+        // A [pulse]-titled playbook on a repo-optional slug still runs through
+        // the playbook lane (also no-git); everything else there is a generic
+        // operating task.
+        const status = repoOptional
+          ? issue.title.startsWith("[pulse]")
+            ? await processPlaybookIssue(issue, slug, workDir)
+            : await processRepoOptionalIssue(issue, slug, workDir)
+          : await processIssue(issue, slug, workDir);
         markDone(issue.id, status);
         return true;
       } catch (error) {

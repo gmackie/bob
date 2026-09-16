@@ -38,6 +38,11 @@ describe("provider runs model", () => {
     expect(filterRunsByProvider(runs, "codex").map((run) => run.id)).toEqual([
       "codex",
     ]);
+    // ...and the claude filter returns it, rather than claude being visible only
+    // through the "all" bucket.
+    expect(filterRunsByProvider(runs, "claude").map((run) => run.id)).toEqual([
+      "claude",
+    ]);
     expect(filterRunsByProvider(runs, "cursor").map((run) => run.id)).toEqual([
       "cursor",
     ]);
