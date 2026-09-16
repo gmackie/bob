@@ -4,6 +4,7 @@
  *
  * Phase 7B-4D-beta Task 9.
  */
+import { createTrackedExecution } from "../services/dispatch/trackedExecution";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, gte, isNull, or, sql } from "@bob/db";
 import { inArray } from "@bob/db";
@@ -1156,9 +1157,7 @@ export async function workItemsDispatch(
   // Stable, filesystem-safe feature branch per work item.
   const branch = `bob/${identifier.toLowerCase().replace(/[^a-z0-9._/-]+/g, "-")}`;
 
-  const [session] = await ctx.db
-    .insert(chatConversations)
-    .values({
+  const session = await createTrackedExecution(ctx.db, {
       userId: ctx.userId,
       repositoryId: repository?.id ?? null,
       workingDirectory: repoPath,
@@ -1171,15 +1170,12 @@ export async function workItemsDispatch(
       workItemIdentifierSnapshot: identifier,
       personaId: input.personaId ?? null,
       personaMetadata,
-    })
-    .returning();
-
-  if (!session) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Failed to create execution session",
-    });
-  }
+    }, {
+    workspaceId: workItem.workspaceId ?? "", workItemId: workItem.id, identifier,
+    planningProvider: workItem.externalProvider ?? project?.planningProvider ?? "internal",
+    issueId: workItem.externalProvider === "linear" ? workItem.externalId ?? undefined : undefined,
+    branch: repository ? branch : undefined,
+  });
 
   const gatewayUrl = process.env.GATEWAY_URL;
   const nudgeSecret = process.env.NUDGE_SHARED_SECRET;

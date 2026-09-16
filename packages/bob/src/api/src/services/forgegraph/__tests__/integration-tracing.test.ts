@@ -117,3 +117,21 @@ it("resolves the external-ID object contract before posting a trace and handles 
   await expect(client.listWorkItems()).resolves.toEqual([{ id: "fg-owned-item" }]);
   expect(requests).toContain("POST /api/fg/work-items/fg-owned-item/traces");
 });
+
+it("bounds optional dispatch mapping and does not retry failures", async () => {
+  const requests: string[] = [];
+  server = createServer((req, res) => {
+    requests.push(req.url ?? "");
+    if (req.url?.includes("externalId=unavailable")) {
+      res.statusCode = 503;
+      res.end("unavailable");
+    }
+    // Other requests deliberately never respond: the caller must abort.
+  }).listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const baseUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const client = new ForgeGraphClient({ baseUrl, apiToken: "fixture-key", timeoutMs: 15_000 });
+  await expect(client.getWorkItemByExternalId("unavailable", { retry: false, timeoutMs: 100 })).rejects.toThrow("503");
+  await expect(client.getWorkItemByExternalId("slow", { repositoryId: "owned-repo", retry: false, timeoutMs: 25 })).rejects.toThrow();
+  expect(requests).toEqual(["/api/fg/work-items?externalId=unavailable", "/api/fg/work-items?externalId=slow&repositoryId=owned-repo"]);
+});

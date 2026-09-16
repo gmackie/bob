@@ -88,7 +88,7 @@ describe("deep trace continuity", () => {
               },
             );
           },
-          { attributes: { "work_item.id": "item-1", prompt: "secret" } },
+          { attributes: { "work_item.id": "item-1", "issue.id": "issue-1", "forgegraph.work_item.id": "fg-1", prompt: "secret" } },
         );
         return new Response("ok");
       },
@@ -111,6 +111,8 @@ describe("deep trace continuity", () => {
     expect(response.headers.get("traceparent")).toBe(
       `00-${traceId}-${root.spanId}-01`,
     );
+    expect(JSON.stringify(op.attributes)).toContain("issue.id");
+    expect(JSON.stringify(op.attributes)).toContain("forgegraph.work_item.id");
     expect(JSON.stringify(spans)).not.toMatch(/secret|private|prompt|token/);
   });
   it("preserves unsampled context through nested work without exporting", async () => {

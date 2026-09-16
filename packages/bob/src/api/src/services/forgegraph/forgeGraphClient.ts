@@ -216,10 +216,12 @@ export class ForgeGraphClient {
 
   async getWorkItemByExternalId(
     externalId: string,
+    options: { repositoryId?: string; timeoutMs?: number; retry?: boolean } = {},
   ): Promise<FgWorkItem | null> {
     // externalId switches the server route from a list to a single object/null.
     const params = new URLSearchParams({ externalId });
-    return this.get<FgWorkItem | null>(`/api/fg/work-items?${params.toString()}`);
+    if (options.repositoryId) params.set("repositoryId", options.repositoryId);
+    return this.get<FgWorkItem | null>(`/api/fg/work-items?${params.toString()}`, options);
   }
 
   async createWorkItem(input: CreateWorkItemInput): Promise<FgWorkItem> {
@@ -366,8 +368,8 @@ export class ForgeGraphClient {
 
   // ── HTTP helpers ──────────────────────────────────────────────────
 
-  private async get<T>(path: string): Promise<T> {
-    const resp = await this.request(path, { method: "GET" });
+  private async get<T>(path: string, policy?: { timeoutMs?: number; retry?: boolean }): Promise<T> {
+    const resp = await this.request(path, { method: "GET" }, policy);
     return resp.json() as Promise<T>;
   }
 
@@ -390,6 +392,7 @@ export class ForgeGraphClient {
   private async request(
     path: string,
     options: RequestInit = {},
+    policy?: { timeoutMs?: number; retry?: boolean },
   ): Promise<Response> {
     const url = `${this.config.baseUrl}${path}`;
     const headers: Record<string, string> = {
@@ -401,7 +404,7 @@ export class ForgeGraphClient {
     const controller = new AbortController();
     const timeoutId = setTimeout(
       () => controller.abort(),
-      this.config.timeoutMs,
+      policy?.timeoutMs ?? this.config.timeoutMs,
     );
 
     try {
@@ -415,13 +418,13 @@ export class ForgeGraphClient {
         { service: "forgegraph", baseUrl: this.config.baseUrl },
       );
 
-      if (response.status >= 500 && response.status < 600) {
+      if (policy?.retry !== false && response.status >= 500 && response.status < 600) {
         // Single retry on 5xx
         clearTimeout(timeoutId);
         const retryController = new AbortController();
         const retryTimeout = setTimeout(
           () => retryController.abort(),
-          this.config.timeoutMs,
+          policy?.timeoutMs ?? this.config.timeoutMs,
         );
         try {
           const retry = await tracedFetch(

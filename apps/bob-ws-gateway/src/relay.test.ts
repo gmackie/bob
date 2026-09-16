@@ -172,7 +172,7 @@ describe("Relay", () => {
       const poll = relay as unknown as { deliverPendingSessionsToDaemon(conn: unknown): Promise<void> };
       await poll.deliverPendingSessionsToDaemon(conn);
       const messages = ws.sentOfType("session_available");
-      if (workspaceId === "ws-1") expect(messages).toEqual([expect.objectContaining({ description: "Owned context" })]);
+      if (workspaceId === "ws-1") expect(messages).toEqual([expect.objectContaining({ description: "Owned context", workspaceId: "ws-1", workItemId: "item-1" })]);
       else expect(messages).toEqual([]);
     });
   });
@@ -922,6 +922,15 @@ describe("Relay", () => {
       });
       await new Promise((r) => setImmediate(r));
 
+      vi.mocked(db.query.chatConversations.findFirst).mockReset().mockResolvedValue({ workItemId: "item-1" } as never);
+      vi.mocked(db.query.workItems.findFirst).mockReset().mockImplementationOnce((query) => {
+        const where = query?.where;
+        if (!where || typeof where === "function") throw new Error("Expected scoped predicate");
+        const params = new PgDialect().sqlToQuery(where).params;
+        expect(params).toContain("ws-1");
+        return Promise.resolve({ id: "item-1" }) as never;
+      });
+
       await relay.nudgeSession({
         sessionId: "sess-99",
         workspaceId: "ws-1",
@@ -933,6 +942,7 @@ describe("Relay", () => {
       const nudges = daemonWs.sentOfType("session_available");
       expect(nudges.length).toBe(1);
       expect((nudges[0] as any).sessionId).toBe("sess-99");
+      expect(nudges[0]).toMatchObject({ workspaceId: "ws-1", workItemId: "item-1" });
     });
 
     it("silently drops nudge when daemon is offline", () => {
