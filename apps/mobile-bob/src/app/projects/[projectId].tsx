@@ -1,4 +1,3 @@
-import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
 import {
   ActivityIndicator,
@@ -7,8 +6,15 @@ import {
   Text,
   View,
 } from "react-native";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type {
+  MobileProjectAutomationKey,
+  MobileProjectConfigurationManagementGroup,
+  MobileProjectConfigurationSection,
+  MobileProjectStatusRow,
+} from "~/features/planning/project-status";
 import { Badge, Button, Card, ListRow, Screen } from "~/components/ui";
 import {
   buildProjectExecutionSummary,
@@ -21,16 +27,9 @@ import {
   buildMobileProjectConfigurationSections,
   buildMobileProjectStatusRows,
 } from "~/features/planning/project-status";
-import type {
-  MobileProjectAutomationKey,
-  MobileProjectConfigurationManagementGroup,
-  MobileProjectConfigurationSection,
-  MobileProjectStatusEntry,
-  MobileProjectStatusRow,
-} from "~/features/planning/project-status";
-import { authClient } from "~/utils/auth";
-import { trpc, rpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
+import { rpc } from "~/utils/api";
+import { authClient } from "~/utils/auth";
 
 interface WorkItemEntry {
   id: string;
@@ -40,35 +39,15 @@ interface WorkItemEntry {
   status: string;
 }
 
-interface ProjectData {
-  project: {
-    id: string;
-    name: string;
-    key: string;
-    description: string | null;
-    status: string;
-    workspaceId: string;
-    planningProvider?: string | null;
-    linearProjectId?: string | null;
-    automationSettings?: Record<string, unknown> | null;
-  };
-  linkedRepository?: MobileProjectStatusEntry["linkedRepository"];
-  counts: {
-    active: number;
-    issues: number;
-    tasks: number;
-    epics: number;
-  };
-}
-
 export default function ProjectDetailScreen() {
   const queryClient = useQueryClient();
   const { data: session, isPending } = authClient.useSession();
   const params = useLocalSearchParams<{ projectId: string }>();
-  const projectId = typeof params.projectId === "string" ? params.projectId : "";
+  const projectId =
+    typeof params.projectId === "string" ? params.projectId : "";
 
   const projectQuery = useQuery(
-    trpc.project.get.queryOptions(
+    rpc("project.get").queryOptions(
       { id: projectId },
       {
         enabled: Boolean(session && projectId),
@@ -80,12 +59,12 @@ export default function ProjectDetailScreen() {
   const rawWorkItemsQuery = useQuery(
     rpc("workItem.list").queryOptions(
       {
-        workspaceId: (projectQuery.data as ProjectData | undefined)?.project.workspaceId ?? "",
+        workspaceId: projectQuery.data?.project.workspaceId ?? "",
         projectId,
         limit: 50,
       },
       {
-        enabled: Boolean((projectQuery.data as ProjectData | undefined)?.project.workspaceId),
+        enabled: Boolean(projectQuery.data?.project.workspaceId),
         ...getMobileProjectDetailQueryRefreshOptions(),
       },
     ),
@@ -96,10 +75,10 @@ export default function ProjectDetailScreen() {
     [rawWorkItemsQuery.data],
   );
   const updateAutomationSettings = useMutation(
-    trpc.project.updateAutomationSettings.mutationOptions({
+    rpc("project.updateAutomationSettings").mutationOptions({
       onSuccess: async () => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.project.get.queryKey({ id: projectId }),
+          queryKey: rpc("project.get").queryKey({ id: projectId }),
         });
       },
     }),
@@ -129,7 +108,7 @@ export default function ProjectDetailScreen() {
     return (
       <Screen className="justify-center">
         <Card className="items-center">
-          <Text className="text-lg font-semibold text-foreground">
+          <Text className="text-foreground text-lg font-semibold">
             Project not found
           </Text>
         </Card>
@@ -137,7 +116,7 @@ export default function ProjectDetailScreen() {
     );
   }
 
-  const { project, counts } = projectQuery.data as ProjectData;
+  const { project, counts } = projectQuery.data;
   const [configurationRow] = buildMobileProjectStatusRows({
     projects: [projectQuery.data],
   });
@@ -160,14 +139,14 @@ export default function ProjectDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View className="mb-5 flex-row items-start justify-between">
           <View className="flex-1 pr-4">
-            <Text className="text-sm uppercase tracking-[0.18em] text-muted">
+            <Text className="text-muted text-sm tracking-[0.18em] uppercase">
               Project
             </Text>
-            <Text className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
+            <Text className="text-foreground mt-1 text-3xl font-semibold tracking-tight">
               {project.name}
             </Text>
             {project.description ? (
-              <Text className="mt-3 text-sm leading-6 text-muted">
+              <Text className="text-muted mt-3 text-sm leading-6">
                 {project.description}
               </Text>
             ) : null}
@@ -176,39 +155,37 @@ export default function ProjectDetailScreen() {
         </View>
 
         <Card variant="elevated" className="mb-5">
-          <Text className="text-lg font-semibold text-foreground">
-            Scope
-          </Text>
+          <Text className="text-foreground text-lg font-semibold">Scope</Text>
           <View className="mt-4 flex-row gap-3">
             <View className="flex-1">
-              <Text className="text-xs uppercase tracking-[0.16em] text-muted2">
+              <Text className="text-muted2 text-xs tracking-[0.16em] uppercase">
                 Issues
               </Text>
-              <Text className="mt-1 text-2xl font-semibold text-foreground">
+              <Text className="text-foreground mt-1 text-2xl font-semibold">
                 {counts.issues}
               </Text>
             </View>
             <View className="flex-1">
-              <Text className="text-xs uppercase tracking-[0.16em] text-muted2">
+              <Text className="text-muted2 text-xs tracking-[0.16em] uppercase">
                 Tasks
               </Text>
-              <Text className="mt-1 text-2xl font-semibold text-foreground">
+              <Text className="text-foreground mt-1 text-2xl font-semibold">
                 {counts.tasks}
               </Text>
             </View>
             <View className="flex-1">
-              <Text className="text-xs uppercase tracking-[0.16em] text-muted2">
+              <Text className="text-muted2 text-xs tracking-[0.16em] uppercase">
                 Epics
               </Text>
-              <Text className="mt-1 text-2xl font-semibold text-foreground">
+              <Text className="text-foreground mt-1 text-2xl font-semibold">
                 {counts.epics}
               </Text>
             </View>
             <View className="flex-1">
-              <Text className="text-xs uppercase tracking-[0.16em] text-muted2">
+              <Text className="text-muted2 text-xs tracking-[0.16em] uppercase">
                 Active
               </Text>
-              <Text className="mt-1 text-2xl font-semibold text-foreground">
+              <Text className="text-foreground mt-1 text-2xl font-semibold">
                 {counts.active}
               </Text>
             </View>
@@ -229,31 +206,31 @@ export default function ProjectDetailScreen() {
         ) : null}
 
         <Card className="mb-5">
-          <Text className="text-lg font-semibold text-foreground">
+          <Text className="text-foreground text-lg font-semibold">
             Execution state
           </Text>
           <View className="mt-4 flex-row gap-3">
             <View className="flex-1">
-              <Text className="text-xs uppercase tracking-[0.16em] text-muted2">
+              <Text className="text-muted2 text-xs tracking-[0.16em] uppercase">
                 In progress
               </Text>
-              <Text className="mt-1 text-2xl font-semibold text-foreground">
+              <Text className="text-foreground mt-1 text-2xl font-semibold">
                 {executionSummary.inProgress}
               </Text>
             </View>
             <View className="flex-1">
-              <Text className="text-xs uppercase tracking-[0.16em] text-muted2">
+              <Text className="text-muted2 text-xs tracking-[0.16em] uppercase">
                 In review
               </Text>
-              <Text className="mt-1 text-2xl font-semibold text-foreground">
+              <Text className="text-foreground mt-1 text-2xl font-semibold">
                 {executionSummary.inReview}
               </Text>
             </View>
             <View className="flex-1">
-              <Text className="text-xs uppercase tracking-[0.16em] text-muted2">
+              <Text className="text-muted2 text-xs tracking-[0.16em] uppercase">
                 Blocked
               </Text>
-              <Text className="mt-1 text-2xl font-semibold text-foreground">
+              <Text className="text-foreground mt-1 text-2xl font-semibold">
                 {executionSummary.blocked}
               </Text>
             </View>
@@ -261,7 +238,9 @@ export default function ProjectDetailScreen() {
         </Card>
 
         <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-lg font-semibold text-foreground">Work items</Text>
+          <Text className="text-foreground text-lg font-semibold">
+            Work items
+          </Text>
           <Button variant="ghost" size="sm" onPress={() => router.back()}>
             Back
           </Button>
@@ -274,13 +253,17 @@ export default function ProjectDetailScreen() {
                 key={item.id}
                 title={item.title}
                 subtitle={item.subtitle}
-                right={<Text className="text-sm text-muted">{item.actionLabel}</Text>}
+                right={
+                  <Text className="text-muted text-sm">{item.actionLabel}</Text>
+                }
                 onPress={() => router.push(item.href)}
                 showDivider={index < workItemRows.length - 1}
               />
             ))
           ) : (
-            <Text className="text-sm text-muted">No work items in this project.</Text>
+            <Text className="text-muted text-sm">
+              No work items in this project.
+            </Text>
           )}
         </Card>
       </ScrollView>
@@ -295,17 +278,22 @@ function ProjectConfigurationCard({
 }: {
   row: MobileProjectStatusRow;
   isUpdatingAutomation: boolean;
-  onToggleAutomation: (key: MobileProjectAutomationKey, enabled: boolean) => void;
+  onToggleAutomation: (
+    key: MobileProjectAutomationKey,
+    enabled: boolean,
+  ) => void;
 }) {
   const configurationSections = buildMobileProjectConfigurationSections(row);
   const configurationGroups = buildMobileProjectConfigurationManagementGroups(
     configurationSections,
   );
-  const automationControls = buildMobileProjectAutomationControls(row.automationSettings);
+  const automationControls = buildMobileProjectAutomationControls(
+    row.automationSettings,
+  );
 
   return (
     <Card className="mb-5 gap-3">
-      <Text className="text-lg font-semibold text-foreground">
+      <Text className="text-foreground text-lg font-semibold">
         Configuration
       </Text>
 
@@ -320,20 +308,24 @@ function ProjectConfigurationCard({
         <Badge variant={row.gitStatus === "Clean" ? "success" : "warning"}>
           {row.gitStatus}
         </Badge>
-        <Badge variant={row.linearStatus === "Connected" ? "success" : "warning"}>
+        <Badge
+          variant={row.linearStatus === "Connected" ? "success" : "warning"}
+        >
           {row.linearStatus}
         </Badge>
-        <Badge variant={row.configStatus === "Configured" ? "success" : "warning"}>
+        <Badge
+          variant={row.configStatus === "Configured" ? "success" : "warning"}
+        >
           {row.configStatus}
         </Badge>
       </View>
 
       <View className="border-border border-t pt-3">
-        <Text className="text-xs text-muted">{row.warningLabel}</Text>
+        <Text className="text-muted text-xs">{row.warningLabel}</Text>
       </View>
 
       <View className="border-border border-t pt-3">
-        <Text className="text-sm font-semibold uppercase tracking-[0.16em] text-muted2">
+        <Text className="text-muted2 text-sm font-semibold tracking-[0.16em] uppercase">
           Bob Configuration
         </Text>
         <View className="mt-3 gap-4">
@@ -344,7 +336,7 @@ function ProjectConfigurationCard({
       </View>
 
       <View className="border-border border-t pt-3">
-        <Text className="text-sm font-semibold uppercase tracking-[0.16em] text-muted2">
+        <Text className="text-muted2 text-sm font-semibold tracking-[0.16em] uppercase">
           Execution Controls
         </Text>
         <View className="mt-3 gap-2">
@@ -370,10 +362,13 @@ function ProjectConfigurationCard({
             >
               <View className="flex-row items-center justify-between gap-3">
                 <View className="min-w-0 flex-1">
-                  <Text className="text-sm font-semibold text-foreground" numberOfLines={1}>
+                  <Text
+                    className="text-foreground text-sm font-semibold"
+                    numberOfLines={1}
+                  >
                     {control.label}
                   </Text>
-                  <Text className="mt-1 text-xs leading-5 text-muted">
+                  <Text className="text-muted mt-1 text-xs leading-5">
                     {control.description}
                   </Text>
                 </View>
@@ -400,10 +395,10 @@ function ProjectConfigurationGroup({
     <View>
       <View className="flex-row items-start justify-between gap-3">
         <View className="min-w-0 flex-1">
-          <Text className="text-sm font-semibold text-foreground">
+          <Text className="text-foreground text-sm font-semibold">
             {group.title}
           </Text>
-          <Text className="mt-1 text-xs leading-5 text-muted">
+          <Text className="text-muted mt-1 text-xs leading-5">
             {group.description}
           </Text>
         </View>
@@ -412,9 +407,15 @@ function ProjectConfigurationGroup({
             <View
               key={action.key}
               className="rounded-md border px-2 py-1"
-              style={{ borderColor: colors.border, backgroundColor: colors.secondary }}
+              style={{
+                borderColor: colors.border,
+                backgroundColor: colors.secondary,
+              }}
             >
-              <Text className="text-xs font-medium text-muted" numberOfLines={1}>
+              <Text
+                className="text-muted text-xs font-medium"
+                numberOfLines={1}
+              >
                 {action.label}
               </Text>
             </View>
@@ -441,7 +442,10 @@ function ProjectConfigurationSection({
       style={{ borderColor: colors.border, backgroundColor: colors.background }}
     >
       <View className="flex-row items-center justify-between gap-2">
-        <Text className="min-w-0 flex-1 text-sm font-semibold text-foreground" numberOfLines={1}>
+        <Text
+          className="text-foreground min-w-0 flex-1 text-sm font-semibold"
+          numberOfLines={1}
+        >
           {section.title}
         </Text>
         <Badge
@@ -472,8 +476,8 @@ function ProjectConfigurationSection({
 function MetaLine({ label, value }: { label: string; value: string }) {
   return (
     <View className="flex-row gap-3">
-      <Text className="w-24 text-xs uppercase text-muted2">{label}</Text>
-      <Text className="min-w-0 flex-1 text-xs text-muted" numberOfLines={1}>
+      <Text className="text-muted2 w-24 text-xs uppercase">{label}</Text>
+      <Text className="text-muted min-w-0 flex-1 text-xs" numberOfLines={1}>
         {value}
       </Text>
     </View>

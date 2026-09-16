@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "@gmacko/core/ui/toast";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 import type { WorkflowStage } from "~/lib/workflow/stage";
 import { STAGES } from "~/lib/workflow/stage";
 import { AgentSelect } from "~/components/work-items/agent-select";
@@ -98,8 +98,7 @@ const TOGGLE_CONFIG = [
   {
     key: "autoFeaturePR" as const,
     label: "Auto-feature PR",
-    description:
-      "Combine task PRs into a feature PR when all tasks are done",
+    description: "Combine task PRs into a feature PR when all tasks are done",
   },
   {
     key: "ciTrigger" as const,
@@ -131,9 +130,7 @@ const DEFAULT_STAGE_SKILLS: Record<
   live: [{ slug: "retro", label: "/retro" }],
 };
 
-function buildInitialStageSkills(
-  saved?: StageSkillMapping,
-): StageSkillMapping {
+function buildInitialStageSkills(saved?: StageSkillMapping): StageSkillMapping {
   const result: StageSkillMapping = {};
   for (const stage of STAGES) {
     const defaults = DEFAULT_STAGE_SKILLS[stage.key] ?? [];
@@ -155,13 +152,13 @@ export function AutomationSettings({
   initialSettings,
   initialDefaultAgentType,
 }: AutomationSettingsProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
 
   const [defaultAgentType, setDefaultAgentType] = useState<string | null>(
     initialDefaultAgentType ?? null,
   );
   const setProjectAgent = useMutation(
-    trpc.project.setDefaultAgent.mutationOptions({
+    bobQuery("project.setDefaultAgent").mutationOptions({
       onError: (err) => {
         toast(err.message, {
           style: { background: "#1a0000", borderColor: "#f43f5e40" },
@@ -189,7 +186,7 @@ export function AutomationSettings({
   );
 
   const updateSettings = useMutation(
-    trpc.project.updateAutomationSettings.mutationOptions({
+    bobQuery("project.updateAutomationSettings").mutationOptions({
       onError: (err) => {
         toast(err.message, {
           style: { background: "#1a0000", borderColor: "#f43f5e40" },

@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Text, View, Pressable, ActivityIndicator } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 
-import { rpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
 import { hapticLight } from "~/lib/haptics";
+import { rpc } from "~/utils/api";
 
 const STATUS_COLORS: Record<string, string> = {
   in_progress: colors.success,
@@ -17,7 +17,14 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 interface TaskTreeNodeProps {
-  item: { id: string; identifier: string; title: string; kind: string; status: string; childCount?: number };
+  item: {
+    id: string;
+    identifier: string;
+    title: string;
+    kind: string;
+    status: string;
+    childCount?: number;
+  };
   workspaceId: string;
   depth: number;
 }
@@ -26,13 +33,20 @@ function TaskTreeNode({ item, workspaceId, depth }: TaskTreeNodeProps) {
   const [expanded, setExpanded] = useState(false);
   const hasChildren = (item.childCount ?? 0) > 0;
 
-  const childrenQuery = useQuery(rpc("workItem.list").queryOptions(
-    { workspaceId, parentId: item.id, limit: 50 },
-    { enabled: expanded && hasChildren },
-  ));
+  const childrenQuery = useQuery(
+    rpc("workItem.list").queryOptions(
+      { workspaceId, parentId: item.id, limit: 50 },
+      { enabled: expanded && hasChildren },
+    ),
+  );
 
-  const children = (childrenQuery.data ?? []) as {
-    id: string; identifier: string; title: string; kind: string; status: string; childCount?: number;
+  const children = [...(childrenQuery.data ?? [])] as {
+    id: string;
+    identifier: string;
+    title: string;
+    kind: string;
+    status: string;
+    childCount?: number;
   }[];
 
   return (
@@ -52,7 +66,7 @@ function TaskTreeNode({ item, workspaceId, depth }: TaskTreeNodeProps) {
       >
         {/* Expand/collapse indicator */}
         {hasChildren ? (
-          <Text className="mr-2 text-xs text-muted" style={{ width: 16 }}>
+          <Text className="text-muted mr-2 text-xs" style={{ width: 16 }}>
             {expanded ? "▾" : "▸"}
           </Text>
         ) : (
@@ -62,25 +76,29 @@ function TaskTreeNode({ item, workspaceId, depth }: TaskTreeNodeProps) {
         {/* Status dot */}
         <View
           style={{
-            width: 6, height: 6, borderRadius: 3, marginRight: 8,
+            width: 6,
+            height: 6,
+            borderRadius: 3,
+            marginRight: 8,
             backgroundColor: STATUS_COLORS[item.status] ?? colors.muted,
           }}
         />
 
         {/* Content */}
         <View className="flex-1">
-          <Text className="text-sm text-foreground" numberOfLines={1}>
+          <Text className="text-foreground text-sm" numberOfLines={1}>
             {item.title}
           </Text>
-          <Text className="text-xs text-muted">
+          <Text className="text-muted text-xs">
             {item.identifier} · {item.status.replace(/_/g, " ")}
           </Text>
         </View>
       </Pressable>
 
       {/* Children */}
-      {expanded && hasChildren && (
-        childrenQuery.isLoading ? (
+      {expanded &&
+        hasChildren &&
+        (childrenQuery.isLoading ? (
           <View style={{ paddingLeft: 36 + depth * 20, paddingVertical: 8 }}>
             <ActivityIndicator size="small" color={colors.muted} />
           </View>
@@ -93,8 +111,7 @@ function TaskTreeNode({ item, workspaceId, depth }: TaskTreeNodeProps) {
               depth={depth + 1}
             />
           ))
-        )
-      )}
+        ))}
     </View>
   );
 }
@@ -104,21 +121,33 @@ interface TaskTreeProps {
   workspaceId?: string;
 }
 
-export function TaskTree({ workItemId, workspaceId: providedWsId }: TaskTreeProps) {
+export function TaskTree({
+  workItemId,
+  workspaceId: providedWsId,
+}: TaskTreeProps) {
   // If workspaceId not provided, fetch the work item to get it
-  const itemQuery = useQuery(rpc("workItem.get").queryOptions(
-    { id: workItemId },
-    { enabled: Boolean(workItemId) && !providedWsId },
-  ));
-  const workspaceId = providedWsId ?? (itemQuery.data as { workspaceId?: string } | undefined)?.workspaceId;
+  const itemQuery = useQuery(
+    rpc("workItem.get").queryOptions(
+      { id: workItemId },
+      { enabled: Boolean(workItemId) && !providedWsId },
+    ),
+  );
+  const workspaceId = providedWsId ?? itemQuery.data?.workItem.workspaceId;
 
-  const childrenQuery = useQuery(rpc("workItem.list").queryOptions(
-    { workspaceId: workspaceId ?? "", parentId: workItemId, limit: 50 },
-    { enabled: Boolean(workItemId && workspaceId) },
-  ));
+  const childrenQuery = useQuery(
+    rpc("workItem.list").queryOptions(
+      { workspaceId: workspaceId ?? "", parentId: workItemId, limit: 50 },
+      { enabled: Boolean(workItemId && workspaceId) },
+    ),
+  );
 
-  const children = (childrenQuery.data ?? []) as {
-    id: string; identifier: string; title: string; kind: string; status: string; childCount?: number;
+  const children = [...(childrenQuery.data ?? [])] as {
+    id: string;
+    identifier: string;
+    title: string;
+    kind: string;
+    status: string;
+    childCount?: number;
   }[];
 
   if (childrenQuery.isLoading) {
@@ -132,7 +161,7 @@ export function TaskTree({ workItemId, workspaceId: providedWsId }: TaskTreeProp
   if (children.length === 0 || !workspaceId) {
     return (
       <View className="items-center justify-center px-4 py-8">
-        <Text className="text-sm text-muted">No subtasks</Text>
+        <Text className="text-muted text-sm">No subtasks</Text>
       </View>
     );
   }

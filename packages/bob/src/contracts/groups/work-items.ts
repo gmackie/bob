@@ -4,7 +4,11 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
-import { BobNotFoundError, BobForbiddenError, BobConflictError } from "../errors.js";
+import {
+  BobNotFoundError,
+  BobForbiddenError,
+  BobConflictError,
+} from "../errors.js";
 import {
   WorkItemKindEnum,
   WorkItemRecordSchema,
@@ -261,17 +265,14 @@ export const WorkItemTaskRunListByWorkItemRpc = Rpc.make(
   },
 );
 
-export const WorkItemTaskRunExecuteRpc = Rpc.make(
-  "workItem.taskRun.execute",
-  {
-    payload: Schema.Struct({
-      workItemId: Schema.String,
-      agentType: Schema.optional(Schema.String),
-    }),
-    success: TaskRunRecordSchema,
-    error: BobNotFoundError,
-  },
-);
+export const WorkItemTaskRunExecuteRpc = Rpc.make("workItem.taskRun.execute", {
+  payload: Schema.Struct({
+    workItemId: Schema.String,
+    agentType: Schema.optional(Schema.String),
+  }),
+  success: TaskRunRecordSchema,
+  error: BobNotFoundError,
+});
 
 export const WorkItemTaskRunListLifecycleEventsRpc = Rpc.make(
   "workItem.taskRun.listLifecycleEvents",
@@ -291,7 +292,14 @@ export const WorkItemRequirementListRpc = Rpc.make(
   "workItem.requirement.list",
   {
     payload: Schema.Struct({ workItemId: Schema.String }),
-    success: Schema.Array(RequirementRecordSchema),
+    success: Schema.Record(
+      Schema.String,
+      Schema.Struct({
+        items: Schema.Array(RequirementRecordSchema),
+        total: Schema.Number,
+        done: Schema.Number,
+      }),
+    ),
     error: BobNotFoundError,
   },
 );

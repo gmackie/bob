@@ -1,8 +1,12 @@
-import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 
+import type {
+  MobileProjectStatusEntry,
+  MobileProjectStatusRow,
+} from "~/features/planning/project-status";
 import { Badge, Button, Card, Screen } from "~/components/ui";
 import { getProjectHref } from "~/features/planning/navigation";
 import {
@@ -11,13 +15,9 @@ import {
   getMobileProjectQueryRefreshOptions,
   normalizeMobileProjectStatusFilter,
 } from "~/features/planning/project-status";
-import type {
-  MobileProjectStatusEntry,
-  MobileProjectStatusRow,
-} from "~/features/planning/project-status";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
+import { rpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
-import { trpc } from "~/utils/api";
 
 export default function ProjectsListScreen() {
   const { data: session, isPending } = authClient.useSession();
@@ -25,7 +25,7 @@ export default function ProjectsListScreen() {
   const { workspace, selectedWorkspaceId } = useSelectedWorkspace();
 
   const projectsQuery = useQuery(
-    trpc.project.list.queryOptions(
+    rpc("project.list").queryOptions(
       { workspaceId: selectedWorkspaceId ?? "" },
       {
         enabled: Boolean(selectedWorkspaceId),
@@ -35,7 +35,7 @@ export default function ProjectsListScreen() {
   );
 
   const projects = useMemo(
-    () => (projectsQuery.data as MobileProjectStatusEntry[] | undefined) ?? [],
+    () => projectsQuery.data ?? [],
     [projectsQuery.data],
   );
 
@@ -74,7 +74,7 @@ export default function ProjectsListScreen() {
     return (
       <Screen className="items-center justify-center">
         <ActivityIndicator />
-        <Text className="mt-3 text-muted">Loading projects…</Text>
+        <Text className="text-muted mt-3">Loading projects…</Text>
       </Screen>
     );
   }
@@ -83,7 +83,7 @@ export default function ProjectsListScreen() {
     <Screen className="pt-6">
       <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
         <View className="mb-5 flex-row items-center justify-between">
-          <Text className="text-3xl font-semibold tracking-tight text-foreground">
+          <Text className="text-foreground text-3xl font-semibold tracking-tight">
             Projects
           </Text>
           <Button variant="ghost" size="sm" onPress={() => router.back()}>
@@ -97,13 +97,17 @@ export default function ProjectsListScreen() {
               <ProjectStatusCard
                 key={row.id}
                 row={row}
-                onPress={() => router.push(getProjectHref(row.id, row.workspaceId))}
+                onPress={() =>
+                  router.push(getProjectHref(row.id, row.workspaceId))
+                }
               />
             ))
           ) : (
             <Card>
-              <Text className="text-sm text-muted">
-                {projectRows.length > 0 ? "No projects match this filter." : "No projects yet."}
+              <Text className="text-muted text-sm">
+                {projectRows.length > 0
+                  ? "No projects match this filter."
+                  : "No projects yet."}
               </Text>
             </Card>
           )}
@@ -124,10 +128,13 @@ function ProjectStatusCard({
     <Card className="gap-3">
       <View className="flex-row items-start justify-between gap-3">
         <View className="min-w-0 flex-1">
-          <Text className="text-lg font-semibold text-foreground" numberOfLines={1}>
+          <Text
+            className="text-foreground text-lg font-semibold"
+            numberOfLines={1}
+          >
             {row.title}
           </Text>
-          <Text className="mt-1 text-xs text-muted">{row.workspaceName}</Text>
+          <Text className="text-muted mt-1 text-xs">{row.workspaceName}</Text>
         </View>
         <Button variant="ghost" size="sm" onPress={onPress}>
           Open
@@ -145,17 +152,21 @@ function ProjectStatusCard({
         <Badge variant={row.gitStatus === "Clean" ? "success" : "warning"}>
           {row.gitStatus}
         </Badge>
-        <Badge variant={row.linearStatus === "Connected" ? "success" : "warning"}>
+        <Badge
+          variant={row.linearStatus === "Connected" ? "success" : "warning"}
+        >
           {row.linearStatus}
         </Badge>
-        <Badge variant={row.configStatus === "Configured" ? "success" : "warning"}>
+        <Badge
+          variant={row.configStatus === "Configured" ? "success" : "warning"}
+        >
           {row.configStatus}
         </Badge>
       </View>
 
       <View className="border-border border-t pt-3">
-        <Text className="text-sm text-muted">{row.activityLabel}</Text>
-        <Text className="mt-1 text-xs text-muted">{row.warningLabel}</Text>
+        <Text className="text-muted text-sm">{row.activityLabel}</Text>
+        <Text className="text-muted mt-1 text-xs">{row.warningLabel}</Text>
       </View>
     </Card>
   );
@@ -164,8 +175,8 @@ function ProjectStatusCard({
 function MetaLine({ label, value }: { label: string; value: string }) {
   return (
     <View className="flex-row gap-3">
-      <Text className="w-20 text-xs uppercase text-muted2">{label}</Text>
-      <Text className="min-w-0 flex-1 text-xs text-muted" numberOfLines={1}>
+      <Text className="text-muted2 w-20 text-xs uppercase">{label}</Text>
+      <Text className="text-muted min-w-0 flex-1 text-xs" numberOfLines={1}>
         {value}
       </Text>
     </View>

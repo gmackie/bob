@@ -22,7 +22,7 @@ import {
   normalizeProjectDetailTab,
 } from "~/components/projects/project-detail-tabs-model";
 import { STATUS_COLOR, formatLabel } from "~/lib/design/colors";
-import { createPlanningCaller } from "~/lib/planning/server";
+import { createPlanningClient } from "~/lib/planning/server";
 
 interface ProjectPageProps {
   params: Promise<{ projectId: string }>;
@@ -31,26 +31,30 @@ interface ProjectPageProps {
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjectPage({ params, searchParams }: ProjectPageProps) {
+export default async function ProjectPage({
+  params,
+  searchParams,
+}: ProjectPageProps) {
   const { projectId } = await params;
   const resolvedSearchParams = await searchParams;
   const tabParam = Array.isArray(resolvedSearchParams?.tab)
     ? resolvedSearchParams?.tab[0]
     : resolvedSearchParams?.tab;
   const initialTab = normalizeProjectDetailTab(tabParam ?? null);
-  const caller = (await createPlanningCaller()) as any;
-  const projectResult = await caller.project.get({ id: projectId });
+  const caller = await createPlanningClient();
+  const projectResult = await caller("project.get").call({ id: projectId });
 
   if (!projectResult) {
     notFound();
   }
 
-  const { project, counts, capabilities, linkedRepository, workspace } = projectResult;
+  const { project, counts, capabilities, linkedRepository, workspace } =
+    projectResult;
   const [configurationRow] = buildProjectStatusRows({
     workspaceName: workspace?.name,
     projects: [projectResult],
   });
-  const workItems = await caller.workItems.list({
+  const workItems = await caller("workItem.list").call({
     workspaceId: project.workspaceId,
     projectId: project.id,
     limit: 100,
@@ -58,14 +62,17 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
 
   // Find a top-level epic for the requirements tab
   const topEpic = workItems.find(
-    (item: any) => item.kind === "epic" && !item.parentId,
+    (item) => item.kind === "epic" && !item.parentId,
   );
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10">
       <Breadcrumbs
         items={[
-          { label: "Projects", href: getProjectsDashboardHref(project.workspaceId) },
+          {
+            label: "Projects",
+            href: getProjectsDashboardHref(project.workspaceId),
+          },
           { label: project.name },
         ]}
         className="mb-4"
@@ -127,7 +134,11 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
         <section className="mt-10">
           <ProjectTemplatePanel
             linkedRepository={linkedRepository}
-            capability={capabilities.template}
+            capability={{
+              ...capabilities.template,
+              frontendApps: [...capabilities.template.frontendApps],
+              evidence: [...capabilities.template.evidence],
+            }}
             planningAction={
               <NewIdeaButton
                 workspaceId={project.workspaceId}
@@ -141,7 +152,7 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
       {/* Tabbed work items section */}
       <section className="mt-10">
         <ProjectDetailTabs
-          items={workItems.map((item: any) => ({
+          items={workItems.map((item) => ({
             id: item.id,
             identifier: item.identifier,
             title: item.title,
@@ -184,7 +195,9 @@ function ProjectConfigurationSummary({ row }: { row: ProjectStatusRow }) {
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <span className="rounded-full border border-border bg-secondary px-2.5 py-1 text-xs text-muted-foreground">
-            {row.warnings.length > 0 ? `${row.warnings.length} warning${row.warnings.length === 1 ? "" : "s"}` : "Ready"}
+            {row.warnings.length > 0
+              ? `${row.warnings.length} warning${row.warnings.length === 1 ? "" : "s"}`
+              : "Ready"}
           </span>
           <Link
             href={getProjectConfigurationHref(row.id, row.workspaceId)}
@@ -215,9 +228,7 @@ function ProjectConfigurationSummary({ row }: { row: ProjectStatusRow }) {
       </div>
 
       {row.warnings.length > 0 ? (
-        <p className="mt-4 text-sm text-amber-500">
-          {row.warnings.join(", ")}
-        </p>
+        <p className="mt-4 text-sm text-amber-500">{row.warnings.join(", ")}</p>
       ) : null}
 
       <div className="mt-6 border-t border-border pt-5">
@@ -226,7 +237,8 @@ function ProjectConfigurationSummary({ row }: { row: ProjectStatusRow }) {
             Bob Configuration
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Assignment, mappings, defaults, execution, secrets, and validation state.
+            Assignment, mappings, defaults, execution, secrets, and validation
+            state.
           </p>
         </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -239,11 +251,12 @@ function ProjectConfigurationSummary({ row }: { row: ProjectStatusRow }) {
   );
 }
 
-const SECTION_STATUS_CLASS: Record<ProjectConfigurationSectionStatus, string> = {
-  ready: "border-emerald-500/25 bg-emerald-500/10 text-emerald-500",
-  warning: "border-amber-500/25 bg-amber-500/10 text-amber-500",
-  missing: "border-rose-500/25 bg-rose-500/10 text-rose-500",
-};
+const SECTION_STATUS_CLASS: Record<ProjectConfigurationSectionStatus, string> =
+  {
+    ready: "border-emerald-500/25 bg-emerald-500/10 text-emerald-500",
+    warning: "border-amber-500/25 bg-amber-500/10 text-amber-500",
+    missing: "border-rose-500/25 bg-rose-500/10 text-rose-500",
+  };
 
 function ConfigurationSectionCard({
   section,
@@ -256,7 +269,9 @@ function ConfigurationSectionCard({
         <h4 className="truncate text-sm font-semibold text-foreground">
           {section.title}
         </h4>
-        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${SECTION_STATUS_CLASS[section.status]}`}>
+        <span
+          className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${SECTION_STATUS_CLASS[section.status]}`}
+        >
           {section.status}
         </span>
       </div>
@@ -266,7 +281,10 @@ function ConfigurationSectionCard({
             <div className="text-[10px] uppercase text-muted-foreground">
               {item.label}
             </div>
-            <div className="mt-0.5 truncate text-xs font-medium text-foreground" title={item.value}>
+            <div
+              className="mt-0.5 truncate text-xs font-medium text-foreground"
+              title={item.value}
+            >
               {item.value}
             </div>
           </div>
@@ -280,7 +298,10 @@ function ConfigField({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-lg border border-border/70 bg-background/40 px-3 py-2">
       <div className="text-xs uppercase text-muted-foreground">{label}</div>
-      <div className="mt-1 truncate text-sm font-medium text-foreground" title={value}>
+      <div
+        className="mt-1 truncate text-sm font-medium text-foreground"
+        title={value}
+      >
         {value}
       </div>
     </div>

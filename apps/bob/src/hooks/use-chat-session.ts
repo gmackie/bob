@@ -1,11 +1,13 @@
 "use client";
 
+import { timestampString } from "~/rpc/timestamp";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { SessionEvent, SessionStatus } from "~/hooks/use-session-socket";
 import { useSessionSocket } from "~/hooks/use-session-socket";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 // --- Converters ---
 
@@ -54,16 +56,12 @@ function toEventDirection(direction: string): SessionEvent["direction"] {
     : "system";
 }
 
-interface SessionEventRecord {
-  sessionId: string;
-  seq: number;
-  eventType: string;
-  direction: string;
-  payload: Record<string, unknown>;
-  createdAt: string | Date;
-}
+type SessionEventRecord =
+  import("@gmacko/bob-client/query").BobRpcOutput<"agent.session.getEvents">["events"][number];
 
-function toSessionEvents(records?: SessionEventRecord[]): SessionEvent[] {
+function toSessionEvents(
+  records?: readonly SessionEventRecord[],
+): SessionEvent[] {
   return (records ?? []).map((e) => ({
     type: "event",
     sessionId: e.sessionId,
@@ -71,8 +69,7 @@ function toSessionEvents(records?: SessionEventRecord[]): SessionEvent[] {
     eventType: toEventType(e.eventType),
     direction: toEventDirection(e.direction),
     payload: e.payload,
-    createdAt:
-      typeof e.createdAt === "string" ? e.createdAt : e.createdAt.toISOString(),
+    createdAt: timestampString(e.createdAt),
   }));
 }
 
@@ -94,8 +91,11 @@ interface UseChatSessionOptions {
   enabled?: boolean;
 }
 
-export function useChatSession({ sessionId, enabled = true }: UseChatSessionOptions) {
-  const trpc = useTRPC();
+export function useChatSession({
+  sessionId,
+  enabled = true,
+}: UseChatSessionOptions) {
+  const bobQuery = useBobQueryClient();
   const queryClient = useQueryClient();
   const hasSession = Boolean(sessionId) && enabled;
   const activeId = sessionId ?? "";
@@ -107,19 +107,22 @@ export function useChatSession({ sessionId, enabled = true }: UseChatSessionOpti
 
   // Gateway info
   const { data: gatewayInfo } = useQuery(
-    trpc.session.getGatewayWebSocketUrl.queryOptions(undefined, {
+    bobQuery("agent.session.getGatewayWebSocketUrl").queryOptions(undefined, {
       enabled: hasSession,
     }),
   );
 
   // Session data
   const { data: sessionData } = useQuery(
-    trpc.session.get.queryOptions({ id: activeId }, { enabled: hasSession }),
+    bobQuery("agent.session.get").queryOptions(
+      { id: activeId },
+      { enabled: hasSession },
+    ),
   );
 
   // Events
   const { data: rawEvents } = useQuery(
-    trpc.session.getEvents.queryOptions(
+    bobQuery("agent.session.getEvents").queryOptions(
       { sessionId: activeId, limit: 500 },
       { enabled: hasSession },
     ),
@@ -127,7 +130,7 @@ export function useChatSession({ sessionId, enabled = true }: UseChatSessionOpti
 
   // Workflow state
   const { data: rawWorkflowState } = useQuery(
-    trpc.session.getWorkflowState.queryOptions(
+    bobQuery("agent.session.getWorkflowState").queryOptions(
       { sessionId: activeId },
       { enabled: hasSession },
     ),
@@ -152,13 +155,17 @@ export function useChatSession({ sessionId, enabled = true }: UseChatSessionOpti
     return {
       workflowStatus: rawWorkflowState.workflowStatus,
       statusMessage: rawWorkflowState.statusMessage,
-      awaitingInput: { ...ai, expiresAt },
+      awaitingInput: {
+        ...ai,
+        options: ai.options ? [...ai.options] : null,
+        expiresAt,
+      },
     };
   }, [rawWorkflowState]);
 
   // Event merging
   const historicalEvents = useMemo(
-    () => toSessionEvents(rawEvents?.events as SessionEventRecord[] | undefined),
+    () => toSessionEvents(rawEvents?.events),
     [rawEvents?.events],
   );
 
@@ -166,8 +173,7 @@ export function useChatSession({ sessionId, enabled = true }: UseChatSessionOpti
     const byKey = new Map<string, SessionEvent>();
     for (const e of historicalEvents) byKey.set(`${e.sessionId}:${e.seq}`, e);
     for (const e of liveEvents) {
-      if (e.sessionId === activeId)
-        byKey.set(`${e.sessionId}:${e.seq}`, e);
+      if (e.sessionId === activeId) byKey.set(`${e.sessionId}:${e.seq}`, e);
     }
     return [...byKey.values()].sort((a, b) => a.seq - b.seq);
   }, [historicalEvents, liveEvents, activeId]);
@@ -194,13 +200,13 @@ export function useChatSession({ sessionId, enabled = true }: UseChatSessionOpti
         event.sessionId === activeId
       ) {
         void queryClient.invalidateQueries({
-          queryKey: trpc.session.getWorkflowState.queryKey({
+          queryKey: bobQuery("agent.session.getWorkflowState").queryKey({
             sessionId: activeId,
           }),
         });
       }
     },
-    [activeId, queryClient, trpc.session.getWorkflowState],
+    [activeId, queryClient, bobQuery("agent.session.getWorkflowState")],
   );
 
   const handleStatusChange = useCallback(
@@ -235,20 +241,20 @@ export function useChatSession({ sessionId, enabled = true }: UseChatSessionOpti
 
   // Mutations
   const stopMutation = useMutation(
-    trpc.session.stop.mutationOptions({
+    bobQuery("agent.session.stop").mutationOptions({
       onSuccess: () => {
         void queryClient.invalidateQueries({
-          queryKey: trpc.session.get.queryKey({ id: activeId }),
+          queryKey: bobQuery("agent.session.get").queryKey({ id: activeId }),
         });
       },
     }),
   );
 
   const resolveInputMutation = useMutation(
-    trpc.session.resolveAwaitingInput.mutationOptions({
+    bobQuery("agent.session.resolveAwaitingInput").mutationOptions({
       onSuccess: () => {
         void queryClient.invalidateQueries({
-          queryKey: trpc.session.getWorkflowState.queryKey({
+          queryKey: bobQuery("agent.session.getWorkflowState").queryKey({
             sessionId: activeId,
           }),
         });
@@ -292,8 +298,7 @@ export function useChatSession({ sessionId, enabled = true }: UseChatSessionOpti
 
   const isConnected = connectionState.status === "connected";
   const canSend =
-    isConnected &&
-    (sessionStatus === "running" || sessionStatus === "idle");
+    isConnected && (sessionStatus === "running" || sessionStatus === "idle");
 
   return {
     events,

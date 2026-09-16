@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 import { getBobThinkingSessionHref } from "./bob-thinking-model";
 
 // ---------------------------------------------------------------------------
@@ -88,10 +88,10 @@ export function BobThinking({
   sessionId,
   workspaceId,
 }: BobThinkingProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
 
   const { data: session } = useQuery(
-    trpc.session.get.queryOptions(
+    bobQuery("agent.session.get").queryOptions(
       { id: sessionId! },
       {
         enabled: Boolean(sessionId),
@@ -99,13 +99,16 @@ export function BobThinking({
       },
     ),
   );
-  const sessionRecord = session as unknown as {
-    status?: string | null;
-    sessionType?: string | null;
-    workflowStatus?: string | null;
-    awaitingInputQuestion?: string | null;
-    workspaceId?: string | null;
-  } | null | undefined;
+  const sessionRecord = session as unknown as
+    | {
+        status?: string | null;
+        sessionType?: string | null;
+        workflowStatus?: string | null;
+        awaitingInputQuestion?: string | null;
+        workspaceId?: string | null;
+      }
+    | null
+    | undefined;
 
   // Derive thinking state
   const thinkingState: ThinkingState = !sessionId
@@ -124,7 +127,7 @@ export function BobThinking({
     sessionRecord.status === "running" &&
     sessionRecord.workflowStatus === "awaiting_input";
   const awaitingQuestion = isAwaitingInput
-    ? sessionRecord.awaitingInputQuestion ?? null
+    ? (sessionRecord.awaitingInputQuestion ?? null)
     : null;
   const sessionWorkspaceId = workspaceId ?? sessionRecord?.workspaceId;
 

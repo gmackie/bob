@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { ExecutionSessionWorkspace } from "~/components/sessions/execution-session-workspace";
-import { createPlanningCaller } from "~/lib/planning/server";
+import { createPlanningClient } from "~/lib/planning/server";
 
 interface ExecutionSessionRouteProps {
   params: Promise<{ sessionId: string }>;
@@ -13,8 +13,10 @@ export default async function ExecutionSessionRoute({
   params,
 }: ExecutionSessionRouteProps) {
   const { sessionId } = await params;
-  const caller = (await createPlanningCaller()) as any;
-  const session = await caller.session.get({ id: sessionId }).catch(() => null);
+  const caller = await createPlanningClient();
+  const session = await caller("agent.session.get")
+    .call({ id: sessionId })
+    .catch(() => null);
 
   if (!session) {
     notFound();
@@ -29,7 +31,7 @@ export default async function ExecutionSessionRoute({
           status: session.status,
           agentType: session.agentType,
           workingDirectory: session.workingDirectory,
-          workspaceId: session.workspaceId,
+          workspaceId: session.planningWorkspaceId,
           workItemId: session.workItemId,
           workItemIdentifier: session.workItemIdentifier,
           linkedTask: session.linkedTask,

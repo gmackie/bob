@@ -34,7 +34,7 @@ import {
   ChatConversationSchema,
   ChatMessageSchema,
 } from "../schemas/agent.js";
-import { AgentRunSchema } from "../schemas/agent-run.js";
+import { AgentRunSchema, AgentRunDetailSchema } from "../schemas/agent-run.js";
 import {
   CaptureTargetSchema,
   CaptureResultSchema,
@@ -79,7 +79,11 @@ import {
   PersonaReadOnlyError,
   PersonaSyncResultSchema,
 } from "../schemas/agent-persona.js";
-import { NotFoundError, UnauthorizedError, RpcError } from "../../rpc/errors.js";
+import {
+  NotFoundError,
+  UnauthorizedError,
+  RpcError,
+} from "../../rpc/errors.js";
 
 /** Union of every error `agent.sendTurn` can surface (on its stream). */
 export const AgentStreamErrorSchema = Schema.Union([
@@ -157,7 +161,7 @@ export const AgentRunGetRpc = Rpc.make("agent.run.get", {
   payload: Schema.Struct({
     runId: Schema.String, // UUID
   }),
-  success: AgentRunSchema,
+  success: AgentRunDetailSchema,
   error: NotFoundError,
 });
 
@@ -376,18 +380,15 @@ export const AgentSessionUpdateStatusRpc = Rpc.make(
 
 // --- agent.session.claimLease -----------------------------------------------
 
-export const AgentSessionClaimLeaseRpc = Rpc.make(
-  "agent.session.claimLease",
-  {
-    payload: Schema.Struct({
-      sessionId: Schema.String,
-      gatewayId: Schema.String,
-      leaseMs: Schema.optional(Schema.Number),
-    }),
-    success: SessionSchema,
-    error: Schema.Union([NotFoundError, SessionLeaseConflictError]),
-  },
-);
+export const AgentSessionClaimLeaseRpc = Rpc.make("agent.session.claimLease", {
+  payload: Schema.Struct({
+    sessionId: Schema.String,
+    gatewayId: Schema.String,
+    leaseMs: Schema.optional(Schema.Number),
+  }),
+  success: SessionSchema,
+  error: Schema.Union([NotFoundError, SessionLeaseConflictError]),
+});
 
 // --- agent.session.releaseLease ---------------------------------------------
 
@@ -447,6 +448,7 @@ export const AgentSessionGetGatewayWebSocketUrlRpc = Rpc.make(
     success: Schema.Struct({
       url: Schema.String,
       userId: Schema.String,
+      token: Schema.String,
     }),
   },
 );
@@ -945,7 +947,7 @@ export const AgentFilesystemGitStatusRpc = Rpc.make(
   {
     payload: Schema.Struct({ path: Schema.String }),
     error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
-  success: Schema.Array(GitStatusEntrySchema),
+    success: Schema.Array(GitStatusEntrySchema),
   },
 );
 

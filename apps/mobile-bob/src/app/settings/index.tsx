@@ -1,6 +1,11 @@
-import { ScrollView, Text, View, useWindowDimensions } from "react-native";
-import { Pressable } from "react-native";
-import { Stack, router } from "expo-router";
+import {
+  Pressable,
+  ScrollView,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import { router, Stack } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 
 import { overridesFromRows } from "@bob/notifications/preferences-rows";
@@ -8,7 +13,7 @@ import { overridesFromRows } from "@bob/notifications/preferences-rows";
 import { summariseNotificationPreferences } from "~/features/settings/notification-matrix-model";
 import { buildSettingsIndex } from "~/features/settings/settings-index-model";
 import { SETTINGS_SECTIONS } from "~/features/settings/settings-shell-model";
-import { trpc, rpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 
 /**
  * Settings index — the phone's entry point.
@@ -26,29 +31,41 @@ export default function SettingsIndexScreen() {
   const { width } = useWindowDimensions();
 
   const { data: preferences } = useQuery(
-    trpc.settings.getPreferences.queryOptions(undefined),
+    rpc("settings.getPreferences").queryOptions(undefined),
   );
   const { data: notificationRows } = useQuery(
-    trpc.settings.listNotificationPreferences.queryOptions(undefined),
+    rpc("settings.listNotificationPreferences").queryOptions(undefined),
   );
-  const { data: apiKeys } = useQuery(trpc.settings.listApiKeys.queryOptions(undefined));
-  const { data: workspaces } = useQuery(rpc("projects.workspace.list").queryOptions(undefined));
+  const { data: apiKeys } = useQuery(
+    rpc("settings.listApiKeys").queryOptions(undefined),
+  );
+  const { data: workspaces } = useQuery(
+    rpc("projects.workspace.list").queryOptions(undefined),
+  );
 
   const prefs = preferences as
-    | { pushNotifications?: boolean; emailNotifications?: boolean; theme?: string }
+    | {
+        pushNotifications?: boolean;
+        emailNotifications?: boolean;
+        theme?: string;
+      }
     | undefined;
 
   const rows = buildSettingsIndex({
     workspaceName:
-      (workspaces as { workspace?: { name?: string } }[] | undefined)?.[0]?.workspace?.name ??
-      "None selected",
+      (workspaces as { workspace?: { name?: string } }[] | undefined)?.[0]
+        ?.workspace?.name ?? "None selected",
     notificationSummary: summariseNotificationPreferences({
       masters: {
         push: prefs?.pushNotifications ?? true,
         email: prefs?.emailNotifications ?? true,
       },
       overrides: overridesFromRows(
-        (notificationRows ?? []) as { type: string; channel: string; enabled: boolean }[],
+        (notificationRows ?? []) as {
+          type: string;
+          channel: string;
+          enabled: boolean;
+        }[],
       ),
     }),
     // Provider health is a node concern; the count here is only a pointer
@@ -56,13 +73,17 @@ export default function SettingsIndexScreen() {
     providerReadyCount: 0,
     providerTotalCount: 0,
     apiKeyCount: (apiKeys as unknown[] | undefined)?.length ?? 0,
-    theme: (prefs?.theme as "light" | "dark" | "system" | undefined) ?? "system",
+    theme:
+      (prefs?.theme as "light" | "dark" | "system" | undefined) ?? "system",
   }).filter((row) => row.key !== "providers" || SETTINGS_SECTIONS.length > 0);
 
   return (
     <>
       <Stack.Screen options={{ title: "Settings" }} />
-      <ScrollView className="bg-background flex-1" contentContainerClassName="p-4 pb-12">
+      <ScrollView
+        className="bg-background flex-1"
+        contentContainerClassName="p-4 pb-12"
+      >
         <View className="border-border bg-card overflow-hidden rounded-lg border">
           {rows.map((row, index) => (
             <Pressable
@@ -74,11 +95,15 @@ export default function SettingsIndexScreen() {
                 index > 0 ? "border-border border-t" : ""
               }`}
             >
-              <Text className="text-foreground flex-1 text-base">{row.label}</Text>
+              <Text className="text-foreground flex-1 text-base">
+                {row.label}
+              </Text>
               {row.value ? (
                 <Text
                   className={`mr-2 text-sm ${
-                    row.needsAttention ? "text-amber-600 dark:text-amber-400" : "text-muted"
+                    row.needsAttention
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-muted"
                   }`}
                   numberOfLines={1}
                 >

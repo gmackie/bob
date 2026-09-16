@@ -20,10 +20,13 @@ export type FileEntryWire = Schema.Schema.Type<typeof FileEntrySchema>;
 // --- Git status entry -------------------------------------------------------
 
 export const GitStatusEntrySchema = Schema.Struct({
+  file: Schema.String,
   path: Schema.String,
   status: Schema.String, // e.g. "modified", "added", "deleted", "untracked"
 });
-export type GitStatusEntryWire = Schema.Schema.Type<typeof GitStatusEntrySchema>;
+export type GitStatusEntryWire = Schema.Schema.Type<
+  typeof GitStatusEntrySchema
+>;
 
 // --- Search result ----------------------------------------------------------
 

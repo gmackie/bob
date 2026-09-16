@@ -9,16 +9,13 @@ import { ThemeToggle } from "@gmacko/core/ui/theme-toggle";
 import { Toaster } from "@gmacko/core/ui/toast";
 
 import { ThemePreferencesSync } from "~/components/theme/theme-preferences-sync";
-import { TRPCReactProvider } from "~/trpc/react";
 import { BobRpcProvider } from "~/rpc/react";
 import { Providers } from "./providers";
 
 import "~/app/styles.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.FRONTEND_URL ?? "https://bob.blder.bot",
-  ),
+  metadataBase: new URL(process.env.FRONTEND_URL ?? "https://bob.blder.bot"),
   title: "blder.bot - AI Agent Manager",
   description: "Manage AI agents, plan work, and ship code with blder.bot",
   icons: {
@@ -43,10 +40,26 @@ export const viewport: Viewport = {
 
 const satoshi = localFont({
   src: [
-    { path: "../../public/fonts/satoshi/satoshi-400.woff2", weight: "400", style: "normal" },
-    { path: "../../public/fonts/satoshi/satoshi-500.woff2", weight: "500", style: "normal" },
-    { path: "../../public/fonts/satoshi/satoshi-700.woff2", weight: "700", style: "normal" },
-    { path: "../../public/fonts/satoshi/satoshi-900.woff2", weight: "900", style: "normal" },
+    {
+      path: "../../public/fonts/satoshi/satoshi-400.woff2",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/satoshi/satoshi-500.woff2",
+      weight: "500",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/satoshi/satoshi-700.woff2",
+      weight: "700",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/satoshi/satoshi-900.woff2",
+      weight: "900",
+      style: "normal",
+    },
   ],
   variable: "--font-satoshi",
   display: "swap",
@@ -54,8 +67,16 @@ const satoshi = localFont({
 
 const dmSans = localFont({
   src: [
-    { path: "../../public/fonts/dm-sans/dm-sans-latin-variable.woff2", weight: "100 900", style: "normal" },
-    { path: "../../public/fonts/dm-sans/dm-sans-latin-italic-variable.woff2", weight: "400", style: "italic" },
+    {
+      path: "../../public/fonts/dm-sans/dm-sans-latin-variable.woff2",
+      weight: "100 900",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/dm-sans/dm-sans-latin-italic-variable.woff2",
+      weight: "400",
+      style: "italic",
+    },
   ],
   variable: "--font-dm-sans",
   display: "swap",
@@ -63,14 +84,21 @@ const dmSans = localFont({
 
 const jetBrainsMono = localFont({
   src: [
-    { path: "../../public/fonts/jetbrains-mono/jetbrains-mono-latin-variable.woff2", weight: "100 800", style: "normal" },
+    {
+      path: "../../public/fonts/jetbrains-mono/jetbrains-mono-latin-variable.woff2",
+      weight: "100 800",
+      style: "normal",
+    },
   ],
   variable: "--font-jetbrains-mono",
   display: "swap",
   preload: false,
 });
 
-export default function RootLayout(props: { children: React.ReactNode; params: Promise<any> }) {
+export default function RootLayout(props: {
+  children: React.ReactNode;
+  params: Promise<any>;
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -95,12 +123,10 @@ export default function RootLayout(props: { children: React.ReactNode; params: P
           >
             Skip to content
           </a>
-          <TRPCReactProvider>
-            <BobRpcProvider>
-              <ThemePreferencesSync />
-              <Providers>{props.children}</Providers>
-            </BobRpcProvider>
-          </TRPCReactProvider>
+          <BobRpcProvider>
+            <ThemePreferencesSync />
+            <Providers>{props.children}</Providers>
+          </BobRpcProvider>
           <div className="fixed right-6 bottom-20 z-50">
             <ThemeToggle />
           </div>

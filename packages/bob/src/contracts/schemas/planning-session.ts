@@ -20,11 +20,11 @@ export const PlanningSessionTypeEnum = Schema.Literals([
 export const PlanSessionRecordSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
-  workingDirectory: Schema.optional(Schema.String),
+  workingDirectory: Schema.optional(Schema.NullOr(Schema.String)),
   agentType: Schema.optional(Schema.String),
   sessionType: Schema.optional(Schema.String),
-  title: Schema.optional(Schema.String),
-  status: Schema.optional(Schema.String),
+  title: Schema.optional(Schema.NullOr(Schema.String)),
+  status: Schema.String,
   workItemId: Schema.optional(Schema.NullOr(Schema.String)),
   planningSessionType: Schema.optional(Schema.NullOr(Schema.String)),
   planningWorkspaceId: Schema.optional(Schema.NullOr(Schema.String)),
@@ -38,15 +38,15 @@ export const PlanSessionRecordSchema = Schema.Struct({
 export const PlanDraftRecordSchema = Schema.Struct({
   id: Schema.String,
   sessionId: Schema.String,
-  workspaceId: Schema.optional(Schema.String),
-  projectId: Schema.optional(Schema.String),
+  workspaceId: Schema.String,
+  projectId: Schema.String,
   title: Schema.String,
   description: Schema.optional(Schema.NullOr(Schema.String)),
-  kind: Schema.optional(Schema.String),
-  priority: Schema.optional(Schema.String),
-  sortOrder: Schema.optional(Schema.Number),
-  status: Schema.optional(Schema.String),
-  createdAt: Schema.optional(Schema.String),
+  kind: Schema.String,
+  priority: Schema.String,
+  sortOrder: Schema.Number,
+  status: Schema.String,
+  createdAt: Schema.String,
 });
 
 /** Dependency record from the plan_draft_dependencies table. */

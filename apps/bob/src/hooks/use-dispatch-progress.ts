@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 /**
  * Monitors dispatch batch progress. Primary updates come via the workspace
@@ -15,13 +15,13 @@ import { useTRPC } from "~/trpc/react";
  * @returns The latest batch data and items, or undefined while loading.
  */
 export function useDispatchProgress(batchId: string | null) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch the batch data — workspace WebSocket pushes instant invalidation,
   // polling is fallback only
   const batchQuery = useQuery(
-    trpc.dispatch.getBatch.queryOptions(
+    bobQuery("planning.dispatch.getBatch").queryOptions(
       { batchId: batchId! },
       {
         enabled: !!batchId,
@@ -36,7 +36,7 @@ export function useDispatchProgress(batchId: string | null) {
 
   // Mutation to trigger server-side progress check + next-wave dispatch
   const checkProgress = useMutation(
-    trpc.dispatch.checkProgress.mutationOptions(),
+    bobQuery("planning.dispatch.checkProgress").mutationOptions(),
   );
 
   useEffect(() => {

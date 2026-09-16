@@ -9,7 +9,7 @@ import { cn } from "@gmacko/core/ui";
 
 import { useBobRpcClient } from "~/rpc/react";
 import { useSessionSocket } from "~/hooks/use-session-socket";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 import {
   buildProviderCapacitySummaries,
   extractProviderCapacitySnapshotsFromRuns,
@@ -76,10 +76,10 @@ function ProviderCapacityChip({
 }) {
   const primary = card.usageLimits[0];
   const remainingLabel = primary
-    ? primary.valueLabel ??
+    ? (primary.valueLabel ??
       (primary.remainingPercent === null
         ? "Unavailable"
-        : `${primary.remainingPercent}%`)
+        : `${primary.remainingPercent}%`))
     : null;
   const hasActivity = card.activeCount > 0 || card.queuedOrStartingCount > 0;
   const actionableHealth =
@@ -115,7 +115,9 @@ function ProviderCapacityChip({
         <span className="text-muted-foreground">{remainingLabel}</span>
       ) : null}
       {activityText ? (
-        <span className="tabular-nums text-muted-foreground">· {activityText}</span>
+        <span className="tabular-nums text-muted-foreground">
+          · {activityText}
+        </span>
       ) : null}
       {actionableHealth ? (
         <span
@@ -131,9 +133,11 @@ function ProviderCapacityChip({
   );
 }
 
-export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProps) {
+export function ProviderCapacityCards({
+  workspaceId,
+}: ProviderCapacityCardsProps) {
   const rpc = useBobRpcClient();
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const workItemsInput = { workspaceId: workspaceId ?? "", limit: 80 };
   const { data: workItems } = useQuery({
     queryKey: ["rpc", "workItem.list", workItemsInput],
@@ -142,21 +146,19 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
     enabled: Boolean(workspaceId),
     refetchInterval: 10_000,
   });
-  const runsQueryOptions = (
-    workspaceId
-      ? trpc.agentRun.list.queryOptions(
-          { workspaceId, limit: 100 },
-          { refetchInterval: 10_000 },
-        )
-      : trpc.agentRun.listAll.queryOptions(
-          { limit: 100 },
-          { refetchInterval: 10_000 },
-        )
-  ) as ReturnType<typeof trpc.agentRun.listAll.queryOptions>;
+  const runsQueryOptions = workspaceId
+    ? bobQuery("agent.run.list").queryOptions(
+        { workspaceId, limit: 100 },
+        { refetchInterval: 10_000 },
+      )
+    : bobQuery("agent.run.listAll").queryOptions(
+        { limit: 100 },
+        { refetchInterval: 10_000 },
+      );
   const { data: runRows } = useQuery(runsQueryOptions);
   const runs = (Array.isArray(runRows) ? runRows : []) as ProviderCapacityRun[];
   const { data: workspaceRows } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, {
+    bobQuery("projects.workspace.list").queryOptions(undefined, {
       staleTime: 30_000,
       refetchInterval: 30_000,
     }),
@@ -169,7 +171,7 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
     null,
   );
   const { data: gatewayInfo } = useQuery(
-    trpc.session.getGatewayWebSocketUrl.queryOptions(undefined, {
+    bobQuery("agent.session.getGatewayWebSocketUrl").queryOptions(undefined, {
       enabled: Boolean(workspaceId),
     }),
   );
@@ -193,13 +195,13 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
       }),
     ),
     workItems: workItems ?? [],
-    capacitySnapshots: extractProviderCapacitySnapshotsFromRuns(
-      runs,
-    ),
+    capacitySnapshots: extractProviderCapacitySnapshotsFromRuns(runs),
   });
 
   const heartbeatWorkspace = (
-    (Array.isArray(workspaceRows) ? workspaceRows : []) as WorkspaceHeartbeatRow[]
+    (Array.isArray(workspaceRows)
+      ? workspaceRows
+      : []) as WorkspaceHeartbeatRow[]
   )
     .map((row) => row.workspace)
     .find((workspace) => workspace?.id === workspaceId);
@@ -208,7 +210,9 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
     : heartbeatWorkspace
       ? buildHostMissionControlFromHeartbeat({
           hostId:
-            heartbeatWorkspace.name ?? heartbeatWorkspace.slug ?? "Execution host",
+            heartbeatWorkspace.name ??
+            heartbeatWorkspace.slug ??
+            "Execution host",
           lastHeartbeat: heartbeatWorkspace.lastHeartbeat,
         })
       : null;
@@ -224,8 +228,13 @@ export function ProviderCapacityCards({ workspaceId }: ProviderCapacityCardsProp
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground" data-testid="host-status">
-        <span className="font-semibold text-foreground">{host?.hostId ?? "Execution host"}</span>
+      <div
+        className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground"
+        data-testid="host-status"
+      >
+        <span className="font-semibold text-foreground">
+          {host?.hostId ?? "Execution host"}
+        </span>
         <span>{host?.statusLabel ?? "Waiting for heartbeat"}</span>
         {host ? <span>{host.queueLabel}</span> : null}
       </div>

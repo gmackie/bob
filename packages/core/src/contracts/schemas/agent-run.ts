@@ -49,3 +49,18 @@ export const AgentRunSchema = Schema.Struct({
   createdAt: Schema.Unknown,
 });
 export type AgentRunWire = Schema.Schema.Type<typeof AgentRunSchema>;
+
+/** Detail includes trace and review artifacts loaded by agentRunGet. */
+export const AgentRunDetailSchema = Schema.Struct({
+  ...AgentRunSchema.fields,
+  artifacts: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      runId: Schema.String,
+      type: Schema.String,
+      storageKey: Schema.String,
+      metadata: Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown)),
+      createdAt: Schema.String,
+    }),
+  ),
+});

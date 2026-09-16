@@ -11,6 +11,7 @@ describe("native execution contract parity", () => {
   it("preserves active execution, queue order, dependencies and agent choice", () => {
     const item = {
       id: "work",
+      workspaceId: "workspace",
       kind: "task" as const,
       status: "in_progress",
       title: "Build",

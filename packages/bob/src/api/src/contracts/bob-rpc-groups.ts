@@ -6,24 +6,22 @@
  * script (scripts/generate-openapi.ts) import it without dragging in runtime
  * deps that need env vars or native modules.
  */
+import type { OpenAPIV3_1 } from "openapi-types";
 import {
-  WorkItemsRpc,
-  PlanningRpc,
   ExternalRpc,
+  NativeRpc,
+  OperationsRpc,
+  PlanningRpc,
+  WorkItemsRpc,
 } from "@gmacko/bob/contracts";
 import { AgentRpc } from "@gmacko/core/contracts/groups/agent";
-import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
-import { SettingsRpc } from "@gmacko/core/contracts/groups/settings";
-import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
 import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
-import type { OpenAPIV3_1 } from "openapi-types";
+import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
+import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
+import { SettingsRpc } from "@gmacko/core/contracts/groups/settings";
 
-import {
-  generateOpenApiFromRpcGroups
-
-
-} from "./rpc-openapi.js";
-import type {RpcGroupLike, RpcOpenApiConfig} from "./rpc-openapi.js";
+import type { RpcGroupLike, RpcOpenApiConfig } from "./rpc-openapi.js";
+import { generateOpenApiFromRpcGroups } from "./rpc-openapi.js";
 
 /**
  * The 8 exported Effect-RPC contract groups served by Bob, in the same order
@@ -31,6 +29,8 @@ import type {RpcGroupLike, RpcOpenApiConfig} from "./rpc-openapi.js";
  * `HealthRpc` probe is intentionally omitted — it is not a public REST surface.
  */
 export const BOB_RPC_GROUPS = [
+  NativeRpc,
+  OperationsRpc,
   WorkItemsRpc,
   PlanningRpc,
   ExternalRpc,
@@ -55,5 +55,8 @@ const DEFAULTS: RpcOpenApiConfig = {
 export function generateBobRpcApiDocument(
   config: Partial<RpcOpenApiConfig> = {},
 ): OpenAPIV3_1.Document {
-  return generateOpenApiFromRpcGroups(BOB_RPC_GROUPS, { ...DEFAULTS, ...config });
+  return generateOpenApiFromRpcGroups(BOB_RPC_GROUPS, {
+    ...DEFAULTS,
+    ...config,
+  });
 }

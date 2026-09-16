@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useFileChangeEvents } from "~/hooks/use-file-change-events";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 import { FileTreeItem } from "./file-tree-item";
 
@@ -20,17 +20,11 @@ const FILTERED_NAMES = new Set([
   ".DS_Store",
 ]);
 
-interface FileEntry {
-  name: string;
-  path: string;
-  isDirectory: boolean;
-  isFile: boolean;
-  size: number;
-  modified: string;
-}
+import type { BobRpcOutput } from "@gmacko/bob-client/query";
+type FileEntry = BobRpcOutput<"agent.filesystem.list">[number];
 
 /** Sort entries: directories first, then files, both alphabetical */
-function sortEntries(entries: FileEntry[]): FileEntry[] {
+function sortEntries(entries: readonly FileEntry[]): FileEntry[] {
   return [...entries].sort((a, b) => {
     if (a.isDirectory && !b.isDirectory) return -1;
     if (!a.isDirectory && b.isDirectory) return 1;
@@ -38,7 +32,7 @@ function sortEntries(entries: FileEntry[]): FileEntry[] {
   });
 }
 
-function filterEntries(entries: FileEntry[]): FileEntry[] {
+function filterEntries(entries: readonly FileEntry[]): FileEntry[] {
   return entries.filter((e) => !FILTERED_NAMES.has(e.name));
 }
 
@@ -62,7 +56,14 @@ function getFolderGitStatus(
   gitStatusMap: Map<string, GitStatusCode>,
 ): GitStatusCode | undefined {
   // Priority order: D > M > A > ??
-  const priority: Record<string, number> = { D: 4, M: 3, A: 2, R: 1, "??": 0, C: 0 };
+  const priority: Record<string, number> = {
+    D: 4,
+    M: 3,
+    A: 2,
+    R: 1,
+    "??": 0,
+    C: 0,
+  };
   let best: GitStatusCode | undefined;
   let bestPriority = -1;
 
@@ -95,11 +96,11 @@ function FileTreeNode({
   onToggle,
   onSelect,
 }: FileTreeNodeProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const isExpanded = expandedPaths.has(entry.path);
 
   const { data: children, isLoading } = useQuery(
-    trpc.filesystem.list.queryOptions(
+    bobQuery("agent.filesystem.list").queryOptions(
       { path: entry.path, showHidden: false },
       { enabled: entry.isDirectory && isExpanded },
     ),
@@ -158,10 +159,7 @@ function FileTreeNode({
       {entry.isDirectory && isExpanded && isLoading && (
         <div style={{ paddingLeft: `${(depth + 1) * 16 + 8}px` }}>
           {Array.from({ length: 3 }).map((_, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-1.5 px-2 py-1"
-            >
+            <div key={i} className="flex items-center gap-1.5 px-2 py-1">
               <span className="h-4 w-4 shrink-0" />
               <span className="h-2 w-2 shrink-0 rounded-full bg-muted-foreground/20 animate-pulse" />
               <span
@@ -187,22 +185,28 @@ export interface FileTreeProps {
   sessionId?: string | null;
 }
 
-export function FileTree({ rootPath, onFileSelect, className, sessionId }: FileTreeProps) {
-  const trpc = useTRPC();
+export function FileTree({
+  rootPath,
+  onFileSelect,
+  className,
+  sessionId,
+}: FileTreeProps) {
+  const bobQuery = useBobQueryClient();
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
     () => new Set([rootPath]),
   );
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
   const { data: rootEntries, isLoading: rootLoading } = useQuery(
-    trpc.filesystem.list.queryOptions(
-      { path: rootPath, showHidden: false },
-    ),
+    bobQuery("agent.filesystem.list").queryOptions({
+      path: rootPath,
+      showHidden: false,
+    }),
   );
 
   // Fetch git status for the workspace root
   const { data: gitStatusData } = useQuery(
-    trpc.filesystem.gitStatus.queryOptions(
+    bobQuery("agent.filesystem.gitStatus").queryOptions(
       { path: rootPath },
       { refetchInterval: 10_000 },
     ),
@@ -212,8 +216,8 @@ export function FileTree({ rootPath, onFileSelect, className, sessionId }: FileT
   const gitStatusMap = useMemo(() => {
     const map = new Map<string, GitStatusCode>();
     if (gitStatusData) {
-      for (const entry of gitStatusData as Array<{ file: string; status: GitStatusCode }>) {
-        map.set(entry.file, entry.status);
+      for (const entry of gitStatusData) {
+        map.set(entry.file, entry.status as GitStatusCode);
       }
     }
     return map;

@@ -1,7 +1,20 @@
 import { useMemo } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type {
+  MobileProjectAutomationKey,
+  MobileProjectConfigurationManagementGroup,
+  MobileProjectConfigurationSection,
+  MobileProjectStatusRow,
+} from "~/features/planning/project-status";
+import type { MobileWorkItemEntryView } from "~/features/tablet/work-item-entry";
 import { Badge, Card } from "~/components/ui";
 import {
   buildProjectExecutionSummary,
@@ -13,18 +26,11 @@ import {
   buildMobileProjectAutomationControls,
   buildMobileProjectConfigurationManagementGroups,
   buildMobileProjectConfigurationSections,
-  buildMobileProjectStatusRows
-
-
-
-
-
+  buildMobileProjectStatusRows,
 } from "~/features/planning/project-status";
-import type {MobileProjectAutomationKey, MobileProjectConfigurationManagementGroup, MobileProjectConfigurationSection, MobileProjectStatusEntry, MobileProjectStatusRow} from "~/features/planning/project-status";
-import type { MobileWorkItemEntryView } from "~/features/tablet/work-item-entry";
 import { formatStatusLabel } from "~/features/tablet/queue";
 import { colors } from "~/lib/colors";
-import { trpc, rpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 
 interface ProjectWorkItem {
   id: string;
@@ -32,20 +38,6 @@ interface ProjectWorkItem {
   title: string;
   kind: "issue" | "epic" | "task";
   status: string;
-}
-
-interface ProjectData extends MobileProjectStatusEntry {
-  project: MobileProjectStatusEntry["project"] & {
-    description?: string | null;
-    status: string;
-    workspaceId: string;
-  };
-  counts: {
-    active: number;
-    issues: number;
-    tasks: number;
-    epics: number;
-  };
 }
 
 export function TabletProjectPane({
@@ -57,7 +49,7 @@ export function TabletProjectPane({
 }) {
   const queryClient = useQueryClient();
   const projectQuery = useQuery(
-    trpc.project.get.queryOptions(
+    rpc("project.get").queryOptions(
       { id: projectId },
       {
         enabled: Boolean(projectId),
@@ -65,7 +57,7 @@ export function TabletProjectPane({
       },
     ),
   );
-  const projectData = projectQuery.data as ProjectData | undefined;
+  const projectData = projectQuery.data;
   const workItemsQuery = useQuery(
     rpc("workItem.list").queryOptions(
       {
@@ -84,10 +76,10 @@ export function TabletProjectPane({
     [workItemsQuery.data],
   );
   const updateAutomationSettings = useMutation(
-    trpc.project.updateAutomationSettings.mutationOptions({
+    rpc("project.updateAutomationSettings").mutationOptions({
       onSuccess: async () => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.project.get.queryKey({ id: projectId }),
+          queryKey: rpc("project.get").queryKey({ id: projectId }),
         });
       },
     }),
@@ -105,7 +97,9 @@ export function TabletProjectPane({
     return (
       <View className="flex-1 justify-center p-6">
         <Card>
-          <Text className="text-lg font-semibold text-foreground">Project not found</Text>
+          <Text className="text-foreground text-lg font-semibold">
+            Project not found
+          </Text>
         </Card>
       </View>
     );
@@ -128,14 +122,14 @@ export function TabletProjectPane({
     >
       <View className="flex-row items-start justify-between gap-4">
         <View className="min-w-0 flex-1">
-          <Text className="text-sm uppercase tracking-[0.18em] text-muted">
+          <Text className="text-muted text-sm tracking-[0.18em] uppercase">
             Project
           </Text>
-          <Text className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
+          <Text className="text-foreground mt-1 text-3xl font-semibold tracking-tight">
             {project.name}
           </Text>
           {project.description ? (
-            <Text className="mt-3 max-w-3xl text-sm leading-6 text-muted">
+            <Text className="text-muted mt-3 max-w-3xl text-sm leading-6">
               {project.description}
             </Text>
           ) : null}
@@ -171,10 +165,10 @@ export function TabletProjectPane({
 
       <View className="mt-6">
         <View className="mb-3 flex-row items-center justify-between">
-          <Text className="text-sm font-semibold uppercase tracking-wider text-muted">
+          <Text className="text-muted text-sm font-semibold tracking-wider uppercase">
             Work Items
           </Text>
-          <Text className="text-xs text-muted">{workItems.length}</Text>
+          <Text className="text-muted text-xs">{workItems.length}</Text>
         </View>
         <View
           className="overflow-hidden rounded-lg border"
@@ -185,7 +179,7 @@ export function TabletProjectPane({
               <ActivityIndicator color={colors.muted} />
             </View>
           ) : workItems.length === 0 ? (
-            <Text className="p-4 text-sm text-muted">
+            <Text className="text-muted p-4 text-sm">
               No work items in this project.
             </Text>
           ) : (
@@ -215,10 +209,10 @@ function Metric({ label, value }: { label: string; value: number }) {
       className="flex-1 rounded-lg border p-4"
       style={{ borderColor: colors.border, backgroundColor: colors.card }}
     >
-      <Text className="text-xs font-semibold uppercase tracking-wider text-muted2">
+      <Text className="text-muted2 text-xs font-semibold tracking-wider uppercase">
         {label}
       </Text>
-      <Text className="mt-2 text-2xl font-semibold text-foreground">
+      <Text className="text-foreground mt-2 text-2xl font-semibold">
         {value}
       </Text>
     </View>
@@ -232,20 +226,25 @@ function ProjectConfigurationPanel({
 }: {
   row: MobileProjectStatusRow;
   isUpdatingAutomation: boolean;
-  onToggleAutomation: (key: MobileProjectAutomationKey, enabled: boolean) => void;
+  onToggleAutomation: (
+    key: MobileProjectAutomationKey,
+    enabled: boolean,
+  ) => void;
 }) {
   const configurationSections = buildMobileProjectConfigurationSections(row);
   const configurationGroups = buildMobileProjectConfigurationManagementGroups(
     configurationSections,
   );
-  const automationControls = buildMobileProjectAutomationControls(row.automationSettings);
+  const automationControls = buildMobileProjectAutomationControls(
+    row.automationSettings,
+  );
 
   return (
     <View
       className="mt-5 rounded-lg border p-4"
       style={{ borderColor: colors.border, backgroundColor: colors.card }}
     >
-      <Text className="text-sm font-semibold uppercase tracking-wider text-muted">
+      <Text className="text-muted text-sm font-semibold tracking-wider uppercase">
         Configuration
       </Text>
       <View className="mt-4 gap-2">
@@ -258,17 +257,24 @@ function ProjectConfigurationPanel({
         <Badge variant={row.gitStatus === "Clean" ? "success" : "warning"}>
           {row.gitStatus}
         </Badge>
-        <Badge variant={row.linearStatus === "Connected" ? "success" : "warning"}>
+        <Badge
+          variant={row.linearStatus === "Connected" ? "success" : "warning"}
+        >
           {row.linearStatus}
         </Badge>
-        <Badge variant={row.configStatus === "Configured" ? "success" : "warning"}>
+        <Badge
+          variant={row.configStatus === "Configured" ? "success" : "warning"}
+        >
           {row.configStatus}
         </Badge>
       </View>
-      <Text className="mt-4 text-xs text-muted">{row.warningLabel}</Text>
+      <Text className="text-muted mt-4 text-xs">{row.warningLabel}</Text>
 
-      <View className="mt-5 border-t pt-4" style={{ borderColor: colors.border }}>
-        <Text className="text-sm font-semibold uppercase tracking-wider text-muted">
+      <View
+        className="mt-5 border-t pt-4"
+        style={{ borderColor: colors.border }}
+      >
+        <Text className="text-muted text-sm font-semibold tracking-wider uppercase">
           Bob Configuration
         </Text>
         <View className="mt-3 gap-4">
@@ -278,8 +284,11 @@ function ProjectConfigurationPanel({
         </View>
       </View>
 
-      <View className="mt-5 border-t pt-4" style={{ borderColor: colors.border }}>
-        <Text className="text-sm font-semibold uppercase tracking-wider text-muted">
+      <View
+        className="mt-5 border-t pt-4"
+        style={{ borderColor: colors.border }}
+      >
+        <Text className="text-muted text-sm font-semibold tracking-wider uppercase">
           Execution Controls
         </Text>
         <View className="mt-3 flex-row flex-wrap gap-3">
@@ -290,11 +299,16 @@ function ProjectConfigurationPanel({
               disabled={isUpdatingAutomation}
               accessibilityRole="switch"
               accessibilityLabel={control.label}
-              accessibilityState={{ checked: control.enabled, disabled: isUpdatingAutomation }}
+              accessibilityState={{
+                checked: control.enabled,
+                disabled: isUpdatingAutomation,
+              }}
               className="rounded-lg border p-3 active:opacity-75"
               style={{
                 borderColor: colors.border,
-                backgroundColor: control.enabled ? colors.primary + "22" : colors.background,
+                backgroundColor: control.enabled
+                  ? colors.primary + "22"
+                  : colors.background,
                 flexBasis: "48%",
                 flexGrow: 1,
                 minWidth: 200,
@@ -302,14 +316,17 @@ function ProjectConfigurationPanel({
               }}
             >
               <View className="flex-row items-center justify-between gap-3">
-                <Text className="min-w-0 flex-1 text-sm font-semibold text-foreground" numberOfLines={1}>
+                <Text
+                  className="text-foreground min-w-0 flex-1 text-sm font-semibold"
+                  numberOfLines={1}
+                >
                   {control.label}
                 </Text>
                 <Badge variant={control.enabled ? "success" : "warning"}>
                   {control.enabled ? "On" : "Off"}
                 </Badge>
               </View>
-              <Text className="mt-2 text-xs leading-5 text-muted">
+              <Text className="text-muted mt-2 text-xs leading-5">
                 {control.description}
               </Text>
             </Pressable>
@@ -331,10 +348,10 @@ function ConfigurationManagementGroup({
     <View>
       <View className="flex-row items-start justify-between gap-3">
         <View className="min-w-0 flex-1">
-          <Text className="text-sm font-semibold text-foreground">
+          <Text className="text-foreground text-sm font-semibold">
             {group.title}
           </Text>
-          <Text className="mt-1 text-xs leading-5 text-muted">
+          <Text className="text-muted mt-1 text-xs leading-5">
             {group.description}
           </Text>
         </View>
@@ -343,9 +360,15 @@ function ConfigurationManagementGroup({
             <View
               key={action.key}
               className="rounded-md border px-2 py-1"
-              style={{ borderColor: colors.border, backgroundColor: colors.secondary }}
+              style={{
+                borderColor: colors.border,
+                backgroundColor: colors.secondary,
+              }}
             >
-              <Text className="text-xs font-medium text-muted" numberOfLines={1}>
+              <Text
+                className="text-muted text-xs font-medium"
+                numberOfLines={1}
+              >
                 {action.label}
               </Text>
             </View>
@@ -385,7 +408,10 @@ function ConfigurationSectionCard({
       }}
     >
       <View className="flex-row items-center justify-between gap-2">
-        <Text className="min-w-0 flex-1 text-sm font-semibold text-foreground" numberOfLines={1}>
+        <Text
+          className="text-foreground min-w-0 flex-1 text-sm font-semibold"
+          numberOfLines={1}
+        >
           {section.title}
         </Text>
         <Badge variant={variant}>{section.status}</Badge>
@@ -434,14 +460,19 @@ function ProjectWorkItemRow({
       }}
     >
       <View className="min-w-0 flex-1">
-        <Text className="text-sm font-semibold text-foreground" numberOfLines={1}>
+        <Text
+          className="text-foreground text-sm font-semibold"
+          numberOfLines={1}
+        >
           {action.title}
         </Text>
-        <Text className="mt-1 text-xs text-muted" numberOfLines={1}>
+        <Text className="text-muted mt-1 text-xs" numberOfLines={1}>
           {action.subtitle}
         </Text>
       </View>
-      <Text className="text-xs font-medium text-muted">{action.actionLabel}</Text>
+      <Text className="text-muted text-xs font-medium">
+        {action.actionLabel}
+      </Text>
     </Pressable>
   );
 }
@@ -449,8 +480,8 @@ function ProjectWorkItemRow({
 function MetaLine({ label, value }: { label: string; value: string }) {
   return (
     <View className="flex-row gap-3">
-      <Text className="w-24 text-xs uppercase text-muted2">{label}</Text>
-      <Text className="min-w-0 flex-1 text-xs text-muted" numberOfLines={1}>
+      <Text className="text-muted2 w-24 text-xs uppercase">{label}</Text>
+      <Text className="text-muted min-w-0 flex-1 text-xs" numberOfLines={1}>
         {value}
       </Text>
     </View>

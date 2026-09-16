@@ -11,18 +11,13 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type { ProviderKey } from "~/features/tablet/dashboard";
 import {
   buildMobileSettingsDeviceSummary,
   buildMobileSettingsProviderRows,
@@ -30,9 +25,8 @@ import {
 } from "~/features/settings/settings-model";
 import { SELECTED_WORKSPACE_KEY } from "~/features/settings/workspace-selection";
 import { colors } from "~/lib/colors";
-import { trpc, rpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
-import type { ProviderKey } from "~/features/tablet/dashboard";
 
 const PERMISSIONS = ["read", "write", "delete", "admin"] as const;
 
@@ -40,14 +34,6 @@ interface PreferencesData {
   theme: "light" | "dark" | "system";
   emailNotifications: boolean;
   pushNotifications: boolean;
-}
-
-interface ApiKeyData {
-  id: string;
-  name: string;
-  keyPrefix: string;
-  permissions: string[];
-  lastUsedAt: string | Date | null;
 }
 
 interface CreatedApiKeyData {
@@ -145,7 +131,9 @@ export function WorkspacesSection() {
     null,
   );
   const { data: memberships, isLoading } = useQuery(
-    rpc("projects.workspace.list").queryOptions(undefined, { staleTime: 60_000 }),
+    rpc("projects.workspace.list").queryOptions(undefined, {
+      staleTime: 60_000,
+    }),
   );
 
   useEffect(() => {
@@ -170,7 +158,7 @@ export function WorkspacesSection() {
         queryKey: rpc("projects.workspace.list").queryKey(),
       });
       void queryClient.invalidateQueries({
-        queryKey: trpc.project.list.queryKey(),
+        queryKey: rpc("project.list").queryKey(),
       });
       void queryClient.invalidateQueries({
         queryKey: rpc("workItem.list").queryKey(),
@@ -246,7 +234,9 @@ export function ProvidersSection({
           <Pressable
             key={row.key}
             onPress={() =>
-              onOpenProvider ? onOpenProvider(row.key as ProviderKey) : router.push(row.href)
+              onOpenProvider
+                ? onOpenProvider(row.key as ProviderKey)
+                : router.push(row.href)
             }
             accessibilityRole="button"
             accessibilityLabel={`Open ${row.label} provider settings`}
@@ -270,15 +260,15 @@ export function PreferencesSection() {
   const queryClient = useQueryClient();
 
   const { data: preferences, isLoading } = useQuery(
-    trpc.settings.getPreferences.queryOptions(undefined),
+    rpc("settings.getPreferences").queryOptions(undefined),
   );
   const currentPreferences = preferences as PreferencesData | undefined;
 
   const { mutate: updatePreferences } = useMutation(
-    trpc.settings.updatePreferences.mutationOptions({
+    rpc("settings.updatePreferences").mutationOptions({
       onSuccess: () => {
         void queryClient.invalidateQueries(
-          trpc.settings.getPreferences.queryFilter(),
+          rpc("settings.getPreferences").queryFilter(),
         );
       },
     }),
@@ -382,7 +372,7 @@ export function PreferencesSection() {
 
 export function DeviceSection() {
   const { data: apiKeys } = useQuery(
-    trpc.settings.listApiKeys.queryOptions(undefined, { staleTime: 60_000 }),
+    rpc("settings.listApiKeys").queryOptions(undefined, { staleTime: 60_000 }),
   );
   const apiKeyCount = Array.isArray(apiKeys) ? apiKeys.length : 0;
   const summary = buildMobileSettingsDeviceSummary({ apiKeyCount });
@@ -410,29 +400,29 @@ export function ApiKeysSection() {
   const [newKey, setNewKey] = useState<string | null>(null);
 
   const { data: apiKeys, isLoading } = useQuery(
-    trpc.settings.listApiKeys.queryOptions(undefined),
+    rpc("settings.listApiKeys").queryOptions(undefined),
   );
-  const apiKeyRows = (apiKeys ?? []) as ApiKeyData[];
+  const apiKeyRows = apiKeys ?? [];
 
   const { mutate: createKey, isPending: isCreating } = useMutation(
-    trpc.settings.createApiKey.mutationOptions({
+    rpc("settings.createApiKey").mutationOptions({
       onSuccess: (data: CreatedApiKeyData) => {
         setNewKey(data.key);
         setNewKeyName("");
         setSelectedPermissions(["read"]);
         setShowCreateForm(false);
         void queryClient.invalidateQueries(
-          trpc.settings.listApiKeys.queryFilter(),
+          rpc("settings.listApiKeys").queryFilter(),
         );
       },
     }),
   );
 
   const { mutate: revokeKey, isPending: isRevoking } = useMutation(
-    trpc.settings.revokeApiKey.mutationOptions({
+    rpc("settings.revokeApiKey").mutationOptions({
       onSuccess: () => {
         void queryClient.invalidateQueries(
-          trpc.settings.listApiKeys.queryFilter(),
+          rpc("settings.listApiKeys").queryFilter(),
         );
       },
     }),
@@ -593,7 +583,8 @@ export function ApiKeysSection() {
                 </Text>
                 {key.lastUsedAt && (
                   <Text className="text-muted text-xs">
-                    Last used: {new Date(key.lastUsedAt).toLocaleDateString()}
+                    Last used:{" "}
+                    {new Date(String(key.lastUsedAt)).toLocaleDateString()}
                   </Text>
                 )}
               </View>

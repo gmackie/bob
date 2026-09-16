@@ -8,17 +8,19 @@
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { inferRouterOutputs } from "@trpc/server";
+import type { BobRpcOutput } from "@gmacko/bob-client/query";
 
-import type { AppRouter } from "@bob/api";
+import {
+  useSessionSocket,
+  type SessionEvent,
+} from "~/hooks/use-session-socket";
+import { useBobQueryClient } from "~/rpc/react";
 
-import { useSessionSocket, type SessionEvent } from "~/hooks/use-session-socket";
-import { useTRPC } from "~/trpc/react";
-
-export type CockpitStatus = inferRouterOutputs<AppRouter>["cockpit"]["status"];
+export type CockpitStatus = BobRpcOutput<"cockpit.status">;
 export type CockpitSession = CockpitStatus["sessions"][number];
 export type CockpitPr = CockpitStatus["prs"]["active"][number];
-export type CockpitQueueCard = CockpitStatus["queue"]["lanes"]["urgent"][number];
+export type CockpitQueueCard =
+  CockpitStatus["queue"]["lanes"]["urgent"][number];
 
 export interface TileFeed {
   /** Last lines of agent output (ring buffer). */
@@ -64,7 +66,11 @@ function emptyFeed(): TileFeed {
  * per-phase state. v1 lines keep the legacy branch below — both shapes share
  * the `check` session event type.
  */
-function applyCheckV2(feed: TileFeed, phase: string, payload: Record<string, unknown>): void {
+function applyCheckV2(
+  feed: TileFeed,
+  phase: string,
+  payload: Record<string, unknown>,
+): void {
   const kind = typeof payload.event === "string" ? payload.event : "";
   const prev = feed.check[phase] ?? { status: "running" };
   const next: CheckPhaseState = { ...prev, streams: { ...prev.streams } };
@@ -78,7 +84,8 @@ function applyCheckV2(feed: TileFeed, phase: string, payload: Record<string, unk
   } else if (kind === "skipped") {
     next.status = "skipped";
   } else if (kind === "run_finished") {
-    const status = typeof payload.status === "string" ? payload.status : "failed";
+    const status =
+      typeof payload.status === "string" ? payload.status : "failed";
     // a failed stream fails the phase for good — a later passing stream can't clear it
     next.status = prev.status === "failed" ? "failed" : status;
     if (typeof payload.durationMs === "number") {
@@ -97,7 +104,8 @@ function applyCheckV2(feed: TileFeed, phase: string, payload: Record<string, unk
     const test = payload.test as { name?: string; status?: string } | undefined;
     if (test?.status === "failed" && typeof test.name === "string") {
       const fails = prev.failures ?? [];
-      if (!fails.includes(test.name)) next.failures = [...fails, test.name].slice(-3);
+      if (!fails.includes(test.name))
+        next.failures = [...fails, test.name].slice(-3);
     }
   }
 
@@ -117,24 +125,32 @@ function applyCheckV2(feed: TileFeed, phase: string, payload: Record<string, unk
 }
 
 export function useCockpit(opts: { includeOoda: boolean }) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const queryClient = useQueryClient();
 
   const statusQuery = useQuery(
-    trpc.cockpit.status.queryOptions(
+    bobQuery("cockpit.status").queryOptions(
       { includeOoda: opts.includeOoda },
-      { refetchInterval: 10_000, staleTime: 5_000, refetchOnWindowFocus: false },
+      {
+        refetchInterval: 10_000,
+        staleTime: 5_000,
+        refetchOnWindowFocus: false,
+      },
     ),
   );
   const status = statusQuery.data ?? null;
 
   const { data: gatewayInfo } = useQuery(
-    trpc.session.getGatewayWebSocketUrl.queryOptions(undefined, { staleTime: 5 * 60_000 }),
+    bobQuery("agent.session.getGatewayWebSocketUrl").queryOptions(undefined, {
+      staleTime: 5 * 60_000,
+    }),
   );
 
   const refetchStatus = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: trpc.cockpit.status.queryKey() });
-  }, [queryClient, trpc]);
+    void queryClient.invalidateQueries({
+      queryKey: bobQuery("cockpit.status").queryKey(),
+    });
+  }, [queryClient, bobQuery]);
 
   // Per-session live feeds, kept in a ref + version counter so a burst of
   // output doesn't re-render the whole wall on every chunk (we flush at 4 Hz).
@@ -154,13 +170,24 @@ export function useCockpit(opts: { includeOoda: boolean }) {
   const onEvent = useCallback((event: SessionEvent) => {
     const feed = feedsRef.current.get(event.sessionId) ?? emptyFeed();
     const payload = (event.payload ?? {}) as Record<string, unknown>;
-    if (event.eventType === "output_chunk" && typeof payload.data === "string") {
+    if (
+      event.eventType === "output_chunk" &&
+      typeof payload.data === "string"
+    ) {
       const lines = payload.data.split("\n").filter((l) => l.trim().length > 0);
       feed.tail = [...feed.tail, ...lines].slice(-TAIL_LINES);
     } else if (event.eventType === "tool_call") {
-      const name = typeof payload.toolName === "string" ? payload.toolName : typeof payload.name === "string" ? payload.name : null;
+      const name =
+        typeof payload.toolName === "string"
+          ? payload.toolName
+          : typeof payload.name === "string"
+            ? payload.name
+            : null;
       if (name) feed.tool = name;
-    } else if (event.eventType === "thought" && typeof payload.text === "string") {
+    } else if (
+      event.eventType === "thought" &&
+      typeof payload.text === "string"
+    ) {
       feed.tail = [...feed.tail, `… ${payload.text}`].slice(-TAIL_LINES);
     } else if (event.eventType === "file_changes") {
       feed.files = payload as unknown as TileFeed["files"];
@@ -175,10 +202,16 @@ export function useCockpit(opts: { includeOoda: boolean }) {
             ...feed.check,
             [phase]: {
               status: String(payload.status ?? "running"),
-              passed: typeof payload.passed === "number" ? payload.passed : undefined,
-              failed: typeof payload.failed === "number" ? payload.failed : undefined,
-              total: typeof payload.total === "number" ? payload.total : undefined,
-              durationMs: typeof payload.durationMs === "number" ? payload.durationMs : undefined,
+              passed:
+                typeof payload.passed === "number" ? payload.passed : undefined,
+              failed:
+                typeof payload.failed === "number" ? payload.failed : undefined,
+              total:
+                typeof payload.total === "number" ? payload.total : undefined,
+              durationMs:
+                typeof payload.durationMs === "number"
+                  ? payload.durationMs
+                  : undefined,
             },
           };
         }
@@ -189,7 +222,12 @@ export function useCockpit(opts: { includeOoda: boolean }) {
     dirtyRef.current = true;
   }, []);
 
-  const { connectionState: wsState, subscribe, unsubscribe, subscribeWorkspace } = useSessionSocket({
+  const {
+    connectionState: wsState,
+    subscribe,
+    unsubscribe,
+    subscribeWorkspace,
+  } = useSessionSocket({
     gatewayUrl: gatewayInfo?.url ?? "",
     token: gatewayInfo?.token ?? "",
     enabled: !!gatewayInfo?.url && !!gatewayInfo?.token,
@@ -208,7 +246,10 @@ export function useCockpit(opts: { includeOoda: boolean }) {
   }, [connectionState, subscribeWorkspace]);
 
   // Subscribe to exactly the visible sessions; drop feeds for finished ones.
-  const sessionIds = useMemo(() => (status?.sessions ?? []).map((s) => s.id), [status]);
+  const sessionIds = useMemo(
+    () => (status?.sessions ?? []).map((s) => s.id),
+    [status],
+  );
   const subscribedRef = useRef(new Set<string>());
   useEffect(() => {
     if (connectionState !== "connected") return;
@@ -223,7 +264,14 @@ export function useCockpit(opts: { includeOoda: boolean }) {
     subscribedRef.current = want;
   }, [sessionIds, connectionState, subscribe, unsubscribe]);
 
-  const staleSeconds = status ? Math.max(0, Math.round((Date.now() - new Date(status.generatedAt).getTime()) / 1000)) : null;
+  const staleSeconds = status
+    ? Math.max(
+        0,
+        Math.round(
+          (Date.now() - new Date(status.generatedAt).getTime()) / 1000,
+        ),
+      )
+    : null;
 
   return {
     status,

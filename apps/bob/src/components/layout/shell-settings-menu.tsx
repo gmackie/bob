@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 import {
   buildShellSettingsActions,
   buildWorkspaceSwitchHref,
@@ -21,19 +21,20 @@ type WorkspaceMembership = {
 };
 
 export function ShellSettingsMenu() {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const pathname = usePathname() ?? "/";
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
   const { data: workspaceMemberships } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, {
+    bobQuery("projects.workspace.list").queryOptions(undefined, {
       staleTime: 60_000,
       refetchInterval: 30_000,
     }),
   );
 
   const workspaces = useMemo(() => {
-    const memberships = (workspaceMemberships ?? []) as unknown as WorkspaceMembership[];
+    const memberships = (workspaceMemberships ??
+      []) as unknown as WorkspaceMembership[];
     return memberships.flatMap((membership) =>
       membership.workspace ? [membership.workspace] : [],
     );
@@ -46,7 +47,9 @@ export function ShellSettingsMenu() {
   const actions = buildShellSettingsActions(currentWorkspace?.id);
 
   async function handleLogout() {
-    await fetch("/api/auth/sign-out", { method: "POST" }).catch(() => undefined);
+    await fetch("/api/auth/sign-out", { method: "POST" }).catch(
+      () => undefined,
+    );
     window.location.href = "/login";
   }
 
@@ -96,7 +99,9 @@ export function ShellSettingsMenu() {
                 >
                   <span className="truncate">{workspace.name}</span>
                   {workspace.id === currentWorkspace?.id ? (
-                    <span className="ml-3 text-[10px] uppercase tracking-wide">Current</span>
+                    <span className="ml-3 text-[10px] uppercase tracking-wide">
+                      Current
+                    </span>
                   ) : null}
                 </Link>
               ))

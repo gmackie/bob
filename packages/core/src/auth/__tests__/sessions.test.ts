@@ -1,4 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it as vitestIt } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it as vitestIt,
+} from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { createTestDb } from "@gmacko/core/db/testing";
@@ -6,11 +12,7 @@ import { GmackoDb, layerGmackoDb } from "@gmacko/core/db";
 import { sessions, users } from "@gmacko/core/db/schema/auth";
 
 import { layerBetterAuth } from "../better-auth.js";
-import {
-  Sessions,
-  SessionExpiredError,
-  layerSessions,
-} from "../sessions.js";
+import { Sessions, SessionExpiredError, layerSessions } from "../sessions.js";
 
 type TestCtx = Awaited<ReturnType<typeof createTestDb>>;
 
@@ -65,14 +67,20 @@ afterEach(async () => {
 });
 
 describe("@gmacko/auth Sessions service", () => {
-  it.effect("validateToken rejects unknown tokens with SessionExpiredError", () =>
-    Effect.gen(function* () {
-      const svc = yield* Sessions.asEffect();
-      const caught = yield* svc.validateToken("unknown_token").pipe(
-        Effect.catchTag("SessionExpiredError", (err) => Effect.succeed(err)),
-      );
-      expect(caught).toBeInstanceOf(SessionExpiredError);
-    }).pipe(Effect.provide(authLayer)),
+  it.effect(
+    "validateToken rejects unknown tokens with SessionExpiredError",
+    () =>
+      Effect.gen(function* () {
+        const svc = yield* Sessions.asEffect();
+        const caught = yield* svc
+          .validateToken("unknown_token")
+          .pipe(
+            Effect.catchTag("SessionExpiredError", (err) =>
+              Effect.succeed(err),
+            ),
+          );
+        expect(caught).toBeInstanceOf(SessionExpiredError);
+      }).pipe(Effect.provide(authLayer)),
   );
 
   it.effect("validateToken returns userId + email for a valid token", () =>
@@ -84,14 +92,20 @@ describe("@gmacko/auth Sessions service", () => {
     }).pipe(Effect.provide(authLayer)),
   );
 
-  it.effect("validateToken rejects expired tokens with SessionExpiredError", () =>
-    Effect.gen(function* () {
-      const svc = yield* Sessions.asEffect();
-      const caught = yield* svc.validateToken(EXPIRED_TOKEN).pipe(
-        Effect.catchTag("SessionExpiredError", (err) => Effect.succeed(err)),
-      );
-      expect(caught).toBeInstanceOf(SessionExpiredError);
-    }).pipe(Effect.provide(authLayer)),
+  it.effect(
+    "validateToken rejects expired tokens with SessionExpiredError",
+    () =>
+      Effect.gen(function* () {
+        const svc = yield* Sessions.asEffect();
+        const caught = yield* svc
+          .validateToken(EXPIRED_TOKEN)
+          .pipe(
+            Effect.catchTag("SessionExpiredError", (err) =>
+              Effect.succeed(err),
+            ),
+          );
+        expect(caught).toBeInstanceOf(SessionExpiredError);
+      }).pipe(Effect.provide(authLayer)),
   );
 
   it.effect("validateBearer returns null for missing header (no error)", () =>
@@ -112,12 +126,14 @@ describe("@gmacko/auth Sessions service", () => {
     }).pipe(Effect.provide(authLayer)),
   );
 
-  it.effect("validateBearer returns null when the Bearer value is whitespace only", () =>
-    Effect.gen(function* () {
-      const svc = yield* Sessions.asEffect();
-      const result = yield* svc.validateBearer("Bearer   ");
-      expect(result).toBeNull();
-    }).pipe(Effect.provide(authLayer)),
+  it.effect(
+    "validateBearer returns null when the Bearer value is whitespace only",
+    () =>
+      Effect.gen(function* () {
+        const svc = yield* Sessions.asEffect();
+        const result = yield* svc.validateBearer("Bearer   ");
+        expect(result).toBeNull();
+      }).pipe(Effect.provide(authLayer)),
   );
 
   it.effect("validateBearer returns null for non-Bearer schemes", () =>
@@ -136,50 +152,64 @@ describe("Sessions.validateRequest (signature-aware)", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const stubDbLayer = Layer.succeed(GmackoDb)({} as any);
 
-  vitestIt("delegates to betterAuth.api.getSession and returns userId+email when valid", async () => {
-    const fakeAuth = {
-      api: {
-        getSession: async (_input: { headers: Headers }) => ({
-          session: { userId: "user_123", token: "tok" },
-          user: { id: "user_123", email: "alice@example.test" },
-        }),
-      },
-    } as unknown as Parameters<typeof layerBetterAuth>[0];
+  vitestIt(
+    "delegates to betterAuth.api.getSession and returns userId+email when valid",
+    async () => {
+      const fakeAuth = {
+        api: {
+          getSession: async (_input: { headers: Headers }) => ({
+            session: { userId: "user_123", token: "tok" },
+            user: { id: "user_123", email: "alice@example.test" },
+          }),
+        },
+      } as unknown as Parameters<typeof layerBetterAuth>[0];
 
-    const program = Effect.gen(function* () {
-      const sessions = yield* Sessions.asEffect();
-      return yield* sessions.validateRequest(new Headers());
-    }).pipe(
-      Effect.provide(
-        Layer.provide(
-          layerSessions,
-          Layer.mergeAll(layerBetterAuth(fakeAuth), stubDbLayer),
+      const program = Effect.gen(function* () {
+        const sessions = yield* Sessions.asEffect();
+        return yield* sessions.validateRequest(new Headers());
+      }).pipe(
+        Effect.provide(
+          Layer.provide(
+            layerSessions,
+            Layer.mergeAll(layerBetterAuth(fakeAuth), stubDbLayer),
+          ),
         ),
-      ),
-    );
-
-    const result = await Effect.runPromise(program);
-    expect(result).toEqual({ userId: "user_123", email: "alice@example.test" });
-  });
-
-  vitestIt("fails with SessionExpiredError when better-auth returns null", async () => {
-    const fakeAuth = {
-      api: { getSession: async () => null },
-    } as unknown as Parameters<typeof layerBetterAuth>[0];
-    const program = Effect.gen(function* () {
-      const sessions = yield* Sessions.asEffect();
-      return yield* sessions.validateRequest(new Headers()).pipe(
-        Effect.catchTag("SessionExpiredError", (err) => Effect.succeed(err)),
       );
-    }).pipe(
-      Effect.provide(
-        Layer.provide(
-          layerSessions,
-          Layer.mergeAll(layerBetterAuth(fakeAuth), stubDbLayer),
+
+      const result = await Effect.runPromise(program);
+      expect(result).toEqual({
+        userId: "user_123",
+        email: "alice@example.test",
+        gatewayToken: "tok",
+      });
+    },
+  );
+
+  vitestIt(
+    "fails with SessionExpiredError when better-auth returns null",
+    async () => {
+      const fakeAuth = {
+        api: { getSession: async () => null },
+      } as unknown as Parameters<typeof layerBetterAuth>[0];
+      const program = Effect.gen(function* () {
+        const sessions = yield* Sessions.asEffect();
+        return yield* sessions
+          .validateRequest(new Headers())
+          .pipe(
+            Effect.catchTag("SessionExpiredError", (err) =>
+              Effect.succeed(err),
+            ),
+          );
+      }).pipe(
+        Effect.provide(
+          Layer.provide(
+            layerSessions,
+            Layer.mergeAll(layerBetterAuth(fakeAuth), stubDbLayer),
+          ),
         ),
-      ),
-    );
-    const caught = await Effect.runPromise(program);
-    expect(caught).toBeInstanceOf(SessionExpiredError);
-  });
+      );
+      const caught = await Effect.runPromise(program);
+      expect(caught).toBeInstanceOf(SessionExpiredError);
+    },
+  );
 });

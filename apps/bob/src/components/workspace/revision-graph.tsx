@@ -6,17 +6,17 @@ import { cn } from "@gmacko/core/ui";
 import { Badge } from "@gmacko/core/ui/badge";
 
 import { formatRelativeTime } from "~/lib/format/time";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 interface RevisionGraphProps {
   worktreePath: string;
 }
 
 export function RevisionGraph({ worktreePath }: RevisionGraphProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
 
   const { data: isJjRepo, isLoading: checkingRepo } = useQuery(
-    trpc.git.jjIsRepo.queryOptions({ path: worktreePath }),
+    bobQuery("projects.git.jjIsRepo").queryOptions({ path: worktreePath }),
   );
 
   const {
@@ -24,7 +24,10 @@ export function RevisionGraph({ worktreePath }: RevisionGraphProps) {
     isLoading: loadingRevisions,
     error,
   } = useQuery({
-    ...trpc.git.jjLog.queryOptions({ path: worktreePath, limit: 20 }),
+    ...bobQuery("projects.git.jjLog").queryOptions({
+      path: worktreePath,
+      limit: 20,
+    }),
     enabled: isJjRepo === true,
   });
 

@@ -9,7 +9,7 @@ import { Badge } from "@gmacko/core/ui/badge";
 
 import { getProjectWorkItemHref } from "~/components/projects/project-detail-tabs-model";
 import { KIND_COLOR } from "~/lib/design/colors";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -20,7 +20,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
 
   // Debounce search by 200ms
   useEffect(() => {
@@ -39,7 +39,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
 
   // Get current workspace (cached across opens)
   const { data: workspaces } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, {
+    bobQuery("projects.workspace.list").queryOptions(undefined, {
       enabled: open,
       staleTime: 60_000,
     }),
@@ -48,11 +48,10 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     | string
     | undefined;
 
-  const searchEnabled =
-    open && debouncedSearch.length >= 2 && !!workspaceId;
+  const searchEnabled = open && debouncedSearch.length >= 2 && !!workspaceId;
 
   const { data: results = [], isFetching } = useQuery(
-    trpc.planning.searchTasks.queryOptions(
+    bobQuery("planning.searchTasks").queryOptions(
       { workspaceId: workspaceId!, query: debouncedSearch, limit: 10 },
       { enabled: searchEnabled },
     ),

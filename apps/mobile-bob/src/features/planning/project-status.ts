@@ -43,7 +43,13 @@ export interface MobileProjectStatusRow {
   workspaceName: string;
   directory: string;
   repository: string;
-  gitStatus: "Clean" | "Dirty" | "Stale" | "Missing repo" | "Auth issue" | "Invalid directory";
+  gitStatus:
+    | "Clean"
+    | "Dirty"
+    | "Stale"
+    | "Missing repo"
+    | "Auth issue"
+    | "Invalid directory";
   branchLabel: string;
   buildSystem: string;
   linearStatus: "Connected" | "Not connected";
@@ -71,7 +77,10 @@ export interface MobileProjectsDashboardHeaderModel {
   subtitle: string | null;
 }
 
-export type MobileProjectStatusFilter = "setup-issues" | "stale-sync" | "healthy";
+export type MobileProjectStatusFilter =
+  | "setup-issues"
+  | "stale-sync"
+  | "healthy";
 
 export type MobileProjectDashboardColumnKey =
   | "project"
@@ -125,7 +134,11 @@ export interface MobileProjectConfigurationManagementAction {
 }
 
 export interface MobileProjectConfigurationManagementGroup {
-  key: "identity" | "repository-integrations" | "planning-execution" | "validation";
+  key:
+    | "identity"
+    | "repository-integrations"
+    | "planning-execution"
+    | "validation";
   title: string;
   description: string;
   actions: MobileProjectConfigurationManagementAction[];
@@ -206,7 +219,7 @@ export function getMobileProjectsDashboardHeaderModel(): MobileProjectsDashboard
 
 export function buildMobileProjectStatusRows(input: {
   workspaceName?: string | null;
-  projects: MobileProjectStatusEntry[];
+  projects: readonly MobileProjectStatusEntry[];
 }): MobileProjectStatusRow[] {
   const workspaceName = input.workspaceName?.trim() ?? "Current workspace";
 
@@ -214,8 +227,11 @@ export function buildMobileProjectStatusRows(input: {
     const repository = entry.linkedRepository;
     const hasRepository = Boolean(repository);
     const hasLinearLink =
-      entry.project.planningProvider === "linear" && Boolean(entry.project.linearProjectId);
-    const hasAutomationConfig = hasConfiguredAutomation(entry.project.automationSettings);
+      entry.project.planningProvider === "linear" &&
+      Boolean(entry.project.linearProjectId);
+    const hasAutomationConfig = hasConfiguredAutomation(
+      entry.project.automationSettings,
+    );
     const warnings: string[] = [];
 
     if (!hasRepository) warnings.push("Missing repository");
@@ -243,7 +259,8 @@ export function buildMobileProjectStatusRows(input: {
       branchLabel: formatBranchLabel(repository),
       buildSystem: formatBuildSystem(repository),
       linearStatus: hasLinearLink ? "Connected" : "Not connected",
-      configStatus: hasRepository && hasAutomationConfig ? "Configured" : "Needs setup",
+      configStatus:
+        hasRepository && hasAutomationConfig ? "Configured" : "Needs setup",
       activityLabel: `${entry.counts?.tasks ?? 0} tasks · ${entry.counts?.issues ?? 0} issues · ${entry.counts?.active ?? 0} active`,
       warningLabel: warnings.length > 0 ? warnings.join(", ") : "Ready",
       warnings,
@@ -253,7 +270,7 @@ export function buildMobileProjectStatusRows(input: {
 
 export function buildMobileProjectRailRows(input: {
   workspaceName?: string | null;
-  projects: MobileProjectStatusEntry[];
+  projects: readonly MobileProjectStatusEntry[];
   now?: Date;
 }): MobileProjectRailRow[] {
   const now = input.now ?? new Date();
@@ -283,7 +300,9 @@ export function buildMobileProjectRailRows(input: {
 export function normalizeMobileProjectStatusFilter(
   value: string | null | undefined,
 ): MobileProjectStatusFilter | null {
-  return value === "setup-issues" || value === "stale-sync" || value === "healthy"
+  return value === "setup-issues" ||
+    value === "stale-sync" ||
+    value === "healthy"
     ? value
     : null;
 }
@@ -300,12 +319,15 @@ export function filterMobileProjectStatusRows(
   }
 
   if (normalized === "healthy") {
-    return rows.filter((row) => row.warnings.length === 0 && row.configStatus === "Configured");
+    return rows.filter(
+      (row) => row.warnings.length === 0 && row.configStatus === "Configured",
+    );
   }
 
-  return rows.filter((row) =>
-    row.configStatus === "Needs setup" ||
-    row.warnings.some((warning) => warning !== "Stale sync"),
+  return rows.filter(
+    (row) =>
+      row.configStatus === "Needs setup" ||
+      row.warnings.some((warning) => warning !== "Stale sync"),
   );
 }
 
@@ -361,32 +383,38 @@ export function buildMobileProjectConfigurationSections(
       status: row.linearStatus === "Connected" ? "ready" : "missing",
       items: [
         { label: "Provider", value: row.planningProvider },
-        { label: "Linear project", value: row.linearProjectId ?? "Not connected" },
+        {
+          label: "Linear project",
+          value: row.linearProjectId ?? "Not connected",
+        },
       ],
     },
     {
       key: "planning",
       title: "Planning",
       status: planningDefaults.length > 0 ? "ready" : "missing",
-      items: planningDefaults.length > 0
-        ? planningDefaults
-        : [{ label: "Defaults", value: "Not configured" }],
+      items:
+        planningDefaults.length > 0
+          ? planningDefaults
+          : [{ label: "Defaults", value: "Not configured" }],
     },
     {
       key: "execution",
       title: "Execution",
       status: executionSettings.length > 0 ? "ready" : "missing",
-      items: executionSettings.length > 0
-        ? executionSettings
-        : [{ label: "Execution", value: "Not configured" }],
+      items:
+        executionSettings.length > 0
+          ? executionSettings
+          : [{ label: "Execution", value: "Not configured" }],
     },
     {
       key: "secrets",
       title: "Secrets",
       status: envReferences.length > 0 ? "ready" : "missing",
-      items: envReferences.length > 0
-        ? envReferences
-        : [{ label: "References", value: "No references configured" }],
+      items:
+        envReferences.length > 0
+          ? envReferences
+          : [{ label: "References", value: "No references configured" }],
     },
     {
       key: "validation",
@@ -421,7 +449,8 @@ export function buildMobileProjectConfigurationManagementGroups(
     {
       key: "repository-integrations",
       title: "Repository & Integrations",
-      description: "Local directory, git repository, branch, and Linear mapping.",
+      description:
+        "Local directory, git repository, branch, and Linear mapping.",
       actions: [
         { key: "map-repository", label: "Map repository" },
         { key: "connect-linear", label: "Connect Linear" },
@@ -431,7 +460,8 @@ export function buildMobileProjectConfigurationManagementGroups(
     {
       key: "planning-execution",
       title: "Planning & Execution",
-      description: "Project planning defaults, execution settings, and secret references.",
+      description:
+        "Project planning defaults, execution settings, and secret references.",
       actions: [
         { key: "edit-automation", label: "Edit automation" },
         { key: "review-env", label: "Review env references" },
@@ -441,7 +471,8 @@ export function buildMobileProjectConfigurationManagementGroups(
     {
       key: "validation",
       title: "Validation",
-      description: "Configuration checks and setup warnings before Bob runs work.",
+      description:
+        "Configuration checks and setup warnings before Bob runs work.",
       actions: [{ key: "review-checks", label: "Review checks" }],
       sections: pick(["validation"]),
     },
@@ -457,12 +488,16 @@ export function buildMobileProjectAutomationControls(
   }));
 }
 
-function formatBuildSystem(repository: MobileProjectStatusEntry["linkedRepository"]): string {
+function formatBuildSystem(
+  repository: MobileProjectStatusEntry["linkedRepository"],
+): string {
   const buildSystem = repository?.buildSystem?.trim();
   return buildSystem && buildSystem.length > 0 ? buildSystem : "Unknown";
 }
 
-function formatGitStatus(repository: MobileProjectStatusEntry["linkedRepository"]): MobileProjectStatusRow["gitStatus"] {
+function formatGitStatus(
+  repository: MobileProjectStatusEntry["linkedRepository"],
+): MobileProjectStatusRow["gitStatus"] {
   if (!repository) return "Missing repo";
   const discoveryStatus = repository.discoveryStatus?.trim().toLowerCase();
   if (discoveryStatus?.includes("auth")) return "Auth issue";
@@ -472,7 +507,9 @@ function formatGitStatus(repository: MobileProjectStatusEntry["linkedRepository"
   return "Clean";
 }
 
-function getRepositoryHealth(repository: MobileProjectStatusEntry["linkedRepository"]): {
+function getRepositoryHealth(
+  repository: MobileProjectStatusEntry["linkedRepository"],
+): {
   gitStatus: MobileProjectStatusRow["gitStatus"];
   warning: string | null;
 } {
@@ -483,7 +520,9 @@ function getRepositoryHealth(repository: MobileProjectStatusEntry["linkedReposit
   return { gitStatus, warning: null };
 }
 
-function formatBranchLabel(repository: MobileProjectStatusEntry["linkedRepository"]): string {
+function formatBranchLabel(
+  repository: MobileProjectStatusEntry["linkedRepository"],
+): string {
   const branch = repository?.branch?.trim();
   const mainBranch = repository?.mainBranch?.trim();
 
@@ -492,7 +531,9 @@ function formatBranchLabel(repository: MobileProjectStatusEntry["linkedRepositor
   return `${branch} (default ${mainBranch})`;
 }
 
-function formatRepository(repository: MobileProjectStatusEntry["linkedRepository"]): string {
+function formatRepository(
+  repository: MobileProjectStatusEntry["linkedRepository"],
+): string {
   if (!repository) return "No repository";
 
   const remoteParts = [
@@ -506,12 +547,15 @@ function formatRepository(repository: MobileProjectStatusEntry["linkedRepository
   return "Repository linked";
 }
 
-function hasConfiguredAutomation(settings: MobileProjectStatusEntry["project"]["automationSettings"]) {
+function hasConfiguredAutomation(
+  settings: MobileProjectStatusEntry["project"]["automationSettings"],
+) {
   if (!settings) return false;
 
   return Object.values(settings).some((value) => {
     if (Array.isArray(value)) return value.length > 0;
-    if (value && typeof value === "object") return Object.keys(value).length > 0;
+    if (value && typeof value === "object")
+      return Object.keys(value).length > 0;
     return Boolean(value);
   });
 }
@@ -520,7 +564,9 @@ function getPlanningDefaults(
   settings: Record<string, unknown> | null,
 ): MobileProjectConfigurationItem[] {
   const planning = getRecord(settings?.planning);
-  const defaultAgent = getString(planning?.defaultAgent ?? settings?.defaultAgent);
+  const defaultAgent = getString(
+    planning?.defaultAgent ?? settings?.defaultAgent,
+  );
   const planningMode = getString(planning?.mode ?? settings?.planningMode);
 
   return [
@@ -541,7 +587,10 @@ function getExecutionSettings(
   return [
     autoDispatch === null
       ? null
-      : { label: "Auto dispatch", value: autoDispatch ? "Enabled" : "Disabled" },
+      : {
+          label: "Auto dispatch",
+          value: autoDispatch ? "Enabled" : "Disabled",
+        },
     provider ? { label: "Provider", value: provider } : null,
   ].filter((item): item is MobileProjectConfigurationItem => Boolean(item));
 }
@@ -559,7 +608,7 @@ function getEnvReferences(
 
 function getRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : null;
 }
 
@@ -592,7 +641,10 @@ function formatLastUpdatedLabel(
 
 function getStringList(value: unknown): string[] {
   return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    ? value.filter(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
+      )
     : [];
 }
 

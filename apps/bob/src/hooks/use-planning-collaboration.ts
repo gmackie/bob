@@ -10,7 +10,7 @@ import type {
   SessionPresenceParticipant,
 } from "@bob/ws";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 export type PlanningPresence = SessionPresenceParticipant;
 
@@ -25,7 +25,11 @@ export interface PlanningCollabMessage {
 }
 
 function messageKey(msg: PlanningCollabMessage): string {
-  return msg.id ?? msg.clientMessageId ?? `${msg.userId}:${msg.createdAt}:${msg.body}`;
+  return (
+    msg.id ??
+    msg.clientMessageId ??
+    `${msg.userId}:${msg.createdAt}:${msg.body}`
+  );
 }
 
 interface UsePlanningCollaborationOptions {
@@ -45,16 +49,15 @@ export function usePlanningCollaboration({
   displayName,
   imageUrl,
 }: UsePlanningCollaborationOptions) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const queryClient = useQueryClient();
   const [participants, setParticipants] = useState<PlanningPresence[]>([]);
   const [liveMessages, setLiveMessages] = useState<PlanningCollabMessage[]>([]);
-  const [liveArtifact, setLiveArtifact] = useState<ServerArtifactUpdated | null>(
-    null,
-  );
+  const [liveArtifact, setLiveArtifact] =
+    useState<ServerArtifactUpdated | null>(null);
 
   const { data: gatewayInfo } = useQuery(
-    trpc.session.getGatewayWebSocketUrl.queryOptions(undefined, {
+    bobQuery("agent.session.getGatewayWebSocketUrl").queryOptions(undefined, {
       enabled: enabled && Boolean(sessionId),
     }),
   );
@@ -62,7 +65,7 @@ export function usePlanningCollaboration({
   const resolvedToken = gatewayInfo?.token ?? "";
 
   const messagesQuery = useQuery({
-    ...trpc.planSession.listMessages.queryOptions({ sessionId }),
+    ...bobQuery("planning.session.listMessages").queryOptions({ sessionId }),
     enabled: enabled && Boolean(sessionId),
     refetchOnWindowFocus: false,
   });
@@ -93,51 +96,65 @@ export function usePlanningCollaboration({
     );
   }, [historyMessages, liveMessages]);
 
-  const applyPresenceSnapshot = useCallback((snap: ServerPresenceSnapshot) => {
-    if (snap.sessionId !== sessionId) return;
-    setParticipants(snap.participants);
-  }, [sessionId]);
+  const applyPresenceSnapshot = useCallback(
+    (snap: ServerPresenceSnapshot) => {
+      if (snap.sessionId !== sessionId) return;
+      setParticipants(snap.participants);
+    },
+    [sessionId],
+  );
 
-  const applyPresenceChanged = useCallback((change: ServerPresenceChanged) => {
-    if (change.sessionId !== sessionId) return;
-    setParticipants((prev) => {
-      const without = prev.filter(
-        (p) =>
-          !(
-            p.userId === change.participant.userId &&
-            p.clientId === change.participant.clientId
-          ),
-      );
-      if (change.change === "leave") return without;
-      return [...without, change.participant];
-    });
-  }, [sessionId]);
+  const applyPresenceChanged = useCallback(
+    (change: ServerPresenceChanged) => {
+      if (change.sessionId !== sessionId) return;
+      setParticipants((prev) => {
+        const without = prev.filter(
+          (p) =>
+            !(
+              p.userId === change.participant.userId &&
+              p.clientId === change.participant.clientId
+            ),
+        );
+        if (change.change === "leave") return without;
+        return [...without, change.participant];
+      });
+    },
+    [sessionId],
+  );
 
-  const applyCollabChat = useCallback((msg: ServerCollabChatMessage) => {
-    if (msg.sessionId !== sessionId) return;
-    setLiveMessages((prev) => {
-      const next: PlanningCollabMessage = {
-        id: msg.message.id,
-        clientMessageId: msg.message.clientMessageId,
-        userId: msg.message.userId,
-        displayName: msg.message.displayName,
-        imageUrl: msg.message.imageUrl,
-        body: msg.message.body,
-        createdAt: msg.message.createdAt,
-      };
-      const key = messageKey(next);
-      if (prev.some((p) => messageKey(p) === key)) return prev;
-      return [...prev, next];
-    });
-  }, [sessionId]);
+  const applyCollabChat = useCallback(
+    (msg: ServerCollabChatMessage) => {
+      if (msg.sessionId !== sessionId) return;
+      setLiveMessages((prev) => {
+        const next: PlanningCollabMessage = {
+          id: msg.message.id,
+          clientMessageId: msg.message.clientMessageId,
+          userId: msg.message.userId,
+          displayName: msg.message.displayName,
+          imageUrl: msg.message.imageUrl,
+          body: msg.message.body,
+          createdAt: msg.message.createdAt,
+        };
+        const key = messageKey(next);
+        if (prev.some((p) => messageKey(p) === key)) return prev;
+        return [...prev, next];
+      });
+    },
+    [sessionId],
+  );
 
-  const applyArtifactUpdated = useCallback((msg: ServerArtifactUpdated) => {
-    if (msg.sessionId !== sessionId) return;
-    setLiveArtifact(msg);
-    void queryClient.invalidateQueries({
-      queryKey: trpc.planSession.listArtifacts.queryKey({ sessionId }),
-    });
-  }, [queryClient, sessionId, trpc.planSession.listArtifacts]);
+  const applyArtifactUpdated = useCallback(
+    (msg: ServerArtifactUpdated) => {
+      if (msg.sessionId !== sessionId) return;
+      setLiveArtifact(msg);
+      void queryClient.invalidateQueries({
+        queryKey: bobQuery("planning.session.listArtifacts").queryKey({
+          sessionId,
+        }),
+      });
+    },
+    [queryClient, sessionId, bobQuery("planning.session.listArtifacts")],
+  );
 
   const collabClientRef = useRef<import("@bob/ws").BobWsClient | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
@@ -205,7 +222,7 @@ export function usePlanningCollaboration({
   ]);
 
   const sendMessageMutation = useMutation(
-    trpc.planSession.sendMessage.mutationOptions({
+    bobQuery("planning.session.sendMessage").mutationOptions({
       onSuccess: (result) => {
         setLiveMessages((prev) => {
           const next: PlanningCollabMessage = {
@@ -222,7 +239,9 @@ export function usePlanningCollaboration({
           return [...prev, next];
         });
         void queryClient.invalidateQueries({
-          queryKey: trpc.planSession.listMessages.queryKey({ sessionId }),
+          queryKey: bobQuery("planning.session.listMessages").queryKey({
+            sessionId,
+          }),
         });
       },
     }),
@@ -243,10 +262,15 @@ export function usePlanningCollaboration({
         createdAt: new Date().toISOString(),
       };
       setLiveMessages((prev) => [...prev, optimistic]);
-      collabClientRef.current?.sendCollabChat(sessionId, body, clientMessageId, {
-        displayName,
-        imageUrl,
-      });
+      collabClientRef.current?.sendCollabChat(
+        sessionId,
+        body,
+        clientMessageId,
+        {
+          displayName,
+          imageUrl,
+        },
+      );
       await sendMessageMutation.mutateAsync({
         sessionId,
         body,

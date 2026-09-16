@@ -12,7 +12,7 @@ import { Card } from "@gmacko/core/ui/card";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { useBobRpcClient } from "~/rpc/react";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 import { getProvider } from "~/lib/providers";
 import {
   buildProviderCapacitySummaries,
@@ -67,8 +67,12 @@ function UsageLimits({ card }: { card: ProviderCapacitySummary }) {
         return (
           <div key={limit.label}>
             <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-              <span className="font-medium text-muted-foreground">{limit.label}</span>
-              <span className="font-semibold text-foreground tabular-nums">{valueLabel}</span>
+              <span className="font-medium text-muted-foreground">
+                {limit.label}
+              </span>
+              <span className="font-semibold text-foreground tabular-nums">
+                {valueLabel}
+              </span>
             </div>
             <div className="h-2.5 overflow-hidden rounded-full bg-muted">
               <div
@@ -77,7 +81,9 @@ function UsageLimits({ card }: { card: ProviderCapacitySummary }) {
               />
             </div>
             {limit.resetLabel ? (
-              <div className="mt-1.5 text-xs text-muted-foreground">{limit.resetLabel}</div>
+              <div className="mt-1.5 text-xs text-muted-foreground">
+                {limit.resetLabel}
+              </div>
             ) : null}
           </div>
         );
@@ -93,7 +99,7 @@ export default function ProviderDetailPage({
 }) {
   const { provider: providerParam } = use(params);
   const rpc = useBobRpcClient();
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const searchParams = useSearchParams();
   const workspaceId = searchParams?.get("workspace") ?? "";
 
@@ -102,17 +108,22 @@ export default function ProviderDetailPage({
   const { data: workItems } = useQuery({
     queryKey: ["rpc", "workItem.list", "provider-detail", workspaceId],
     queryFn: () =>
-      rpc.workItems.list({ workspaceId: workspaceId || "", limit: 80 }) as Promise<
-        WorkPipelineItem[]
-      >,
+      rpc.workItems.list({
+        workspaceId: workspaceId || "",
+        limit: 80,
+      }) as Promise<WorkPipelineItem[]>,
     enabled: Boolean(workspaceId),
     refetchInterval: 10_000,
   });
-  const runsQueryOptions = (
-    workspaceId
-      ? trpc.agentRun.list.queryOptions({ workspaceId, limit: 100 }, { refetchInterval: 10_000 })
-      : trpc.agentRun.listAll.queryOptions({ limit: 100 }, { refetchInterval: 10_000 })
-  ) as ReturnType<typeof trpc.agentRun.listAll.queryOptions>;
+  const runsQueryOptions = workspaceId
+    ? bobQuery("agent.run.list").queryOptions(
+        { workspaceId, limit: 100 },
+        { refetchInterval: 10_000 },
+      )
+    : bobQuery("agent.run.listAll").queryOptions(
+        { limit: 100 },
+        { refetchInterval: 10_000 },
+      );
   const { data: runRows } = useQuery(runsQueryOptions);
   const runs = (Array.isArray(runRows) ? runRows : []) as {
     id: string;
@@ -133,24 +144,33 @@ export default function ProviderDetailPage({
     capacitySnapshots: extractProviderCapacitySnapshotsFromRuns(runs as never),
   });
   // Match on the normalized provider key (cards are keyed by ProviderKey).
-  const card = cards.find((c) => c.provider === def?.id || c.provider === providerParam);
+  const card = cards.find(
+    (c) => c.provider === def?.id || c.provider === providerParam,
+  );
 
   // "cursor-agent" is the registry id; the runs filter uses the "cursor" param.
   const runsFilter = normalizeProviderParam(
     providerParam === "cursor-agent" ? "cursor" : providerParam,
   );
-  const providerRuns = filterRunsByProvider(runs as any[], runsFilter).slice(0, 8);
+  const providerRuns = filterRunsByProvider(runs as any[], runsFilter).slice(
+    0,
+    8,
+  );
   const runsHref = `/runs?provider=${encodeURIComponent(runsFilter)}${
     workspaceId ? `&workspace=${encodeURIComponent(workspaceId)}` : ""
   }`;
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <Breadcrumbs items={[{ label: "Providers" }, { label: def?.label ?? providerParam }]} />
+      <Breadcrumbs
+        items={[{ label: "Providers" }, { label: def?.label ?? providerParam }]}
+      />
 
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <span className="text-3xl" aria-hidden="true">{def?.icon ?? "•"}</span>
+          <span className="text-3xl" aria-hidden="true">
+            {def?.icon ?? "•"}
+          </span>
           <div>
             <h1 className="font-display text-2xl font-bold tracking-tight">
               {def?.label ?? providerParam}
@@ -175,9 +195,12 @@ export default function ProviderDetailPage({
 
       {!def ? (
         <Card className="p-8">
-          <h2 className="font-display text-lg font-semibold">Unknown provider</h2>
+          <h2 className="font-display text-lg font-semibold">
+            Unknown provider
+          </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            No provider named <span className="font-mono">{providerParam}</span> is registered.
+            No provider named <span className="font-mono">{providerParam}</span>{" "}
+            is registered.
           </p>
         </Card>
       ) : (
@@ -187,7 +210,12 @@ export default function ProviderDetailPage({
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Active
               </p>
-              <p className={cn("mt-1 text-2xl font-semibold tabular-nums", card && TONE_TEXT[card.tone])}>
+              <p
+                className={cn(
+                  "mt-1 text-2xl font-semibold tabular-nums",
+                  card && TONE_TEXT[card.tone],
+                )}
+              >
                 {card?.activeCount ?? 0}
               </p>
             </Card>
@@ -205,16 +233,23 @@ export default function ProviderDetailPage({
               </p>
               <div className="mt-2 flex items-center gap-2">
                 <span
-                  className={cn("size-2.5 rounded-full", card ? TONE_DOT[card.tone] : "bg-muted-foreground")}
+                  className={cn(
+                    "size-2.5 rounded-full",
+                    card ? TONE_DOT[card.tone] : "bg-muted-foreground",
+                  )}
                   aria-hidden="true"
                 />
-                <span className="text-sm font-medium">{card?.statusLabel ?? "Unknown"}</span>
+                <span className="text-sm font-medium">
+                  {card?.statusLabel ?? "Unknown"}
+                </span>
               </div>
             </Card>
           </div>
 
           <Card className="p-6">
-            <h2 className="font-display text-base font-semibold text-foreground">Usage limits</h2>
+            <h2 className="font-display text-base font-semibold text-foreground">
+              Usage limits
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {def.metered
                 ? "Metered quota reported by the execution host."
@@ -236,7 +271,10 @@ export default function ProviderDetailPage({
               <h2 className="font-display text-base font-semibold text-foreground">
                 Recent {def.label} runs
               </h2>
-              <Link href={runsHref} className="text-sm text-primary hover:underline">
+              <Link
+                href={runsHref}
+                className="text-sm text-primary hover:underline"
+              >
                 View all →
               </Link>
             </div>
@@ -254,7 +292,12 @@ export default function ProviderDetailPage({
                       href={row.href}
                       className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/30"
                     >
-                      <Badge className={cn("shrink-0 text-xs font-medium", ROW_STATUS_COLORS[row.statusTone])}>
+                      <Badge
+                        className={cn(
+                          "shrink-0 text-xs font-medium",
+                          ROW_STATUS_COLORS[row.statusTone],
+                        )}
+                      >
                         {row.statusLabel}
                       </Badge>
                       <span className="min-w-0 flex-1 truncate text-sm font-medium">

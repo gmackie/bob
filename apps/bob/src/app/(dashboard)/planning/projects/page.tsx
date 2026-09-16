@@ -17,7 +17,7 @@ import {
   type ProjectStatusRow,
 } from "~/components/projects/project-status-model";
 import { getPlanningProjectQueryRefreshOptions } from "~/components/planning/planning-shell-model";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 type WorkspaceMembership = {
   workspace?: {
@@ -34,14 +34,18 @@ const PROJECT_STATUS_GRID_CLASS =
 const PROJECT_STATUS_COLUMNS = getProjectStatusDashboardColumns();
 
 export default function PlanningProjectsPage() {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const searchParams = useSearchParams();
 
   const { data: workspaceMemberships } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
+    bobQuery("projects.workspace.list").queryOptions(undefined, {
+      staleTime: 60_000,
+    }),
   );
 
-  const workspaceRows = (Array.isArray(workspaceMemberships) ? workspaceMemberships : []) as WorkspaceMembership[];
+  const workspaceRows = (
+    Array.isArray(workspaceMemberships) ? workspaceMemberships : []
+  ) as WorkspaceMembership[];
 
   const workspaces = workspaceRows
     .map((m) => m.workspace)
@@ -54,7 +58,7 @@ export default function PlanningProjectsPage() {
       : workspaces?.[0]) ?? null;
 
   const { data: projectsData, isLoading } = useQuery(
-    trpc.project.list.queryOptions(
+    bobQuery("project.list").queryOptions(
       { workspaceId: currentWorkspace?.id ?? "" },
       {
         enabled: !!currentWorkspace,
@@ -63,20 +67,27 @@ export default function PlanningProjectsPage() {
     ),
   );
 
-  const projectEntries = (Array.isArray(projectsData) ? projectsData : []) as ProjectStatusEntry[];
+  const projectEntries = (
+    Array.isArray(projectsData) ? projectsData : []
+  ) as ProjectStatusEntry[];
 
   const projectRows = buildProjectStatusRows({
     workspaceName: currentWorkspace?.name,
     projects: projectEntries,
   });
-  const statusFilter = normalizeProjectStatusFilter(searchParams?.get("filter"));
+  const statusFilter = normalizeProjectStatusFilter(
+    searchParams?.get("filter"),
+  );
   const visibleProjectRows = filterProjectStatusRows(projectRows, statusFilter);
 
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="animate-pulse rounded-2xl border border-border bg-card p-5">
+          <div
+            key={i}
+            className="animate-pulse rounded-2xl border border-border bg-card p-5"
+          >
             <div className="h-3 w-16 rounded bg-muted" />
             <div className="mt-3 h-5 w-3/4 rounded bg-muted" />
             <div className="mt-6 h-4 w-1/2 rounded bg-muted" />
@@ -90,8 +101,12 @@ export default function PlanningProjectsPage() {
   if (projectRows.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border px-8 py-12 text-center">
-        <h2 className="mt-4 font-display text-lg font-semibold text-foreground">No projects yet</h2>
-        <p className="mt-2 text-sm text-muted-foreground">Create your first project to start organizing work.</p>
+        <h2 className="mt-4 font-display text-lg font-semibold text-foreground">
+          No projects yet
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Create your first project to start organizing work.
+        </p>
       </div>
     );
   }
@@ -100,12 +115,15 @@ export default function PlanningProjectsPage() {
     <>
       <div className="mb-4 flex items-center justify-between">
         <span className="text-sm text-muted-foreground">
-          {visibleProjectRows.length} project{visibleProjectRows.length !== 1 ? "s" : ""}
+          {visibleProjectRows.length} project
+          {visibleProjectRows.length !== 1 ? "s" : ""}
           {statusFilter ? ` · ${formatProjectFilterLabel(statusFilter)}` : ""}
         </span>
       </div>
       <div className="overflow-hidden rounded-lg border border-border bg-card">
-        <div className={`${PROJECT_STATUS_GRID_CLASS} border-b border-border px-4 py-3 text-xs font-medium uppercase text-muted-foreground`}>
+        <div
+          className={`${PROJECT_STATUS_GRID_CLASS} border-b border-border px-4 py-3 text-xs font-medium uppercase text-muted-foreground`}
+        >
           {PROJECT_STATUS_COLUMNS.map((column) => (
             <span key={column.key}>{column.label}</span>
           ))}
@@ -165,14 +183,19 @@ function ProjectStatusTableRow({ row }: { row: ProjectStatusRow }) {
       <StatusBadge tone={row.configStatus === "Configured" ? "good" : "warn"}>
         {row.configStatus}
       </StatusBadge>
-      <CellText>{row.warnings.length > 0 ? row.warnings.join(", ") : "Ready"}</CellText>
+      <CellText>
+        {row.warnings.length > 0 ? row.warnings.join(", ") : "Ready"}
+      </CellText>
     </Link>
   );
 }
 
 function CellText({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-w-0 self-center truncate text-muted-foreground" title={String(children)}>
+    <div
+      className="min-w-0 self-center truncate text-muted-foreground"
+      title={String(children)}
+    >
       {children}
     </div>
   );

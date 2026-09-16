@@ -11,7 +11,12 @@ export const WorkItemsStubLayer = WorkItemsRpc.toLayer({
   "workItem.statusCounts": () => Effect.succeed({}),
   "workItem.get": () => Effect.succeed(null),
   "workItem.update": () => Effect.succeed(null),
-  "workItem.dispatch": () => Effect.succeed({ sessionId: "stub-session-1", identifier: "TASK-1", status: "pending" }),
+  "workItem.dispatch": () =>
+    Effect.succeed({
+      sessionId: "stub-session-1",
+      identifier: "TASK-1",
+      status: "pending",
+    }),
   "workItem.promoteToTask": () => Effect.succeed(null),
   "workItem.comment.list": () => Effect.succeed([]),
   "workItem.comment.create": () =>
@@ -46,8 +51,7 @@ export const WorkItemsStubLayer = WorkItemsRpc.toLayer({
     }),
   "workItem.notification.markAsRead": () => Effect.succeed(null),
   "workItem.notification.markAllAsRead": () => Effect.succeed({ count: 0 }),
-  "workItem.notification.registerPushToken": () =>
-    Effect.succeed({ ok: true }),
+  "workItem.notification.registerPushToken": () => Effect.succeed({ ok: true }),
   // --- TaskRun (Task 2) ---
   "workItem.taskRun.listByWorkItem": () => Effect.succeed([]),
   "workItem.taskRun.execute": () =>
@@ -58,13 +62,14 @@ export const WorkItemsStubLayer = WorkItemsRpc.toLayer({
     }),
   "workItem.taskRun.listLifecycleEvents": () => Effect.succeed([]),
   // --- Requirement (Task 3) ---
-  "workItem.requirement.list": () => Effect.succeed([]),
+  "workItem.requirement.list": () => Effect.succeed({}),
   "workItem.requirement.create": () =>
     Effect.succeed({
       id: "stub-req-1",
       workItemId: "stub-wi-1",
       category: "other",
       description: "stub requirement",
+      linkedTaskId: null,
       status: "pending",
       sortOrder: 0,
     }),
@@ -74,6 +79,7 @@ export const WorkItemsStubLayer = WorkItemsRpc.toLayer({
       workItemId: "stub-wi-1",
       category: "other",
       description: "stub requirement",
+      linkedTaskId: null,
       status: "pending",
       sortOrder: 0,
     }),
@@ -84,6 +90,7 @@ export const WorkItemsStubLayer = WorkItemsRpc.toLayer({
       workItemId: "stub-wi-1",
       category: "other",
       description: "stub requirement",
+      linkedTaskId: null,
       status: "pending",
       sortOrder: 0,
     }),

@@ -61,3 +61,8 @@ it("cancels the transport when React Query cancels a read", async () => {
   await rejected;
   cache.clear();
 });
+
+it("keeps procedure identities stable for hook dependencies", () => {
+  const rpc = createBobQueryClient({ baseURL: "http://localhost/api/rpc" });
+  expect(rpc("workItem.list")).toBe(rpc("workItem.list"));
+});

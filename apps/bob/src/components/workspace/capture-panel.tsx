@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 import { useFileSaveTrigger } from "~/hooks/use-file-save-trigger";
 
 interface CaptureResult {
@@ -39,7 +39,7 @@ interface CapturePanelProps {
 }
 
 export function CapturePanel({ sessionId }: CapturePanelProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
 
   // State
   const [selectedTargetId, setSelectedTargetId] = useState("screen");
@@ -49,19 +49,21 @@ export function CapturePanel({ sessionId }: CapturePanelProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [fileSaveMessage, setFileSaveMessage] = useState(false);
   const autoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const fileSaveMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fileSaveMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const historyStripRef = useRef<HTMLDivElement>(null);
 
   // Queries
   const { data: targets } = useQuery(
-    trpc.capture.listTargets.queryOptions(),
+    bobQuery("agent.capture.listTargets").queryOptions(),
   );
 
   const selectedTarget = targets?.find((t) => t.id === selectedTargetId);
 
   // Mutation
   const captureMutation = useMutation(
-    trpc.capture.capture.mutationOptions({
+    bobQuery("agent.capture.capture").mutationOptions({
       onSuccess: (result) => {
         setCaptures((prev) => {
           const next = [...prev, result];
@@ -79,7 +81,10 @@ export function CapturePanel({ sessionId }: CapturePanelProps) {
   const doCapture = useCallback(() => {
     if (captureMutation.isPending) return;
     captureMutation.mutate({
-      targetType: (selectedTarget?.type ?? "screen") as "browser" | "window" | "screen",
+      targetType: (selectedTarget?.type ?? "screen") as
+        | "browser"
+        | "window"
+        | "screen",
       targetId: selectedTargetId,
       url: selectedTarget?.type === "browser" ? url : undefined,
     });
@@ -140,7 +145,9 @@ export function CapturePanel({ sessionId }: CapturePanelProps) {
 
   // Derived: active capture
   const activeCapture =
-    activeIndex !== null ? captures[activeIndex] : captures[captures.length - 1];
+    activeIndex !== null
+      ? captures[activeIndex]
+      : captures[captures.length - 1];
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -152,13 +159,21 @@ export function CapturePanel({ sessionId }: CapturePanelProps) {
             Screen Capture
           </span>
           {captureMutation.isPending && (
-            <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" title="Capturing..." />
+            <span
+              className="h-2 w-2 rounded-full bg-red-500 animate-pulse"
+              title="Capturing..."
+            />
           )}
           {autoMode !== "off" && !captureMutation.isPending && (
-            <span className="h-2 w-2 rounded-full bg-green-500" title="Auto-capture active" />
+            <span
+              className="h-2 w-2 rounded-full bg-green-500"
+              title="Auto-capture active"
+            />
           )}
           {fileSaveMessage && (
-            <span className="text-xs text-green-500 animate-pulse">Auto-captured on file change</span>
+            <span className="text-xs text-green-500 animate-pulse">
+              Auto-captured on file change
+            </span>
           )}
         </div>
 
@@ -173,7 +188,8 @@ export function CapturePanel({ sessionId }: CapturePanelProps) {
         >
           {targets?.map((t) => (
             <option key={t.id} value={t.id} disabled={!t.connected}>
-              {t.name}{!t.connected ? " (unavailable)" : ""}
+              {t.name}
+              {!t.connected ? " (unavailable)" : ""}
             </option>
           ))}
         </select>
@@ -193,7 +209,10 @@ export function CapturePanel({ sessionId }: CapturePanelProps) {
         <button
           type="button"
           onClick={doCapture}
-          disabled={captureMutation.isPending || (selectedTarget?.type === "browser" && !url)}
+          disabled={
+            captureMutation.isPending ||
+            (selectedTarget?.type === "browser" && !url)
+          }
           className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {captureMutation.isPending ? "Capturing..." : "Capture Now"}
@@ -208,7 +227,11 @@ export function CapturePanel({ sessionId }: CapturePanelProps) {
             className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary"
           >
             {AUTO_MODE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value} disabled={opt.value === "file_save" && !sessionId}>
+              <option
+                key={opt.value}
+                value={opt.value}
+                disabled={opt.value === "file_save" && !sessionId}
+              >
                 {opt.label}
               </option>
             ))}
@@ -251,13 +274,27 @@ export function CapturePanel({ sessionId }: CapturePanelProps) {
                 stroke="currentColor"
                 strokeWidth="1.5"
               />
-              <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
-              <path d="M3 8h2M19 8h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <circle
+                cx="12"
+                cy="12"
+                r="3"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              />
+              <path
+                d="M3 8h2M19 8h2"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
             </svg>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">No captures yet</p>
+              <p className="text-sm font-medium text-muted-foreground">
+                No captures yet
+              </p>
               <p className="mt-1 text-xs text-muted-foreground/70">
-                Select a target and click &quot;Capture Now&quot; to take a screenshot
+                Select a target and click &quot;Capture Now&quot; to take a
+                screenshot
               </p>
             </div>
           </div>
@@ -287,7 +324,9 @@ export function CapturePanel({ sessionId }: CapturePanelProps) {
                   strokeLinecap="round"
                 />
               </svg>
-              <span className="text-xs text-muted-foreground">Capturing...</span>
+              <span className="text-xs text-muted-foreground">
+                Capturing...
+              </span>
             </div>
           </div>
         )}
@@ -307,7 +346,10 @@ export function CapturePanel({ sessionId }: CapturePanelProps) {
               // Dispatch a custom event that the chat can listen for
               window.dispatchEvent(
                 new CustomEvent("bob:attach-capture", {
-                  detail: { url: activeCapture.url, filename: activeCapture.filename },
+                  detail: {
+                    url: activeCapture.url,
+                    filename: activeCapture.filename,
+                  },
                 }),
               );
             }}
@@ -321,13 +363,12 @@ export function CapturePanel({ sessionId }: CapturePanelProps) {
       {/* Capture history strip */}
       {captures.length > 0 && (
         <div className="border-t border-border bg-card px-4 py-2">
-          <div
-            ref={historyStripRef}
-            className="flex gap-2 overflow-x-auto"
-          >
+          <div ref={historyStripRef} className="flex gap-2 overflow-x-auto">
             {captures.map((cap, idx) => {
               const isActive =
-                activeIndex !== null ? idx === activeIndex : idx === captures.length - 1;
+                activeIndex !== null
+                  ? idx === activeIndex
+                  : idx === captures.length - 1;
               return (
                 <button
                   key={cap.capturedAt + cap.filename}

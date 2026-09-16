@@ -4,12 +4,16 @@
  *
  * Phase 7B-4D-beta Task 9.
  */
-import { createExecutionBranch } from "../services/dispatch/executionBranch";
-import { createTrackedExecution } from "../services/dispatch/trackedExecution";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, gte, isNull, or, sql } from "@bob/db";
-import { inArray } from "@bob/db";
+
 import type { Db } from "@bob/db/client";
+import type {
+  WorkItemArtifactProducerType as WorkItemArtifactProducerTypeDb,
+  WorkItemArtifactType,
+  WorkItemKind,
+  WorkItemNotificationType,
+} from "@bob/work-items/schema";
+import { and, desc, eq, gte, inArray, isNull, or, sql } from "@bob/db";
 import {
   activities,
   agentPersonas,
@@ -21,21 +25,17 @@ import {
   repositories,
   runLifecycleEvents,
   taskRuns,
-  workItemDependencies,
   workItemArtifacts,
+  workItemDependencies,
   workItems,
   workspaceMembers,
   workspaces,
 } from "@bob/db/schema";
 import { resolveAgentType } from "@bob/work-items";
-import type {
-  WorkItemKind,
-  WorkItemArtifactType,
-  WorkItemArtifactProducerType as WorkItemArtifactProducerTypeDb,
-  WorkItemNotificationType,
-} from "@bob/work-items/schema";
 
 import type { HandlerContext } from "./context.js";
+import { createExecutionBranch } from "../services/dispatch/executionBranch";
+import { createTrackedExecution } from "../services/dispatch/trackedExecution";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -69,7 +69,11 @@ function readOptionalStringField(value: unknown, field: string): string | null {
   return typeof raw === "string" ? raw : null;
 }
 
-async function assertWorkspaceAccess(db: Db, userId: string, workspaceId: string) {
+async function assertWorkspaceAccess(
+  db: Db,
+  userId: string,
+  workspaceId: string,
+) {
   const membership = await db.query.workspaceMembers.findFirst({
     where: and(
       eq(workspaceMembers.workspaceId, workspaceId),
@@ -107,7 +111,11 @@ async function notifyWorkspaceEvent(input: {
   }
 }
 
-async function assertWorkItemAccess(db: Db, userId: string, workItem: { workspaceId: string | null | undefined }) {
+async function assertWorkItemAccess(
+  db: Db,
+  userId: string,
+  workItem: { workspaceId: string | null | undefined },
+) {
   if (!workItem.workspaceId) {
     throw new TRPCError({ code: "NOT_FOUND" });
   }
@@ -115,7 +123,11 @@ async function assertWorkItemAccess(db: Db, userId: string, workItem: { workspac
   await assertWorkspaceAccess(db, userId, workItem.workspaceId);
 }
 
-async function loadAccessibleWorkItem(db: Db, userId: string, workItemId: string) {
+async function loadAccessibleWorkItem(
+  db: Db,
+  userId: string,
+  workItemId: string,
+) {
   const workItem = await db.query.workItems.findFirst({
     where: eq(workItems.id, workItemId),
   });
@@ -129,12 +141,17 @@ async function loadAccessibleWorkItem(db: Db, userId: string, workItemId: string
 }
 
 /** Parse a short identifier like "BOB-27" into { projectKey, sequenceNumber }. */
-function parseIdentifier(id: string): { projectKey: string; sequenceNumber: number } | null {
+function parseIdentifier(
+  id: string,
+): { projectKey: string; sequenceNumber: number } | null {
   const match = /^([A-Za-z][A-Za-z0-9]*)-(\d+)$/.exec(id);
   const projectKey = match?.[1];
   const sequencePart = match?.[2];
   if (!projectKey || !sequencePart) return null;
-  return { projectKey: projectKey.toUpperCase(), sequenceNumber: parseInt(sequencePart, 10) };
+  return {
+    projectKey: projectKey.toUpperCase(),
+    sequenceNumber: parseInt(sequencePart, 10),
+  };
 }
 
 export function formatWorkItemIdentifier(input: {
@@ -209,7 +226,9 @@ export async function workItemsList(
         })
       : [];
 
-  const projectById = new Map(projectRows.map((project) => [project.id, project]));
+  const projectById = new Map(
+    projectRows.map((project) => [project.id, project]),
+  );
 
   const itemIds = items.map((i) => i.id);
   const activeSessions =
@@ -219,17 +238,26 @@ export async function workItemsList(
             inArray(chatConversations.workItemId, itemIds),
             inArray(chatConversations.status, ACTIVE_LINKED_SESSION_STATUSES),
           ),
-          columns: { id: true, workItemId: true, status: true, agentType: true },
+          columns: {
+            id: true,
+            workItemId: true,
+            status: true,
+            agentType: true,
+          },
         })
       : [];
   const sessionByWorkItem = new Map(
     activeSessions
-      .filter((s): s is typeof s & { workItemId: string } => s.workItemId !== null)
+      .filter(
+        (s): s is typeof s & { workItemId: string } => s.workItemId !== null,
+      )
       .map((s) => [s.workItemId, s]),
   );
 
   return items.map((item) => {
-    const project = item.projectId ? (projectById.get(item.projectId) ?? null) : null;
+    const project = item.projectId
+      ? (projectById.get(item.projectId) ?? null)
+      : null;
     const activeSession = sessionByWorkItem.get(item.id);
 
     return {
@@ -243,7 +271,11 @@ export async function workItemsList(
         }),
       project,
       agentStatus: activeSession
-        ? { sessionId: activeSession.id, status: activeSession.status, agentType: activeSession.agentType }
+        ? {
+            sessionId: activeSession.id,
+            status: activeSession.status,
+            agentType: activeSession.agentType,
+          }
         : null,
     };
   });
@@ -257,7 +289,11 @@ export async function workItemsList(
  */
 export async function workItemStatusCounts(
   ctx: HandlerContext,
-  input: { workspaceId: string; kind?: WorkItemKind; externalProvider?: string },
+  input: {
+    workspaceId: string;
+    kind?: WorkItemKind;
+    externalProvider?: string;
+  },
 ): Promise<Record<string, number>> {
   await assertWorkspaceAccess(ctx.db, ctx.userId, input.workspaceId);
 
@@ -282,12 +318,12 @@ export async function workItemStatusCounts(
   return counts;
 }
 
-export async function workItemsGet(
-  ctx: HandlerContext,
-  input: { id: string },
-) {
+export async function workItemsGet(ctx: HandlerContext, input: { id: string }) {
   // Try UUID lookup first
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.id);
+  const isUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      input.id,
+    );
 
   let workItem;
   if (isUuid) {
@@ -319,7 +355,14 @@ export async function workItemsGet(
   await assertWorkItemAccess(ctx.db, ctx.userId, workItem);
 
   const dependencyQueries = ctx.db.query.workItemDependencies;
-  const [project, currentArtifacts, children, activeSession, dependencies, dependents] = await Promise.all([
+  const [
+    project,
+    currentArtifacts,
+    children,
+    activeSession,
+    dependencies,
+    dependents,
+  ] = await Promise.all([
     workItem.projectId
       ? ctx.db.query.projects.findFirst({
           where: eq(projects.id, workItem.projectId),
@@ -414,7 +457,9 @@ function formatRelatedWorkItem(
   currentProject: { id: string; key: string } | null,
 ) {
   const projectKey =
-    currentProject && item.projectId === currentProject.id ? currentProject.key : null;
+    currentProject && item.projectId === currentProject.id
+      ? currentProject.key
+      : null;
 
   return {
     id: item.id,
@@ -445,11 +490,7 @@ export async function workItemsUpdate(
     agentTypeOverride?: string | null;
   },
 ) {
-  const existing = await loadAccessibleWorkItem(
-    ctx.db,
-    ctx.userId,
-    input.id,
-  );
+  const existing = await loadAccessibleWorkItem(ctx.db, ctx.userId, input.id);
 
   // `priority` is intentionally omitted: `workItems` has no `priority`
   // column, so persisting it here would either throw (strict driver) or be
@@ -486,38 +527,40 @@ export async function workItemsUpdate(
 
   const nextWorkItem = workItem ?? existing;
 
-  const changedFields = ([
-    {
-      field: "title" as const,
-      previousValue: existing.title,
-      nextValue: input.title ?? null,
-    },
-    {
-      field: "description" as const,
-      previousValue: existing.description ?? null,
-      nextValue: input.description ?? null,
-    },
-    {
-      field: "status" as const,
-      previousValue: existing.status,
-      nextValue: input.status ?? null,
-    },
-    {
-      // `workItems` has no `priority` column (see note above), so a real DB
-      // row never carries this field — but some callers/tests attach one
-      // ad hoc, and prior (masked-by-`any`) behavior read it back when
-      // present. `existing`'s shape is genuinely not staticaly knowable
-      // here (it may be enriched beyond the `workItems` row), so narrow via
-      // `unknown` rather than widening the whole function back to `any`.
-      field: "priority" as const,
-      previousValue: readOptionalStringField(existing, "priority"),
-      nextValue: input.priority ?? null,
-    },
-  ] satisfies {
-    field: "title" | "description" | "status" | "priority";
-    previousValue: string | null;
-    nextValue: string | null;
-  }[]).filter(
+  const changedFields = (
+    [
+      {
+        field: "title" as const,
+        previousValue: existing.title,
+        nextValue: input.title ?? null,
+      },
+      {
+        field: "description" as const,
+        previousValue: existing.description ?? null,
+        nextValue: input.description ?? null,
+      },
+      {
+        field: "status" as const,
+        previousValue: existing.status,
+        nextValue: input.status ?? null,
+      },
+      {
+        // `workItems` has no `priority` column (see note above), so a real DB
+        // row never carries this field — but some callers/tests attach one
+        // ad hoc, and prior (masked-by-`any`) behavior read it back when
+        // present. `existing`'s shape is genuinely not staticaly knowable
+        // here (it may be enriched beyond the `workItems` row), so narrow via
+        // `unknown` rather than widening the whole function back to `any`.
+        field: "priority" as const,
+        previousValue: readOptionalStringField(existing, "priority"),
+        nextValue: input.priority ?? null,
+      },
+    ] satisfies {
+      field: "title" | "description" | "status" | "priority";
+      previousValue: string | null;
+      nextValue: string | null;
+    }[]
+  ).filter(
     (change) =>
       change.nextValue !== null && change.previousValue !== change.nextValue,
   );
@@ -535,7 +578,9 @@ export async function workItemsUpdate(
     );
   }
 
-  const statusChange = changedFields.find((change) => change.field === "status");
+  const statusChange = changedFields.find(
+    (change) => change.field === "status",
+  );
   if (statusChange && existing.workspaceId) {
     await notifyWorkspaceEvent({
       type: "task_status_changed",
@@ -548,7 +593,9 @@ export async function workItemsUpdate(
     });
   }
 
-  const priorityChange = changedFields.find((change) => change.field === "priority");
+  const priorityChange = changedFields.find(
+    (change) => change.field === "priority",
+  );
   if (priorityChange && existing.workspaceId) {
     await notifyWorkspaceEvent({
       type: "task_priority_changed",
@@ -599,11 +646,7 @@ export async function workItemsPromoteToTask(
   ctx: HandlerContext,
   input: { id: string },
 ) {
-  const existing = await loadAccessibleWorkItem(
-    ctx.db,
-    ctx.userId,
-    input.id,
-  );
+  const existing = await loadAccessibleWorkItem(ctx.db, ctx.userId, input.id);
 
   if (existing.kind === "task") {
     return existing;
@@ -694,13 +737,10 @@ export async function workItemsCreateComment(
   }
 
   if (recipients.size > 0) {
-    const { createInAppNotification } = await import(
-      "../services/notifications/notificationService.js"
-    );
+    const { createInAppNotification } =
+      await import("../services/notifications/notificationService.js");
     const preview =
-      input.body.length > 140
-        ? `${input.body.slice(0, 137)}...`
-        : input.body;
+      input.body.length > 140 ? `${input.body.slice(0, 137)}...` : input.body;
     await Promise.all(
       [...recipients].map((userId) =>
         createInAppNotification(ctx.db, {
@@ -758,9 +798,8 @@ export async function workItemsCreateArtifact(
   const storageDelta =
     (input.content?.length ?? 0) + (input.summary?.length ?? 0);
   if (storageDelta > 0) {
-    const { assertWithinQuotaOrThrow } = await import(
-      "../services/quotas/index.js"
-    );
+    const { assertWithinQuotaOrThrow } =
+      await import("../services/quotas/index.js");
     await assertWithinQuotaOrThrow({
       db: ctx.db,
       userId: ctx.userId,
@@ -799,7 +838,8 @@ export async function workItemsCreateArtifact(
       workItemId: input.workItemId,
       taskRunId: input.taskRunId ?? null,
       sessionId: input.sessionId ?? null,
-      producerType: input.producerType as unknown as WorkItemArtifactProducerTypeDb,
+      producerType:
+        input.producerType as unknown as WorkItemArtifactProducerTypeDb,
       producerId: input.producerId ?? null,
       artifactType: input.artifactType,
       artifactRole: input.artifactRole,
@@ -848,11 +888,7 @@ export async function workItemsListChildArtifactGroups(
   ctx: HandlerContext,
   input: { parentWorkItemId: string },
 ) {
-  await loadAccessibleWorkItem(
-    ctx.db,
-    ctx.userId,
-    input.parentWorkItemId,
-  );
+  await loadAccessibleWorkItem(ctx.db, ctx.userId, input.parentWorkItemId);
 
   const children = await ctx.db.query.workItems.findMany({
     where: eq(workItems.parentId, input.parentWorkItemId),
@@ -913,9 +949,8 @@ export async function workItemsCreateNotification(
     url?: string | null;
   },
 ) {
-  const { createInAppNotification } = await import(
-    "../services/notifications/notificationService.js"
-  );
+  const { createInAppNotification } =
+    await import("../services/notifications/notificationService.js");
   return createInAppNotification(ctx.db, {
     userId: input.userId,
     workItemId: input.workItemId,
@@ -938,23 +973,19 @@ export async function workItemsMarkNotificationAsRead(
       readAt: new Date().toISOString(),
     })
     .where(
-      and(
-        eq(notifications.id, input.id),
-        eq(notifications.userId, ctx.userId),
-      ),
+      and(eq(notifications.id, input.id), eq(notifications.userId, ctx.userId)),
     )
     .returning();
 
-  return notification;
+  return notification ?? null;
 }
 
 export async function workItemsMarkAllNotificationsAsRead(
   ctx: HandlerContext,
   _input: Record<string, never> = {},
 ) {
-  const { markAllNotificationsAsRead } = await import(
-    "../services/notifications/notificationService.js"
-  );
+  const { markAllNotificationsAsRead } =
+    await import("../services/notifications/notificationService.js");
   return markAllNotificationsAsRead(ctx.db, ctx.userId);
 }
 
@@ -966,9 +997,7 @@ export async function workItemsRegisterPushToken(
     deviceName?: string;
   },
 ) {
-  const { registerPushToken } = await import(
-    "../services/push/pushService"
-  );
+  const { registerPushToken } = await import("../services/push/pushService");
   return registerPushToken({
     userId: ctx.userId,
     expoPushToken: input.token,
@@ -1016,7 +1045,8 @@ export async function workItemsTaskRunExecute(
     input.workItemId,
   );
 
-  const { assertWithinQuotaOrThrow } = await import("../services/quotas/index.js");
+  const { assertWithinQuotaOrThrow } =
+    await import("../services/quotas/index.js");
   await assertWithinQuotaOrThrow({
     db: ctx.db,
     userId: ctx.userId,
@@ -1040,9 +1070,7 @@ export async function workItemsTaskRunExecute(
     id: workItem.id,
   });
 
-  const { executeTask } = await import(
-    "@bob/execution/runtime/taskExecutor"
-  );
+  const { executeTask } = await import("@bob/execution/runtime/taskExecutor");
 
   const result = await executeTask(
     ctx.userId,
@@ -1076,7 +1104,8 @@ export async function workItemsDispatch(
     input.workItemId,
   );
 
-  const { assertWithinQuotaOrThrow } = await import("../services/quotas/index.js");
+  const { assertWithinQuotaOrThrow } =
+    await import("../services/quotas/index.js");
   await assertWithinQuotaOrThrow({
     db: ctx.db,
     userId: ctx.userId,
@@ -1164,7 +1193,9 @@ export async function workItemsDispatch(
   // canonical bob/<identifier>/<title> refs, without resetting earlier work.
   const branch = createExecutionBranch(workItem.title);
 
-  const session = await createTrackedExecution(ctx.db, {
+  const session = await createTrackedExecution(
+    ctx.db,
+    {
       userId: ctx.userId,
       repositoryId: repository?.id ?? null,
       workingDirectory: repoPath,
@@ -1177,12 +1208,20 @@ export async function workItemsDispatch(
       workItemIdentifierSnapshot: identifier,
       personaId: input.personaId ?? null,
       personaMetadata,
-    }, {
-    workspaceId: workItem.workspaceId ?? "", workItemId: workItem.id, identifier,
-    planningProvider: workItem.externalProvider ?? project?.planningProvider ?? "internal",
-    issueId: workItem.externalProvider === "linear" ? workItem.externalId ?? undefined : undefined,
-    branch: repository ? branch : undefined,
-  });
+    },
+    {
+      workspaceId: workItem.workspaceId ?? "",
+      workItemId: workItem.id,
+      identifier,
+      planningProvider:
+        workItem.externalProvider ?? project?.planningProvider ?? "internal",
+      issueId:
+        workItem.externalProvider === "linear"
+          ? (workItem.externalId ?? undefined)
+          : undefined,
+      branch: repository ? branch : undefined,
+    },
+  );
 
   const gatewayUrl = process.env.GATEWAY_URL;
   const nudgeSecret = process.env.NUDGE_SHARED_SECRET;
@@ -1315,7 +1354,8 @@ export async function workItemsListRecentActivities(
       limit: limit - mappedActivities.length,
     });
 
-    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const uuidRe =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const runWorkItemIds = recentRuns
       .map((r) => r.workItemId)
       .filter((id): id is string => typeof id === "string" && uuidRe.test(id));
@@ -1331,7 +1371,12 @@ export async function workItemsListRecentActivities(
     if (runWorkItemIds.length > 0) {
       const wiRows = await ctx.db.query.workItems.findMany({
         where: inArray(workItems.id, runWorkItemIds),
-        columns: { id: true, title: true, projectId: true, sequenceNumber: true },
+        columns: {
+          id: true,
+          title: true,
+          projectId: true,
+          sequenceNumber: true,
+        },
         with: { project: { columns: { id: true, key: true, name: true } } },
       });
       for (const wi of wiRows) runWorkItems.set(wi.id, wi);
@@ -1339,7 +1384,8 @@ export async function workItemsListRecentActivities(
 
     const runActivities = recentRuns.map((run) => {
       const isUuid = Boolean(run.workItemId && uuidRe.test(run.workItemId));
-      const wi = isUuid && run.workItemId ? runWorkItems.get(run.workItemId) : undefined;
+      const wi =
+        isUuid && run.workItemId ? runWorkItems.get(run.workItemId) : undefined;
       return {
         id: `run-${run.id}`,
         workItemId: isUuid ? (run.workItemId ?? null) : null,

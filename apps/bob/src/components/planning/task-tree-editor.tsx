@@ -24,7 +24,7 @@ import { Button } from "@gmacko/core/ui/button";
 import { toast } from "@gmacko/core/ui/toast";
 
 import { KIND_COLOR, PRIORITY_COLOR, formatLabel } from "~/lib/design/colors";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -204,7 +204,14 @@ function SortableItem({
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
         title="Remove draft"
       >
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+        >
           <path d="M2 2l8 8M10 2l-8 8" />
         </svg>
       </button>
@@ -223,45 +230,45 @@ export function TaskTreeEditor({
   onCommit,
   className,
 }: TaskTreeEditorProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const queryClient = useQueryClient();
 
   // ---- Data fetching (5s refetch) ----
   const { data, isLoading } = useQuery({
-    ...trpc.planSession.get.queryOptions({ sessionId }),
+    ...bobQuery("planning.session.get").queryOptions({ sessionId }),
     refetchInterval: 5000,
   });
 
   // ---- Mutations ----
   const invalidate = useCallback(() => {
     void queryClient.invalidateQueries({
-      queryKey: trpc.planSession.get.queryKey({ sessionId }),
+      queryKey: bobQuery("planning.session.get").queryKey({ sessionId }),
     });
-  }, [queryClient, trpc, sessionId]);
+  }, [queryClient, bobQuery, sessionId]);
 
   const createDraft = useMutation(
-    trpc.planSession.createDraft.mutationOptions({
+    bobQuery("planning.session.createDraft").mutationOptions({
       onSuccess: invalidate,
       onError: (err) => toast(err.message),
     }),
   );
 
   const updateDraft = useMutation(
-    trpc.planSession.updateDraft.mutationOptions({
+    bobQuery("planning.session.updateDraft").mutationOptions({
       onSuccess: invalidate,
       onError: (err) => toast(err.message),
     }),
   );
 
   const removeDraft = useMutation(
-    trpc.planSession.removeDraft.mutationOptions({
+    bobQuery("planning.session.removeDraft").mutationOptions({
       onSuccess: invalidate,
       onError: (err) => toast(err.message),
     }),
   );
 
   const commitPlan = useMutation(
-    trpc.planSession.commitPlan.mutationOptions({
+    bobQuery("planning.session.commitPlan").mutationOptions({
       onSuccess: (result) => {
         if (result.committed === 0) {
           toast("No tasks were committed");
@@ -282,7 +289,7 @@ export function TaskTreeEditor({
   // which executes them one at a time. Distinct from commitPlan (which files
   // tasks into the planning provider for humans to pick up).
   const commitAsChecklist = useMutation(
-    trpc.planSession.commitAsChecklist.mutationOptions({
+    bobQuery("planning.session.commitAsChecklist").mutationOptions({
       onSuccess: (result) => {
         if (!result.planId || result.items === 0) {
           toast("No tasks to run");
@@ -379,7 +386,12 @@ export function TaskTreeEditor({
   // ---- Render ----
   if (isLoading) {
     return (
-      <div className={cn("px-4 py-8 text-center text-sm text-muted-foreground", className)}>
+      <div
+        className={cn(
+          "px-4 py-8 text-center text-sm text-muted-foreground",
+          className,
+        )}
+      >
         Loading task tree...
       </div>
     );
@@ -464,9 +476,7 @@ export function TaskTreeEditor({
           }
           title="Auto-provision a worktree and let Bob run these items one at a time, gated"
         >
-          {commitAsChecklist.isPending
-            ? "Starting run..."
-            : "Run as checklist"}
+          {commitAsChecklist.isPending ? "Starting run..." : "Run as checklist"}
         </Button>
       </div>
     </div>

@@ -11,7 +11,18 @@ const { caller } = vi.hoisted(() => ({
   },
 }));
 vi.mock("~/lib/planning/server", () => ({
-  createPlanningCaller: async () => caller,
+  createPlanningClient: async () => (tag: string) => {
+    const procedures: Record<string, unknown> = {
+      "workItem.get": caller.workItem.get,
+      "workItem.artifact.listChildGroups":
+        caller.workItem.listChildArtifactGroups,
+      "planning.dispatch.listBatches": caller.dispatch.listBatches,
+      "planning.dispatch.getBatch": caller.dispatch.getBatch,
+      "external.forgegraph.listRevisions": caller.forgegraph.listRevisions,
+      "external.forgegraph.listDeployments": caller.forgegraph.listDeployments,
+    };
+    return { call: procedures[tag] };
+  },
 }));
 vi.mock("next/navigation", () => ({
   notFound: () => {

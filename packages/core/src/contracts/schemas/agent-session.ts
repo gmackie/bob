@@ -24,13 +24,19 @@ export const SessionStatusEnum = Schema.Literals([
   "running",
   "idle",
   "stopping",
+  "blocked",
+  "host_unknown",
   "stopped",
   "error",
 ]);
 export type SessionStatus = Schema.Schema.Type<typeof SessionStatusEnum>;
 
 /** Direction of a session event relative to the session. */
-export const EventDirectionEnum = Schema.Literals(["client", "agent", "system"]);
+export const EventDirectionEnum = Schema.Literals([
+  "client",
+  "agent",
+  "system",
+]);
 export type EventDirection = Schema.Schema.Type<typeof EventDirectionEnum>;
 
 /** Workflow status for agent work-item tracking. */
@@ -85,9 +91,26 @@ export const SessionSchema = Schema.Struct({
   status: Schema.String,
   nextSeq: Schema.Number,
   lastActivityAt: Schema.NullOr(WireTimestamp),
-  lastError: Schema.NullOr(Schema.Unknown),
+  lastError: Schema.NullOr(
+    Schema.Struct({
+      code: Schema.String,
+      message: Schema.String,
+      timestamp: Schema.String,
+    }),
+  ),
   workItemId: Schema.NullOr(Schema.String),
   workItemIdentifierSnapshot: Schema.NullOr(Schema.String),
+  planningWorkspaceId: Schema.optional(Schema.NullOr(Schema.String)),
+  workItemIdentifier: Schema.optional(Schema.NullOr(Schema.String)),
+  linkedTask: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        id: Schema.NullOr(Schema.String),
+        identifier: Schema.NullOr(Schema.String),
+        url: Schema.NullOr(Schema.String),
+      }),
+    ),
+  ),
   planningTaskId: Schema.NullOr(Schema.String),
   createdAt: WireTimestamp,
   updatedAt: Schema.NullOr(WireTimestamp),
@@ -122,12 +145,14 @@ export type SessionConnectionWire = Schema.Schema.Type<
 export const WorkflowStateSchema = Schema.Struct({
   workflowStatus: Schema.String,
   statusMessage: Schema.NullOr(Schema.String),
-  awaitingInput: Schema.NullOr(Schema.Struct({
-    question: Schema.String,
-    options: Schema.NullOr(Schema.Array(Schema.String)),
-    defaultAction: Schema.String,
-    expiresAt: WireTimestamp,
-  })),
+  awaitingInput: Schema.NullOr(
+    Schema.Struct({
+      question: Schema.String,
+      options: Schema.NullOr(Schema.Array(Schema.String)),
+      defaultAction: Schema.String,
+      expiresAt: WireTimestamp,
+    }),
+  ),
 });
 export type WorkflowStateWire = Schema.Schema.Type<typeof WorkflowStateSchema>;
 

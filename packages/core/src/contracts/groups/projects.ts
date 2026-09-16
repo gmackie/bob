@@ -29,7 +29,11 @@ import {
   ProjectNotFoundError,
   ProjectSlugConflictError,
 } from "@gmacko/core/projects/errors";
-import { NotFoundError } from "@gmacko/core/rpc/errors";
+import {
+  NotFoundError,
+  RpcError,
+  UnauthorizedError,
+} from "@gmacko/core/rpc/errors";
 
 import { ProjectSchema } from "../schemas/projects.js";
 import {
@@ -134,17 +138,14 @@ export const ProjectsUpdateAutomationSettingsRpc = Rpc.make(
   },
 );
 
-export const ProjectsSetDefaultAgentRpc = Rpc.make(
-  "projects.setDefaultAgent",
-  {
-    payload: Schema.Struct({
-      projectId: Schema.String,
-      defaultAgentType: Schema.NullOr(Schema.String),
-    }),
-    success: ProjectSchema,
-    error: ProjectNotFoundError,
-  },
-);
+export const ProjectsSetDefaultAgentRpc = Rpc.make("projects.setDefaultAgent", {
+  payload: Schema.Struct({
+    projectId: Schema.String,
+    defaultAgentType: Schema.NullOr(Schema.String),
+  }),
+  success: ProjectSchema,
+  error: ProjectNotFoundError,
+});
 
 export const ProjectsDismissDirRpc = Rpc.make("projects.dismissDir", {
   payload: Schema.Struct({ dirId: Schema.String }),
@@ -215,14 +216,11 @@ export const ProjectsRepositoryListRpc = Rpc.make("projects.repository.list", {
   success: Schema.Array(RepositorySchema),
 });
 
-export const ProjectsRepositoryByIdRpc = Rpc.make(
-  "projects.repository.byId",
-  {
-    payload: Schema.Struct({ id: Schema.String }),
-    success: RepositorySchema,
-    error: NotFoundError,
-  },
-);
+export const ProjectsRepositoryByIdRpc = Rpc.make("projects.repository.byId", {
+  payload: Schema.Struct({ id: Schema.String }),
+  success: RepositorySchema,
+  error: NotFoundError,
+});
 
 export const ProjectsRepositoryAddRpc = Rpc.make("projects.repository.add", {
   payload: Schema.Struct({ repositoryPath: Schema.String }),
@@ -371,17 +369,15 @@ export const ProjectsPullRequestListRpc = Rpc.make(
       limit: Schema.optional(Schema.Number),
     }),
     success: Schema.Array(PullRequestSchema),
+    error: Schema.Union([NotFoundError, RpcError, UnauthorizedError]),
   },
 );
 
-export const ProjectsPullRequestGetRpc = Rpc.make(
-  "projects.pullRequest.get",
-  {
-    payload: Schema.Struct({ pullRequestId: Schema.String }),
-    success: PullRequestSchema,
-    error: NotFoundError,
-  },
-);
+export const ProjectsPullRequestGetRpc = Rpc.make("projects.pullRequest.get", {
+  payload: Schema.Struct({ pullRequestId: Schema.String }),
+  success: PullRequestSchema,
+  error: NotFoundError,
+});
 
 export const ProjectsPullRequestListByRepositoryRpc = Rpc.make(
   "projects.pullRequest.listByRepository",
@@ -442,8 +438,11 @@ export const ProjectsPullRequestMergeRpc = Rpc.make(
       pullRequestId: Schema.String,
       mergeMethod: Schema.optional(MergeMethodEnum),
     }),
-    success: PullRequestSchema,
-    error: NotFoundError,
+    success: Schema.Struct({
+      success: Schema.Boolean,
+      mergedAt: Schema.String,
+    }),
+    error: Schema.Union([NotFoundError, RpcError, UnauthorizedError]),
   },
 );
 

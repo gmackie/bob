@@ -1,14 +1,20 @@
 import { QueryClient } from "@tanstack/react-query";
 import { createBobQueryClient } from "../query.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
 import { AddressInfo } from "node:net";
 
 import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { RpcGroup, RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import {
+  ProjectListRpc,
   ExternalRpc,
   PlanningRpc,
   WorkItemsRpc,
@@ -25,7 +31,10 @@ import { createBobRpcClient } from "../index.js";
 
 const STUB_DATE = new Date("2026-01-01T00:00:00.000Z");
 
+const NativeFixtureRpc = RpcGroup.make(ProjectListRpc);
+
 const MergedBobRpc = WorkItemsRpc.merge(
+  NativeFixtureRpc,
   PlanningRpc,
   ExternalRpc,
   AgentRpc,
@@ -42,27 +51,38 @@ const mergedHandlers = Layer.mergeAll(
   AgentRpc.toLayer({
     "agent.run.list": () => Effect.succeed([]),
   } as any),
-  ProjectsRpc.toLayer({
-    "projects.list": () =>
-      Effect.succeed([
-        {
-          id: "stub-project-1",
-          tenantId: "stub-tenant-1",
-          slug: "alpha",
-          name: "Alpha",
-          createdAt: STUB_DATE,
-          updatedAt: STUB_DATE,
-        },
-        {
-          id: "stub-project-2",
-          tenantId: "stub-tenant-1",
-          slug: "beta",
-          name: "Beta",
-          createdAt: STUB_DATE,
-          updatedAt: STUB_DATE,
-        },
-      ]),
-  } as any),
+  NativeFixtureRpc.toLayer({
+    "project.list": () =>
+      Effect.succeed(
+        ["alpha", "beta"].map((name) => ({
+          project: {
+            id: `stub-${name}`,
+            workspaceId: "stub-ws-1",
+            name,
+            key: name.toUpperCase(),
+            leadUserId: null,
+            forgeGraphAppId: null,
+            repoUrl: null,
+            defaultBranch: null,
+            description: null,
+            color: null,
+            status: "active",
+            automationSettings: {},
+            planningProvider: "internal",
+            defaultAgentType: null,
+            linearProjectId: null,
+            externalProvider: null,
+            externalId: null,
+            sourceMetadata: {},
+            createdAt: STUB_DATE.toISOString(),
+            updatedAt: null,
+          },
+          counts: { issues: 0, tasks: 0, epics: 0, active: 0 },
+          linkedRepository: null,
+          _latestActivity: STUB_DATE.toISOString(),
+        })),
+      ),
+  }),
   SettingsRpc.toLayer({
     "settings.getPreferences": () =>
       Effect.succeed({
@@ -162,9 +182,9 @@ beforeAll(async () => {
       receivedCredentials.push(req.headers.authorization);
       const body = await readNodeRequestBody(req);
       const webRequest = buildWebRequest(req, body, "http://127.0.0.1");
-      const webResponse = await (handler as (request: Request) => Promise<Response>)(
-        webRequest,
-      );
+      const webResponse = await (
+        handler as (request: Request) => Promise<Response>
+      )(webRequest);
       await writeWebResponse(res, webResponse);
     } catch (error) {
       res.statusCode = 500;
@@ -234,7 +254,8 @@ it("resolves authentication anew for each request, including logout", async () =
   let credential: string | undefined = "Bearer first";
   const client = createBobRpcClient({
     baseURL,
-    headers: (): Record<string, string> => credential ? { authorization: credential } : {},
+    headers: (): Record<string, string> =>
+      credential ? { authorization: credential } : {},
   });
   await client.workItems.statusCounts({ workspaceId: "stub-ws-1" });
   expect(receivedCredentials.at(-1)).toBe("Bearer first");
@@ -249,8 +270,16 @@ it("resolves authentication anew for each request, including logout", async () =
 it("runs contract-derived query and mutation options through Effect serialization", async () => {
   const rpc = createBobQueryClient({ baseURL });
   const cache = new QueryClient();
-  await expect(cache.fetchQuery(rpc("workItem.statusCounts").queryOptions({ workspaceId: "ws" }))).resolves.toEqual({});
-  const mutation = cache.getMutationCache().build(cache, rpc("workItem.dispatch").mutationOptions());
-  await expect(mutation.execute({ workItemId: "work", agentType: "codex" })).resolves.toMatchObject({ status: "pending" });
+  await expect(
+    cache.fetchQuery(
+      rpc("workItem.statusCounts").queryOptions({ workspaceId: "ws" }),
+    ),
+  ).resolves.toEqual({});
+  const mutation = cache
+    .getMutationCache()
+    .build(cache, rpc("workItem.dispatch").mutationOptions());
+  await expect(
+    mutation.execute({ workItemId: "work", agentType: "codex" }),
+  ).resolves.toMatchObject({ status: "pending" });
   cache.clear();
 });

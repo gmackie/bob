@@ -100,43 +100,50 @@ export const PlanningStubLayer = PlanningRpc.toLayer({
       ok: true,
       sessionId: "stub-plan-session-1",
     }),
-  "planning.session.get": () =>
-    Effect.succeed(null),
-  "planning.session.list": () =>
-    Effect.succeed([]),
-  "planning.session.listByWorkItem": () =>
-    Effect.succeed([]),
-  "planning.session.getActiveForWorkItem": () =>
-    Effect.succeed(null),
+  "planning.session.get": () => Effect.succeed(null),
+  "planning.session.list": () => Effect.succeed([]),
+  "planning.session.listByWorkItem": () => Effect.succeed([]),
+  "planning.session.getActiveForWorkItem": () => Effect.succeed(null),
   "planning.session.saveArtifact": () =>
     Effect.succeed({
       id: "stub-artifact-1",
       workItemId: "stub-wi-1",
     }),
-  "planning.session.getPriorContext": () =>
-    Effect.succeed([]),
+  "planning.session.getPriorContext": () => Effect.succeed([]),
   "planning.session.createDraft": () =>
     Effect.succeed({
       id: "stub-draft-1",
       sessionId: "stub-plan-session-1",
+      workspaceId: "stub-workspace-1",
+      projectId: "stub-project-1",
+      kind: "task",
+      priority: "no_priority",
+      status: "draft",
+      sortOrder: 0,
+      createdAt: "2026-09-16",
       title: "stub draft",
     }),
   "planning.session.updateDraft": () =>
     Effect.succeed({
       id: "stub-draft-1",
       sessionId: "stub-plan-session-1",
+      workspaceId: "stub-workspace-1",
+      projectId: "stub-project-1",
+      kind: "task",
+      priority: "no_priority",
+      status: "draft",
+      sortOrder: 0,
+      createdAt: "2026-09-16",
       title: "stub draft updated",
     }),
-  "planning.session.removeDraft": () =>
-    Effect.succeed({ ok: true }),
+  "planning.session.removeDraft": () => Effect.succeed({ ok: true }),
   "planning.session.setDependency": () =>
     Effect.succeed({
       id: "stub-dep-1",
       draftId: "stub-draft-1",
       dependsOnDraftId: "stub-draft-2",
     }),
-  "planning.session.removeDependency": () =>
-    Effect.succeed({ ok: true }),
+  "planning.session.removeDependency": () => Effect.succeed({ ok: true }),
   "planning.session.commitPlan": () =>
     Effect.succeed({
       committed: 0,
@@ -253,8 +260,7 @@ export const PlanningStubLayer = PlanningRpc.toLayer({
       completedTasks: 0,
       failedTasks: 0,
     }),
-  "planning.dispatch.dispatch": () =>
-    Effect.succeed({ started: 0 }),
+  "planning.dispatch.dispatch": () => Effect.succeed({ started: 0 }),
   "planning.dispatch.checkProgress": () =>
     Effect.succeed({
       batch: {
@@ -271,12 +277,10 @@ export const PlanningStubLayer = PlanningRpc.toLayer({
       items: [],
     }),
   "planning.dispatch.listBatches": () => Effect.succeed([]),
-  "planning.dispatch.resetPipelineState": () =>
-    Effect.succeed({ ok: true }),
+  "planning.dispatch.resetPipelineState": () => Effect.succeed({ ok: true }),
   // --- Skill procedures (Task 7) ---
   "planning.skill.list": () => Effect.succeed([]),
-  "planning.skill.seed": () =>
-    Effect.succeed({ seeded: 0, total: 10 }),
+  "planning.skill.seed": () => Effect.succeed({ seeded: 0, total: 10 }),
   "planning.skill.getExecution": () => Effect.succeed(null),
   "planning.skill.listExecutions": () => Effect.succeed([]),
   "planning.skill.recordExecution": () =>

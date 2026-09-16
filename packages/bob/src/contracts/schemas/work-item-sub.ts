@@ -44,7 +44,9 @@ export const TaskRunStatusEnum = Schema.Literals([
 
 export const ActivityRecordSchema = Schema.Struct({
   id: Schema.String,
-  workItemId: Schema.String,
+  workItemId: Schema.NullOr(Schema.String),
+  workItemTitle: Schema.optional(Schema.NullOr(Schema.String)),
+  workItemIdentifier: Schema.optional(Schema.NullOr(Schema.String)),
   userId: Schema.optional(Schema.NullOr(Schema.String)),
   type: Schema.String,
   fromValue: Schema.optional(Schema.NullOr(Schema.String)),
@@ -52,7 +54,7 @@ export const ActivityRecordSchema = Schema.Struct({
   metadata: Schema.optional(
     Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown)),
   ),
-  createdAt: Schema.optional(Schema.String),
+  createdAt: Schema.String,
 });
 
 export const NotificationRecordSchema = Schema.Struct({
@@ -70,6 +72,8 @@ export const NotificationRecordSchema = Schema.Struct({
 });
 
 export const TaskRunRecordSchema = Schema.Struct({
+  completedAt: Schema.optional(Schema.NullOr(Schema.String)),
+  blockedReason: Schema.optional(Schema.NullOr(Schema.String)),
   branch: Schema.optional(Schema.NullOr(Schema.String)),
   id: Schema.String,
   userId: Schema.String,

@@ -16,6 +16,7 @@ export interface LocalFilesystemCapability {
 
 export interface HandlerContext {
   readonly filesystem?: LocalFilesystemCapability;
+  readonly gatewayToken?: string;
   /** Database client — the schema-typed Drizzle instance so `ctx.db.query.*` is typed. */
   readonly db: Db;
   /** Authenticated user's ID. */

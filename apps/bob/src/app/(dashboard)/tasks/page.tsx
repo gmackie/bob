@@ -8,13 +8,15 @@ import {
   getTaskDashboardHeaderModel,
   selectTaskDashboardWorkspace,
 } from "~/components/tasks/task-shell-model";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 export default function TasksDashboardPage() {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const searchParams = useSearchParams();
   const { data: workspaceRows } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
+    bobQuery("projects.workspace.list").queryOptions(undefined, {
+      staleTime: 60_000,
+    }),
   );
   const workspaceParam = searchParams?.get("workspace") ?? null;
   const currentWorkspace = selectTaskDashboardWorkspace(
@@ -30,7 +32,9 @@ export default function TasksDashboardPage() {
           {header.title}
         </h1>
         {header.subtitle ? (
-          <p className="mt-2 text-base text-muted-foreground">{header.subtitle}</p>
+          <p className="mt-2 text-base text-muted-foreground">
+            {header.subtitle}
+          </p>
         ) : null}
       </div>
 

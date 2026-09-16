@@ -2,18 +2,18 @@ import { useMemo } from "react";
 import { Switch, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { notificationChannels } from "@bob/notifications/preferences";
 import type {
   NotificationChannel,
   NotificationType,
 } from "@bob/notifications/preferences";
+import { notificationChannels } from "@bob/notifications/preferences";
 import { overridesFromRows } from "@bob/notifications/preferences-rows";
 
 import {
-  CHANNEL_LABELS,
   buildNotificationMatrix,
+  CHANNEL_LABELS,
 } from "~/features/settings/notification-matrix-model";
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 
 /**
  * The notification matrix, tablet form.
@@ -28,17 +28,17 @@ export function TabletNotificationMatrix() {
   const queryClient = useQueryClient();
 
   const { data: preferences } = useQuery(
-    trpc.settings.getPreferences.queryOptions(undefined),
+    rpc("settings.getPreferences").queryOptions(undefined),
   );
   const { data: rows, isLoading } = useQuery(
-    trpc.settings.listNotificationPreferences.queryOptions(undefined),
+    rpc("settings.listNotificationPreferences").queryOptions(undefined),
   );
 
   const { mutate: setPreference } = useMutation(
-    trpc.settings.setNotificationPreference.mutationOptions({
+    rpc("settings.setNotificationPreference").mutationOptions({
       onSuccess: () => {
         void queryClient.invalidateQueries(
-          trpc.settings.listNotificationPreferences.queryFilter(),
+          rpc("settings.listNotificationPreferences").queryFilter(),
         );
       },
     }),
@@ -63,7 +63,11 @@ export function TabletNotificationMatrix() {
     [rows, masters.push, masters.email],
   );
 
-  const toggle = (type: NotificationType, channel: NotificationChannel, next: boolean) => {
+  const toggle = (
+    type: NotificationType,
+    channel: NotificationChannel,
+    next: boolean,
+  ) => {
     setPreference({ type, channel, enabled: next });
   };
 
@@ -84,7 +88,7 @@ export function TabletNotificationMatrix() {
           {notificationChannels.map((channel) => (
             <Text
               key={channel}
-              className="text-muted w-20 text-center text-[11px] font-semibold uppercase tracking-wider"
+              className="text-muted w-20 text-center text-[11px] font-semibold tracking-wider uppercase"
             >
               {CHANNEL_LABELS[channel]}
             </Text>
@@ -103,8 +107,12 @@ export function TabletNotificationMatrix() {
                 }`}
               >
                 <View className="flex-1 pr-4">
-                  <Text className="text-foreground text-sm font-medium">{row.label}</Text>
-                  <Text className="text-muted mt-0.5 text-xs leading-4">{row.hint}</Text>
+                  <Text className="text-foreground text-sm font-medium">
+                    {row.label}
+                  </Text>
+                  <Text className="text-muted mt-0.5 text-xs leading-4">
+                    {row.hint}
+                  </Text>
                 </View>
                 {notificationChannels.map((channel) => {
                   const cell = row.channels[channel];
@@ -113,7 +121,9 @@ export function TabletNotificationMatrix() {
                       <Switch
                         value={cell.enabled}
                         disabled={cell.disabled}
-                        onValueChange={(next) => toggle(row.type, channel, next)}
+                        onValueChange={(next) =>
+                          toggle(row.type, channel, next)
+                        }
                         accessibilityLabel={`${row.label}, ${CHANNEL_LABELS[channel]}`}
                       />
                     </View>

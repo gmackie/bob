@@ -10,7 +10,7 @@ import { Card } from "@gmacko/core/ui/card";
 
 import { AgentCredentials } from "~/components/nodes/agent-credentials";
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 const STATUS_COLORS: Record<string, string> = {
   queued:
@@ -50,24 +50,24 @@ export default function NodeDetailPage({
 }) {
   const { machineId } = use(params);
   const decodedMachineId = decodeURIComponent(machineId);
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const queryClient = useQueryClient();
 
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState("");
 
   const { data: workspaceMemberships } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, {
+    bobQuery("projects.workspace.list").queryOptions(undefined, {
       staleTime: 10_000,
       refetchInterval: 15_000,
     }),
   );
 
   const renameMutation = useMutation(
-    trpc.workspace.rename.mutationOptions({
+    bobQuery("projects.workspace.rename").mutationOptions({
       onSuccess: () => {
         queryClient.invalidateQueries({
-          queryKey: trpc.workspace.list.queryKey(),
+          queryKey: bobQuery("projects.workspace.list").queryKey(),
         });
         setEditing(false);
       },
@@ -83,29 +83,19 @@ export default function NodeDetailPage({
   );
 
   const { data: repoData } = useQuery(
-    trpc.repository.list.queryOptions(undefined, { staleTime: 30_000 }),
+    bobQuery("projects.repository.list").queryOptions(undefined, {
+      staleTime: 30_000,
+    }),
   );
 
-  const allRepos = (repoData ?? []) as Array<{
-    id: string;
-    name: string;
-    path: string;
-    branch: string;
-    mainBranch: string;
-    remoteUrl: string | null;
-    remoteOwner: string | null;
-    remoteName: string | null;
-    workspaceId: string | null;
-    dirty: boolean | null;
-    stale: boolean | null;
-  }>;
+  const allRepos = repoData ?? [];
 
   const nodeRepos = workspace
     ? allRepos.filter((r) => r.workspaceId === workspace.id)
     : [];
 
   const { data: runs } = useQuery(
-    trpc.agentRun.list.queryOptions(
+    bobQuery("agent.run.list").queryOptions(
       { workspaceId: workspace?.id ?? "", limit: 30 },
       { enabled: !!workspace?.id, refetchInterval: 10_000 },
     ),

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { cn } from "@gmacko/core/ui";
 import { getWorkItemEntryPlanSessionHref } from "~/components/work-items/work-item-entry-model";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 const SESSION_TYPE_LABELS: Record<string, string> = {
   office_hours: "Office Hours",
@@ -28,10 +28,10 @@ export function SessionHistory({
   sessionTypes,
   className,
 }: SessionHistoryProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
 
   const { data: sessions, isLoading } = useQuery(
-    trpc.planSession.listByWorkItem.queryOptions(
+    bobQuery("planning.session.listByWorkItem").queryOptions(
       { workItemId },
       { staleTime: 15_000 },
     ),
@@ -91,7 +91,11 @@ export function SessionHistory({
           {/* Actions */}
           <div className="flex items-center gap-2">
             <Link
-              href={getWorkItemEntryPlanSessionHref(workItemId, session.id, workspaceId)}
+              href={getWorkItemEntryPlanSessionHref(
+                workItemId,
+                session.id,
+                workspaceId,
+              )}
               className="text-xs text-primary hover:underline"
             >
               {session.status === "stopped" ? "Replay" : "Resume"}

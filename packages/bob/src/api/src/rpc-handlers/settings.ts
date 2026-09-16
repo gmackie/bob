@@ -7,22 +7,23 @@
  * Phase 7B-4D-beta Task 7.
  */
 import type { HandlerContext } from "../handlers/context.js";
-import { wrapHandler } from "../handlers/bridge.js";
 import type { ConfigRootId } from "../handlers/settings.js";
+import { wrapAuthorizedHandler } from "../handlers/authorized-rpc.js";
+import { wrapHandler } from "../handlers/bridge.js";
 import {
-  settingsGetPreferences,
-  settingsUpdatePreferences,
-  settingsListApiKeys,
-  settingsCreateApiKey,
-  settingsRevokeApiKey,
-  settingsListConfigRoots,
-  settingsListConfigEntries,
-  settingsReadConfigFile,
-  settingsWriteConfigFile,
-  settingsDeleteConfigFile,
-  settingsGetForgeGraphConnection,
   settingsConnectForgeGraph,
+  settingsCreateApiKey,
+  settingsDeleteConfigFile,
   settingsDisconnectForgeGraph,
+  settingsGetForgeGraphConnection,
+  settingsGetPreferences,
+  settingsListApiKeys,
+  settingsListConfigEntries,
+  settingsListConfigRoots,
+  settingsReadConfigFile,
+  settingsRevokeApiKey,
+  settingsUpdatePreferences,
+  settingsWriteConfigFile,
 } from "../handlers/settings.js";
 
 const CONFIG_ROOT_ID_VALUES = [
@@ -53,19 +54,28 @@ export const makeSettingsRpcHandlers = (ctx: HandlerContext) => ({
     payload,
   }: {
     payload: Record<string, never>;
-  }) => wrapHandler((c: HandlerContext) => settingsGetPreferences(c), ctx, payload, "settings"),
+  }) =>
+    wrapAuthorizedHandler(
+      (c: HandlerContext) => settingsGetPreferences(c),
+      ctx,
+      payload,
+      "settings",
+    ),
 
   "settings.updatePreferences": ({
     payload,
   }: {
     payload: Record<string, unknown>;
-  }) => wrapHandler(settingsUpdatePreferences, ctx, payload, "settings"),
+  }) =>
+    wrapAuthorizedHandler(settingsUpdatePreferences, ctx, payload, "settings"),
 
-  "settings.listApiKeys": ({
-    payload,
-  }: {
-    payload: Record<string, never>;
-  }) => wrapHandler((c: HandlerContext) => settingsListApiKeys(c), ctx, payload, "settings"),
+  "settings.listApiKeys": ({ payload }: { payload: Record<string, never> }) =>
+    wrapAuthorizedHandler(
+      (c: HandlerContext) => settingsListApiKeys(c),
+      ctx,
+      payload,
+      "settings",
+    ),
 
   "settings.createApiKey": ({
     payload,
@@ -75,17 +85,13 @@ export const makeSettingsRpcHandlers = (ctx: HandlerContext) => ({
       permissions: ("read" | "write" | "delete" | "admin")[];
       expiresInDays?: number;
     };
-  }) => wrapHandler(settingsCreateApiKey, ctx, payload, "settings"),
+  }) => wrapAuthorizedHandler(settingsCreateApiKey, ctx, payload, "settings"),
 
-  "settings.revokeApiKey": ({
-    payload,
-  }: {
-    payload: { id: string };
-  }) => wrapHandler(settingsRevokeApiKey, ctx, payload, "settings"),
+  "settings.revokeApiKey": ({ payload }: { payload: { id: string } }) =>
+    wrapAuthorizedHandler(settingsRevokeApiKey, ctx, payload, "settings"),
 
-  "settings.listConfigRoots": (_args: {
-    payload: Record<string, never>;
-  }) => wrapHandler(() => settingsListConfigRoots(), ctx, undefined, "settings"),
+  "settings.listConfigRoots": (_args: { payload: Record<string, never> }) =>
+    wrapHandler(() => settingsListConfigRoots(), ctx, undefined, "settings"),
 
   "settings.listConfigEntries": ({
     payload,
@@ -114,7 +120,12 @@ export const makeSettingsRpcHandlers = (ctx: HandlerContext) => ({
   "settings.writeConfigFile": ({
     payload,
   }: {
-    payload: { rootId: string; path: string; content: string; createOnly?: boolean };
+    payload: {
+      rootId: string;
+      path: string;
+      content: string;
+      createOnly?: boolean;
+    };
   }) =>
     wrapHandler(
       settingsWriteConfigFile,
@@ -144,7 +155,13 @@ export const makeSettingsRpcHandlers = (ctx: HandlerContext) => ({
     payload,
   }: {
     payload: Record<string, never>;
-  }) => wrapHandler((c: HandlerContext) => settingsGetForgeGraphConnection(c), ctx, payload, "settings"),
+  }) =>
+    wrapHandler(
+      (c: HandlerContext) => settingsGetForgeGraphConnection(c),
+      ctx,
+      payload,
+      "settings",
+    ),
 
   "settings.connectForgeGraph": ({
     payload,
@@ -156,5 +173,11 @@ export const makeSettingsRpcHandlers = (ctx: HandlerContext) => ({
     payload,
   }: {
     payload: Record<string, never>;
-  }) => wrapHandler((c: HandlerContext) => settingsDisconnectForgeGraph(c), ctx, payload, "settings"),
+  }) =>
+    wrapHandler(
+      (c: HandlerContext) => settingsDisconnectForgeGraph(c),
+      ctx,
+      payload,
+      "settings",
+    ),
 });

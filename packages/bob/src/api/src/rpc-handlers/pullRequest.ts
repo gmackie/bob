@@ -7,20 +7,21 @@
  * Phase 7B-4D-beta Task 7.
  */
 import type { HandlerContext } from "../handlers/context.js";
+import { wrapAuthorizedHandler } from "../handlers/authorized-rpc.js";
 import { wrapHandler } from "../handlers/bridge.js";
 import {
-  pullRequestList,
+  pullRequestAddReview,
+  pullRequestCreate,
   pullRequestGet,
+  pullRequestLinkToPlanningTask,
+  pullRequestList,
   pullRequestListByRepository,
   pullRequestListBySession,
-  pullRequestCreate,
-  pullRequestUpdate,
-  pullRequestMerge,
-  pullRequestSyncCommits,
-  pullRequestLinkToPlanningTask,
-  pullRequestRefresh,
   pullRequestListReviews,
-  pullRequestAddReview,
+  pullRequestMerge,
+  pullRequestRefresh,
+  pullRequestSyncCommits,
+  pullRequestUpdate,
 } from "../handlers/pullRequest.js";
 
 export const makePullRequestRpcHandlers = (ctx: HandlerContext) => ({
@@ -31,13 +32,10 @@ export const makePullRequestRpcHandlers = (ctx: HandlerContext) => ({
       status?: "draft" | "open" | "merged" | "closed";
       limit?: number;
     };
-  }) => wrapHandler(pullRequestList, ctx, payload, "pullRequest"),
+  }) => wrapAuthorizedHandler(pullRequestList, ctx, payload, "pullRequest"),
 
-  "pullRequest.get": ({
-    payload,
-  }: {
-    payload: { pullRequestId: string };
-  }) => wrapHandler(pullRequestGet, ctx, payload, "pullRequest"),
+  "pullRequest.get": ({ payload }: { payload: { pullRequestId: string } }) =>
+    wrapHandler(pullRequestGet, ctx, payload, "pullRequest"),
 
   "pullRequest.listByRepository": ({
     payload,
@@ -89,7 +87,7 @@ export const makePullRequestRpcHandlers = (ctx: HandlerContext) => ({
       pullRequestId: string;
       mergeMethod?: "merge" | "squash" | "rebase";
     };
-  }) => wrapHandler(pullRequestMerge, ctx, payload, "pullRequest"),
+  }) => wrapAuthorizedHandler(pullRequestMerge, ctx, payload, "pullRequest"),
 
   "pullRequest.syncCommits": ({
     payload,

@@ -34,11 +34,7 @@ import { UnauthorizedError } from "@gmacko/core/rpc/errors";
 
 import { ApiKeys } from "./api-keys.js";
 import { Sessions } from "./sessions.js";
-import {
-  Tenancy,
-  TenantNotSelectedError,
-  type Membership,
-} from "./tenancy.js";
+import { Tenancy, TenantNotSelectedError, type Membership } from "./tenancy.js";
 import type { TenantId, UserId } from "@gmacko/core/validators";
 
 /**
@@ -169,11 +165,13 @@ export const resolveCurrentUser = (
 
     // --- Path 1a: API-key bearer ---------------------------------------
     if (bearerToken && apiKeys.isApiKey(bearerToken)) {
-      const validated = yield* apiKeys.validateKey(bearerToken).pipe(
-        Effect.catchTag("InvalidApiKeyError", (e) =>
-          Effect.fail(new UnauthorizedError({ message: e.message })),
-        ),
-      );
+      const validated = yield* apiKeys
+        .validateKey(bearerToken)
+        .pipe(
+          Effect.catchTag("InvalidApiKeyError", (e) =>
+            Effect.fail(new UnauthorizedError({ message: e.message })),
+          ),
+        );
       // API keys are tenant-scoped; role comes from the tenant_members row.
       // If FK cascades ever leave a key-without-membership, treat defensively
       // as Unauthorized.
@@ -193,6 +191,7 @@ export const resolveCurrentUser = (
         tenantId: validated.tenantId,
         email: validated.email,
         role,
+        gatewayToken: bearerToken,
       };
     }
 
@@ -203,6 +202,7 @@ export const resolveCurrentUser = (
     const resolveWithTenant = (identity: {
       readonly userId: UserId;
       readonly email: string;
+      readonly gatewayToken?: string;
     }): Effect.Effect<
       CurrentUserShape,
       UnauthorizedError | TenantNotSelectedError
@@ -231,6 +231,7 @@ export const resolveCurrentUser = (
           tenantId: membership.tenantId,
           email: identity.email,
           role: membership.role,
+          gatewayToken: identity.gatewayToken,
         };
       });
 
@@ -239,11 +240,13 @@ export const resolveCurrentUser = (
     // lookup here. Signature-aware verification is reserved for the
     // cookie path (Path 2) below.
     if (bearerToken) {
-      const identity = yield* sessions.validateToken(bearerToken).pipe(
-        Effect.catchTag("SessionExpiredError", (e) =>
-          Effect.fail(new UnauthorizedError({ message: e.message })),
-        ),
-      );
+      const identity = yield* sessions
+        .validateToken(bearerToken)
+        .pipe(
+          Effect.catchTag("SessionExpiredError", (e) =>
+            Effect.fail(new UnauthorizedError({ message: e.message })),
+          ),
+        );
       return yield* resolveWithTenant(identity);
     }
 
@@ -261,11 +264,13 @@ export const resolveCurrentUser = (
       );
     }
     const headers = toHeaders(req.headers);
-    const identity = yield* sessions.validateRequest(headers).pipe(
-      Effect.catchTag("SessionExpiredError", (e) =>
-        Effect.fail(new UnauthorizedError({ message: e.message })),
-      ),
-    );
+    const identity = yield* sessions
+      .validateRequest(headers)
+      .pipe(
+        Effect.catchTag("SessionExpiredError", (e) =>
+          Effect.fail(new UnauthorizedError({ message: e.message })),
+        ),
+      );
     return yield* resolveWithTenant(identity);
   });
 

@@ -17,6 +17,7 @@ export const RevisionRecordSchema = Schema.Struct({
 });
 
 export const BuildRecordSchema = Schema.Struct({
+  durationMs: Schema.optional(Schema.NullOr(Schema.Number)),
   id: Schema.String,
   revisionId: Schema.String,
   repoId: Schema.optional(Schema.String),
@@ -128,7 +129,11 @@ export const WebhookDeliveryRecordSchema = Schema.Struct({
 // PublicApi schemas (7B-4C Task 9)
 // ---------------------------------------------------------------------------
 
-export const RunStatusEnum = Schema.Literals(["running", "completed", "failed"]);
+export const RunStatusEnum = Schema.Literals([
+  "running",
+  "completed",
+  "failed",
+]);
 
 export const PublicApiArtifactTypeEnum = Schema.Literals([
   "diff",
@@ -143,7 +148,9 @@ export const PublicApiRunRecordSchema = Schema.Struct({
   workspaceId: Schema.String,
   agentType: Schema.String,
   status: Schema.String,
-  summary: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))),
+  summary: Schema.optional(
+    Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown)),
+  ),
   createdAt: Schema.optional(Schema.String),
 });
 
@@ -152,7 +159,9 @@ export const PublicApiArtifactRecordSchema = Schema.Struct({
   runId: Schema.String,
   type: Schema.String,
   storageKey: Schema.String,
-  metadata: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))),
+  metadata: Schema.optional(
+    Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown)),
+  ),
   createdAt: Schema.optional(Schema.String),
 });
 

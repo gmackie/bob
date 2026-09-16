@@ -1,9 +1,21 @@
-import { Redirect, router } from "expo-router";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import { Redirect, router } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type {
+  QueueMoveDirection,
+  TabletQueueItem,
+} from "~/features/tablet/queue";
 import { Badge, Card, Screen } from "~/components/ui";
+import { getSessionHref } from "~/features/planning/navigation";
+import { getMobileTasksDashboardHref } from "~/features/tablet/navigation";
 import {
   buildPriorityQueueControls,
   buildPriorityQueueItems,
@@ -15,14 +27,11 @@ import {
   moveQueueItem,
   sortQueueItemsByPriority,
 } from "~/features/tablet/queue";
-import { getSessionHref } from "~/features/planning/navigation";
-import { getMobileTasksDashboardHref } from "~/features/tablet/navigation";
-import type { QueueMoveDirection, TabletQueueItem } from "~/features/tablet/queue";
 import { getMobileQueueWorkItemHref } from "~/features/tablet/work-item-entry";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { colors } from "~/lib/colors";
+import { rpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
-import { trpc, rpc } from "~/utils/api";
 
 export default function PriorityQueueScreen() {
   const { data: session, isPending } = authClient.useSession();
@@ -31,13 +40,16 @@ export default function PriorityQueueScreen() {
   const listInput = { workspaceId: workspace?.id ?? "", limit: 100 };
   const [localOrder, setLocalOrder] = useState<string[]>([]);
   const workItemsQuery = useQuery(
-    rpc("workItem.list").queryOptions(
-      listInput,
-      { enabled: Boolean(workspace?.id), refetchInterval: 10_000 },
-    ),
+    rpc("workItem.list").queryOptions(listInput, {
+      enabled: Boolean(workspace?.id),
+      refetchInterval: 10_000,
+    }),
   );
   const rows = useMemo(
-    () => buildPriorityQueueItems([...(workItemsQuery.data ?? [])] as TabletQueueItem[]),
+    () =>
+      buildPriorityQueueItems([
+        ...(workItemsQuery.data ?? []),
+      ] as TabletQueueItem[]),
     [workItemsQuery.data],
   );
   const header = getMobilePriorityQueueHeaderModel();
@@ -53,7 +65,9 @@ export default function PriorityQueueScreen() {
   // changes" pattern: track the last-applied key in state and update
   // `localOrder` directly during render when the key changes.
   // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
-  const [lastAppliedOrderKey, setLastAppliedOrderKey] = useState<string | undefined>(undefined);
+  const [lastAppliedOrderKey, setLastAppliedOrderKey] = useState<
+    string | undefined
+  >(undefined);
   if (defaultOrderKey !== lastAppliedOrderKey) {
     setLastAppliedOrderKey(defaultOrderKey);
     setLocalOrder(defaultOrder);
@@ -70,7 +84,7 @@ export default function PriorityQueueScreen() {
   }, [localOrder, rows]);
 
   const reorderMutation = useMutation(
-    trpc.workItems.reorderQueue.mutationOptions({
+    rpc("workItem.reorderQueue").mutationOptions({
       onSuccess: async () => {
         await queryClient.invalidateQueries({
           queryKey: rpc("workItem.list").queryKey(listInput),
@@ -95,17 +109,23 @@ export default function PriorityQueueScreen() {
     isSaving: reorderMutation.isPending,
   });
 
-  const saveQueue = (workItemIds = buildPriorityQueueSaveOrder(orderedRows)) => {
+  const saveQueue = (
+    workItemIds = buildPriorityQueueSaveOrder(orderedRows),
+  ) => {
     if (!workspace?.id) return;
     reorderMutation.mutate({ workspaceId: workspace.id, workItemIds });
   };
 
   const moveItem = (itemId: string, direction: QueueMoveDirection) => {
-    setLocalOrder((current) => moveQueueItem(current, itemId, direction, orderedRows));
+    setLocalOrder((current) =>
+      moveQueueItem(current, itemId, direction, orderedRows),
+    );
   };
 
   const sortByPriority = () => {
-    setLocalOrder(buildPriorityQueueSaveOrder(sortQueueItemsByPriority(orderedRows)));
+    setLocalOrder(
+      buildPriorityQueueSaveOrder(sortQueueItemsByPriority(orderedRows)),
+    );
   };
 
   if (isPending) {
@@ -125,18 +145,20 @@ export default function PriorityQueueScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View className="mb-5 flex-row items-start justify-between gap-4">
           <View className="min-w-0 flex-1">
-            <Text className="text-3xl font-semibold tracking-tight text-foreground">
+            <Text className="text-foreground text-3xl font-semibold tracking-tight">
               {header.title}
             </Text>
           </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back to tasks"
-            onPress={() => router.replace(getMobileTasksDashboardHref(workspace?.id))}
+            onPress={() =>
+              router.replace(getMobileTasksDashboardHref(workspace?.id))
+            }
             className="rounded-md px-3 py-2 active:opacity-70"
             style={{ backgroundColor: colors.secondary }}
           >
-            <Text className="text-sm font-semibold text-foreground">Tasks</Text>
+            <Text className="text-foreground text-sm font-semibold">Tasks</Text>
           </Pressable>
         </View>
 
@@ -152,7 +174,7 @@ export default function PriorityQueueScreen() {
               opacity: controls[0]?.disabled ? 0.55 : 1,
             }}
           >
-            <Text className="text-sm font-semibold text-background">
+            <Text className="text-background text-sm font-semibold">
               {controls[0]?.label ?? "Save queue"}
             </Text>
           </Pressable>
@@ -167,11 +189,11 @@ export default function PriorityQueueScreen() {
               opacity: controls[1]?.disabled ? 0.55 : 1,
             }}
           >
-            <Text className="text-sm font-semibold text-foreground">
+            <Text className="text-foreground text-sm font-semibold">
               {controls[1]?.label ?? "Sort priority"}
             </Text>
           </Pressable>
-          <Text className="text-xs text-muted">
+          <Text className="text-muted text-xs">
             {orderedRows.length} queued
           </Text>
         </View>
@@ -189,18 +211,24 @@ export default function PriorityQueueScreen() {
                 key={item.id}
                 item={item}
                 index={index}
-                onOpen={() => router.push(getMobileQueueWorkItemHref(item.id, workspace?.id))}
+                onOpen={() =>
+                  router.push(
+                    getMobileQueueWorkItemHref(item.id, workspace?.id),
+                  )
+                }
                 onMove={moveItem}
                 canMoveUp={canMoveQueueItem(orderedRows, item.id, "up")}
                 canMoveDown={canMoveQueueItem(orderedRows, item.id, "down")}
-                onDispatch={(workItemId) => dispatchMutation.mutate({ workItemId })}
+                onDispatch={(workItemId) =>
+                  dispatchMutation.mutate({ workItemId })
+                }
                 isBusy={reorderMutation.isPending || dispatchMutation.isPending}
               />
             ))}
           </View>
         ) : (
           <Card>
-            <Text className="text-sm text-muted">No queued work items.</Text>
+            <Text className="text-muted text-sm">No queued work items.</Text>
           </Card>
         )}
       </ScrollView>
@@ -239,10 +267,13 @@ function QueueRow({
       >
         <View className="flex-row items-start justify-between gap-3">
           <View className="min-w-0 flex-1">
-            <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
+            <Text
+              className="text-foreground text-base font-semibold"
+              numberOfLines={1}
+            >
               {item.identifier} · {item.title}
             </Text>
-            <Text className="mt-1 text-xs text-muted" numberOfLines={1}>
+            <Text className="text-muted mt-1 text-xs" numberOfLines={1}>
               Priority {item.priority ?? "none"} · Queue #{index + 1}
             </Text>
           </View>

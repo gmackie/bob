@@ -27,7 +27,7 @@ import {
   selectCurrentWorkspace,
   type ShellWorkspace,
 } from "./shell-settings-model";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 export interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
@@ -36,12 +36,22 @@ export interface NavItem {
 }
 const MODE_ICON: Record<SidebarShellMode, NavItem["icon"]> = {
   tasks: () => (
-    <svg className="size-[15px]" viewBox="0 0 15 15" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      className="size-[15px]"
+      viewBox="0 0 15 15"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6A1.5 1.5 0 0 1 12 3.5v8a1.5 1.5 0 0 1-1.5 1.5h-6A1.5 1.5 0 0 1 3 11.5v-8Zm1.5-.5a.5.5 0 0 0-.5.5v8a.5.5 0 0 0 .5.5h6a.5.5 0 0 0 .5-.5v-8a.5.5 0 0 0-.5-.5h-6ZM5 5h1v1H5V5Zm2 0h3v1H7V5ZM5 7.25h1v1H5v-1Zm2 0h3v1H7v-1ZM5 9.5h1v1H5v-1Zm2 0h3v1H7v-1Z" />
     </svg>
   ),
   planning: () => (
-    <svg className="size-[15px]" viewBox="0 0 15 15" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      className="size-[15px]"
+      viewBox="0 0 15 15"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <path d="M4.5 2C3.67 2 3 2.67 3 3.5v8c0 .83.67 1.5 1.5 1.5h6c.83 0 1.5-.67 1.5-1.5v-8c0-.83-.67-1.5-1.5-1.5h-6ZM5 5h5v1H5V5Zm0 2.5h5v1H5v-1Zm0 2.5h3v1H5V10Z" />
     </svg>
   ),
@@ -49,13 +59,23 @@ const MODE_ICON: Record<SidebarShellMode, NavItem["icon"]> = {
 
 const UTILITY_ICON: Record<SidebarUtilityItem["key"], NavItem["icon"]> = {
   onboarding: () => (
-    <svg className="size-[15px]" viewBox="0 0 15 15" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      className="size-[15px]"
+      viewBox="0 0 15 15"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <path d="M3 2.5A1.5 1.5 0 0 1 4.5 1h6A1.5 1.5 0 0 1 12 2.5v10a1.5 1.5 0 0 1-1.5 1.5h-6A1.5 1.5 0 0 1 3 12.5v-10ZM4.5 2a.5.5 0 0 0-.5.5v10a.5.5 0 0 0 .5.5h6a.5.5 0 0 0 .5-.5v-10a.5.5 0 0 0-.5-.5h-6Z" />
       <path d="M5 4.25 6.1 5.35 8.5 3 9.2 3.7 6.1 6.75 4.3 4.95 5 4.25ZM5 8.25 6.1 9.35 8.5 7 9.2 7.7 6.1 10.75 4.3 8.95 5 8.25Z" />
     </svg>
   ),
   "pull-requests": () => (
-    <svg className="size-[15px]" viewBox="0 0 15 15" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      className="size-[15px]"
+      viewBox="0 0 15 15"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <circle cx="4.5" cy="3.5" r="1.5" />
       <circle cx="4.5" cy="11.5" r="1.5" />
       <circle cx="10.5" cy="3.5" r="1.5" />
@@ -64,8 +84,22 @@ const UTILITY_ICON: Record<SidebarUtilityItem["key"], NavItem["icon"]> = {
     </svg>
   ),
   nodes: () => (
-    <svg className="size-[15px]" viewBox="0 0 15 15" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="4" width="11" height="8" rx="1" stroke="currentColor" strokeWidth="1" fill="none" />
+    <svg
+      className="size-[15px]"
+      viewBox="0 0 15 15"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect
+        x="2"
+        y="4"
+        width="11"
+        height="8"
+        rx="1"
+        stroke="currentColor"
+        strokeWidth="1"
+        fill="none"
+      />
       <circle cx="5" cy="8" r="1" />
       <circle cx="7.5" cy="8" r="1" />
       <circle cx="10" cy="8" r="1" />
@@ -74,13 +108,33 @@ const UTILITY_ICON: Record<SidebarUtilityItem["key"], NavItem["icon"]> = {
     </svg>
   ),
   hermes: () => (
-    <svg className="size-[15px]" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M7.5 1.5v12M4.25 4.25h6.5M4.25 10.75h6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-      <path d="M5 4.25c0 1.35 1.1 2.45 2.45 2.45h.1A2.45 2.45 0 0 1 10 9.15v1.6M10 4.25v.6A2.45 2.45 0 0 1 7.55 7.3h-.1A2.45 2.45 0 0 0 5 9.75v1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    <svg
+      className="size-[15px]"
+      viewBox="0 0 15 15"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M7.5 1.5v12M4.25 4.25h6.5M4.25 10.75h6.5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M5 4.25c0 1.35 1.1 2.45 2.45 2.45h.1A2.45 2.45 0 0 1 10 9.15v1.6M10 4.25v.6A2.45 2.45 0 0 1 7.55 7.3h-.1A2.45 2.45 0 0 0 5 9.75v1"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
     </svg>
   ),
   settings: () => (
-    <svg className="size-[15px]" viewBox="0 0 15 15" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      className="size-[15px]"
+      viewBox="0 0 15 15"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       <path
         fillRule="evenodd"
         clipRule="evenodd"
@@ -147,7 +201,7 @@ const RAIL_ROW_BADGE_CLASS: Record<SidebarRailStatusTone, string> = {
 };
 
 export function SidebarNav({ collapsed }: SidebarNavProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const pathname = usePathname() ?? "";
   const searchParams = useSearchParams();
   const mode = getSidebarModeForPath(pathname);
@@ -159,13 +213,14 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
   );
   const utilityItems = getSidebarUtilityItems();
   const { data: workspaceMemberships } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, {
+    bobQuery("projects.workspace.list").queryOptions(undefined, {
       staleTime: 60_000,
       refetchInterval: 30_000,
     }),
   );
   const workspaces = useMemo(() => {
-    const memberships = (workspaceMemberships ?? []) as unknown as WorkspaceMembership[];
+    const memberships = (workspaceMemberships ??
+      []) as unknown as WorkspaceMembership[];
     return memberships.flatMap((membership) =>
       membership.workspace ? [membership.workspace] : [],
     );
@@ -176,7 +231,7 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
   );
   const workspaceId = currentWorkspace?.id ?? "";
   const { data: workItems } = useQuery(
-    trpc.workItem.list.queryOptions(
+    bobQuery("workItem.list").queryOptions(
       { workspaceId, limit: 100 },
       { enabled: Boolean(workspaceId), refetchInterval: 10_000 },
     ),
@@ -184,19 +239,23 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
   // Dispatchable-scoped fetch + uncapped counts so the queue/outcome badges are
   // accurate instead of counting a recency-capped page (which read 0 backlog).
   const { data: dispatchableItems } = useQuery(
-    trpc.workItem.list.queryOptions(
-      { workspaceId, statuses: ["backlog", "todo", "ready", "draft"], limit: 100 },
+    bobQuery("workItem.list").queryOptions(
+      {
+        workspaceId,
+        statuses: ["backlog", "todo", "ready", "draft"],
+        limit: 100,
+      },
       { enabled: Boolean(workspaceId), refetchInterval: 10_000 },
     ),
   );
   const { data: statusCounts } = useQuery(
-    trpc.workItem.statusCounts.queryOptions(
+    bobQuery("workItem.statusCounts").queryOptions(
       { workspaceId },
       { enabled: Boolean(workspaceId), refetchInterval: 10_000 },
     ),
   );
   const { data: executionSessions } = useQuery(
-    trpc.agentRun.list.queryOptions(
+    bobQuery("agent.run.list").queryOptions(
       { workspaceId, limit: 50 },
       { enabled: Boolean(workspaceId), refetchInterval: 10_000 },
     ),
@@ -205,42 +264,58 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
   // /runs "All" feed, so the badge counts what that feed renders instead of the
   // workspace-scoped tally (which read 0 while /runs showed every workspace).
   const { data: recentOutcomeRuns } = useQuery(
-    trpc.agentRun.listAll.queryOptions(
+    bobQuery("agent.run.listAll").queryOptions(
       { limit: 50 },
       { refetchInterval: 10_000 },
     ),
   );
   const { data: planningSessions } = useQuery(
-    trpc.planSession.list.queryOptions(
+    bobQuery("planning.session.list").queryOptions(
       { workspaceId, limit: 50 },
       { enabled: Boolean(workspaceId), refetchInterval: 10_000 },
     ),
   );
   const { data: projects } = useQuery(
-    trpc.project.list.queryOptions(
+    bobQuery("project.list").queryOptions(
       { workspaceId },
       { enabled: Boolean(workspaceId), refetchInterval: 15_000 },
     ),
   );
   const tabBadges = buildSidebarTabBadges({
     workItems: (workItems ?? []) as SidebarTabBadgeInput["workItems"],
-    dispatchableItems: (dispatchableItems ?? []) as SidebarTabBadgeInput["dispatchableItems"],
-    statusCounts: (statusCounts ?? undefined) as SidebarTabBadgeInput["statusCounts"],
-    recentOutcomeRuns: (recentOutcomeRuns ?? []) as SidebarTabBadgeInput["recentOutcomeRuns"],
-    executionSessions: (executionSessions ?? []) as SidebarTabBadgeInput["executionSessions"],
-    planningSessions: (planningSessions ?? []) as SidebarTabBadgeInput["planningSessions"],
-    projects: buildSidebarProjectSummaries((projects ?? []) as SidebarProjectEntry[]),
+    dispatchableItems: (dispatchableItems ??
+      []) as SidebarTabBadgeInput["dispatchableItems"],
+    statusCounts: (statusCounts ??
+      undefined) as SidebarTabBadgeInput["statusCounts"],
+    recentOutcomeRuns: [
+      ...(recentOutcomeRuns ?? []),
+    ] as SidebarTabBadgeInput["recentOutcomeRuns"],
+    executionSessions: [
+      ...(executionSessions ?? []),
+    ] as SidebarTabBadgeInput["executionSessions"],
+    planningSessions: [
+      ...(planningSessions ?? []),
+    ] as SidebarTabBadgeInput["planningSessions"],
+    projects: buildSidebarProjectSummaries([
+      ...(projects ?? []),
+    ] as SidebarProjectEntry[]),
   });
   const activeTab =
     modeTabs.find((item) => item.key === activeTabKey) ?? modeTabs[0];
-  const projectRows = buildSidebarProjectSummaries((projects ?? []) as SidebarProjectEntry[]);
+  const projectRows = buildSidebarProjectSummaries([
+    ...(projects ?? []),
+  ] as SidebarProjectEntry[]);
   const railRows = activeTab
-      ? buildSidebarRailRows({
+    ? buildSidebarRailRows({
         tab: activeTab.key as SidebarTabBadgeKey,
         workspaceId,
         workItems: (workItems ?? []) as SidebarTabBadgeInput["workItems"],
-        executionSessions: (executionSessions ?? []) as SidebarTabBadgeInput["executionSessions"],
-        planningSessions: (planningSessions ?? []) as SidebarTabBadgeInput["planningSessions"],
+        executionSessions: [
+          ...(executionSessions ?? []),
+        ] as SidebarTabBadgeInput["executionSessions"],
+        planningSessions: [
+          ...(planningSessions ?? []),
+        ] as SidebarTabBadgeInput["planningSessions"],
         projects: projectRows,
       })
     : [];
@@ -365,28 +440,28 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
           </div>
         )}
         {utilityItems.map((item) => {
-        const isActive =
-          pathname === item.href || pathname.startsWith(item.href + "/");
-        const Icon = UTILITY_ICON[item.key];
+          const isActive =
+            pathname === item.href || pathname.startsWith(item.href + "/");
+          const Icon = UTILITY_ICON[item.key];
 
-        return (
-          <Link
-            key={item.href}
-            href={getSidebarScopedHref(item.href, workspaceId)}
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-              isActive
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground",
-              collapsed && "justify-center px-0",
-            )}
-            title={collapsed ? item.label : undefined}
-          >
-            <Icon className="size-[15px] shrink-0" />
-            {!collapsed && <span>{item.label}</span>}
-          </Link>
-        );
-      })}
+          return (
+            <Link
+              key={item.href}
+              href={getSidebarScopedHref(item.href, workspaceId)}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                collapsed && "justify-center px-0",
+              )}
+              title={collapsed ? item.label : undefined}
+            >
+              <Icon className="size-[15px] shrink-0" />
+              {!collapsed && <span>{item.label}</span>}
+            </Link>
+          );
+        })}
       </div>
     </nav>
   );

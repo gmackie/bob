@@ -7,25 +7,38 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 export function useCockpitActions() {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const queryClient = useQueryClient();
   const refresh = useCallback(
-    () => void queryClient.invalidateQueries({ queryKey: trpc.cockpit.status.queryKey() }),
-    [queryClient, trpc],
+    () =>
+      void queryClient.invalidateQueries({
+        queryKey: bobQuery("cockpit.status").queryKey(),
+      }),
+    [queryClient, bobQuery],
   );
   const opts = { onSettled: refresh };
   return {
-    stopSession: useMutation(trpc.cockpit.stopSession.mutationOptions(opts)),
-    retryItem: useMutation(trpc.cockpit.retryItem.mutationOptions(opts)),
-    bumpPriority: useMutation(trpc.cockpit.bumpPriority.mutationOptions(opts)),
-    setDispatchEnabled: useMutation(trpc.cockpit.setDispatchEnabled.mutationOptions(opts)),
-    setBudget: useMutation(trpc.cockpit.setBudget.mutationOptions(opts)),
-    setAgentEnabled: useMutation(trpc.cockpit.setAgentEnabled.mutationOptions(opts)),
-    triggerReview: useMutation(trpc.cockpit.triggerReview.mutationOptions(opts)),
-    reviewPr: useMutation(trpc.cockpit.reviewPr.mutationOptions(opts)),
+    stopSession: useMutation(
+      bobQuery("cockpit.stopSession").mutationOptions(opts),
+    ),
+    retryItem: useMutation(bobQuery("cockpit.retryItem").mutationOptions(opts)),
+    bumpPriority: useMutation(
+      bobQuery("cockpit.bumpPriority").mutationOptions(opts),
+    ),
+    setDispatchEnabled: useMutation(
+      bobQuery("cockpit.setDispatchEnabled").mutationOptions(opts),
+    ),
+    setBudget: useMutation(bobQuery("cockpit.setBudget").mutationOptions(opts)),
+    setAgentEnabled: useMutation(
+      bobQuery("cockpit.setAgentEnabled").mutationOptions(opts),
+    ),
+    triggerReview: useMutation(
+      bobQuery("cockpit.triggerReview").mutationOptions(opts),
+    ),
+    reviewPr: useMutation(bobQuery("cockpit.reviewPr").mutationOptions(opts)),
   };
 }
 

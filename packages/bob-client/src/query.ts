@@ -4,7 +4,13 @@ import type {
 } from "@tanstack/react-query";
 import { Effect } from "effect";
 import { RpcClient, type Rpc, type RpcGroup } from "effect/unstable/rpc";
-import { ExternalRpc, PlanningRpc, WorkItemsRpc } from "@gmacko/bob/contracts";
+import {
+  OperationsRpc,
+  NativeRpc,
+  ExternalRpc,
+  PlanningRpc,
+  WorkItemsRpc,
+} from "@gmacko/bob/contracts";
 import { AgentRpc } from "@gmacko/core/contracts/groups/agent";
 import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
 import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
@@ -13,6 +19,8 @@ import { SettingsRpc } from "@gmacko/core/contracts/groups/settings";
 import { makeRuntime, type ClientRuntimeOptions } from "./internal/runtime.js";
 
 type AllProcedures = RpcGroup.Rpcs<
+  | typeof OperationsRpc
+  | typeof NativeRpc
   | typeof WorkItemsRpc
   | typeof PlanningRpc
   | typeof ExternalRpc
@@ -23,6 +31,8 @@ type AllProcedures = RpcGroup.Rpcs<
   | typeof SettingsRpc
 >;
 const BobRpc: RpcGroup.RpcGroup<AllProcedures> = WorkItemsRpc.merge(
+  NativeRpc,
+  OperationsRpc,
   PlanningRpc,
   ExternalRpc,
   AgentRpc,
@@ -75,7 +85,10 @@ export function createBobQueryClient(
   options: ClientRuntimeOptions,
 ): BobQueryClient {
   const runtime = makeRuntime(options);
+  const procedures = new Map<BobRpcTag, unknown>();
   return <T extends BobRpcTag>(tag: T) => {
+    const cached = procedures.get(tag) as BobProcedure<T> | undefined;
+    if (cached) return cached;
     type Input = BobRpcInput<T>;
     type Output = BobRpcOutput<T>;
     const queryKey = (input?: Partial<Input>) =>
@@ -94,7 +107,7 @@ export function createBobQueryClient(
         }),
         signal,
       );
-    return {
+    const procedure: BobProcedure<T> = {
       queryKey,
       queryFilter: (input?: Partial<Input>) => ({ queryKey: queryKey(input) }),
       queryOptions: <Selected = Output>(
@@ -120,5 +133,7 @@ export function createBobQueryClient(
       }),
       call: invoke,
     };
+    procedures.set(tag, procedure);
+    return procedure;
   };
 }

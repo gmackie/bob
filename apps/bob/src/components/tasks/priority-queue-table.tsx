@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@gmacko/core/ui/badge";
 
 import { useBobRpcClient } from "~/rpc/react";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 import {
   buildPriorityQueueRows,
   buildPriorityQueueSaveOrder,
@@ -27,10 +27,14 @@ interface PriorityQueueTableProps {
 }
 
 function formatStatus(status: string): string {
-  return status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return status
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function statusVariant(status: string): "default" | "slate" | "blue" | "amber" | "emerald" | "rose" {
+function statusVariant(
+  status: string,
+): "default" | "slate" | "blue" | "amber" | "emerald" | "rose" {
   if (status === "blocked") return "rose";
   if (status === "in_progress" || status === "running") return "blue";
   if (status === "in_review" || status === "review") return "amber";
@@ -38,7 +42,7 @@ function statusVariant(status: string): "default" | "slate" | "blue" | "amber" |
 }
 
 export function PriorityQueueTable({ workspaceId }: PriorityQueueTableProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const rpc = useBobRpcClient();
   const queryClient = useQueryClient();
 
@@ -60,28 +64,28 @@ export function PriorityQueueTable({ workspaceId }: PriorityQueueTableProps) {
     limit: 100,
   };
   const { data: workItems, isLoading } = useQuery(
-    trpc.workItem.list.queryOptions(
-      listInput,
-      { enabled: Boolean(workspaceId), refetchInterval: 10_000 },
-    ),
+    bobQuery("workItem.list").queryOptions(listInput, {
+      enabled: Boolean(workspaceId),
+      refetchInterval: 10_000,
+    }),
   );
   const rows = buildPriorityQueueRows((workItems ?? []) as PriorityQueueItem[]);
   const header = getPriorityQueueHeaderModel();
 
   const reorderQueue = useMutation(
-    trpc.workItems.reorderQueue.mutationOptions({
+    bobQuery("workItem.reorderQueue").mutationOptions({
       onSuccess: async () => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.workItem.list.queryKey(listInput),
+          queryKey: bobQuery("workItem.list").queryKey(listInput),
         });
       },
     }),
   );
   const dispatchWork = useMutation(
-    trpc.workItem.dispatch.mutationOptions({
+    bobQuery("workItem.dispatch").mutationOptions({
       onSuccess: async () => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.workItem.list.queryKey(listInput),
+          queryKey: bobQuery("workItem.list").queryKey(listInput),
         });
       },
     }),
@@ -119,7 +123,9 @@ export function PriorityQueueTable({ workspaceId }: PriorityQueueTableProps) {
             {header.title}
           </h1>
           {header.subtitle ? (
-            <p className="mt-1 text-sm text-muted-foreground">{header.subtitle}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {header.subtitle}
+            </p>
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -154,7 +160,13 @@ export function PriorityQueueTable({ workspaceId }: PriorityQueueTableProps) {
           </button>
           <button
             type="button"
-            onClick={() => saveQueue(buildPriorityQueueRows((workItems ?? []) as PriorityQueueItem[]))}
+            onClick={() =>
+              saveQueue(
+                buildPriorityQueueRows(
+                  (workItems ?? []) as PriorityQueueItem[],
+                ),
+              )
+            }
             disabled={rows.length === 0 || reorderQueue.isPending}
             className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -199,10 +211,14 @@ export function PriorityQueueTable({ workspaceId }: PriorityQueueTableProps) {
                 const action = getPriorityQueueRowAction(item);
                 const rowBusy =
                   reorderQueue.isPending ||
-                  (dispatchWork.isPending && dispatchWork.variables?.workItemId === item.id);
+                  (dispatchWork.isPending &&
+                    dispatchWork.variables?.workItemId === item.id);
 
                 return (
-                  <tr key={item.id} className="border-b border-border last:border-b-0">
+                  <tr
+                    key={item.id}
+                    className="border-b border-border last:border-b-0"
+                  >
                     <td className="px-5 py-3">
                       <Badge variant="slate">
                         {formatTaskPriority(item.priority)}
@@ -213,7 +229,10 @@ export function PriorityQueueTable({ workspaceId }: PriorityQueueTableProps) {
                     </td>
                     <td className="px-5 py-3">
                       <Link
-                        href={getPriorityQueueWorkItemHref(item.id, workspaceId)}
+                        href={getPriorityQueueWorkItemHref(
+                          item.id,
+                          workspaceId,
+                        )}
                         className="font-medium text-foreground transition-colors hover:text-primary"
                       >
                         {item.title}
@@ -232,7 +251,10 @@ export function PriorityQueueTable({ workspaceId }: PriorityQueueTableProps) {
                         <button
                           type="button"
                           onClick={() => moveRow(item.id, "up")}
-                          disabled={!canMovePriorityQueueRow(rows, item.id, "up") || rowBusy}
+                          disabled={
+                            !canMovePriorityQueueRow(rows, item.id, "up") ||
+                            rowBusy
+                          }
                           className="rounded border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           Up
@@ -240,7 +262,10 @@ export function PriorityQueueTable({ workspaceId }: PriorityQueueTableProps) {
                         <button
                           type="button"
                           onClick={() => moveRow(item.id, "down")}
-                          disabled={!canMovePriorityQueueRow(rows, item.id, "down") || rowBusy}
+                          disabled={
+                            !canMovePriorityQueueRow(rows, item.id, "down") ||
+                            rowBusy
+                          }
                           className="rounded border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           Down
@@ -250,7 +275,10 @@ export function PriorityQueueTable({ workspaceId }: PriorityQueueTableProps) {
                     <td className="px-5 py-3">
                       {action.kind === "live-session" ? (
                         <Link
-                          href={getPriorityQueueSessionHref(action.sessionId, workspaceId)}
+                          href={getPriorityQueueSessionHref(
+                            action.sessionId,
+                            workspaceId,
+                          )}
                           className="rounded-md bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-500 transition-colors hover:bg-amber-500/20"
                         >
                           Live

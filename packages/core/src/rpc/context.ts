@@ -1,5 +1,9 @@
 import { ServiceMap } from "effect";
-import type { TenantId, TenantMemberRole, UserId } from "@gmacko/core/validators";
+import type {
+  TenantId,
+  TenantMemberRole,
+  UserId,
+} from "@gmacko/core/validators";
 
 // CurrentUser is populated by auth middleware and consumed by handlers.
 // The real shape lives in @gmacko/auth; this file declares the tag only
@@ -9,6 +13,8 @@ export interface CurrentUserShape {
   readonly tenantId: TenantId;
   readonly email: string;
   readonly role: TenantMemberRole;
+  /** Validated credential for the authenticated gateway handshake. */
+  readonly gatewayToken?: string;
 }
 
 export class CurrentUser extends ServiceMap.Service<

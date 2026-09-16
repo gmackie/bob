@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createPlanningCaller } from "~/lib/planning/server";
+import { createPlanningClient } from "~/lib/planning/server";
 import { getRunTraceStatuses } from "~/lib/traces/run-trace-status";
 export async function GET(
   _request: Request,
@@ -7,13 +7,17 @@ export async function GET(
 ) {
   try {
     const { runId } = await params;
-    const caller = await createPlanningCaller();
-    const run = await caller.agentRun.get({ runId });
+    const caller = await createPlanningClient();
+    const run = await caller("agent.run.get").call({ runId });
     const token = process.env.FORGEGRAPH_TRACE_API_TOKEN;
     const traces = await getRunTraceStatuses(
-      run,
+      { ...run, artifacts: [...run.artifacts] },
       token
-        ? { baseUrl: process.env.FORGEGRAPH_TRACE_API_URL ?? "https://forgegraf.com", token }
+        ? {
+            baseUrl:
+              process.env.FORGEGRAPH_TRACE_API_URL ?? "https://forgegraf.com",
+            token,
+          }
         : null,
     );
     return NextResponse.json(

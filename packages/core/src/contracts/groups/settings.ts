@@ -13,6 +13,16 @@
 //   - Cookie import uses a separate `cookies` input array schema
 //     mirroring the Bob extension/CLI import flow.
 import { Schema } from "effect";
+import {
+  NotFoundError,
+  RpcError,
+  UnauthorizedError,
+} from "@gmacko/core/rpc/errors";
+const settingsError = Schema.Union([
+  NotFoundError,
+  RpcError,
+  UnauthorizedError,
+]);
 
 import { WireTimestamp } from "../schemas/wire-timestamp.js";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
@@ -43,45 +53,68 @@ import {
 export const SettingsGetPreferencesRpc = Rpc.make("settings.getPreferences", {
   payload: Schema.Void,
   success: UserPreferencesSchema,
+  error: settingsError,
 });
 
-export const SettingsUpdatePreferencesRpc = Rpc.make("settings.updatePreferences", {
-  payload: Schema.Struct({
-    theme: Schema.optional(Schema.Literals(["light", "dark", "system"])),
-    defaultModel: Schema.optional(Schema.NullOr(Schema.String)),
-    editorFontSize: Schema.optional(Schema.NullOr(Schema.Number)),
-    enableNotifications: Schema.optional(Schema.Boolean),
-    emailNotifications: Schema.optional(Schema.Boolean),
-    pushNotifications: Schema.optional(Schema.Boolean),
-    timezone: Schema.optional(Schema.NullOr(Schema.String)),
-  }),
-  success: UserPreferencesSchema,
-});
+export const SettingsUpdatePreferencesRpc = Rpc.make(
+  "settings.updatePreferences",
+  {
+    payload: Schema.Struct({
+      language: Schema.optional(Schema.String.check(Schema.isMaxLength(10))),
+      quietHoursStart: Schema.optional(
+        Schema.NullOr(
+          Schema.String.check(Schema.isPattern(/^([01]\d|2[0-3]):[0-5]\d$/)),
+        ),
+      ),
+      quietHoursEnd: Schema.optional(
+        Schema.NullOr(
+          Schema.String.check(Schema.isPattern(/^([01]\d|2[0-3]):[0-5]\d$/)),
+        ),
+      ),
+      theme: Schema.optional(Schema.Literals(["light", "dark", "system"])),
+      defaultModel: Schema.optional(Schema.NullOr(Schema.String)),
+      editorFontSize: Schema.optional(Schema.NullOr(Schema.Number)),
+      enableNotifications: Schema.optional(Schema.Boolean),
+      emailNotifications: Schema.optional(Schema.Boolean),
+      pushNotifications: Schema.optional(Schema.Boolean),
+      timezone: Schema.optional(Schema.NullOr(Schema.String)),
+    }),
+    success: UserPreferencesSchema,
+    error: settingsError,
+  },
+);
 
 export const SettingsListApiKeysRpc = Rpc.make("settings.listApiKeys", {
   payload: Schema.Void,
   success: Schema.Array(SettingsApiKeySchema),
+  error: settingsError,
 });
 
 export const SettingsCreateApiKeyRpc = Rpc.make("settings.createApiKey", {
   payload: Schema.Struct({
     name: Schema.String,
-    permissions: Schema.Array(Schema.Literals(["read", "write", "delete", "admin"])),
+    permissions: Schema.Array(
+      Schema.Literals(["read", "write", "delete", "admin"]),
+    ),
     expiresInDays: Schema.optional(Schema.Number),
   }),
   success: Schema.Struct({
     id: Schema.String,
     name: Schema.String,
     keyPrefix: Schema.String,
-    permissions: Schema.Array(Schema.Literals(["read", "write", "delete", "admin"])),
+    permissions: Schema.Array(
+      Schema.Literals(["read", "write", "delete", "admin"]),
+    ),
     expiresAt: Schema.NullOr(WireTimestamp),
     key: Schema.String, // plaintext — returned exactly once at creation
   }),
+  error: settingsError,
 });
 
 export const SettingsRevokeApiKeyRpc = Rpc.make("settings.revokeApiKey", {
   payload: Schema.Struct({ id: Schema.String }),
   success: Schema.Struct({ success: Schema.Boolean }),
+  error: settingsError,
 });
 
 export const SettingsListConfigRootsRpc = Rpc.make("settings.listConfigRoots", {
@@ -89,17 +122,20 @@ export const SettingsListConfigRootsRpc = Rpc.make("settings.listConfigRoots", {
   success: Schema.Array(ConfigRootSchema),
 });
 
-export const SettingsListConfigEntriesRpc = Rpc.make("settings.listConfigEntries", {
-  payload: Schema.Struct({
-    rootId: ConfigRootIdEnum,
-    dir: Schema.optional(Schema.String),
-  }),
-  success: Schema.Struct({
-    rootDir: Schema.String,
-    dir: Schema.String,
-    entries: Schema.Array(ConfigEntrySchema),
-  }),
-});
+export const SettingsListConfigEntriesRpc = Rpc.make(
+  "settings.listConfigEntries",
+  {
+    payload: Schema.Struct({
+      rootId: ConfigRootIdEnum,
+      dir: Schema.optional(Schema.String),
+    }),
+    success: Schema.Struct({
+      rootDir: Schema.String,
+      dir: Schema.String,
+      entries: Schema.Array(ConfigEntrySchema),
+    }),
+  },
+);
 
 export const SettingsReadConfigFileRpc = Rpc.make("settings.readConfigFile", {
   payload: Schema.Struct({
@@ -119,30 +155,42 @@ export const SettingsWriteConfigFileRpc = Rpc.make("settings.writeConfigFile", {
   success: ConfigFileSchema,
 });
 
-export const SettingsDeleteConfigFileRpc = Rpc.make("settings.deleteConfigFile", {
-  payload: Schema.Struct({
-    rootId: ConfigRootIdEnum,
-    path: Schema.String,
-  }),
-  success: Schema.Struct({ success: Schema.Boolean }),
-});
+export const SettingsDeleteConfigFileRpc = Rpc.make(
+  "settings.deleteConfigFile",
+  {
+    payload: Schema.Struct({
+      rootId: ConfigRootIdEnum,
+      path: Schema.String,
+    }),
+    success: Schema.Struct({ success: Schema.Boolean }),
+  },
+);
 
-export const SettingsGetForgeGraphConnectionRpc = Rpc.make("settings.getForgeGraphConnection", {
-  payload: Schema.Void,
-  success: Schema.NullOr(ForgeGraphConnectionSchema),
-});
+export const SettingsGetForgeGraphConnectionRpc = Rpc.make(
+  "settings.getForgeGraphConnection",
+  {
+    payload: Schema.Void,
+    success: Schema.NullOr(ForgeGraphConnectionSchema),
+  },
+);
 
-export const SettingsConnectForgeGraphRpc = Rpc.make("settings.connectForgeGraph", {
-  payload: Schema.Struct({
-    apiToken: Schema.String,
-  }),
-  success: ForgeGraphConnectionSchema,
-});
+export const SettingsConnectForgeGraphRpc = Rpc.make(
+  "settings.connectForgeGraph",
+  {
+    payload: Schema.Struct({
+      apiToken: Schema.String,
+    }),
+    success: ForgeGraphConnectionSchema,
+  },
+);
 
-export const SettingsDisconnectForgeGraphRpc = Rpc.make("settings.disconnectForgeGraph", {
-  payload: Schema.Void,
-  success: Schema.Struct({ success: Schema.Boolean }),
-});
+export const SettingsDisconnectForgeGraphRpc = Rpc.make(
+  "settings.disconnectForgeGraph",
+  {
+    payload: Schema.Void,
+    success: Schema.Struct({ success: Schema.Boolean }),
+  },
+);
 
 // --- Cookies -----------------------------------------------------------------
 
@@ -167,24 +215,30 @@ export const SettingsCookiesRemoveRpc = Rpc.make("settings.cookies.remove", {
   success: Schema.Struct({ deleted: Schema.Number }),
 });
 
-export const SettingsCookiesGetForSessionRpc = Rpc.make("settings.cookies.getForSession", {
-  payload: Schema.Struct({
-    sessionId: Schema.String,
-    domain: Schema.String,
-  }),
-  success: Schema.Struct({
-    cookies: Schema.Array(CookieSchema),
-    error: Schema.optional(Schema.String),
-  }),
-});
+export const SettingsCookiesGetForSessionRpc = Rpc.make(
+  "settings.cookies.getForSession",
+  {
+    payload: Schema.Struct({
+      sessionId: Schema.String,
+      domain: Schema.String,
+    }),
+    success: Schema.Struct({
+      cookies: Schema.Array(CookieSchema),
+      error: Schema.optional(Schema.String),
+    }),
+  },
+);
 
-export const SettingsCookiesSetSessionScopesRpc = Rpc.make("settings.cookies.setSessionScopes", {
-  payload: Schema.Struct({
-    sessionId: Schema.String,
-    domains: Schema.Array(Schema.String),
-  }),
-  success: Schema.Struct({ scoped: Schema.Number }),
-});
+export const SettingsCookiesSetSessionScopesRpc = Rpc.make(
+  "settings.cookies.setSessionScopes",
+  {
+    payload: Schema.Struct({
+      sessionId: Schema.String,
+      domains: Schema.Array(Schema.String),
+    }),
+    success: Schema.Struct({ scoped: Schema.Number }),
+  },
+);
 
 // --- System ------------------------------------------------------------------
 

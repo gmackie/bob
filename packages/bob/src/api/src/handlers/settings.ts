@@ -16,12 +16,12 @@ import {
   userPreferences,
 } from "@bob/db/schema";
 
+import type { HandlerContext } from "./context.js";
 import {
   encryptToken,
   isEncryptionConfigured,
 } from "../services/crypto/tokenVault";
-
-import type { HandlerContext } from "./context.js";
+import { normalizeApiKeyPermissions } from "./api-key-permissions.js";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -144,10 +144,7 @@ export async function settingsUpdatePreferences(
 
 export async function settingsListApiKeys(ctx: HandlerContext) {
   const keys = await ctx.db.query.apiKeys.findMany({
-    where: and(
-      eq(apiKeys.userId, ctx.userId),
-      isNull(apiKeys.revokedAt),
-    ),
+    where: and(eq(apiKeys.userId, ctx.userId), isNull(apiKeys.revokedAt)),
     columns: {
       id: true,
       name: true,
@@ -160,7 +157,10 @@ export async function settingsListApiKeys(ctx: HandlerContext) {
     orderBy: (keys, { desc }) => [desc(keys.createdAt)],
   });
 
-  return keys;
+  return keys.map((key) => ({
+    ...key,
+    permissions: normalizeApiKeyPermissions(key.permissions),
+  }));
 }
 
 export async function settingsCreateApiKey(
@@ -171,7 +171,8 @@ export async function settingsCreateApiKey(
     expiresInDays?: number;
   },
 ) {
-  const { assertWithinQuotaOrThrow } = await import("../services/quotas/index.js");
+  const { assertWithinQuotaOrThrow } =
+    await import("../services/quotas/index.js");
   await assertWithinQuotaOrThrow({
     db: ctx.db,
     userId: ctx.userId,
@@ -183,7 +184,9 @@ export async function settingsCreateApiKey(
   const keyPrefix = getKeyPrefix(key);
 
   const expiresAt = input.expiresInDays
-    ? new Date(Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000).toISOString()
+    ? new Date(
+        Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000,
+      ).toISOString()
     : null;
 
   const [created] = await ctx.db
@@ -231,13 +234,41 @@ export async function settingsRevokeApiKey(
 
 export async function settingsListConfigRoots() {
   const roots: { id: ConfigRootId; label: string; dir: string }[] = [
-    { id: "opencode_xdg", label: "OpenCode (XDG config)", dir: getConfigRootDir("opencode_xdg") },
-    { id: "opencode_dot", label: "OpenCode (.opencode)", dir: getConfigRootDir("opencode_dot") },
-    { id: "claude_dot", label: "Claude (.claude)", dir: getConfigRootDir("claude_dot") },
-    { id: "codex_dot", label: "Codex (.codex)", dir: getConfigRootDir("codex_dot") },
-    { id: "gemini_dot", label: "Gemini (.gemini)", dir: getConfigRootDir("gemini_dot") },
-    { id: "kiro_dot", label: "Kiro (.kiro)", dir: getConfigRootDir("kiro_dot") },
-    { id: "cursor_agent_dot", label: "Cursor Agent (.cursor-agent)", dir: getConfigRootDir("cursor_agent_dot") },
+    {
+      id: "opencode_xdg",
+      label: "OpenCode (XDG config)",
+      dir: getConfigRootDir("opencode_xdg"),
+    },
+    {
+      id: "opencode_dot",
+      label: "OpenCode (.opencode)",
+      dir: getConfigRootDir("opencode_dot"),
+    },
+    {
+      id: "claude_dot",
+      label: "Claude (.claude)",
+      dir: getConfigRootDir("claude_dot"),
+    },
+    {
+      id: "codex_dot",
+      label: "Codex (.codex)",
+      dir: getConfigRootDir("codex_dot"),
+    },
+    {
+      id: "gemini_dot",
+      label: "Gemini (.gemini)",
+      dir: getConfigRootDir("gemini_dot"),
+    },
+    {
+      id: "kiro_dot",
+      label: "Kiro (.kiro)",
+      dir: getConfigRootDir("kiro_dot"),
+    },
+    {
+      id: "cursor_agent_dot",
+      label: "Cursor Agent (.cursor-agent)",
+      dir: getConfigRootDir("cursor_agent_dot"),
+    },
   ];
 
   // Best-effort existence check.
@@ -285,10 +316,7 @@ export async function settingsListConfigEntries(
     names.map(async (name) => {
       const absPath = path.join(targetDir, name);
       const st = await fs.stat(absPath);
-      const relPath = path
-        .relative(rootDir, absPath)
-        .split(path.sep)
-        .join("/");
+      const relPath = path.relative(rootDir, absPath).split(path.sep).join("/");
       return {
         name,
         path: relPath,
@@ -336,7 +364,12 @@ export async function settingsReadConfigFile(
 
 export async function settingsWriteConfigFile(
   _ctx: HandlerContext,
-  input: { rootId: ConfigRootId; path: string; content: string; createOnly?: boolean },
+  input: {
+    rootId: ConfigRootId;
+    path: string;
+    content: string;
+    createOnly?: boolean;
+  },
 ) {
   const rootDir = getConfigRootDir(input.rootId);
   const absPath = resolveUnderRoot(rootDir, input.path);

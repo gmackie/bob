@@ -14,7 +14,7 @@ import { InputComposer } from "~/app/(dashboard)/chat/_components/input-composer
 import { AwaitingInputCard } from "~/app/(dashboard)/chat/_components/awaiting-input-card";
 import { useChatSession } from "~/hooks/use-chat-session";
 import { usePlanningCollaboration } from "~/hooks/use-planning-collaboration";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 import { ResizableSplitView } from "~/components/planning/resizable-split-view";
 import { ArtifactPreviewPanel } from "~/components/planning/artifact-preview-panel";
@@ -54,14 +54,14 @@ export function PlanningSessionClient({
   priorArtifacts,
   isReadOnly,
 }: PlanningSessionClientProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const router = useRouter();
   const [artifactContent, setArtifactContent] = useState<string | null>(null);
   const startedRef = useRef(false);
 
   // Start the session on the gateway if it's still provisioning
   const startSession = useMutation(
-    trpc.planSession.start.mutationOptions({
+    bobQuery("planning.session.start").mutationOptions({
       onError: () => {
         // Allow retry on failure
         startedRef.current = false;
@@ -71,7 +71,7 @@ export function PlanningSessionClient({
 
   // Save artifact content to work item
   const saveArtifact = useMutation(
-    trpc.planSession.saveArtifact.mutationOptions(),
+    bobQuery("planning.session.saveArtifact").mutationOptions(),
   );
 
   // Wire up the chat session (same hook as ChatPanel uses)
@@ -93,7 +93,7 @@ export function PlanningSessionClient({
   });
 
   const updateArtifact = useMutation(
-    trpc.planSession.updateArtifact.mutationOptions({
+    bobQuery("planning.session.updateArtifact").mutationOptions({
       onSuccess: () => toast.success("Artifact updated for collaborators"),
       onError: () => toast.error("Failed to update artifact"),
     }),
@@ -138,27 +138,44 @@ export function PlanningSessionClient({
   const handleEndSession = () => {
     // Save artifact if there's content
     if (artifactContent && artifactContent.length > 0) {
-      saveArtifact.mutate({
-        sessionId: session.id,
-        workItemId: workItem.id,
-        title: `${session.planningSessionType ?? "Planning"} — ${workItem.title}`,
-        content: artifactContent,
-        planningSessionType: (session.planningSessionType as "shape" | "breakdown" | "office_hours" | "ceo_review" | "eng_review" | "design_review" | undefined) ?? undefined,
-      }, {
-        onSuccess: () => {
-          toast.success("Artifact saved to work item");
+      saveArtifact.mutate(
+        {
+          sessionId: session.id,
+          workItemId: workItem.id,
+          title: `${session.planningSessionType ?? "Planning"} — ${workItem.title}`,
+          content: artifactContent,
+          planningSessionType:
+            (session.planningSessionType as
+              | "shape"
+              | "breakdown"
+              | "office_hours"
+              | "ceo_review"
+              | "eng_review"
+              | "design_review"
+              | undefined) ?? undefined,
         },
-        onError: () => {
-          toast.error("Failed to save artifact");
+        {
+          onSuccess: () => {
+            toast.success("Artifact saved to work item");
+          },
+          onError: () => {
+            toast.error("Failed to save artifact");
+          },
         },
-      });
+      );
     }
 
     // Stop the session
     stopSession();
 
     // Navigate back to work item
-    router.push(getWorkItemEntryHref(workItem.id, "planning", workItem.selectedWorkspaceId));
+    router.push(
+      getWorkItemEntryHref(
+        workItem.id,
+        "planning",
+        workItem.selectedWorkspaceId,
+      ),
+    );
   };
 
   const isAwaitingInput = workflowState?.workflowStatus === "awaiting_input";
@@ -204,7 +221,8 @@ export function PlanningSessionClient({
               : // Paused awaiting a human decision — steady amber "needs you".
                 sessionStatus === "blocked"
                 ? "bg-amber-500"
-                : sessionStatus === "provisioning" || sessionStatus === "starting"
+                : sessionStatus === "provisioning" ||
+                    sessionStatus === "starting"
                   ? "bg-amber-500 animate-pulse"
                   : // host_unknown (lease expired, contact lost) → muted dot.
                     "bg-muted-foreground",
@@ -215,24 +233,27 @@ export function PlanningSessionClient({
         <span className="text-muted-foreground/60">(connecting...)</span>
       )}
       <PresenceAvatars participants={collab.participants} className="ml-1" />
-      {(sessionStatus === "provisioning" || sessionStatus === "error" || sessionStatus === "stopped") && !isReadOnly && (
-        <button
-          onClick={() => {
-            startedRef.current = false;
-            startSession.mutate({
-              sessionId: session.id,
-              workspaceId: workItem.workspaceId,
-              projectId: workItem.projectId!,
-              projectName: workItem.projectName ?? "Project",
-              workingDirectory: "/",
-            });
-          }}
-          disabled={startSession.isPending}
-          className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
-        >
-          {startSession.isPending ? "Starting..." : "Retry"}
-        </button>
-      )}
+      {(sessionStatus === "provisioning" ||
+        sessionStatus === "error" ||
+        sessionStatus === "stopped") &&
+        !isReadOnly && (
+          <button
+            onClick={() => {
+              startedRef.current = false;
+              startSession.mutate({
+                sessionId: session.id,
+                workspaceId: workItem.workspaceId,
+                projectId: workItem.projectId!,
+                projectName: workItem.projectName ?? "Project",
+                workingDirectory: "/",
+              });
+            }}
+            disabled={startSession.isPending}
+            className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+          >
+            {startSession.isPending ? "Starting..." : "Retry"}
+          </button>
+        )}
       <Link
         href={`/chat?session=${session.id}`}
         className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
@@ -300,7 +321,8 @@ export function PlanningSessionClient({
             placeholder={
               !isConnected
                 ? "Connecting..."
-                : sessionStatus === "provisioning" || sessionStatus === "starting"
+                : sessionStatus === "provisioning" ||
+                    sessionStatus === "starting"
                   ? "Session starting..."
                   : isAwaitingInput
                     ? "Resolve input prompt above"
@@ -355,7 +377,12 @@ function MobilePlanningTabs({
 }: {
   chatPanel: React.ReactNode;
   artifactContent: string | null;
-  priorArtifacts: Array<{ id: string; title: string | null; content: string | null; createdAt: string }>;
+  priorArtifacts: Array<{
+    id: string;
+    title: string | null;
+    content: string | null;
+    createdAt: string;
+  }>;
   isReadOnly: boolean;
   sessionId: string;
   onContentEdit?: (content: string) => void;

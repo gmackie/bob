@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { getWorkItemEntryHref } from "~/components/work-items/work-item-entry-model";
-import { createPlanningCaller } from "~/lib/planning/server";
+import { createPlanningClient } from "~/lib/planning/server";
 import { PlanningSessionClient } from "./planning-session-client";
 
 interface PlanningSessionPageProps {
@@ -18,28 +18,36 @@ export default async function PlanningSessionPage({
 }: PlanningSessionPageProps) {
   const { workItemId, sessionId } = await params;
   const query = searchParams ? await searchParams : {};
-  const caller = (await createPlanningCaller()) as any;
+  const caller = await createPlanningClient();
 
   // Fetch work item and session in parallel
   const [workItemDetail, sessionData, priorArtifacts] = await Promise.all([
-    caller.workItem.get({ id: workItemId }).catch(() => null),
-    caller.planSession.get({ sessionId }).catch(() => null),
-    caller.planSession.getPriorContext({ workItemId, excludeSessionId: sessionId }).catch(() => []),
+    caller("workItem.get")
+      .call({ id: workItemId })
+      .catch(() => null),
+    caller("planning.session.get")
+      .call({ sessionId })
+      .catch(() => null),
+    caller("planning.session.getPriorContext")
+      .call({ workItemId, excludeSessionId: sessionId })
+      .catch(() => []),
   ]);
 
-  if (!workItemDetail) {
+  if (!workItemDetail?.workItem.workspaceId) {
     notFound();
   }
 
   if (!sessionData?.session) {
     // Session not found — redirect to work item
-    const selectedWorkspaceId = typeof query.workspace === "string" ? query.workspace : null;
+    const selectedWorkspaceId =
+      typeof query.workspace === "string" ? query.workspace : null;
     redirect(getWorkItemEntryHref(workItemId, "planning", selectedWorkspaceId));
   }
 
   const workItem = workItemDetail.workItem;
   const session = sessionData.session;
-  const isReadOnly = session.status === "stopped" || session.status === "completed";
+  const isReadOnly =
+    session.status === "stopped" || session.status === "completed";
   const selectedWorkspaceId =
     typeof query.workspace === "string"
       ? query.workspace
@@ -69,11 +77,17 @@ export default async function PlanningSessionPage({
               : []),
             {
               label: workItem.identifier,
-              href: getWorkItemEntryHref(workItemId, "planning", selectedWorkspaceId),
+              href: getWorkItemEntryHref(
+                workItemId,
+                "planning",
+                selectedWorkspaceId,
+              ),
             },
-            { label: session.planningSessionType
-              ? formatSessionType(session.planningSessionType)
-              : "Planning Session" },
+            {
+              label: session.planningSessionType
+                ? formatSessionType(session.planningSessionType)
+                : "Planning Session",
+            },
           ]}
         />
 
@@ -100,15 +114,15 @@ export default async function PlanningSessionPage({
           description: workItem.description ?? null,
           projectId: workItem.project?.id ?? null,
           projectName: workItem.project?.name ?? null,
-          workspaceId: workItem.workspaceId,
+          workspaceId: workItemDetail.workItem.workspaceId,
           selectedWorkspaceId,
         }}
         session={{
           id: session.id,
           status: session.status,
-          planningSessionType: session.planningSessionType,
+          planningSessionType: session.planningSessionType ?? null,
         }}
-        priorArtifacts={priorArtifacts}
+        priorArtifacts={[...priorArtifacts]}
         isReadOnly={isReadOnly}
       />
     </div>

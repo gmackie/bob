@@ -7,7 +7,7 @@ import { cn } from "@gmacko/core/ui";
 import { Card } from "@gmacko/core/ui/card";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 function isNodeOnline(lastHeartbeat: string | null): boolean {
   if (!lastHeartbeat) return false;
@@ -24,10 +24,13 @@ function formatRelative(dateStr: string | null): string {
 }
 
 export default function NodesPage() {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
 
   const { data: workspaceMemberships } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, { staleTime: 10_000, refetchInterval: 15_000 }),
+    bobQuery("projects.workspace.list").queryOptions(undefined, {
+      staleTime: 10_000,
+      refetchInterval: 15_000,
+    }),
   );
 
   const workspaces = (workspaceMemberships ?? [])
@@ -35,16 +38,16 @@ export default function NodesPage() {
     .filter(Boolean);
 
   const { data: repoData } = useQuery(
-    trpc.repository.list.queryOptions(undefined, { staleTime: 30_000 }),
+    bobQuery("projects.repository.list").queryOptions(undefined, {
+      staleTime: 30_000,
+    }),
   );
 
-  const repos = (repoData ?? []) as Array<{
-    id: string;
-    name: string;
-    workspaceId: string | null;
-  }>;
+  const repos = repoData ?? [];
 
-  const onlineCount = workspaces.filter((w: any) => isNodeOnline(w.lastHeartbeat)).length;
+  const onlineCount = workspaces.filter((w: any) =>
+    isNodeOnline(w.lastHeartbeat),
+  ).length;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -56,23 +59,29 @@ export default function NodesPage() {
             Nodes
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Machines running the ooda-runner agent daemon. Manage workspaces, repos, and agent capacity.
+            Machines running the ooda-runner agent daemon. Manage workspaces,
+            repos, and agent capacity.
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span className={cn(
-            "size-2 rounded-full",
-            onlineCount > 0 ? "bg-emerald-500" : "bg-neutral-400",
-          )} />
+          <span
+            className={cn(
+              "size-2 rounded-full",
+              onlineCount > 0 ? "bg-emerald-500" : "bg-neutral-400",
+            )}
+          />
           {onlineCount} online &middot; {workspaces.length} total
         </div>
       </div>
 
       {workspaces.length === 0 ? (
         <Card className="mt-8 p-8 text-center">
-          <p className="text-sm font-medium text-foreground">No nodes registered</p>
+          <p className="text-sm font-medium text-foreground">
+            No nodes registered
+          </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Run <code className="font-mono">bob init</code> on a machine to register it as a node.
+            Run <code className="font-mono">bob init</code> on a machine to
+            register it as a node.
           </p>
         </Card>
       ) : (
@@ -100,12 +109,17 @@ export default function NodesPage() {
                 ).length;
 
                 return (
-                  <tr key={ws.id} className="group transition-colors hover:bg-accent/20">
+                  <tr
+                    key={ws.id}
+                    className="group transition-colors hover:bg-accent/20"
+                  >
                     <td className="px-4 py-3">
-                      <span className={cn(
-                        "inline-block size-2.5 rounded-full",
-                        online ? "bg-emerald-500" : "bg-neutral-400",
-                      )} />
+                      <span
+                        className={cn(
+                          "inline-block size-2.5 rounded-full",
+                          online ? "bg-emerald-500" : "bg-neutral-400",
+                        )}
+                      />
                     </td>
                     <td className="px-4 py-3">
                       <Link

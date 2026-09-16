@@ -30,6 +30,8 @@ export const WorkItemRecordSchema = Schema.Struct({
   queueSortOrder: Schema.optional(Schema.NullOr(Schema.Number)),
   agentTypeOverride: Schema.optional(Schema.NullOr(Schema.String)),
   externalId: Schema.optional(Schema.NullOr(Schema.String)),
+  externalProvider: Schema.optional(Schema.NullOr(Schema.String)),
+  externalUrl: Schema.optional(Schema.NullOr(Schema.String)),
   agentStatus: Schema.optional(
     Schema.NullOr(
       Schema.Struct({
@@ -44,7 +46,7 @@ export const WorkItemRecordSchema = Schema.Struct({
   sequenceNumber: Schema.optional(Schema.NullOr(Schema.Number)),
   projectId: Schema.optional(Schema.NullOr(Schema.String)),
   ownerUserId: Schema.optional(Schema.NullOr(Schema.String)),
-  workspaceId: Schema.optional(Schema.NullOr(Schema.String)),
+  workspaceId: Schema.NullOr(Schema.String),
   parentId: Schema.optional(Schema.NullOr(Schema.String)),
   project: Schema.optional(Schema.NullOr(ProjectSummarySchema)),
   createdAt: Schema.optional(Schema.String),
