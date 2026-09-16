@@ -13,11 +13,36 @@ afterEach(() => {
 });
 
 describe("BobRunReporter", () => {
+  it("attaches a metadata-only trace reference to its run", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("{}"));
+    const reporter = new BobRunReporter(CFG);
+    await reporter.pushTrace("run-1", {
+      traceId: "1".repeat(32),
+      spanId: "2".repeat(16),
+      sampled: true,
+    });
+    const body = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
+    expect(body).toEqual({
+      type: "test-report",
+      storageKey: `trace:run-1:${"1".repeat(32)}:${"2".repeat(16)}`,
+      metadata: {
+        kind: "trace_reference",
+        traceId: "1".repeat(32),
+        spanId: "2".repeat(16),
+        sampled: true,
+        captureState: "pending",
+      },
+    });
+  });
   it("is disabled and no-ops when config is missing", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch" as any);
     const r = new BobRunReporter({});
     expect(r.enabled).toBe(false);
-    expect(await r.startRun({ workItemId: "w", agentType: "claude" })).toBeNull();
+    expect(
+      await r.startRun({ workItemId: "w", agentType: "claude" }),
+    ).toBeNull();
     await r.pushLog("anything", "output");
     await r.finishRun("anything", "completed");
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -67,15 +92,21 @@ describe("BobRunReporter", () => {
     const r = new BobRunReporter(CFG);
     await r.pushLog("run-9", "hello stdout");
 
-    expect(calls[0].url).toBe("https://bob.example/api/v1/runs/run-9/artifacts");
+    expect(calls[0].url).toBe(
+      "https://bob.example/api/v1/runs/run-9/artifacts",
+    );
     expect(calls[0].body).toMatchObject({ type: "log" });
     expect(calls[0].body.metadata.content).toBe("hello stdout");
   });
 
   it("never throws when the network fails", async () => {
-    vi.spyOn(globalThis, "fetch" as any).mockRejectedValue(new Error("ECONNREFUSED"));
+    vi.spyOn(globalThis, "fetch" as any).mockRejectedValue(
+      new Error("ECONNREFUSED"),
+    );
     const r = new BobRunReporter(CFG);
-    await expect(r.startRun({ workItemId: "w", agentType: "x" })).resolves.toBeNull();
+    await expect(
+      r.startRun({ workItemId: "w", agentType: "x" }),
+    ).resolves.toBeNull();
     await expect(r.pushLog("run-1", "x")).resolves.toBeUndefined();
     await expect(r.finishRun("run-1", "failed")).resolves.toBeUndefined();
   });

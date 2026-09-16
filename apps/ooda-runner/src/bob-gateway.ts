@@ -1,3 +1,5 @@
+import { withTraceSpan } from "@gmacko/core/telemetry/deep";
+import { readDispatchTrace } from "./trace-dispatch";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { accessSync, constants as fsConstants, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -940,6 +942,15 @@ export class BobGatewayConnector {
   }
 
   private async handleSessionAvailable(session: ServerSessionAvailable): Promise<void> {
+    return withTraceSpan("session.dispatch", () => this.executeSessionAvailable(session), {
+      carrier: readDispatchTrace(session.personaConfig),
+      kind: "consumer",
+      link: true,
+      attributes: { "session.id": session.sessionId, "messaging.operation": "process" },
+    });
+  }
+
+  private async executeSessionAvailable(session: ServerSessionAvailable): Promise<void> {
     if (this.activeSessions.size >= this.config.maxConcurrent) {
       console.log(`[bob-gw] At capacity (${this.config.maxConcurrent}), skipping ${session.sessionId}`);
       return;
@@ -1018,6 +1029,7 @@ export class BobGatewayConnector {
         workItemId: session.identifier ?? session.sessionId,
         agentType: adapterId,
         title: session.title,
+        agentConfig: { sessionId: session.sessionId },
       })
       .catch(() => null);
     let runOutput = "";
@@ -1069,11 +1081,13 @@ export class BobGatewayConnector {
       }
     };
     try {
-      if (adapter) {
-        await this.runWithAdapter(session, adapter, workDir, prompt, collect, worktree);
-      } else {
-        await this.runWithCli(session, workDir, prompt, collect);
-      }
+      await withTraceSpan("session.execute", async () => {
+        if (adapter) {
+          await this.runWithAdapter(session, adapter, workDir, prompt, collect, worktree);
+        } else {
+          await this.runWithCli(session, workDir, prompt, collect);
+        }
+      }, { attributes: { "session.id": session.sessionId } });
 
       if (this.stopRequested.has(session.sessionId)) {
         await this.reportInterrupted(session, bobRunId, runOutput, startTime);

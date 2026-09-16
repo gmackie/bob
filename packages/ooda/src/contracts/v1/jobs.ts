@@ -153,6 +153,17 @@ export type ClaimAgentJobInputV1 = z.infer<typeof ClaimAgentJobInputV1Schema>;
 export const ClaimAgentJobResultV1Schema = z
   .object({
     job: AgentJobV1Schema,
+    traceCarrier: z
+      .object({
+        traceparent: z
+          .string()
+          .regex(
+            /^00-(?!0{32})[0-9a-f]{32}-(?!0{16})[0-9a-f]{16}-[0-9a-f]{2}$/,
+          ),
+        tracestate: z.string().max(512).optional(),
+      })
+      .strict()
+      .optional(),
     prompt: z.string().min(1).max(100_000),
     attempt: z.number().int().positive(),
     leaseToken: z.string().uuid(),

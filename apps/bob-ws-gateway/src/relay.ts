@@ -1091,7 +1091,7 @@ export class Relay {
    * naturally drops out of the query.
    */
   private async deliverPendingSessionsToDaemon(conn: Connection): Promise<void> {
-    if (conn.kind !== "daemon" || !conn.userId) return;
+    if (conn.kind !== "daemon" || !conn.userId || !conn.workspaceId) return;
     if (!conn.deliveredSessions) conn.deliveredSessions = new Set<string>();
 
     const pending = await db.query.chatConversations.findMany({
@@ -1112,15 +1112,18 @@ export class Relay {
       let identifier: string | undefined;
       let branch: string | undefined;
       if (!isPlanning && session.workItemId) {
+        const wi = await db.query.workItems.findFirst({
+          where: and(eq(workItems.id, session.workItemId), eq(workItems.workspaceId, conn.workspaceId)),
+          columns: { description: true },
+        });
+        // Legacy sessions may contain a foreign item and a cached foreign title.
+        // Do not deliver any part of that session to this workspace's daemon.
+        if (!wi) continue;
         const taskRun = await db.query.taskRuns.findFirst({
           where: eq(taskRuns.sessionId, session.id),
           columns: { branch: true, workItemIdentifierSnapshot: true },
         });
-        const wi = await db.query.workItems.findFirst({
-          where: eq(workItems.id, session.workItemId),
-          columns: { description: true },
-        });
-        description = wi?.description ?? undefined;
+        description = wi.description ?? undefined;
         identifier = taskRun?.workItemIdentifierSnapshot ?? undefined;
         branch = taskRun?.branch ?? undefined;
       }

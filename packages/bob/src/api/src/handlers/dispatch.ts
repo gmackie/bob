@@ -983,7 +983,7 @@ export async function dispatchExecutionBatch(
 
     if (wiId) {
       const existing = await ctx.db.query.workItems.findFirst({
-        where: eq(workItems.id, wiId),
+        where: and(eq(workItems.id, wiId), eq(workItems.workspaceId, input.workspaceId)),
         with: { project: { columns: { key: true } } },
       });
       if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: `Work item ${wiId} not found` });

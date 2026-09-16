@@ -543,6 +543,17 @@ function ArtifactsTab({ run }: { run: any }) {
               {new Date(artifact.createdAt).toLocaleTimeString()}
             </span>
           </div>
+          {artifact.metadata?.kind === "trace_reference" && (
+            <div className="mt-3 flex items-center gap-3 text-sm">
+              <a href={`/api/runs/${encodeURIComponent(run.id)}/traces/${encodeURIComponent(artifact.id)}`}
+                target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                Open trace
+              </a>
+              <span className="text-muted-foreground">
+                {artifact.metadata.captureState === "sampled_out" ? "Not sampled" : "Capture pending verification"}
+              </span>
+            </div>
+          )}
           {artifact.metadata && Object.keys(artifact.metadata).length > 0 && (
             <div className="mt-3 rounded bg-muted/50 p-3">
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

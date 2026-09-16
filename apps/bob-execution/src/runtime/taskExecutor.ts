@@ -1,3 +1,4 @@
+import { captureTraceCarrier } from "@gmacko/core/telemetry/deep";
 import { and, desc, eq } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
@@ -330,7 +331,13 @@ export async function executeTask(
       gitBranch: branch,
       planningTaskId: task.id,
       personaId: options?.personaId ?? null,
-      personaMetadata: options?.personaMetadata ?? UNATTENDED_PERSONA,
+      personaMetadata: {
+        ...(options?.personaMetadata ?? UNATTENDED_PERSONA),
+        metadata: {
+          ...((options?.personaMetadata?.metadata as Record<string, unknown> | undefined) ?? {}),
+          traceCarrier: captureTraceCarrier(),
+        },
+      },
     })
     .returning();
   const insertedSession = expectInsertedRow(
@@ -589,7 +596,7 @@ export async function dispatchReviewSession(
       // Unattended run: ACP adapters (claude/grok) pause on every permission
       // prompt unless the persona grants full autonomy, and nobody is there to
       // answer — the session would sit "blocked" forever.
-      personaMetadata: UNATTENDED_PERSONA,
+      personaMetadata: { ...UNATTENDED_PERSONA, metadata: { traceCarrier: captureTraceCarrier() } },
       gitBranch: reviewBranch,
       sessionType: "execution",
       planningWorkspaceId: workspaceId,
@@ -798,7 +805,7 @@ export async function dispatchRepairSession(
       // Unattended run: ACP adapters (claude/grok) pause on every permission
       // prompt unless the persona grants full autonomy, and nobody is there to
       // answer — the session would sit "blocked" forever.
-      personaMetadata: UNATTENDED_PERSONA,
+      personaMetadata: { ...UNATTENDED_PERSONA, metadata: { traceCarrier: captureTraceCarrier() } },
       gitBranch: workBranch,
       sessionType: "execution",
       planningWorkspaceId: workspaceId,
