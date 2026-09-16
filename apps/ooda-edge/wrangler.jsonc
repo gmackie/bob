@@ -1,6 +1,10 @@
 {
   "name": "ooda-blder-bot",
   "observability": {
+    "traces": {
+      "enabled": true,
+      "destinations": ["signoz-traces"]
+    },
     "enabled": true,
     "logs": { "enabled": true, "destinations": ["signoz-logs"] }
   },

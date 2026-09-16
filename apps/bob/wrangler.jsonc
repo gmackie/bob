@@ -3,6 +3,10 @@
   // Node/VPS (bob-server) is desktop/local only — not a production path.
   "name": "blder-bot",
   "observability": {
+    "traces": {
+      "enabled": true,
+      "destinations": ["signoz-traces"]
+    },
     "enabled": true,
     "logs": { "enabled": true, "destinations": ["signoz-logs"] }
   },
