@@ -1,3 +1,4 @@
+import { readTraceReportScope } from "./trace-report-scope.js";
 import type { WebSocket } from "ws";
 import { spawnFailureAgent } from "./spawn-failure";
 import { eq, and, or, gt, lt, inArray, asc, desc, sql, isNull } from "@bob/db";
@@ -643,9 +644,28 @@ export class Relay {
       }
     }
 
+    let workItemId: string | undefined;
+    let issueId: string | undefined;
+    const ownedSession = await db.query.chatConversations.findFirst({
+      where: eq(chatConversations.id, input.sessionId),
+      columns: { workItemId: true, personaMetadata: true },
+    });
+    if (ownedSession?.workItemId) {
+      const ownedItem = await db.query.workItems.findFirst({
+        where: and(eq(workItems.id, ownedSession.workItemId), eq(workItems.workspaceId, input.workspaceId)),
+        columns: { id: true, externalProvider: true, externalId: true },
+      });
+      if (!ownedItem) return;
+      workItemId = ownedItem.id;
+      issueId = ownedItem.externalProvider === "linear" ? ownedItem.externalId ?? undefined : undefined;
+    }
+
     this.send(daemon, {
       type: "session_available",
       sessionId: input.sessionId,
+      workspaceId: workItemId ? input.workspaceId : undefined,
+      workItemId, issueId,
+      ...(workItemId ? readTraceReportScope(ownedSession?.personaMetadata, workItemId, input.workspaceId) : {}),
       workingDirectory: input.workingDirectory,
       agentType: input.agentType,
       title: input.title,
@@ -1111,10 +1131,11 @@ export class Relay {
       let description: string | undefined;
       let identifier: string | undefined;
       let branch: string | undefined;
+      let issueId: string | undefined;
       if (!isPlanning && session.workItemId) {
         const wi = await db.query.workItems.findFirst({
           where: and(eq(workItems.id, session.workItemId), eq(workItems.workspaceId, conn.workspaceId)),
-          columns: { description: true },
+          columns: { description: true, externalProvider: true, externalId: true },
         });
         // Legacy sessions may contain a foreign item and a cached foreign title.
         // Do not deliver any part of that session to this workspace's daemon.
@@ -1124,6 +1145,7 @@ export class Relay {
           columns: { branch: true, workItemIdentifierSnapshot: true },
         });
         description = wi.description ?? undefined;
+        issueId = wi.externalProvider === "linear" ? wi.externalId ?? undefined : undefined;
         identifier = taskRun?.workItemIdentifierSnapshot ?? undefined;
         branch = taskRun?.branch ?? undefined;
       }
@@ -1137,6 +1159,10 @@ export class Relay {
       this.send(conn, {
         type: "session_available",
         sessionId: session.id,
+        workspaceId: !isPlanning && session.workItemId ? conn.workspaceId : undefined,
+        workItemId: !isPlanning ? session.workItemId ?? undefined : undefined,
+        issueId,
+        ...(!isPlanning && session.workItemId ? readTraceReportScope(session.personaMetadata, session.workItemId, conn.workspaceId) : {}),
         workingDirectory: session.workingDirectory ?? "",
         agentType: session.agentType,
         title: session.title ?? undefined,

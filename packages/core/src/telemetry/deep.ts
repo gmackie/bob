@@ -69,6 +69,8 @@ const safeKeys = new Set([
   "job.id",
   "execution.id",
   "session.id",
+  "issue.id",
+  "forgegraph.work_item.id",
   "retry.count",
   "queue.wait_ms",
   "messaging.operation",

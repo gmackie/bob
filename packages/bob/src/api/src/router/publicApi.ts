@@ -1,3 +1,6 @@
+import { agentRunGet } from "../handlers/agentRun";
+import { TRPCError } from "@trpc/server";
+import { workItemsDispatch } from "../handlers/workItems";
 import { z } from "zod/v4";
 
 import { agentRunStatusEnum } from "@bob/db/schema";
@@ -67,6 +70,17 @@ const oodaIntakeReceiptSchema = z.object({
 });
 
 export const publicApiRouter = {
+  getRunTraceResource: apiKeyReadProcedure
+    .input(z.object({ runId: z.string().uuid() }))
+    .query(({ ctx, input }) => agentRunGet({ db: ctx.db, userId: ctx.apiKeyAuth.userId }, input)),
+  dispatchExistingWorkItem: apiKeyWriteProcedure
+    .input(z.object({ workItemId: z.string().uuid(), agentType: z.string().min(1).max(64).optional() }))
+    .mutation(({ ctx, input }) => {
+      if (process.env.BOB_OODA_DISPATCH_ENABLED !== "true") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "API execution dispatch is disabled" });
+      }
+      return workItemsDispatch({ db: ctx.db, userId: ctx.session.user.id }, input);
+    }),
   // POST /workspaces — register a workspace
   registerWorkspace: apiKeyWriteProcedure
     .input(

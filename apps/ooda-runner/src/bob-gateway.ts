@@ -105,6 +105,11 @@ interface WorktreeContext {
 interface ServerSessionAvailable {
   type: "session_available";
   sessionId: string;
+  /** Gateway-resolved ownership; never inferred from a display identifier. */
+  workspaceId?: string;
+  workItemId?: string;
+  issueId?: string;
+  forgeGraphWorkItemId?: string;
   workingDirectory: string;
   agentType: string;
   title?: string;
@@ -946,7 +951,13 @@ export class BobGatewayConnector {
       carrier: readDispatchTrace(session.personaConfig),
       kind: "consumer",
       link: true,
-      attributes: { "session.id": session.sessionId, "messaging.operation": "process" },
+      attributes: {
+        "session.id": session.sessionId, "messaging.operation": "process",
+        ...(session.workspaceId ? { "workspace.id": session.workspaceId } : {}),
+        ...(session.workItemId ? { "work_item.id": session.workItemId } : {}),
+        ...(session.issueId ? { "issue.id": session.issueId } : {}),
+        ...(session.forgeGraphWorkItemId ? { "forgegraph.work_item.id": session.forgeGraphWorkItemId } : {}),
+      },
     });
   }
 
@@ -1026,7 +1037,7 @@ export class BobGatewayConnector {
     // (publicApiCreateRun matches it to the work item by externalId).
     const bobRunId = await this.bobReporter
       .startRun({
-        workItemId: session.identifier ?? session.sessionId,
+        workItemId: session.workItemId ?? session.identifier ?? session.sessionId,
         agentType: adapterId,
         title: session.title,
         agentConfig: { sessionId: session.sessionId },
