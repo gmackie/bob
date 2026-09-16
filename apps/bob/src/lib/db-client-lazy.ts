@@ -5,6 +5,7 @@
  * drizzle client per request. The worker entry calls `runWithDb()` to set
  * up the request-scoped client; the Proxy reads it on every access.
  */
+import { tracePostgres } from "@gmacko/core/telemetry/database";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -20,7 +21,7 @@ export function createDbClient(databaseUrl: string, isHyperdrive: boolean): Data
     max: 1,
     prepare: !isHyperdrive,
   });
-  return drizzle(client, { schema, casing: "snake_case" });
+  return drizzle(tracePostgres(client), { schema, casing: "snake_case" });
 }
 
 export function runWithDb<T>(databaseUrl: string, isHyperdrive: boolean, fn: () => T): T {

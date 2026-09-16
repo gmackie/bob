@@ -6,6 +6,7 @@ on:
   pull_request:
 
 env:
+  FG_REGISTRY_TOKEN: ${{ secrets.FG_REGISTRY_TOKEN }}
   NODE_VERSION: "24"
 
 jobs:
@@ -121,7 +122,31 @@ jobs:
       - name: Validate the worktree reaper
         run: node --test scripts/worktree-reap.test.mjs
 
+      - name: Configure private registry
+        run: |
+          printf '%s\n' '//npm.forgegraf.com/:_authToken=${FG_REGISTRY_TOKEN}' > "$RUNNER_TEMP/forgegraph.npmrc"
+          echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/forgegraph.npmrc" >> "$GITHUB_ENV"
+
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
+
+      - name: Install PostgreSQL tools for owned observability test
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql
+
+      - name: Record PostgreSQL latency/observability
+        run: python3 scripts/otel/test-database.py
+        env:
+          FG_OBSERVABILITY_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Upload private observability reports
+        if: always() && github.event.repository.private == true
+        uses: actions/upload-artifact@v3
+        with:
+          name: latency-observability-${{ github.event.pull_request.head.sha || github.sha }}
+          path: packages/core/.fg/observability/
+          retention-days: 7
+          if-no-files-found: error
 
       - name: Validate instrumented host launcher
         run: node --test scripts/otel/host-launcher.test.mjs
@@ -381,6 +406,11 @@ jobs:
           cache: pnpm
       # The web build currently consumes root-hoisted workspace dependencies,
       # so retain the full install while suppressing unrelated desktop binaries.
+      - name: Configure private registry
+        run: |
+          printf '%s\n' '//npm.forgegraf.com/:_authToken=${FG_REGISTRY_TOKEN}' > "$RUNNER_TEMP/forgegraph.npmrc"
+          echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/forgegraph.npmrc" >> "$GITHUB_ENV"
+
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
       - name: Deploy CF Worker (vinext deploy, code-only)
         working-directory: apps/bob
@@ -424,6 +454,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+      - name: Configure private registry
+        run: |
+          printf '%s\n' '//npm.forgegraf.com/:_authToken=${FG_REGISTRY_TOKEN}' > "$RUNNER_TEMP/forgegraph.npmrc"
+          echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/forgegraph.npmrc" >> "$GITHUB_ENV"
+
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
       - name: Build and conditionally deploy OODA edge
         working-directory: apps/ooda-edge
