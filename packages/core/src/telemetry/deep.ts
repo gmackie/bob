@@ -62,6 +62,8 @@ const kinds = {
   consumer: SpanKind.CONSUMER,
 };
 const safeKeys = new Set([
+  "db.system.name",
+  "db.operation.name",
   "workspace.id",
   "work_item.id",
   "task_run.id",

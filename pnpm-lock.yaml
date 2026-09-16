@@ -1938,6 +1938,9 @@ importers:
       '@electric-sql/pglite':
         specifier: 0.3.16
         version: 0.3.16
+      '@forgegraph/otel':
+        specifier: 0.1.8
+        version: 0.1.8
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.1
@@ -3960,6 +3963,12 @@ packages:
   '@forgegraph/check-events@0.1.7':
     resolution: {integrity: sha512-5mWo5j1MNKKVa3ObbEBhk9RZGquoAjtUMATPJ9vJj1lwYQaJsgKR7m1tlm/oxdEG35cTJiIH2DYUwH1fWx3dvg==}
     hasBin: true
+
+  '@forgegraph/log@0.1.2':
+    resolution: {integrity: sha512-Eu2t2j+3ETyhqwsyzjgbOMMfn748ZSHkGDzKya0WwbcTeZCRMxkijv+u2Jt92h7Q/qHFnrXSqv0i5yCaXrBYhg==}
+
+  '@forgegraph/otel@0.1.8':
+    resolution: {integrity: sha512-OCcv6tz3SL068Jd5OqL+kUpHyUgUdSWPoyu2zEFZqXZ7XQlFJm5/BCmiFXvu2MYxrfq1gjSeDFX13EP2rCvSyA==}
 
   '@forgegraph/oxlint-anti-slop@0.1.0':
     resolution: {integrity: sha512-Wd/TklJZMbLNgMiv7MXvrK/6l1Yswj4/0b2MiECwxSNpKSdJhw7zzJlp8VWXmideUurmR3OIHu1tRr7NCYrRqg==}
@@ -16591,6 +16600,12 @@ snapshots:
   '@floating-ui/utils@0.2.11': {}
 
   '@forgegraph/check-events@0.1.7': {}
+
+  '@forgegraph/log@0.1.2': {}
+
+  '@forgegraph/otel@0.1.8':
+    dependencies:
+      '@forgegraph/log': 0.1.2
 
   '@forgegraph/oxlint-anti-slop@0.1.0(@oxlint/plugins@1.78.0)':
     dependencies:
