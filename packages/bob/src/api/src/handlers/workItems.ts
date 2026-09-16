@@ -4,6 +4,7 @@
  *
  * Phase 7B-4D-beta Task 9.
  */
+import { createExecutionBranch } from "../services/dispatch/executionBranch";
 import { createTrackedExecution } from "../services/dispatch/trackedExecution";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, gte, isNull, or, sql } from "@bob/db";
@@ -1154,8 +1155,9 @@ export async function workItemsDispatch(
       })
     : null;
   const repoPath = repository?.path ?? FALLBACK_DIR;
-  // Stable, filesystem-safe feature branch per work item.
-  const branch = `bob/${identifier.toLowerCase().replace(/[^a-z0-9._/-]+/g, "-")}`;
+  // A fresh sibling ref avoids collisions with both legacy bare item refs and
+  // canonical bob/<identifier>/<title> refs, without resetting earlier work.
+  const branch = createExecutionBranch(workItem.title);
 
   const session = await createTrackedExecution(ctx.db, {
       userId: ctx.userId,
