@@ -131,6 +131,15 @@ function extractParsedEventText(value: unknown): string {
   if (!value || typeof value !== "object") return "";
 
   const record = value as Record<string, unknown>;
+  // Codex exec emits its final answer inside an item.completed envelope.
+  // Only completed agent messages belong in readable output; lifecycle,
+  // reasoning, and tool items are separate events.
+  if (typeof record.type === "string" && record.type.startsWith("item.")) {
+    const item = record.item;
+    if (record.type !== "item.completed" || !item || typeof item !== "object") return "";
+    const message = item as Record<string, unknown>;
+    return message.type === "agent_message" ? primitiveText(message.text) : "";
+  }
   const streams = streamText(record);
   if (streams) return streams;
 

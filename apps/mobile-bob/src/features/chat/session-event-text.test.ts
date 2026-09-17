@@ -106,3 +106,14 @@ describe("session event text extraction", () => {
     expect(text).toBe("2 tests passed\nwarning: deprecated flag");
   });
 });
+
+it("renders completed Codex messages while ignoring lifecycle and non-message items", () => {
+  const data = [
+    { type: "thread.started", thread_id: "thread-1" },
+    { type: "item.started", item: { type: "agent_message", text: "partial" } },
+    { type: "item.completed", item: { type: "reasoning", text: "internal" } },
+    { type: "item.completed", item: { type: "agent_message", text: "BOB_EFFECT_PRODUCTION_ACCEPTANCE_OK" } },
+    { type: "turn.completed", usage: { output_tokens: 37 } },
+  ].map(event => JSON.stringify(event)).join("\n");
+  expect(extractSessionEventText("output_chunk", { data, stream: "stdout" })).toBe("BOB_EFFECT_PRODUCTION_ACCEPTANCE_OK");
+});

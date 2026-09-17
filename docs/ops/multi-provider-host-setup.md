@@ -17,16 +17,23 @@ an inactive legacy service. Never print or commit its values.
 
 Codex needs an explicit Responses provider configuration, with `base_url`
 matching `OPENAI_BASE_URL`, `wire_api = "responses"`,
-`env_key = "OPENAI_API_KEY"`, and `requires_openai_auth = false`.
+`env_key = "CLIPROXY_API_KEY"`, and `requires_openai_auth = false`.
 Select that provider with `model_provider`. Verify with a harmless read-only
 Codex invocation under the service user and service environment. Listing
 proxy models alone does not prove inference works.
 
-The isolated Codex adapter strips `OPENAI_API_KEY` for subscription-mode
-invocations. Preserve that protection against accidental metered fallback;
-proxy-backed execution needs explicit configuration through the active
-runner's credential boundary before rollout. Do not change the shared Codex
-configuration while active runners lack the corresponding environment.
+The dedicated `CLIPROXY_API_KEY` identifies the host-managed proxy credential.
+The Codex adapter continues to strip `OPENAI_API_KEY` for subscription-mode
+invocations, preserving protection against accidental direct metered fallback.
+Bob gateway execution inherits the active runner environment. Isolated OODA
+agent jobs use a separate credential broker and must be configured independently.
+Do not change the shared Codex configuration while active runners lack the
+corresponding environment.
+
+Production verification on 2026-09-17: the active OODA runner loaded the proxy
+credential file, a Codex probe under its exact environment succeeded, and Bob's
+Effect-dispatched acceptance work completed with the expected model response.
+The legacy execution daemon remains stopped to avoid duplicate gateway claims.
 
 For local journals on a mounted volume, ensure the directory exists and the
 systemd service has `RequiresMountsFor` and `ReadWritePaths` for the resolved
