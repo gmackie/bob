@@ -1,7 +1,7 @@
 import { readTraceReportScope } from "./trace-report-scope.js";
 import type { WebSocket } from "ws";
 import { spawnFailureAgent } from "./spawn-failure";
-import { eq, and, or, gt, lt, inArray, asc, desc, sql, isNull } from "@bob/db";
+import { eq, and, or, gt, lt, inArray, asc, desc, sql, isNull, registerSessionAgentRun } from "@bob/db";
 import { db } from "@bob/db/client";
 import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts, pullRequests, runnerLeases, gatewayConfig, eventLog, workspaceMembers, user } from "@bob/db/schema";
 
@@ -1883,7 +1883,7 @@ export class Relay {
         // tenant-less workspace used to drop every run from the dashboard.
         const tenantId = await this.resolveWorkspaceTenantId(conn.workspaceId);
         if (tenantId) {
-          await db.insert(agentRuns).values({
+          await registerSessionAgentRun(db, {
             sessionId: session.id,
             workItemId: session.workItemId ?? session.title ?? session.id,
             workspaceId: conn.workspaceId,
@@ -1891,7 +1891,7 @@ export class Relay {
             agentType: session.agentType ?? "claude",
             agentConfig: (session as any).personaMetadata ?? undefined,
             status: "running",
-            startedAt: sql`now()`,
+            startedAt: new Date(),
           });
         } else {
           console.warn(

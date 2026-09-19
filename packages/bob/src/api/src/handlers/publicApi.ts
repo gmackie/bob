@@ -9,7 +9,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 
 import type { Db } from "@bob/db/client";
-import { and, desc, eq, inArray, sql } from "@bob/db";
+import { and, desc, eq, inArray, sql, registerSessionAgentRun } from "@bob/db";
 import {
   agentRuns,
   apiKeys,
@@ -649,18 +649,17 @@ export async function publicApiCreateRun(
     });
   }
 
-  const [run] = await ctx.db
-    .insert(agentRuns)
-    .values({
-      workItemId: resolvedWorkItemId,
-      ...(sessionId ? { sessionId } : {}),
-      workspaceId: input.workspaceId,
-      tenantId: workspace.tenantId,
-      agentType,
-      agentConfig: input.agentConfig ?? {},
-      status: "queued",
-    })
-    .returning();
+  const values = {
+    workItemId: resolvedWorkItemId,
+    workspaceId: input.workspaceId,
+    tenantId: workspace.tenantId,
+    agentType,
+    agentConfig: input.agentConfig ?? {},
+    status: "queued" as const,
+  };
+  const run = sessionId
+    ? await registerSessionAgentRun(ctx.db, { ...values, sessionId })
+    : (await ctx.db.insert(agentRuns).values(values).returning())[0];
 
   await notifyAgentRunChanged({
     workspaceId: run?.workspaceId ?? input.workspaceId,

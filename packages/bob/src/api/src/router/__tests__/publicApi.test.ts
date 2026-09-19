@@ -36,7 +36,9 @@ const createMockDb = () => {
     set: updateSet,
   }));
 
-  return {
+  const mockDb = {
+    transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb)),
+    select: vi.fn(() => ({ from: () => ({ where: () => ({ for: () => Promise.resolve([{ id: "session" }]) }) }) })),
     query: {
       tenantMembers: {
         findFirst: vi.fn(),
@@ -46,6 +48,7 @@ const createMockDb = () => {
         findFirst: vi.fn(),
       },
       workItems: { findFirst: vi.fn() },
+      chatConversations: { findFirst: vi.fn() },
       repositories: {
         findFirst: vi.fn(),
       },
@@ -64,6 +67,7 @@ const createMockDb = () => {
       updateSet,
     },
   };
+  return mockDb;
 };
 
 let createCaller: (db: MockDb) => ReturnType<TestRouter["createCaller"]>;
@@ -581,4 +585,20 @@ describe("publicApi dispatchExecution model validation", () => {
       }
     },
   );
+});
+
+it("reuses the gateway run when the runner reports a session", async () => {
+  const db = createMockDb();
+  const sessionId = "11111111-1111-4111-8111-111111111111";
+  const workspaceId = "33333333-3333-4333-8333-333333333333";
+  const workItemId = "44444444-4444-4444-8444-444444444444";
+  db.query.tenantMembers.findMany.mockResolvedValue([{ tenantId: "tenant-1" }]);
+  db.query.workspaces.findFirst.mockResolvedValue({ id: workspaceId, tenantId: "tenant-1" });
+  db.query.chatConversations.findFirst.mockResolvedValue({ id: sessionId, workItemId });
+  db.query.workItems.findFirst.mockResolvedValue({ id: workItemId, workspaceId });
+  const existing = { id: "gateway-run", sessionId, tenantId: "tenant-1", workspaceId, workItemId, agentType: "codex", status: "completed" };
+  db.query.agentRuns.findFirst.mockResolvedValue(existing);
+  const run = await createCaller(db).publicApi.createRun({ workspaceId, workItemId, agentType: "codex", agentConfig: { sessionId } });
+  expect(run).toEqual(existing);
+  expect(db.insert).not.toHaveBeenCalled();
 });
