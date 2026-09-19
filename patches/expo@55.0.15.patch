@@ -1,0 +1,17 @@
+diff --git a/src/winter/fetch/FetchResponse.ts b/src/winter/fetch/FetchResponse.ts
+index 647d80344a5ca372fb5504f0ca5f7cddfa6d7c04..9a88c31dc67a54bb66f0294b86dca2c91d6b8271 100644
+--- a/src/winter/fetch/FetchResponse.ts
++++ b/src/winter/fetch/FetchResponse.ts
+@@ -42,8 +42,10 @@ export class FetchResponse extends ConcreteNativeResponse implements Response {
+           });
+ 
+           response.addListener('didComplete', () => {
+-            controller.close();
+-            isControllerClosed = true;
++            if (!isControllerClosed) {
++              isControllerClosed = true;
++              controller.close();
++            }
+           });
+ 
+           response.addListener('didFailWithError', (error: string) => {
