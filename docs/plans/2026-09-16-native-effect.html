@@ -98,7 +98,7 @@
 <tr><td>Shared client</td><td>21 tests passed; typecheck; migration source guardrails</td></tr>
 <tr><td>Desktop shell</td><td>20 tests passed; typecheck; production build</td></tr>
 </tbody></table>
-<p>Verification covers 1,312 passing tests. No deployment, signed-in physical-device acceptance or live agent invocation was performed.</p>
+<p>Initial migration verification covered 1,312 passing tests before deployment. Subsequent production acceptance is recorded below; signed-in physical-device acceptance remains outstanding.</p>
 <details><summary>Explicit compatibility boundaries</summary><p>Public REST, Go daemon and gateway protocols remain supported. Server-side tRPC compatibility routes remain for older clients. OODA research and the separate external Planning service still use their own tRPC APIs; converting those services is a separate migration. Bob domain handlers still include Promise implementations behind Effect service and transport boundaries.</p></details>
 <h2>Portable runtime acceptance receipt</h2>
 <p>Passed real HTTP acceptance against a freshly staged Node application and isolated PGlite directory: signup/login, authenticated settings and assets, API-key authentication and revocation, foreign-tenant rejection, create work, dispatch tracking, workflow progress, fixture-artifact review, cross-account denial, and persistence after process restart.</p>
@@ -110,4 +110,17 @@
 <p>Final Worker version: <code>d8eb4c3f-739a-4668-8b88-829b9e8bb020</code>. Review formatter fix: <code>82d17ffe</code>. The live review JavaScript asset returned HTTP 200 and matched the tested build byte-for-byte. Production acceptance was repeated after deployment.</p>
 <p>Latest checks: 474 mobile tests; 350 web tests (347 in the broad run and 3 on an isolated retry after a setup timeout); both app typechecks; production build and deployment. A separate read-only review found no defects in the formatter fix.</p>
 <p>The competing legacy daemon remains stopped; the active runner is healthy with zero restarts after configuration. No browser connection was available for signed-in visual inspection. Production API, recorded output, and review-data transformation were verified; physical-device and visual browser acceptance remain unperformed.</p>
+<h2>Production lifecycle acceptance · 2026-09-18</h2>
+<p>Fixed duplicate run registration between the gateway and runner reporter. Both paths now register through a shared database transaction that locks the session row and reuses the existing run after checking its workspace, tenant and work-item identity. Existing terminal status is preserved by registration.</p>
+<p>Deployed commit <code>87e0530064912e13f67cf31c99e9b49f0bb15f27</code> to the gateway and Worker version <code>7c46008d-c64b-44cf-8406-71ed56041ad0</code>. The gateway passed its health check and the execution runner reconnected within five seconds. No database migration was needed.</p>
+<table><thead><tr><th>Check</th><th>Observed result</th></tr></thead><tbody>
+<tr><td>Create → run → review data</td><td>A new production work item completed through CLIProxy with exactly one completed run, ten recorded events, the expected acceptance response and work status in_review. Both desktop and mobile formatters extracted the response.</td></tr>
+<tr><td>Stop an active command</td><td>After the runner began the acceptance sleep command, Effect stop interrupted the session. Exactly one failed run remained, matching the current interrupted-run mapping. No sleep process remained on the runner.</td></tr>
+<tr><td>Runner health</td><td>Active with zero restarts after the stop check.</td></tr>
+<tr><td>Regression verification</td><td>17 API, 23 database and 162 gateway tests passed; one gateway test skipped. Affected typechecks, gateway build and module initialization passed. Independent review found no defects.</td></tr>
+</tbody></table>
+<p>The PGlite regression tests serialize transactions and do not independently prove PostgreSQL locking across separate connections. Production acceptance confirms the observed one-run outcome. Registration deduplication does not redesign the reporter's broader replay lifecycle.</p>
+<h2>iOS simulator startup · 2026-09-18</h2>
+<p>The installed development binary lacked the current ExpoCamera native module and could not start the current JavaScript bundle. Rebuilt the iOS development app with current native dependencies and installed it on the iPhone 17 Pro simulator running iOS 26.4. The native build passed. Local ad-hoc signing resolved the unsigned build's Keychain entitlement warning.</p>
+<p>The updated app now renders its sign-in screen without either startup error, connected to the production backend. An authenticated simulator session is required to continue visual work-item and review acceptance. No new native release was distributed. Temporary build-cache and CocoaPods-generated changes were excluded from the source commit.</p>
 <h2>Open Questions</h2><p>Core production create-work → live-agent → review-data acceptance passed. Verify the signed-in review page visually and on physical devices. Isolated OODA jobs use a separate credential broker; their proxy migration is outside the Bob gateway acceptance.</p></main></html>
