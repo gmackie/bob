@@ -30,7 +30,7 @@ import type {
 
 import { useSessionSocket } from "~/hooks/use-session-socket";
 import { useBobQueryClient } from "~/rpc/react";
-import { ProxyPanel } from "~/components/nodes/proxy-panel";
+import { ProxyPanel, type ProxyActionRequest } from "~/components/nodes/proxy-panel";
 import {
   PROVIDER_BILLING_URLS,
   buildHostMissionControl,
@@ -89,6 +89,13 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
    * dispatch_state; until one arrives the host snapshot is the source of truth.
    */
   const [dispatch, setDispatch] = useState<DispatchUi>({ kind: "idle" });
+  /**
+   * Proxy actions resolve asynchronously: the runner answers with a
+   * proxy_control_result frame and then pushes a fresh snapshot. `pending` is
+   * the request in flight; `result` is the proxy's last answer.
+   */
+  const [proxyPending, setProxyPending] = useState<ProxyActionRequest | null>(null);
+  const [proxyResult, setProxyResult] = useState<{ ok: boolean; detail?: string } | null>(null);
 
   const { data: gatewayInfo } = useQuery(
     bobQuery("agent.session.getGatewayWebSocketUrl").queryOptions(undefined, {
@@ -143,6 +150,10 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
     token: gatewayInfo?.token ?? "",
     enabled: Boolean(workspaceId && gatewayInfo?.url && gatewayInfo?.token),
     onHostSnapshot: (_ws, snapshot) => setHostSnapshot(snapshot),
+    onProxyControlResult: (message) => {
+      setProxyPending(null);
+      setProxyResult({ ok: message.ok, detail: message.detail });
+    },
     onAgentAuthPrompt,
     onAgentAuthResult,
     onDispatchState,
@@ -165,6 +176,24 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
   const dispatchMutation = useMutation(
     bobQuery("dispatchControl.set").mutationOptions({}),
   );
+  const proxyMutation = useMutation(
+    bobQuery("proxyControl.set").mutationOptions({}),
+  );
+
+  const setProxyAction = (request: ProxyActionRequest) => {
+    const requestId = crypto.randomUUID();
+    setProxyPending(request);
+    setProxyResult(null);
+    proxyMutation.mutate(
+      { workspaceId, requestId, action: request.action, ...(request.accountId ? { accountId: request.accountId } : {}) },
+      {
+        onError: (error) => {
+          setProxyPending(null);
+          setProxyResult({ ok: false, detail: error.message });
+        },
+      },
+    );
+  };
 
   const host = useMemo(
     () => (hostSnapshot ? buildHostMissionControl(hostSnapshot) : null),
@@ -393,7 +422,12 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
       {/* Where inference actually goes. Rendered only when this host is routed
           through the proxy; a host that is not shows nothing here rather than
           a panel that says "not configured". */}
-      <ProxyPanel snapshot={hostSnapshot} />
+      <ProxyPanel
+        snapshot={hostSnapshot}
+        onAction={setProxyAction}
+        pending={proxyPending}
+        lastResult={proxyResult}
+      />
 
       {phase.kind !== "idle" ? (
         <div

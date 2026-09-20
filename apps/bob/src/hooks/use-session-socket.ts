@@ -17,6 +17,7 @@ import {
   type ServerAgentAuthPrompt,
   type ServerAgentAuthResult,
   type ServerDispatchState,
+  type ServerProxyControlResult,
 } from "@bob/ws";
 
 // Re-export types that consumers depend on
@@ -68,6 +69,7 @@ interface UseSessionSocketOptions {
   onAgentAuthPrompt?: (message: ServerAgentAuthPrompt) => void;
   onAgentAuthResult?: (message: ServerAgentAuthResult) => void;
   onDispatchState?: (message: ServerDispatchState) => void;
+  onProxyControlResult?: (message: ServerProxyControlResult) => void;
   onWorkspaceStatusChanged?: (info: ServerSessionStatusChanged) => void;
   onWorkspaceEvent?: (message: ServerWorkspaceInvalidation) => void;
   onConnectionChange?: (state: ConnectionState) => void;
@@ -84,6 +86,7 @@ export function useSessionSocket({
   onAgentAuthPrompt,
   onAgentAuthResult,
   onDispatchState,
+  onProxyControlResult,
   onWorkspaceStatusChanged,
   onWorkspaceEvent,
   onConnectionChange,
@@ -110,6 +113,7 @@ export function useSessionSocket({
   const onAgentAuthPromptRef = useRef(onAgentAuthPrompt);
   const onAgentAuthResultRef = useRef(onAgentAuthResult);
   const onDispatchStateRef = useRef(onDispatchState);
+  const onProxyControlResultRef = useRef(onProxyControlResult);
   const onWorkspaceStatusChangedRef = useRef(onWorkspaceStatusChanged);
   const onWorkspaceEventRef = useRef(onWorkspaceEvent);
   const onConnectionChangeRef = useRef(onConnectionChange);
@@ -120,6 +124,7 @@ export function useSessionSocket({
   onAgentAuthPromptRef.current = onAgentAuthPrompt;
   onAgentAuthResultRef.current = onAgentAuthResult;
   onDispatchStateRef.current = onDispatchState;
+  onProxyControlResultRef.current = onProxyControlResult;
   onWorkspaceStatusChangedRef.current = onWorkspaceStatusChanged;
   onWorkspaceEventRef.current = onWorkspaceEvent;
   onConnectionChangeRef.current = onConnectionChange;
@@ -171,6 +176,9 @@ export function useSessionSocket({
       },
       onDispatchState: (message: ServerDispatchState) => {
         onDispatchStateRef.current?.(message);
+      },
+      onProxyControlResult: (message: ServerProxyControlResult) => {
+        onProxyControlResultRef.current?.(message);
       },
       onAgentAuthResult: (message: ServerAgentAuthResult) => {
         onAgentAuthResultRef.current?.(message);

@@ -51,6 +51,58 @@ describe("ProxyPanel", () => {
     expect(html).not.toContain("graham");
   });
 
+  it("offers the actions that fit each account's state, and a connection test", () => {
+    const html = renderToStaticMarkup(
+      <ProxyPanel
+        now={now}
+        onAction={() => {}}
+        snapshot={snapshot({
+          origin: "http://p",
+          reachable: true,
+          checkedAt: now.toISOString(),
+          accounts: [
+            { id: "on", provider: "claude", label: "a…@x", status: "ready", requests24h: { success: 0, failed: 0 } },
+            { id: "off", provider: "codex", label: "b…@x", status: "disabled", requests24h: { success: 0, failed: 0 } },
+          ],
+        })}
+      />,
+    );
+    // A ready account can be refreshed or disabled; a disabled one can only be enabled.
+    expect(html).toMatch(/data-testid="proxy-action-refresh-on"/);
+    expect(html).toMatch(/data-testid="proxy-action-disable-on"/);
+    expect(html).not.toMatch(/data-testid="proxy-action-enable-on"/);
+    expect(html).toMatch(/data-testid="proxy-action-enable-off"/);
+    expect(html).not.toMatch(/data-testid="proxy-action-disable-off"/);
+    expect(html).toMatch(/data-testid="proxy-action-test"/);
+  });
+
+  it("renders no controls when there is no way to act, rather than buttons that do nothing", () => {
+    const html = renderToStaticMarkup(
+      <ProxyPanel
+        now={now}
+        snapshot={snapshot({
+          origin: "http://p",
+          reachable: true,
+          checkedAt: now.toISOString(),
+          accounts: [{ id: "on", provider: "claude", label: "a…@x", status: "ready", requests24h: { success: 0, failed: 0 } }],
+        })}
+      />,
+    );
+    expect(html).not.toMatch(/data-testid="proxy-action-/);
+  });
+
+  it("shows the proxy's answer to the last action", () => {
+    const html = renderToStaticMarkup(
+      <ProxyPanel
+        now={now}
+        onAction={() => {}}
+        lastResult={{ ok: false, detail: "proxy answered HTTP 401: invalid management key" }}
+        snapshot={snapshot({ origin: "http://p", reachable: true, checkedAt: now.toISOString(), accounts: [] })}
+      />,
+    );
+    expect(html).toContain("invalid management key");
+  });
+
   it("explains missing accounts and names the variable that fixes it", () => {
     const html = renderToStaticMarkup(
       <ProxyPanel

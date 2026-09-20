@@ -118,7 +118,7 @@
 
   <!-- one <i> per phase -->
   <div class="progress" aria-label="Phase progress">
-    <i class="done"></i><i class="done"></i><i class="active"></i><i class="active"></i><i class="active"></i><i></i><i></i>
+    <i class="done"></i><i class="done"></i><i class="done"></i><i class="active"></i><i class="active"></i><i></i><i></i>
   </div>
 
   <h2>Overview</h2>
@@ -205,7 +205,7 @@
   <ul class="timeline">
     <li class="done"><b>Phase 0 — Baseline</b><br>Production state surveyed; gaps confirmed; branch chosen. 2026-09-20.</li>
     <li class="done"><b>Phase 1 — Proxy as an auth mode</b><br>Landed 2026-09-20: proxy transport for jobs and host turns, proxy-aware probe, <code>check_proxy</code> remedy. 24 new tests.</li>
-    <li class="active"><b>Phase 2 — Proxy telemetry</b><br>Shared wire model, runner monitor, server RPC and actions.</li>
+    <li class="done"><b>Phase 2 — Proxy telemetry</b><br>Landed 2026-09-20: wire model, runner monitor, proxyControl.set end to end (API → gateway → runner → proxy).</li>
     <li><b>Phase 3 — Web monitoring</b><br>Nodes, Providers, Runs and Settings render and act on proxy state.</li>
     <li><b>Phase 4 — Mobile &amp; tablet monitoring</b><br>Same model on the phone; notifications for the two failure modes that matter.</li>
     <li><b>Phase 5 — Navigation &amp; polish</b><br>Web sidebar audit, mobile tab bar, consistent headers, empty and error states.</li>
@@ -245,15 +245,15 @@
     <p>The probe stays an <em>estimate</em>: the outcome latch (402 / 401 / 429 from real runs) remains authoritative. The change is only <em>what</em> the estimate looks at.</p>
   </details>
 
-  <h2>Phase 2 — Proxy telemetry <span class="badge active">Active</span></h2>
+  <h2>Phase 2 — Proxy telemetry <span class="badge done">Done</span></h2>
   <p>Carry proxy state through the same heartbeat that already carries agent health, and give the server a way to act on the proxy without the runner in the loop.</p>
   <table>
     <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
     <tbody>
       <tr><td>Shared wire model: <code>ProxySnapshotWire</code> (reachable, version, latencyMs, checkedAt, accounts[], usage) and <code>ProxyAccountWire</code> (provider, label with the email masked, status ready|cooldown|disabled|error, cooldownUntil, models[], lastRefresh). Add optional <code>proxy?</code> to <code>HostSnapshotWire</code>; <code>undefined</code> means "not configured".</td><td><code>packages/bob/src/ws/src/protocol.ts</code>, new <code>proxy-health.ts</code></td><td>Type tests; redaction test (no raw email survives).</td><td><span class="badge done">Done</span></td></tr>
       <tr><td>Runner <code>proxy-monitor.ts</code>: on each heartbeat poll <code>auth-files</code>, <code>quota/providers</code>, <code>api-key-usage</code>; fold into the snapshot; derive <code>ProviderHealthWire.status</code> per provider from account states (all cooling → <code>rate_limited</code>, none → <code>unauthenticated</code>).</td><td><code>apps/ooda-runner/src/proxy-monitor.ts</code>, <code>agent-credentials.ts</code></td><td>Tests with recorded management responses; fold rules covered per state.</td><td><span class="badge done">Done</span></td></tr>
-      <tr><td>Management key custody: runner reads <code>CLIPROXY_MANAGEMENT_KEY</code> from its env file; server stores it as a workspace secret via the existing secrets router for actions. Never logged, never in a snapshot.</td><td><code>packages/bob/src/api/src/router/secrets.ts</code></td><td>Grep test in CI: key name never appears in snapshot serialisers.</td><td><span class="badge todo">Todo</span></td></tr>
-      <tr><td>RPC: <code>nodes.proxy.get</code> (from gateway snapshot cache), <code>nodes.proxy.logs</code> (last N lines, redacted), actions <code>proxy.refreshAccount</code>, <code>proxy.setAccountEnabled</code>, <code>proxy.testConnection</code>; admin-gated.</td><td><code>packages/core/src/contracts</code>, <code>packages/bob/src/api/src/handlers/proxy.ts</code>, edge router</td><td>Handler tests; contract typechecks in web, mobile, desktop clients.</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Management key custody: the key stays on the runner host only (<code>CLIPROXY_MANAGEMENT_KEY</code> in its env file). Actions relay through the gateway to the daemon, like dispatch control; the server never holds the key and it never crosses the wire.</td><td><code>apps/ooda-runner/src/proxy-control.ts</code>, gateway <code>/internal/proxy-control</code></td><td>Runner tests: refuses actions without the key; results never echo a key.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>RPC: <code>nodes.proxy.get</code> (from gateway snapshot cache), <code>nodes.proxy.logs</code> (last N lines, redacted), actions <code>proxy.refreshAccount</code>, <code>proxy.setAccountEnabled</code>, <code>proxy.testConnection</code>; admin-gated.</td><td><code>packages/core/src/contracts</code>, <code>packages/bob/src/api/src/handlers/proxy.ts</code>, edge router</td><td>Handler tests; contract typechecks in web, mobile, desktop clients.</td><td><span class="badge done">Done</span></td></tr>
       <tr><td>Gateway: broadcast <code>proxy_state_changed</code> when an account flips state, alongside <code>provider_capacity_changed</code>.</td><td><code>apps/bob-ws-gateway/src/relay.ts</code></td><td>Relay test: state flip emits once, not per heartbeat.</td><td><span class="badge todo">Todo</span></td></tr>
     </tbody>
   </table>
