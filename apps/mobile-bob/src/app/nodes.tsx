@@ -5,6 +5,7 @@ import { useGateway } from "~/hooks/use-gateway";
 import { RelatedAppsCard } from "~/features/links/RelatedAppsCard";
 import { buildNodeLights } from "~/features/nodes/node-lights-model";
 import type { LightTone } from "~/features/nodes/node-lights-model";
+import { ProxyCard } from "~/features/nodes/ProxyCard";
 
 /**
  * Agent lights for the workspace's host.
@@ -76,6 +77,10 @@ export default function NodesScreen() {
             ))}
           </View>
         ) : null}
+
+        {/* Where inference actually goes. Nothing is rendered for a host that
+            is not routed through the proxy. */}
+        <ProxyCard snapshot={hostSnapshot} />
 
         {/* Bob does not render deploys or node infra; ForgeGraph does. */}
         <RelatedAppsCard

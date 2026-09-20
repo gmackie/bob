@@ -7,3 +7,4 @@ export type { BobWsClientOptions, ConnectionState, IWebSocket, IWebSocketConstru
 // the same agent.
 export * from "./provider-health.js";
 export * from "./proxy-health.js";
+export * from "./proxy-panel-model.js";

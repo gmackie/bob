@@ -118,7 +118,7 @@
 
   <!-- one <i> per phase -->
   <div class="progress" aria-label="Phase progress">
-    <i class="done"></i><i class="done"></i><i class="active"></i><i></i><i></i><i></i><i></i>
+    <i class="done"></i><i class="done"></i><i class="active"></i><i class="active"></i><i class="active"></i><i></i><i></i>
   </div>
 
   <h2>Overview</h2>
@@ -250,20 +250,20 @@
   <table>
     <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
     <tbody>
-      <tr><td>Shared wire model: <code>ProxySnapshotWire</code> (reachable, version, latencyMs, checkedAt, accounts[], usage) and <code>ProxyAccountWire</code> (provider, label with the email masked, status ready|cooldown|disabled|error, cooldownUntil, models[], lastRefresh). Add optional <code>proxy?</code> to <code>HostSnapshotWire</code>; <code>undefined</code> means "not configured".</td><td><code>packages/bob/src/ws/src/protocol.ts</code>, new <code>proxy-health.ts</code></td><td>Type tests; redaction test (no raw email survives).</td><td><span class="badge todo">Todo</span></td></tr>
-      <tr><td>Runner <code>proxy-monitor.ts</code>: on each heartbeat poll <code>auth-files</code>, <code>quota/providers</code>, <code>api-key-usage</code>; fold into the snapshot; derive <code>ProviderHealthWire.status</code> per provider from account states (all cooling → <code>rate_limited</code>, none → <code>unauthenticated</code>).</td><td><code>apps/ooda-runner/src/proxy-monitor.ts</code>, <code>agent-credentials.ts</code></td><td>Tests with recorded management responses; fold rules covered per state.</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Shared wire model: <code>ProxySnapshotWire</code> (reachable, version, latencyMs, checkedAt, accounts[], usage) and <code>ProxyAccountWire</code> (provider, label with the email masked, status ready|cooldown|disabled|error, cooldownUntil, models[], lastRefresh). Add optional <code>proxy?</code> to <code>HostSnapshotWire</code>; <code>undefined</code> means "not configured".</td><td><code>packages/bob/src/ws/src/protocol.ts</code>, new <code>proxy-health.ts</code></td><td>Type tests; redaction test (no raw email survives).</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Runner <code>proxy-monitor.ts</code>: on each heartbeat poll <code>auth-files</code>, <code>quota/providers</code>, <code>api-key-usage</code>; fold into the snapshot; derive <code>ProviderHealthWire.status</code> per provider from account states (all cooling → <code>rate_limited</code>, none → <code>unauthenticated</code>).</td><td><code>apps/ooda-runner/src/proxy-monitor.ts</code>, <code>agent-credentials.ts</code></td><td>Tests with recorded management responses; fold rules covered per state.</td><td><span class="badge done">Done</span></td></tr>
       <tr><td>Management key custody: runner reads <code>CLIPROXY_MANAGEMENT_KEY</code> from its env file; server stores it as a workspace secret via the existing secrets router for actions. Never logged, never in a snapshot.</td><td><code>packages/bob/src/api/src/router/secrets.ts</code></td><td>Grep test in CI: key name never appears in snapshot serialisers.</td><td><span class="badge todo">Todo</span></td></tr>
       <tr><td>RPC: <code>nodes.proxy.get</code> (from gateway snapshot cache), <code>nodes.proxy.logs</code> (last N lines, redacted), actions <code>proxy.refreshAccount</code>, <code>proxy.setAccountEnabled</code>, <code>proxy.testConnection</code>; admin-gated.</td><td><code>packages/core/src/contracts</code>, <code>packages/bob/src/api/src/handlers/proxy.ts</code>, edge router</td><td>Handler tests; contract typechecks in web, mobile, desktop clients.</td><td><span class="badge todo">Todo</span></td></tr>
       <tr><td>Gateway: broadcast <code>proxy_state_changed</code> when an account flips state, alongside <code>provider_capacity_changed</code>.</td><td><code>apps/bob-ws-gateway/src/relay.ts</code></td><td>Relay test: state flip emits once, not per heartbeat.</td><td><span class="badge todo">Todo</span></td></tr>
     </tbody>
   </table>
 
-  <h2>Phase 3 — Web monitoring <span class="badge todo">Todo</span></h2>
+  <h2>Phase 3 — Web monitoring <span class="badge active">Active</span></h2>
   <p>Render proxy state where operators already look, and make the three actions available without leaving Bob.</p>
   <table>
     <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
     <tbody>
-      <tr><td>Nodes page: "Inference proxy" panel — reachability, version, latency; accounts table (provider, masked account, status, cooldown countdown, quota bar, models); refresh / enable / disable per row.</td><td><code>apps/bob/src/app/(dashboard)/nodes/page.tsx</code>, new <code>components/nodes/proxy-panel.tsx</code></td><td>Storybook-free: vitest on the view-model; manual check against production.</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Nodes page: "Inference proxy" panel — reachability, version, latency; accounts table (provider, masked account, status, cooldown countdown, quota bar, models); refresh / enable / disable per row.</td><td><code>apps/bob/src/app/(dashboard)/nodes/page.tsx</code>, new <code>components/nodes/proxy-panel.tsx</code></td><td>Storybook-free: vitest on the view-model; manual check against production.</td><td><span class="badge done">Done</span></td></tr>
       <tr><td>Provider capacity cards derive from proxy accounts when present; fall back to host probe otherwise; badge says which source.</td><td><code>components/dashboard/provider-capacity-cards.tsx</code>, <code>provider-health.ts</code></td><td>View-model tests for both sources.</td><td><span class="badge todo">Todo</span></td></tr>
       <tr><td>Runs: show auth mode and, when the proxy reports it, the account that served the run.</td><td><code>runs/[runId]/page.tsx</code>, run metadata</td><td>Run detail renders <code>proxy · codex-…</code>.</td><td><span class="badge todo">Todo</span></td></tr>
       <tr><td>Settings → Providers → "Inference proxy": base URL, management key (write-only), test connection, auth-mode default per provider.</td><td><code>settings/page.tsx</code>, settings section</td><td>Test connection round-trips through <code>proxy.testConnection</code>.</td><td><span class="badge todo">Todo</span></td></tr>
@@ -271,11 +271,11 @@
     </tbody>
   </table>
 
-  <h2>Phase 4 — Mobile &amp; tablet monitoring <span class="badge todo">Todo</span></h2>
+  <h2>Phase 4 — Mobile &amp; tablet monitoring <span class="badge active">Active</span></h2>
   <table>
     <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
     <tbody>
-      <tr><td>Nodes screen: proxy card with one light per account; tap → account detail (status, cooldown, models, last refresh); refresh / enable / disable with confirmation.</td><td><code>apps/mobile-bob/src/app/nodes.tsx</code>, <code>features/nodes/proxy-lights-model.ts</code></td><td>Model tests: stale → grey, cooldown → amber, disabled → grey with label.</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Nodes screen: proxy card with one light per account; tap → account detail (status, cooldown, models, last refresh); refresh / enable / disable with confirmation.</td><td><code>apps/mobile-bob/src/app/nodes.tsx</code>, <code>features/nodes/proxy-lights-model.ts</code></td><td>Model tests: stale → grey, cooldown → amber, disabled → grey with label.</td><td><span class="badge done">Done</span></td></tr>
       <tr><td>Home host light incorporates proxy reachability; "Needs you" gains a row when a provider has no ready accounts.</td><td><code>features/home/home-model.ts</code>, <code>node-lights-model.ts</code></td><td>Home model tests extended.</td><td><span class="badge todo">Todo</span></td></tr>
       <tr><td>Settings → Providers section shows proxy config read-only with test connection (phone) and editable on tablet split view.</td><td><code>features/settings/sections.tsx</code></td><td>Both shells render from one section definition.</td><td><span class="badge todo">Todo</span></td></tr>
       <tr><td>Notification types <code>proxy_unreachable</code> and <code>provider_no_ready_accounts</code> in the preferences matrix; push on by default for both.</td><td><code>packages/bob/src/notifications/src/preferences.ts</code>, ws-gateway <code>push-gate.ts</code></td><td>Preference resolver tests; gateway emits once per state change.</td><td><span class="badge todo">Todo</span></td></tr>

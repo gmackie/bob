@@ -126,4 +126,13 @@ describe("buildNodeLights", () => {
       "402 Payment Required",
     );
   });
+  it("reads an unreachable inference proxy as something a person can act on", () => {
+    // The CLI is installed and the accounts are fine; the transport is down.
+    // Amber, like sign-in and top-up: there is a remedy, and it is "check the proxy".
+    const lights = buildNodeLights(
+      snapshot([{ provider: "claude", status: "proxy_unreachable" }], fresh),
+      { activeRunCount: 0, now },
+    );
+    expect(lights.lights[0]).toMatchObject({ statusLabel: "Proxy unreachable", tone: "amber" });
+  });
 });

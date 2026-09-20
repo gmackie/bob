@@ -30,6 +30,7 @@ import type {
 
 import { useSessionSocket } from "~/hooks/use-session-socket";
 import { useBobQueryClient } from "~/rpc/react";
+import { ProxyPanel } from "~/components/nodes/proxy-panel";
 import {
   PROVIDER_BILLING_URLS,
   buildHostMissionControl,
@@ -69,6 +70,7 @@ function statusTone(status: string): string {
     case "rate_limited":
       return "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-300";
     case "unauthenticated":
+    case "proxy_unreachable":
       return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
     default:
       return "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300";
@@ -365,6 +367,18 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
                   {PROVIDER_INSTALL_HINTS[provider.provider] ?? "not installed"}
                 </span>
               ) : null}
+              {/* The CLI is installed and the accounts are fine; the transport
+                  is down. Neither "sign in" nor "install" would help. */}
+              {provider.remedy === "check_proxy" ? (
+                <span className="text-xs text-red-700 dark:text-red-300">
+                  inference proxy unreachable — see below
+                </span>
+              ) : null}
+              {provider.via === "proxy" ? (
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  via proxy
+                </span>
+              ) : null}
             </div>
 
             {provider.detail ? (
@@ -375,6 +389,11 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
           </div>
         ))}
       </div>
+
+      {/* Where inference actually goes. Rendered only when this host is routed
+          through the proxy; a host that is not shows nothing here rather than
+          a panel that says "not configured". */}
+      <ProxyPanel snapshot={hostSnapshot} />
 
       {phase.kind !== "idle" ? (
         <div

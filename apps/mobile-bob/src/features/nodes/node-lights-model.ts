@@ -50,8 +50,14 @@ const STALE_AFTER_MS = 90_000;
 function toneFor(status: string, stale: boolean): LightTone {
   if (stale) return "grey";
   if (status === "ready") return "green";
-  // Everything with a remedy a person can act on.
-  if (status === "unauthenticated" || status === "no_credit" || status === "rate_limited") {
+  // Everything with a remedy a person can act on — including an unreachable
+  // inference proxy, whose remedy is "check the proxy".
+  if (
+    status === "unauthenticated" ||
+    status === "no_credit" ||
+    status === "rate_limited" ||
+    status === "proxy_unreachable"
+  ) {
     return "amber";
   }
   return "grey";
