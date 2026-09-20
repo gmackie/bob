@@ -118,7 +118,7 @@
 
   <!-- one <i> per phase -->
   <div class="progress" aria-label="Phase progress">
-    <i class="done"></i><i class="active"></i><i></i><i></i><i></i><i></i><i></i>
+    <i class="done"></i><i class="done"></i><i class="active"></i><i></i><i></i><i></i><i></i>
   </div>
 
   <h2>Overview</h2>
@@ -204,8 +204,8 @@
   <h2>Milestones</h2>
   <ul class="timeline">
     <li class="done"><b>Phase 0 — Baseline</b><br>Production state surveyed; gaps confirmed; branch chosen. 2026-09-20.</li>
-    <li class="active"><b>Phase 1 — Proxy as an auth mode</b><br>Runner honours <code>proxy</code> for every execution path; probe becomes proxy-aware.</li>
-    <li><b>Phase 2 — Proxy telemetry</b><br>Shared wire model, runner monitor, server RPC and actions.</li>
+    <li class="done"><b>Phase 1 — Proxy as an auth mode</b><br>Landed 2026-09-20: proxy transport for jobs and host turns, proxy-aware probe, <code>check_proxy</code> remedy. 24 new tests.</li>
+    <li class="active"><b>Phase 2 — Proxy telemetry</b><br>Shared wire model, runner monitor, server RPC and actions.</li>
     <li><b>Phase 3 — Web monitoring</b><br>Nodes, Providers, Runs and Settings render and act on proxy state.</li>
     <li><b>Phase 4 — Mobile &amp; tablet monitoring</b><br>Same model on the phone; notifications for the two failure modes that matter.</li>
     <li><b>Phase 5 — Navigation &amp; polish</b><br>Web sidebar audit, mobile tab bar, consistent headers, empty and error states.</li>
@@ -226,17 +226,17 @@
     </tbody>
   </table>
 
-  <h2>Phase 1 — Proxy as a provider auth mode <span class="badge active">Active</span></h2>
+  <h2>Phase 1 — Proxy as a provider auth mode <span class="badge done">Done</span></h2>
   <p>Make the runner understand the proxy as a third auth mode alongside <code>subscription</code> and <code>api_key</code>, so every execution path can use it and health checks look at the thing that actually serves requests.</p>
   <table>
     <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
     <tbody>
-      <tr><td>Add <code>authMode: "proxy"</code>: forward <code>ANTHROPIC_BASE_URL</code>, <code>ANTHROPIC_AUTH_TOKEN</code>, <code>OPENAI_BASE_URL</code>, <code>CLIPROXY_API_KEY</code>; no credential copies; strip metered keys as today.</td><td><code>subscription-runtime-broker.ts</code></td><td>Unit tests: proxy env forwarded, OAuth files not copied, metered keys absent.</td><td><span class="badge todo">Todo</span></td></tr>
-      <tr><td>Write a per-run <code>CODEX_HOME/config.toml</code> with the <code>cliproxy</code> Responses provider so isolated jobs use it without touching the host's shared config.</td><td><code>subscription-runtime-broker.ts</code>, new <code>codex-proxy-config.ts</code></td><td>Test renders <code>model_provider="cliproxy"</code>, <code>wire_api="responses"</code>, <code>env_key="CLIPROXY_API_KEY"</code>.</td><td><span class="badge todo">Todo</span></td></tr>
-      <tr><td>Runner config: <code>BOB_PROVIDER_AUTH_MODE</code> (<code>proxy</code> | <code>subscription</code> | <code>api_key</code>) with per-provider overrides; default <code>proxy</code> when <code>CLIPROXY_BASE_URL</code> is set.</td><td><code>apps/ooda-runner/src/config.ts</code>, <code>agent-job-worker.ts</code>, <code>host-turn-worker.ts</code></td><td>Tests for resolution order; existing callers that hardcode <code>"subscription"</code> read the resolver.</td><td><span class="badge todo">Todo</span></td></tr>
-      <tr><td>Proxy-aware probe: in proxy mode, <code>probeCliProvider</code> checks <code>GET /v1/models</code> with the API key and per-provider model presence instead of <code>codex login status</code>; outcome latch unchanged.</td><td><code>apps/bob-execution/src/providers/cli-provider.ts</code></td><td>Test: 401 → <code>unauthenticated</code>; missing provider models → <code>unavailable</code>; ok → <code>ready</code>; latched 402 still wins.</td><td><span class="badge todo">Todo</span></td></tr>
-      <tr><td>Retire the host credential-health unit's direct OAuth checks: run the proxy-aware probe from the runner instead; document the change in the ops doc.</td><td><code>docs/ops/multi-provider-host-setup.md</code></td><td>Unit no longer in failed state after deploy (Phase 6).</td><td><span class="badge todo">Todo</span></td></tr>
-      <tr><td>Dispatch gate remedy <code>proxy_unreachable</code> → "check proxy", distinct from <code>sign_in</code>.</td><td><code>dispatch-gate.ts</code>, <code>provider-health.ts</code></td><td>Test maps the new failure kind to the new remedy.</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Add <code>authMode: "proxy"</code>: forward <code>ANTHROPIC_BASE_URL</code>, <code>ANTHROPIC_AUTH_TOKEN</code>, <code>OPENAI_BASE_URL</code>, <code>CLIPROXY_API_KEY</code>; no credential copies; strip metered keys as today.</td><td><code>subscription-runtime-broker.ts</code></td><td>Unit tests: proxy env forwarded, OAuth files not copied, metered keys absent.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Write a per-run <code>CODEX_HOME/config.toml</code> with the <code>cliproxy</code> Responses provider so isolated jobs use it without touching the host's shared config.</td><td><code>subscription-runtime-broker.ts</code>, new <code>codex-proxy-config.ts</code></td><td>Test renders <code>model_provider="cliproxy"</code>, <code>wire_api="responses"</code>, <code>env_key="CLIPROXY_API_KEY"</code>.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Runner config: <code>BOB_PROVIDER_AUTH_MODE</code> (<code>proxy</code> | <code>subscription</code> | <code>api_key</code>) with per-provider overrides; default <code>proxy</code> when <code>CLIPROXY_BASE_URL</code> is set.</td><td><code>apps/ooda-runner/src/config.ts</code>, <code>agent-job-worker.ts</code>, <code>host-turn-worker.ts</code></td><td>Tests for resolution order; existing callers that hardcode <code>"subscription"</code> read the resolver.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Proxy-aware probe: in proxy mode, <code>probeCliProvider</code> checks <code>GET /v1/models</code> with the API key and per-provider model presence instead of <code>codex login status</code>; outcome latch unchanged.</td><td><code>apps/bob-execution/src/providers/cli-provider.ts</code></td><td>Test: 401 → <code>unauthenticated</code>; missing provider models → <code>unavailable</code>; ok → <code>ready</code>; latched 402 still wins.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Retire the host credential-health unit's direct OAuth checks: run the proxy-aware probe from the runner instead; document the change in the ops doc.</td><td><code>docs/ops/multi-provider-host-setup.md</code></td><td>Unit no longer in failed state after deploy (Phase 6).</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Dispatch gate remedy <code>proxy_unreachable</code> → "check proxy", distinct from <code>sign_in</code>.</td><td><code>dispatch-gate.ts</code>, <code>provider-health.ts</code></td><td>Test maps the new failure kind to the new remedy.</td><td><span class="badge done">Done</span></td></tr>
     </tbody>
   </table>
   <details>
@@ -245,7 +245,7 @@
     <p>The probe stays an <em>estimate</em>: the outcome latch (402 / 401 / 429 from real runs) remains authoritative. The change is only <em>what</em> the estimate looks at.</p>
   </details>
 
-  <h2>Phase 2 — Proxy telemetry <span class="badge todo">Todo</span></h2>
+  <h2>Phase 2 — Proxy telemetry <span class="badge active">Active</span></h2>
   <p>Carry proxy state through the same heartbeat that already carries agent health, and give the server a way to act on the proxy without the runner in the loop.</p>
   <table>
     <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>

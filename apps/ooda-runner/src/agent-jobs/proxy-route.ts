@@ -9,70 +9,21 @@
  * gateway sessions on the same host used the proxy. This module makes the
  * route a first-class, testable input.
  *
- * The proxy is a *transport* of the subscription auth mode, not a third mode:
- * the accounts behind it are subscriptions, the billing policy is unchanged,
- * and the adapters' metered-key stripping still applies.
+ * The resolvers are shared with the execution daemon and the agent-health CLI
+ * (`@bob/execution/providers`) so the probe and the run cannot disagree about
+ * whether a host is on the proxy. What lives here is the run-side half: the
+ * environment a CLI needs, and the per-run Codex config.
  */
 
-export type ProxyRoute = {
-  /** Origin of the proxy, no trailing slash. */
-  baseUrl: string;
-  /** Proxy API key; presented as a bearer token to the proxy, never logged. */
-  apiKey: string;
-};
+import type { ProxyRoute } from "@bob/execution/providers";
 
-export type ProviderAuthPreference = "proxy" | "subscription" | "api_key";
-
-type Source = Record<string, string | undefined>;
-
-const PREFERENCES = new Set<ProviderAuthPreference>(["proxy", "subscription", "api_key"]);
-
-const PROXY_PROVIDERS = new Set(["claude", "codex", "openai"]);
-
-function trimmed(value: string | undefined): string | undefined {
-  const text = value?.trim();
-  return text ? text : undefined;
-}
-
-/** Both halves are required: a URL without a key 401s, a key without a URL is ignored. */
-export function resolveProxyRoute(source: Source): ProxyRoute | undefined {
-  const baseUrl = trimmed(source.CLIPROXY_BASE_URL)?.replace(/\/+$/, "");
-  const apiKey = trimmed(source.CLIPROXY_API_KEY);
-  if (!baseUrl || !apiKey) return undefined;
-  return { baseUrl, apiKey };
-}
-
-/** The CLIs that honour a base URL. Grok's CLI has no proxy transport here. */
-export function proxySupportsProvider(provider: string): boolean {
-  return PROXY_PROVIDERS.has(provider);
-}
-
-function parsePreference(value: string | undefined): ProviderAuthPreference | undefined {
-  const text = trimmed(value)?.toLowerCase();
-  return text && PREFERENCES.has(text as ProviderAuthPreference)
-    ? (text as ProviderAuthPreference)
-    : undefined;
-}
-
-/**
- * Most specific wins: `BOB_PROVIDER_AUTH_MODE_<PROVIDER>`, then
- * `BOB_PROVIDER_AUTH_MODE`, then "proxy" when a route exists, else
- * "subscription". Unrecognised values are ignored rather than guessed at, and
- * "proxy" is never returned for a provider the proxy cannot serve.
- */
-export function resolveProviderAuthPreference(
-  provider: string,
-  source: Source,
-): ProviderAuthPreference {
-  const perProvider = parsePreference(
-    source[`BOB_PROVIDER_AUTH_MODE_${provider.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`],
-  );
-  const global = parsePreference(source.BOB_PROVIDER_AUTH_MODE);
-  const fallback: ProviderAuthPreference = resolveProxyRoute(source) ? "proxy" : "subscription";
-  const chosen = perProvider ?? global ?? fallback;
-  if (chosen === "proxy" && !proxySupportsProvider(provider)) return "subscription";
-  return chosen;
-}
+export {
+  proxySupportsProvider,
+  resolveProviderAuthPreference,
+  resolveProxyRoute,
+  type ProviderAuthPreference,
+  type ProxyRoute,
+} from "@bob/execution/providers";
 
 /**
  * The environment a CLI needs to talk to the proxy. Claude takes a bearer token

@@ -24,6 +24,7 @@ import {
   CreditLatch,
   FileCreditStore,
   probeCliProvider,
+  probeOptionsFor,
   providerIds,
 } from "@bob/execution/providers";
 import type { AuthPrompt, AuthPty, AuthResult, ProviderId } from "@bob/execution/providers";
@@ -62,6 +63,14 @@ export interface AgentCredentialsOptions {
    * state and on network timing.
    */
   run?: typeof runCommand;
+  /**
+   * Environment the proxy route is resolved from (CLIPROXY_BASE_URL,
+   * CLIPROXY_API_KEY, BOB_PROVIDER_AUTH_MODE…). Defaults to the process
+   * environment; injectable so tests can put a host on or off the proxy.
+   */
+  environment?: Record<string, string | undefined>;
+  /** Fetch used to ask the proxy; injectable for tests. */
+  fetch?: typeof fetch;
   /**
    * Whether the host's standalone task runner process is up. Optional because
    * the credential surface is useful without dispatch control; when it throws
@@ -158,6 +167,7 @@ export class AgentCredentials {
       // keeps serving whatever it loaded at startup, which is how the node
       // page went on reporting "Ready" for agents already latched as dead.
       this.creditLatch.reload();
+      const environment = this.opts.environment ?? process.env;
       this.providerSnapshot = await Promise.all(
         providerIds.map((provider) =>
           probeCliProvider(
@@ -165,6 +175,9 @@ export class AgentCredentials {
             this.opts.run ?? runCommand,
             new Date(),
             this.creditLatch.get(provider),
+            // On a host routed through the inference proxy the host's own
+            // login state is not what serves runs; ask the proxy instead.
+            probeOptionsFor(provider, environment, this.opts.fetch),
           ),
         ),
       );

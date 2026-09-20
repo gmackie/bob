@@ -45,6 +45,42 @@ The commands below apply only when intentionally using direct provider
 login rather than CLIProxy. Run them as the service user; root's credentials
 do not count.
 
+## Bob-managed proxy routing (runner ≥ this change)
+
+The runner now resolves the proxy itself from the same env file, so isolated
+OODA agent jobs and host turns use it too — previously only gateway sessions
+did, and only because the host environment happened to carry the variables.
+
+Variables the runner reads (from `/etc/cli-proxy/client.env` or the runner's
+own env file; never print or commit their values):
+
+| Variable | Meaning |
+|---|---|
+| `CLIPROXY_BASE_URL` | Proxy origin. Required for proxy routing. |
+| `CLIPROXY_API_KEY` | Proxy API key. Required for proxy routing. |
+| `BOB_PROVIDER_AUTH_MODE` | `proxy` (default when a route exists), `subscription`, or `api_key`. |
+| `BOB_PROVIDER_AUTH_MODE_<PROVIDER>` | Per-provider override, e.g. `BOB_PROVIDER_AUTH_MODE_CLAUDE=subscription`. |
+
+What changes when a provider is routed through the proxy:
+
+- Claude runs get `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` derived from
+  the route. The host's own `ANTHROPIC_BASE_URL` is not trusted, so the two
+  cannot drift apart silently.
+- Codex runs get `OPENAI_BASE_URL` and `CLIPROXY_API_KEY`, plus a per-run
+  `CODEX_HOME/config.toml` selecting the `cliproxy` Responses provider. The
+  shared `~/.codex/config.toml` is no longer required for Bob-managed runs and
+  is never edited by the runner.
+- No OAuth credential file is copied for a proxied provider.
+- The health probe asks the proxy (`GET /v1/models` with the key) instead of
+  the host login state. A proxy that cannot be reached reports
+  `proxy_unreachable` with the remedy "check proxy" — not "install" and not
+  "sign in". Grok and Cursor have no proxy transport and stay host-probed.
+
+The host `adapter-cred-health` unit probes host-local OAuth state and is
+therefore wrong for proxied providers; retire it once the runner is deployed
+with this change and confirm the Nodes page shows `via: proxy` for Claude and
+Codex.
+
 ## Install and authenticate
 
 ```bash

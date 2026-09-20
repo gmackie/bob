@@ -70,7 +70,11 @@ export interface ProviderHealthWire {
     | "unauthenticated"
     | "degraded"
     | "no_credit"
-    | "rate_limited";
+    | "rate_limited"
+    /** CLI installed, accounts fine, inference proxy unreachable. */
+    | "proxy_unreachable";
+  /** Source of the estimate. Absent from daemons that predate the proxy; readers treat it as "host". */
+  via?: "proxy" | "host";
   capabilities: ProviderCapabilityWire;
   checkedAt: string;
   error?: string;
