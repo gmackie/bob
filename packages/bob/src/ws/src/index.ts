@@ -8,3 +8,4 @@ export type { BobWsClientOptions, ConnectionState, IWebSocket, IWebSocketConstru
 export * from "./provider-health.js";
 export * from "./proxy-health.js";
 export * from "./proxy-panel-model.js";
+export * from "./proxy-alerts.js";

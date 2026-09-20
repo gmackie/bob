@@ -35,6 +35,8 @@ import {
 import type { ServerProxyControl } from "./protocol.js";
 import type { SessionEventRecord } from "./persistence.js";
 import { pushToUser } from "./push.js";
+import { workspaceOwnerId } from "./auth.js";
+import { ProxyAlertNotifier } from "./proxy-alert-notifier.js";
 import { enqueueTransition } from "./outbox.js";
 import { parsePrUrl } from "./pr-url.js";
 import { orphanReapCutoffs } from "./reap-orphans.js";
@@ -161,6 +163,7 @@ export class Relay {
   private readonly connections = new Map<string, Connection>();
   private readonly clientsByUser = new Map<string, Set<Connection>>();
   private readonly daemonByWorkspace = new Map<string, Connection>();
+  private readonly proxyAlerts = new ProxyAlertNotifier({ push: pushToUser, ownerOf: workspaceOwnerId });
   /** hostId -> agent types that host demonstrably cannot spawn (learned from ENOENT). */
   private readonly hostMissingAgents = new Map<string, Set<string>>();
 
@@ -865,6 +868,9 @@ export class Relay {
           if (msg.hostSnapshot) {
             conn.hostSnapshot = msg.hostSnapshot;
             await this.broadcastHostSnapshot(conn.workspaceId, msg.hostSnapshot);
+            // One push to the owner when the proxy stops serving; nothing per
+            // heartbeat and nothing on recovery. Never blocks the heartbeat.
+            void this.proxyAlerts.observe(conn.workspaceId, msg.hostSnapshot);
           }
           await db
             .update(runnerLeases)

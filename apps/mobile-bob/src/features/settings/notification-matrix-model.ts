@@ -27,6 +27,8 @@ import type {
 const ROW_ORDER: NotificationType[] = [
   "work_item_needs_input",
   "work_item_review_ready",
+  "proxy_unreachable",
+  "provider_no_ready_accounts",
   "work_item_assigned",
   "work_item_commented",
   "task_completed",
@@ -37,6 +39,8 @@ const ROW_ORDER: NotificationType[] = [
 const ROW_LABELS: Record<NotificationType, string> = {
   work_item_needs_input: "Needs input",
   work_item_review_ready: "Review ready",
+  proxy_unreachable: "Proxy unreachable",
+  provider_no_ready_accounts: "No ready account",
   work_item_assigned: "Assigned to me",
   work_item_commented: "Commented",
   task_completed: "Task completed",
@@ -47,6 +51,8 @@ const ROW_LABELS: Record<NotificationType, string> = {
 const ROW_HINTS: Record<NotificationType, string> = {
   work_item_needs_input: "An agent is blocked waiting on you",
   work_item_review_ready: "Work is ready for your review",
+  proxy_unreachable: "The inference proxy cannot be reached; no run can be served",
+  provider_no_ready_accounts: "A provider has no ready account on the proxy",
   work_item_assigned: "A work item was assigned to you",
   work_item_commented: "Someone commented on your work item",
   task_completed: "A single task finished",
@@ -129,10 +135,13 @@ export function summariseNotificationPreferences({ masters, overrides }: MatrixI
   if (pushing.length === ROW_ORDER.length) return "All events";
   if (pushing.length === 0) return "No push events";
 
+  // "Blocking events" is whatever the defaults push: an agent waiting on a
+  // person, work ready for review, and a proxy outage. Derived from the
+  // defaults rather than listed here, so adding a blocking event cannot turn
+  // the untouched posture into "4 events".
+  const defaultPush = ROW_ORDER.filter((type) => DEFAULT_NOTIFICATION_PREFERENCES[type]?.push);
   const isDefaultPosture =
-    pushing.length === 2 &&
-    pushing.includes("work_item_needs_input") &&
-    pushing.includes("work_item_review_ready");
+    pushing.length === defaultPush.length && defaultPush.every((type) => pushing.includes(type));
   if (isDefaultPosture) return "Blocking events only";
 
   return `${pushing.length} event${pushing.length === 1 ? "" : "s"}`;

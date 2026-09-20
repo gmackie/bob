@@ -30,6 +30,8 @@ export const NotificationTypeEnum = Schema.Literals([
   "work_item_review_ready",
   "task_completed",
   "batch_completed",
+  "proxy_unreachable",
+  "provider_no_ready_accounts",
 ]);
 
 export const PushPlatformEnum = Schema.Literals(["ios", "android", "web"]);

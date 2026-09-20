@@ -24,6 +24,8 @@ describe("buildNotificationMatrix", () => {
     expect(rows.map((r) => r.type)).toEqual([
       "work_item_needs_input",
       "work_item_review_ready",
+      "proxy_unreachable",
+      "provider_no_ready_accounts",
       "work_item_assigned",
       "work_item_commented",
       "task_completed",
@@ -124,6 +126,19 @@ describe("summariseNotificationPreferences", () => {
         masters: allOn,
         overrides: { work_item_needs_input: { push: false } },
       }),
-    ).toBe("1 event");
+      // Four types push by default; turning one off leaves three.
+    ).toBe("3 events");
+  });
+});
+
+describe("notification matrix — proxy outages", () => {
+  it("lists the two proxy events after the agent-blocking ones, with plain labels", () => {
+    const rows = buildNotificationMatrix({ overrides: {}, masters: { push: true, email: true } });
+    const keys = rows.map((row) => row.type);
+    expect(keys.indexOf("proxy_unreachable")).toBeGreaterThan(keys.indexOf("work_item_review_ready"));
+    expect(keys.indexOf("provider_no_ready_accounts")).toBe(keys.indexOf("proxy_unreachable") + 1);
+    const unreachable = rows.find((row) => row.type === "proxy_unreachable")!;
+    expect(unreachable.label).toBe("Proxy unreachable");
+    expect(unreachable.hint).toMatch(/inference proxy/i);
   });
 });

@@ -51,6 +51,10 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationDefaults = {
   work_item_commented: { push: false, email: false, in_app: true },
   task_completed: { push: false, email: false, in_app: true },
   batch_completed: { push: false, email: false, in_app: true },
+  // Machinery outages: nothing runs until someone looks, so they push like a
+  // blocked agent does.
+  proxy_unreachable: { push: true, email: false, in_app: true },
+  provider_no_ready_accounts: { push: true, email: false, in_app: true },
 };
 
 /** Sparse per-type overrides; absent entries fall back to the defaults. */

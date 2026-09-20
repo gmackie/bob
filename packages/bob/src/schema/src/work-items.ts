@@ -120,6 +120,10 @@ export const workItemNotificationType = [
   "work_item_review_ready",
   "task_completed",
   "batch_completed",
+  // Machinery outages that stop every run: the inference proxy unreachable,
+  // a provider with no ready account on it. Added by migration 0033.
+  "proxy_unreachable",
+  "provider_no_ready_accounts",
 ] as const;
 export type WorkItemNotificationType =
   (typeof workItemNotificationType)[number];
