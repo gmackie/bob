@@ -15,6 +15,7 @@ import { PreferencesSection } from "./_components/preferences";
 import { PersonasSection } from "./_components/personas";
 import { WebhooksSection } from "./_components/webhooks";
 import { WorkspaceAgentsSection } from "./_components/workspace-agents";
+import { InferenceProxySection } from "./_components/inference-proxy";
 
 export default function SettingsPage() {
   const searchParams = useSearchParams();
@@ -41,6 +42,9 @@ export default function SettingsPage() {
         </CollapsibleSection>
         <CollapsibleSection title="Workspace Agents" sectionId="workspace-agents" defaultOpen={false} forceOpen={openSection === "workspace-agents"}>
           <WorkspaceAgentsSection />
+        </CollapsibleSection>
+        <CollapsibleSection title="Inference Proxy" sectionId="inference-proxy" defaultOpen={false} forceOpen={openSection === "inference-proxy"}>
+          <InferenceProxySection />
         </CollapsibleSection>
         <CollapsibleSection title="Personas" sectionId="personas" defaultOpen={false} forceOpen={openSection === "personas"}>
           <PersonasSection />
