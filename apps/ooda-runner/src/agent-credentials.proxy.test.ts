@@ -80,6 +80,53 @@ describe("AgentCredentials host snapshot via the inference proxy", () => {
     expect(hostAuthCalls).toHaveLength(4);
   });
 
+  it("attaches the proxy snapshot to the heartbeat when a route is configured, and not otherwise", async () => {
+    const withRoute = await credentials({ environment: onProxy, models: ["claude-sonnet-4-5"], hostAuthCalls: [] }).hostSnapshot(true);
+    expect(withRoute.proxy).toMatchObject({ origin: "http://proxy.internal:8317", reachable: true });
+    expect(withRoute.proxy?.managementError).toMatch(/management key/i);
+
+    const withoutRoute = await credentials({ environment: {}, models: [], hostAuthCalls: [] }).hostSnapshot(true);
+    expect(withoutRoute.proxy).toBeUndefined();
+  });
+
+  it("downgrades a provider from the proxy's account states, but never upgrades a failure", async () => {
+    // Every Claude account is cooling down; Codex has a ready one. The /v1/models
+    // probe alone would call both ready — the accounts are the finer truth.
+    const creds = new AgentCredentials({
+      hostId: "runner-a",
+      daemonVersion: "test",
+      send: () => {},
+      queueDepth: () => 0,
+      environment: { ...onProxy, CLIPROXY_MANAGEMENT_KEY: "mgmt" },
+      run: () => Promise.resolve({ code: 0, stdout: "ok", stderr: "" }),
+      fetch: async (target) => {
+        const url = typeof target === "string" ? target : target instanceof URL ? target.toString() : target.url;
+        if (url.includes("/v0/management/auth-files")) {
+          return new Response(
+            JSON.stringify({
+              files: [
+                { id: "c1", provider: "claude", status: "active", cooldowns: [{ retry_at: "2999-01-01T00:00:00Z", reason: "rate_limited" }] },
+                { id: "c2", provider: "claude", status: "active", cooldowns: [{ retry_at: "2999-01-01T00:00:00Z" }] },
+                { id: "x1", provider: "codex", status: "active" },
+              ],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response(JSON.stringify({ data: [{ id: "claude-sonnet-4-5" }, { id: "gpt-5-codex" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+    const snapshot = await creds.hostSnapshot(true);
+    const byProvider = Object.fromEntries(snapshot.providers.map((p) => [p.provider, p]));
+    expect(byProvider.claude).toMatchObject({ status: "rate_limited", via: "proxy" });
+    expect(byProvider.claude!.error).toMatch(/cooling down/i);
+    expect(byProvider.codex).toMatchObject({ status: "ready", via: "proxy" });
+    expect(snapshot.proxy?.accounts?.map((a) => a.status)).toEqual(["cooldown", "cooldown", "ready"]);
+  });
+
   it("lets an operator pin a provider back to the host probe", async () => {
     const hostAuthCalls: string[] = [];
     const snapshot = await credentials({

@@ -1154,6 +1154,9 @@ importers:
       '@bob/execution':
         specifier: workspace:*
         version: link:../bob-execution
+      '@bob/ws':
+        specifier: workspace:*
+        version: link:../../packages/bob/src/ws
       '@forgegraph/check-events':
         specifier: ^0.1.7
         version: 0.1.7

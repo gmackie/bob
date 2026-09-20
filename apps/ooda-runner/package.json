@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@bob/execution": "workspace:*",
+    "@bob/ws": "workspace:*",
     "@forgegraph/check-events": "^0.1.7",
     "@gmacko/core": "workspace:*",
     "@gmacko/ooda": "workspace:*",

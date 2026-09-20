@@ -82,6 +82,49 @@ export interface ProviderHealthWire {
   detail?: string;
 }
 
+/**
+ * One subscription account held by the inference proxy. Redacted at the
+ * source: `label` is the masked email or the file id, never the address.
+ */
+export interface ProxyAccountWire {
+  id: string;
+  /** Bob provider id; proxy names are normalised (xai → grok, openai → codex). */
+  provider: "claude" | "codex" | "grok" | "kimi" | "gemini" | (string & {});
+  label: string;
+  status: "ready" | "cooldown" | "disabled" | "error";
+  /** When a cooldown lifts; present only while status is "cooldown". */
+  cooldownUntil?: string;
+  cooldownReason?: string;
+  /** The proxy's own wording for an error, already redacted. */
+  detail?: string;
+  lastRefreshAt?: string;
+  requests24h: { success: number; failed: number };
+}
+
+export interface ProxyUsageWire {
+  total: { success: number; failed: number };
+  byProvider: Record<string, { success: number; failed: number }>;
+}
+
+/**
+ * The inference proxy as seen from a runner host. Absent from hosts that are
+ * not routed through a proxy, and from daemons that predate it; the UI must
+ * treat `undefined` as "not configured", never as "down".
+ */
+export interface ProxySnapshotWire {
+  /** Origin only (scheme + host + port); never a path, never a key. */
+  origin: string;
+  reachable: boolean;
+  version?: string;
+  latencyMs?: number;
+  checkedAt: string;
+  /** Present when the management API answered; absent when only /v1/models did. */
+  accounts?: ProxyAccountWire[];
+  usage?: ProxyUsageWire;
+  /** Why accounts are absent: no management key configured, or the call failed. */
+  managementError?: string;
+}
+
 export interface HostSnapshotWire {
   schemaVersion: 1;
   hostId: string;
@@ -89,6 +132,8 @@ export interface HostSnapshotWire {
   queueDepth: number;
   checkedAt: string;
   providers: ProviderHealthWire[];
+  /** The inference proxy this host routes through, when it does. */
+  proxy?: ProxySnapshotWire;
   /**
    * Whether the host's standalone task runner process is up, as systemd
    * reports it. Absent from daemons that predate dispatch control, which is
