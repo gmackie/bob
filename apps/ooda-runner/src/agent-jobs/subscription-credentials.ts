@@ -8,6 +8,7 @@ import {
   realpath,
   rm,
   unlink,
+  writeFile,
 } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
@@ -65,5 +66,32 @@ export async function materializeCredentialCopies(
     }
     await copyFile(copy.sourcePath, destination, constants.COPYFILE_EXCL);
     await chmod(destination, 0o600);
+  }
+}
+
+/**
+ * Write run-local credential artifacts that have no host source — the per-run
+ * Codex provider config pointing at the inference proxy. Same containment and
+ * permission rules as the copies: inside the credential home only, 0600,
+ * and never over an existing file.
+ */
+export async function materializeCredentialWrites(
+  sandboxPath: string,
+  writes: Array<{ destinationPath: string; contents: string }>,
+): Promise<void> {
+  const requestedSandbox = resolve(sandboxPath);
+  const canonicalSandbox = await realpath(sandboxPath);
+  for (const write of writes) {
+    const destination = resolve(write.destinationPath);
+    if (!isInside(requestedSandbox, destination)) {
+      throw new Error("Subscription credential destination escapes the scratch sandbox");
+    }
+    const destinationParent = dirname(destination);
+    await mkdir(destinationParent, { recursive: true, mode: 0o700 });
+    const canonicalParent = await realpath(destinationParent);
+    if (!isInside(canonicalSandbox, canonicalParent)) {
+      throw new Error("Subscription credential destination escapes the scratch sandbox");
+    }
+    await writeFile(destination, write.contents, { encoding: "utf8", flag: "wx", mode: 0o600 });
   }
 }
