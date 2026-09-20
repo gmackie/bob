@@ -4,8 +4,7 @@ import {
   Pressable,
   ScrollView,
   Text,
-  View,
-} from "react-native";
+  View, RefreshControl } from "react-native";
 import { Redirect, router } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -142,7 +141,12 @@ export default function PriorityQueueScreen() {
 
   return (
     <Screen className="pt-6">
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={workItemsQuery.isRefetching} onRefresh={() => void workItemsQuery.refetch()} />
+        }
+      >
         <View className="mb-5 flex-row items-start justify-between gap-4">
           <View className="min-w-0 flex-1">
             <Text className="text-foreground text-3xl font-semibold tracking-tight">

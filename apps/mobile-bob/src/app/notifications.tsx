@@ -1,4 +1,4 @@
-import { ActivityIndicator, Text } from "react-native";
+import { ActivityIndicator, Text, RefreshControl, ScrollView } from "react-native";
 import { Redirect, router } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -72,71 +72,81 @@ export default function NotificationsScreen() {
 
   return (
     <Screen className="pt-6">
-      <Text className="text-foreground mb-4 text-3xl font-semibold tracking-tight">
-        Inbox
-      </Text>
-      {unseenRows.length > 0 ? (
-        <Card className="mb-4">
-          <Text className="text-muted mb-2 text-xs tracking-[0.18em] uppercase">
-            Run updates you haven't seen ({unseenRows.length})
-          </Text>
-          {unseenRows.map((row, index) => {
-            const payload = row.payload as {
-              title?: string;
-              body?: string;
-            } | null;
-            return (
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={notificationsQuery.isRefetching}
+            onRefresh={() => void notificationsQuery.refetch()}
+          />
+        }
+      >
+        <Text className="text-foreground mb-4 text-3xl font-semibold tracking-tight">
+          Inbox
+        </Text>
+        {unseenRows.length > 0 ? (
+          <Card className="mb-4">
+            <Text className="text-muted mb-2 text-xs tracking-[0.18em] uppercase">
+              Run updates you haven't seen ({unseenRows.length})
+            </Text>
+            {unseenRows.map((row, index) => {
+              const payload = row.payload as {
+                title?: string;
+                body?: string;
+              } | null;
+              return (
+                <ListRow
+                  key={row.id}
+                  title={payload?.title ?? `Run ${row.transition}`}
+                  subtitle={payload?.body ?? row.transition}
+                  right={
+                    <Text className="text-muted text-sm">{row.transition}</Text>
+                  }
+                  onPress={() => {
+                    markSeenMutation.mutate({ ids: [row.id] });
+                    router.push(`/sessions/${row.sessionId}`);
+                  }}
+                  showDivider={index < unseenRows.length - 1}
+                />
+              );
+            })}
+          </Card>
+        ) : null}
+        <Card>
+          {notificationsQuery.data?.items.length ? (
+            notificationsQuery.data.items.map((item, index) => (
               <ListRow
-                key={row.id}
-                title={payload?.title ?? `Run ${row.transition}`}
-                subtitle={payload?.body ?? row.transition}
+                key={item.id}
+                title={item.title}
+                subtitle={getNotificationPreviewSubtitle({
+                  body: item.body ?? null,
+                  type: item.type,
+                })}
                 right={
-                  <Text className="text-muted text-sm">{row.transition}</Text>
+                  <Text className="text-muted text-sm">
+                    {item.read ? "Read" : "Mark read"}
+                  </Text>
                 }
                 onPress={() => {
-                  markSeenMutation.mutate({ ids: [row.id] });
-                  router.push(`/sessions/${row.sessionId}`);
-                }}
-                showDivider={index < unseenRows.length - 1}
-              />
-            );
-          })}
-        </Card>
-      ) : null}
-      <Card>
-        {notificationsQuery.data?.items.length ? (
-          notificationsQuery.data.items.map((item, index) => (
-            <ListRow
-              key={item.id}
-              title={item.title}
-              subtitle={getNotificationPreviewSubtitle({
-                body: item.body ?? null,
-                type: item.type,
-              })}
-              right={
-                <Text className="text-muted text-sm">
-                  {item.read ? "Read" : "Mark read"}
-                </Text>
-              }
-              onPress={() => {
-                if (!item.read) {
-                  markReadMutation.mutate({ id: item.id });
-                }
+                  if (!item.read) {
+                    markReadMutation.mutate({ id: item.id });
+                  }
 
-                router.push(
-                  getNotificationDestination({
-                    url: item.url ?? null,
-                    workItemId: item.workItemId ?? null,
-                  }),
-                );
-              }}
-              showDivider={index < notificationsQuery.data.items.length - 1}
-            />
-          ))
-        ) : (
-          <Text className="text-muted text-sm">No notifications yet.</Text>
-        )}
-      </Card>
+                  router.push(
+                    getNotificationDestination({
+                      url: item.url ?? null,
+                      workItemId: item.workItemId ?? null,
+                    }),
+                  );
+                }}
+                showDivider={index < notificationsQuery.data.items.length - 1}
+              />
+            ))
+          ) : (
+            <Text className="text-muted text-sm">No notifications yet.</Text>
+          )}
+        </Card>
+      </ScrollView>
     </Screen>
   );
 }

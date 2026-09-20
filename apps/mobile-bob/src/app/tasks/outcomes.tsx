@@ -1,6 +1,6 @@
 import { Redirect, router } from "expo-router";
 import { useMemo } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View, RefreshControl } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 
 import { Badge, Card, Screen } from "~/components/ui";
@@ -59,7 +59,12 @@ export default function RecentOutcomesScreen() {
 
   return (
     <Screen className="pt-6">
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={workItemsQuery.isRefetching} onRefresh={() => void workItemsQuery.refetch()} />
+        }
+      >
         <View className="mb-5 flex-row items-start justify-between gap-4">
           <View className="min-w-0 flex-1">
             <Text className="text-3xl font-semibold tracking-tight text-foreground">

@@ -24,7 +24,9 @@ import {
   buildWorkspaceSettingRows,
 } from "~/features/settings/settings-model";
 import { SELECTED_WORKSPACE_KEY } from "~/features/settings/workspace-selection";
+import { buildProxyPanel } from "@bob/ws";
 import { colors } from "~/lib/colors";
+import { useGateway } from "~/hooks/use-gateway";
 import { rpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
 
@@ -222,6 +224,8 @@ export function ProvidersSection({
   onOpenProvider?: (provider: ProviderKey) => void;
 } = {}) {
   const rows = buildMobileSettingsProviderRows();
+  const { hostSnapshot } = useGateway();
+  const proxy = buildProxyPanel(hostSnapshot);
 
   return (
     <View className="border-border bg-card mt-4 rounded-lg border p-4">
@@ -229,6 +233,25 @@ export function ProvidersSection({
       <Text className="text-muted mt-2 text-sm">
         Review Codex and Cursor capacity, limits, active sessions, and outcomes.
       </Text>
+      {/* Where inference actually goes. Configured on the runner host, shown
+          here, acted on from Nodes. */}
+      {proxy ? (
+        <Pressable
+          onPress={() => router.push("/nodes")}
+          accessibilityRole="button"
+          accessibilityLabel="Open the inference proxy on Nodes"
+          className="border-border mt-4 rounded-lg border p-3 active:opacity-80"
+          style={{ backgroundColor: colors.background }}
+          testID="settings-inference-proxy"
+        >
+          <Text className="text-foreground text-sm font-semibold">Inference proxy · {proxy.statusLabel}</Text>
+          <Text className="text-muted mt-1 text-xs leading-5" numberOfLines={2}>
+            {proxy.accountsState === "listed"
+              ? proxy.providers.map((row) => `${row.label} ${row.summary}`).join(" · ") || "no accounts"
+              : `Accounts not reported: ${proxy.accountsNote}`}
+          </Text>
+        </Pressable>
+      ) : null}
       <View className="mt-4 gap-2">
         {rows.map((row) => (
           <Pressable
