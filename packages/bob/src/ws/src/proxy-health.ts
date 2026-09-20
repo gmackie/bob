@@ -20,6 +20,7 @@ import type { ProviderHealthWire, ProxyAccountWire, ProxyUsageWire } from "./pro
 export interface ManagementAuthFile {
   id?: string;
   name?: string;
+  auth_index?: string;
   provider?: string;
   type?: string;
   status?: string;
@@ -133,6 +134,9 @@ function foldOne(entry: ManagementAuthFile, now: Date): ProxyAccountWire | undef
     ...(detail ? { detail } : {}),
     ...(Number.isFinite(lastRefresh) ? { lastRefreshAt: new Date(lastRefresh).toISOString() } : {}),
     requests24h: sumRecent(entry.recent_requests, now),
+    ...(entry.name || entry.auth_index
+      ? { ref: { ...(entry.name ? { name: entry.name } : {}), ...(entry.auth_index ? { authIndex: entry.auth_index } : {}) } }
+      : {}),
   };
 }
 

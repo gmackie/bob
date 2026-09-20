@@ -18,6 +18,7 @@ import type {
   ServerAgentAuthPrompt,
   ServerAgentAuthResult,
   ServerDispatchState,
+  ServerProxyControlResult,
 } from "./protocol.js";
 import { encodeClientMessage, parseServerMessage } from "./protocol.js";
 
@@ -66,6 +67,8 @@ export interface BobWsClientOptions {
   onAgentAuthResult?: (message: ServerAgentAuthResult) => void;
   /** Confirmed task-runner state after a start/stop, straight from systemd. */
   onDispatchState?: (message: ServerDispatchState) => void;
+  /** Result of a proxy_control the UI asked for; the fresh accounts arrive as a host_snapshot. */
+  onProxyControlResult?: (message: ServerProxyControlResult) => void;
   onError: (error: ServerError) => void;
   onConnectionStateChange: (state: ConnectionState) => void;
   /** Override WebSocket constructor for React Native or testing. */
@@ -315,6 +318,10 @@ export class BobWsClient {
 
       case "dispatch_state":
         this.opts.onDispatchState?.(msg);
+        break;
+
+      case "proxy_control_result":
+        this.opts.onProxyControlResult?.(msg);
         break;
 
       case "session_status_changed":

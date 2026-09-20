@@ -418,6 +418,68 @@ const server = createServer(traceHttpRequest(async (req, res) => {
     return;
   }
 
+  // Act on the inference proxy: refresh, enable or disable an account, or test
+  // the connection. Owner-gated like dispatch-control: enabling an account
+  // spends the owner's subscription. The proxy's management key lives on the
+  // daemon's host and never passes through here.
+  if (req.method === "POST" && req.url === "/internal/proxy-control") {
+    const bearer = bearerFrom(req.headers.authorization);
+    const principal = bearer ? await validateInternalBearer(bearer) : null;
+    if (!principal) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+    const body = (await readJsonBody(req)) as {
+      workspaceId?: string;
+      action?: string;
+      accountId?: string;
+      requestId?: string;
+    } | null;
+    if (!body?.workspaceId || !body?.requestId) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing workspaceId or requestId" }));
+      return;
+    }
+    const action = (["refresh", "enable", "disable", "test"] as const).find((a) => a === body.action);
+    if (!action) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Unknown action" }));
+      return;
+    }
+    if (action !== "test" && !body.accountId) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "accountId is required for this action" }));
+      return;
+    }
+
+    const ownerId = await workspaceOwnerId(body.workspaceId);
+    if (!ownerId || !principalMayActAs(principal, ownerId)) {
+      auditInternal(principal, "internal.denied", {
+        endpoint: "proxy-control",
+        workspaceId: body.workspaceId,
+      });
+      res.writeHead(403, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Forbidden: not this workspace's owner" }));
+      return;
+    }
+
+    auditInternal(principal, "internal.proxy_control", {
+      workspaceId: body.workspaceId,
+      action,
+    });
+
+    const delivered = relay.requestProxyControl(body.workspaceId, {
+      type: "proxy_control",
+      requestId: body.requestId,
+      action,
+      ...(body.accountId ? { accountId: body.accountId } : {}),
+    });
+    res.writeHead(delivered ? 200 : 503, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(delivered ? { ok: true } : { error: "Host daemon is not connected" }));
+    return;
+  }
+
   if (req.method === "POST" && req.url === "/internal/session-stop") {
     const bearer = bearerFrom(req.headers.authorization);
     const principal = bearer ? await validateInternalBearer(bearer) : null;

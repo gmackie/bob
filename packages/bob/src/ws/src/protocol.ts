@@ -99,6 +99,11 @@ export interface ProxyAccountWire {
   detail?: string;
   lastRefreshAt?: string;
   requests24h: { success: number; failed: number };
+  /**
+   * Handles the proxy's management API addresses an account by (file name,
+   * auth_index). Needed to refresh, enable or disable it; neither is a secret.
+   */
+  ref?: { name?: string; authIndex?: string };
 }
 
 export interface ProxyUsageWire {
@@ -644,6 +649,33 @@ export interface ServerDispatchState {
   detail?: string;
 }
 
+export type ProxyControlAction = "refresh" | "enable" | "disable" | "test";
+/**
+ * Server → daemon: act on the inference proxy. The daemon holds the proxy's
+ * management key; the server never does. `accountId` is the ProxyAccountWire
+ * id from the last heartbeat and is required for everything but "test".
+ */
+export interface ServerProxyControl {
+  type: "proxy_control";
+  requestId: string;
+  action: ProxyControlAction;
+  accountId?: string;
+}
+/** Daemon → server: what the proxy said. A fresh host snapshot follows. */
+export interface ClientProxyControlResult {
+  type: "proxy_control_result";
+  requestId: string;
+  ok: boolean;
+  detail?: string;
+}
+/** Server → UI: relayed from the daemon. */
+export interface ServerProxyControlResult {
+  type: "proxy_control_result";
+  workspaceId: string;
+  requestId: string;
+  ok: boolean;
+  detail?: string;
+}
 export interface SessionPresenceParticipant {
   userId: string;
   clientId: string;
@@ -723,7 +755,8 @@ export type ClientMessage =
   | ClientCollabChat
   | ClientAgentAuthPrompt
   | ClientAgentAuthResult
-  | ClientDispatchState;
+  | ClientDispatchState
+  | ClientProxyControlResult;
 
 export type ServerMessage =
   | ServerHelloOk
@@ -752,6 +785,8 @@ export type ServerMessage =
   | ServerAgentAuthCancel
   | ServerDispatchControl
   | ServerDispatchState
+  | ServerProxyControl
+  | ServerProxyControlResult
   | ServerAgentAuthPrompt
   | ServerAgentAuthResult;
 

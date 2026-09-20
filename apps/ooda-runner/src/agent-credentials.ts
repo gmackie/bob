@@ -240,6 +240,16 @@ export class AgentCredentials {
     }
   }
 
+  /** The proxy accounts from the last poll — the only ids proxy control may act on. */
+  proxyAccounts() {
+    return this.proxySnapshot?.accounts ?? [];
+  }
+
+  /** Re-probe now and push the result up the socket. Used after a proxy action. */
+  refreshSnapshot(): Promise<void> {
+    return this.pushFreshSnapshot();
+  }
+
   private async pushFreshSnapshot(): Promise<void> {
     try {
       const hostSnapshot = await this.hostSnapshot(true);

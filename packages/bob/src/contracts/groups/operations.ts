@@ -129,6 +129,16 @@ export const OperationsRpc = RpcGroup.make(
     success: Schema.Struct({ ok: Schema.Boolean, requestId: Schema.String }),
     error,
   }),
+  Rpc.make("proxyControl.set", {
+    payload: Schema.Struct({
+      workspaceId: uuid,
+      requestId,
+      action: Schema.Literals(["refresh", "enable", "disable", "test"]),
+      accountId: Schema.optional(text(1, 256)),
+    }),
+    success: Schema.Struct({ ok: Schema.Boolean, requestId: Schema.String }),
+    error,
+  }),
   Rpc.make("planning.session.listMessages", {
     payload: Schema.Struct({
       sessionId: uuid,

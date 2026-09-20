@@ -17,6 +17,7 @@ import {
 } from "../handlers/cockpitControls.js";
 import { cockpitStatus } from "../handlers/cockpitStatus.js";
 import { dispatchControlSet } from "../handlers/dispatchControl.js";
+import { proxyControlSet } from "../handlers/proxyControl.js";
 import { forgegraphImportAllApps } from "../handlers/forgegraph.js";
 import {
   planSessionCommitAsChecklist,
@@ -81,6 +82,13 @@ export const makeOperationsHandlers = (ctx: HandlerContext) => {
       (ctx, input: Parameters<typeof dispatchControlSet>[1]) =>
         dispatchControlSet(
           ctx as unknown as Parameters<typeof dispatchControlSet>[0],
+          input,
+        ),
+    ),
+    "proxyControl.set": bind(
+      (ctx, input: Parameters<typeof proxyControlSet>[1]) =>
+        proxyControlSet(
+          ctx as unknown as Parameters<typeof proxyControlSet>[0],
           input,
         ),
     ),

@@ -32,6 +32,7 @@ import {
   type ServerAgentAuthCancel,
   type SessionPresenceParticipant,
 } from "./protocol.js";
+import type { ServerProxyControl } from "./protocol.js";
 import type { SessionEventRecord } from "./persistence.js";
 import { pushToUser } from "./push.js";
 import { enqueueTransition } from "./outbox.js";
@@ -836,6 +837,20 @@ export class Relay {
             requestId: msg.requestId,
             ok: msg.ok,
             running: msg.running,
+            detail: msg.detail,
+          });
+        }
+        return;
+      // Daemon-only for the same reason as dispatch_state: a browser forging a
+      // proxy result could tell the workspace an account was re-enabled when
+      // the proxy refused, which is exactly what the panel exists to show.
+      case "proxy_control_result":
+        if (conn.kind === "daemon" && conn.workspaceId) {
+          await this.broadcastToWorkspace(conn.workspaceId, {
+            type: "proxy_control_result",
+            workspaceId: conn.workspaceId,
+            requestId: msg.requestId,
+            ok: msg.ok,
             detail: msg.detail,
           });
         }
@@ -2823,6 +2838,14 @@ export class Relay {
    * offline" instead of leaving the operator watching a spinner.
    */
   requestDispatchControl(workspaceId: string, msg: ServerDispatchControl): boolean {
+    const daemon = this.daemonByWorkspace.get(workspaceId);
+    if (!daemon) return false;
+    this.send(daemon, msg);
+    return true;
+  }
+
+  /** Same contract as dispatch control: false means "no daemon", never a silent drop. */
+  requestProxyControl(workspaceId: string, msg: ServerProxyControl): boolean {
     const daemon = this.daemonByWorkspace.get(workspaceId);
     if (!daemon) return false;
     this.send(daemon, msg);

@@ -58,6 +58,7 @@ describe("foldProxyAccounts", () => {
       status: "ready",
       lastRefreshAt: "2026-09-20T11:00:00.000Z",
       requests24h: { success: 40, failed: 1 },
+      ref: { name: "claude-7f66dfac-abcdef.json" },
     });
     expect(JSON.stringify(account)).not.toContain("graham");
   });
@@ -123,6 +124,13 @@ describe("foldProxyAccounts", () => {
       now,
     );
     expect(account!.requests24h).toEqual({ success: 12, failed: 1 });
+  });
+
+  it("carries the management handles the control plane needs to act on an account", () => {
+    // PATCH /auth-files/status and POST /auth-files/refresh address an auth by
+    // file name or auth_index, not by id. Both ride along, and neither is a secret.
+    const [account] = foldProxyAccounts([file({ name: "claude-7f66dfac-abcdef.json", auth_index: "idx-7" } as never)], now);
+    expect(account!.ref).toEqual({ name: "claude-7f66dfac-abcdef.json", authIndex: "idx-7" });
   });
 
   it("survives a malformed entry rather than dropping the whole snapshot", () => {
