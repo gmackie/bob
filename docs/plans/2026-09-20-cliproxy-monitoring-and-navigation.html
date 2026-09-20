@@ -296,19 +296,24 @@
     </tbody>
   </table>
 
-  <h2>Phase 6 — Deploy &amp; certify <span class="badge todo">Todo</span></h2>
+  <h2>Phase 6 — Deploy &amp; certify <span class="badge active">Active</span></h2>
   <table>
     <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
     <tbody>
-      <tr><td>Open the PR for <code>fix/bob-post-effect</code>; close #190 (already contained in master).</td><td>forge</td><td>PR green on CI.</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Open the PR for <code>fix/bob-post-effect</code>; close #190 (already contained in master).</td><td>forge</td><td>PR green on CI.</td><td><span class="badge active">Active</span></td></tr>
       <tr><td>Runner hosts: add <code>CLIPROXY_MANAGEMENT_KEY</code> and <code>BOB_PROVIDER_AUTH_MODE=proxy</code> to the host env file; restart; confirm heartbeat carries <code>proxy</code>.</td><td>host env (values not recorded)</td><td>Nodes page shows the proxy panel populated.</td><td><span class="badge todo">Todo</span></td></tr>
       <tr><td>Deploy server + gateway; deploy web.</td><td>ForgeGraph</td><td>Health deep check passes.</td><td><span class="badge todo">Todo</span></td></tr>
       <tr><td>Live acceptance: one Claude run and one Codex run dispatched from the phone, both served by the proxy, both visible on Runs with auth mode <code>proxy</code>; disable an account from web, watch the light change on the phone.</td><td>—</td><td>Receipt appended to this plan.</td><td><span class="badge todo">Todo</span></td></tr>
-      <tr><td>TestFlight build of the branch through the existing production profile and ship script.</td><td><code>apps/mobile-bob</code></td><td>Build VALID in App Store Connect.</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>TestFlight build of the branch through the existing production profile and ship script.</td><td><code>apps/mobile-bob</code></td><td>Build VALID in App Store Connect.</td><td><span class="badge done">Done</span></td></tr>
     </tbody>
   </table>
 
-  <h2>Risks &amp; Mitigations</h2>
+  <h2>Phase 6 receipts</h2>
+  <div class="callout ok"><strong>TestFlight · 2026-09-20.</strong> Build 17 (0.1.0) built by EAS from <code>6529cbb1</code>, verified in the binary before upload (icon name, photo-library purpose string, no unresolved <code>${…}</code> in the runtime config, <code>API_URL</code>/<code>AUTH_URL</code> = production), uploaded via altool (delivery <code>cc7f4e0e…</code>), <strong>VALID</strong> in App Store Connect.</div>
+  <div class="callout ok"><strong>Migration 0033 · 2026-09-20.</strong> Applied to production as <code>postgres</code> and recorded in <code>bob_migrations</code>; enum now carries <code>proxy_unreachable</code> and <code>provider_no_ready_accounts</code>.</div>
+  <div class="callout"><strong>CI on PR #205 (run 1172).</strong> typecheck passed; test 4003/4055 with one failure that is identical on master (<code>createRunOwnership</code> fixture lacked <code>db.transaction</code> — fixed on the branch); lint failed (being addressed). Master's own CI has been red since 2026-09-16.</div>
+
+<h2>Risks &amp; Mitigations</h2>
   <table>
     <thead><tr><th>Risk</th><th>Severity</th><th>Mitigation</th></tr></thead>
     <tbody>
