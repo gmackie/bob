@@ -23,6 +23,7 @@ import {
   type SidebarProjectEntry,
   type SidebarUtilityItem,
 } from "./sidebar-nav-model";
+import { SidebarStatusStrip } from "./sidebar-status-strip";
 import {
   selectCurrentWorkspace,
   type ShellWorkspace,
@@ -472,6 +473,11 @@ export function SidebarNav({ collapsed }: SidebarNavProps) {
             </Link>
           );
         })}
+        {/* One glance: proxy, agents, queue. Lives on every page so an outage
+            is visible without opening Nodes. */}
+        {workspaceId ? (
+          <SidebarStatusStrip workspaceId={workspaceId} collapsed={collapsed} />
+        ) : null}
       </div>
     </nav>
   );
