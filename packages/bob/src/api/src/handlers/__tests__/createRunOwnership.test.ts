@@ -23,6 +23,18 @@ function fixture(workItem: unknown) {
         },
       }),
     }),
+    // registerSessionAgentRun (session-bound runs) locks the session row and
+    // dedups inside a transaction; the fixture's tx sees the same inserts.
+    transaction: async <T,>(fn: (tx: unknown) => Promise<T>): Promise<T> =>
+      fn({
+        select: () => ({
+          from: () => ({
+            where: () => ({ for: () => Promise.resolve([{ id: "22222222-2222-4222-8222-222222222222" }]) }),
+          }),
+        }),
+        query: { agentRuns: { findFirst: () => Promise.resolve(undefined) } },
+        insert: () => db.insert(),
+      }),
   };
   return { ctx: { db, userId: "user-1" } as unknown as HandlerContext, db, inserted };
 }
