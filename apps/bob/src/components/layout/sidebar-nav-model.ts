@@ -38,9 +38,9 @@ export interface SidebarTabItem {
 }
 
 export interface SidebarUtilityItem {
-  key: "onboarding" | "pull-requests" | "nodes" | "hermes" | "settings";
-  label: "Onboarding" | "Pull Requests" | "Nodes" | "Hermes" | "Settings";
-  href: "/onboarding" | "/pull-requests" | "/nodes" | "/hermes-console" | "/settings";
+  key: "onboarding" | "discovery" | "pull-requests" | "nodes" | "hermes" | "settings";
+  label: "Onboarding" | "Discovery" | "Pull Requests" | "Nodes" | "Hermes" | "Settings";
+  href: "/onboarding" | "/discovery" | "/pull-requests" | "/nodes" | "/hermes-console" | "/settings";
 }
 
 export interface SidebarProjectSummary {
@@ -151,6 +151,8 @@ const PLANNING_TABS: SidebarTabItem[] = [
 
 const UTILITY_ITEMS: SidebarUtilityItem[] = [
   { key: "onboarding", label: "Onboarding", href: "/onboarding" },
+  // Was reachable only by URL; a page nobody can find is a page nobody uses.
+  { key: "discovery", label: "Discovery", href: "/discovery" },
   { key: "pull-requests", label: "Pull Requests", href: "/pull-requests" },
   { key: "nodes", label: "Nodes", href: "/nodes" },
   { key: "hermes", label: "Hermes", href: "/hermes-console" },
@@ -209,6 +211,29 @@ export function getSidebarModeTabs(mode: SidebarShellMode): SidebarTabItem[] {
 
 export function getSidebarUtilityItems(): SidebarUtilityItem[] {
   return [...UTILITY_ITEMS];
+}
+
+/**
+ * Static routes that are not nav entries themselves but are reached from a
+ * page that is: the planning board and review views from Planning, projects
+ * from Planning → Projects, provider detail from the capacity cards, sessions
+ * from Recent Outcomes, work items from Tasks. The route-coverage test asserts
+ * every static dashboard route is either a nav entry or listed here, so a new
+ * page cannot ship unreachable without someone writing down how it is reached.
+ */
+const KNOWN_CHILD_ROUTES: readonly string[] = [
+  "/planning/board",
+  "/planning/dispatch",
+  "/planning/review",
+  "/planning/sessions",
+  "/projects",
+  "/providers",
+  "/sessions",
+  "/work-items",
+];
+
+export function getSidebarKnownChildRoutes(): string[] {
+  return [...KNOWN_CHILD_ROUTES];
 }
 
 export function getSidebarActiveTabKeyForPath(

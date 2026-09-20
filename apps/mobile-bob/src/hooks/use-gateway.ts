@@ -82,6 +82,9 @@ export interface GatewaySession {
 }
 
 export interface UseGatewayResult {
+  /** The proxy's answer to the last proxy action asked for from this device. */
+  lastProxyResult: { ok: boolean; detail?: string } | null;
+  clearProxyResult: () => void;
   connectionState: ConnectionState;
   sessions: GatewaySession[];
   /**

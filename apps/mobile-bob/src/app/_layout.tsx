@@ -68,6 +68,7 @@ import type {
 import type { ProviderKey, TaskLaneKey } from "~/features/tablet/dashboard";
 import type { MobileWorkItemEntryView } from "~/features/tablet/work-item-entry";
 import { MobileNavSheet } from "~/features/navigation/mobile-nav-sheet";
+import { MobileTabBar } from "~/features/navigation/MobileTabBar";
 import { shouldUseSplitPaneLayout } from "~/features/navigation/mobile-nav";
 import { colors } from "~/lib/colors";
 
@@ -101,35 +102,25 @@ function PhoneLayout() {
     headerTintColor: colors.foreground,
     headerTitleStyle: { color: colors.foreground },
     headerShadowVisible: false,
-    headerRight: () => (
-      <Pressable
-        onPress={() => setNavVisible(true)}
-        accessibilityRole="button"
-        accessibilityLabel="Open navigation"
-        className="active:opacity-70"
-      >
-        <Text
-          className="text-base font-semibold"
-          style={{ color: colors.accent }}
-        >
-          Menu
-        </Text>
-      </Pressable>
-    ),
   };
 
   return (
-    <>
-      <Stack screenOptions={phoneScreenOptions}>
-        <Stack.Screen name="chat" options={{ headerShown: false }} />
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-      </Stack>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <View style={{ flex: 1 }}>
+        <Stack screenOptions={phoneScreenOptions}>
+          <Stack.Screen name="chat" options={{ headerShown: false }} />
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+        </Stack>
+      </View>
+      {/* A tab bar is the primary navigation; the sheet remains behind More so
+          nothing that was reachable stops being reachable. */}
+      <MobileTabBar onMore={() => setNavVisible(true)} />
       <MobileNavSheet
         visible={navVisible}
         pathname={pathname}
         onClose={() => setNavVisible(false)}
       />
-    </>
+    </View>
   );
 }
 

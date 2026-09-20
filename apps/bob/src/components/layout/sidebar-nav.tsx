@@ -58,6 +58,16 @@ const MODE_ICON: Record<SidebarShellMode, NavItem["icon"]> = {
 };
 
 const UTILITY_ICON: Record<SidebarUtilityItem["key"], NavItem["icon"]> = {
+  discovery: () => (
+    <svg
+      className="size-[15px]"
+      viewBox="0 0 15 15"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M10 6.5a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Zm-.7 3.5a4.5 4.5 0 1 0-.7.7l3.15 3.15a.5.5 0 0 0 .7-.7L9.3 10Z" />
+    </svg>
+  ),
   onboarding: () => (
     <svg
       className="size-[15px]"

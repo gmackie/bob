@@ -69,4 +69,8 @@ export {
   parseClientMessage,
   encodeServerMessage,
   createError,
+  type ClientProxyControlResult,
+  type ProxyControlAction,
+  type ServerProxyControl,
+  type ServerProxyControlResult,
 } from "@bob/ws";
