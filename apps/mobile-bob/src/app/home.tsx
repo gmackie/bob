@@ -51,8 +51,8 @@ export default function HomeScreen() {
   );
 
   const triage = useMemo(
-    () => buildHomeTriage({ workItems: workItemsQuery.data ?? [] }),
-    [workItemsQuery.data],
+    () => buildHomeTriage({ workItems: workItemsQuery.data ?? [], hostSnapshot }),
+    [workItemsQuery.data, hostSnapshot],
   );
 
   const activeRunCount = sessions.filter((s) => s.status === "running").length;
