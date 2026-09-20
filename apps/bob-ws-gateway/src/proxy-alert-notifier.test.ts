@@ -58,7 +58,7 @@ describe("ProxyAlertNotifier", () => {
         type: "proxy_unreachable",
         title: "Inference proxy unreachable",
         priority: "high",
-        data: { type: "proxy.alert", href: "/nodes", workspaceId: "ws-1" },
+        data: { type: "proxy.alert", href: "/nodes", url: "/nodes", workspaceId: "ws-1" },
       },
     });
   });

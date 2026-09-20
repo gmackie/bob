@@ -59,7 +59,9 @@ export class ProxyAlertNotifier {
             alert: alert.type,
             ...(alert.provider ? { provider: alert.provider } : {}),
             workspaceId,
+            // The phone routes a tap by `url`; the web by `href`. Same place.
             href: "/nodes",
+            url: "/nodes",
           },
         });
       } catch (error) {

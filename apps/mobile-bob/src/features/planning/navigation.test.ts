@@ -370,3 +370,9 @@ describe("planning navigation", () => {
     });
   });
 });
+
+describe("proxy outage pushes", () => {
+  it("deep-link a tap to Nodes, where the panel is", () => {
+    expect(getNotificationTargetHref({ url: "/nodes" })).toBe("/nodes");
+  });
+});
