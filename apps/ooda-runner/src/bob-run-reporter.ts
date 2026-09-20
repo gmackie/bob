@@ -1,3 +1,8 @@
+import { tracedFetch } from "@gmacko/core/telemetry/deep";
+import {
+  getTraceReference,
+  validateTraceCarrier,
+} from "@gmacko/core/telemetry/deep";
 /**
  * Reports runner work to the Bob backend via its public run API so runs are
  * monitorable (status) and reviewable (streamed output) in the Bob dashboard.
@@ -50,14 +55,14 @@ export class BobRunReporter {
   ): Promise<any | null> {
     if (!this.enabled) return null;
     try {
-      const res = await fetch(`${this.baseUrl}${path}`, {
+      const res = await tracedFetch(`${this.baseUrl}${path}`, {
         method,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${this.apiKey}`,
         },
         body: JSON.stringify(body),
-      });
+      }, { service: "bob", baseUrl: this.baseUrl! });
       if (!res.ok) {
         console.warn(`[bob-report] ${method} ${path} -> ${res.status}`);
         return null;
@@ -89,7 +94,35 @@ export class BobRunReporter {
     const runId: string | undefined = created?.id;
     if (!runId) return null;
     await this.call("PATCH", `/api/v1/runs/${runId}`, { status: "running" });
+    const trace = getTraceReference();
+    if (trace) await this.pushTrace(runId, trace);
     return runId;
+  }
+
+  /** No request content or untrusted viewer URL is included in a trace artifact. */
+  async pushTrace(
+    runId: string | null,
+    trace: { traceId: string; spanId: string; sampled: boolean },
+  ): Promise<void> {
+    if (
+      !runId ||
+      !this.enabled ||
+      !validateTraceCarrier({
+        traceparent: `00-${trace.traceId}-${trace.spanId}-${trace.sampled ? "01" : "00"}`,
+      })
+    )
+      return;
+    await this.call("POST", `/api/v1/runs/${runId}/artifacts`, {
+      type: "test-report",
+      storageKey: `trace:${runId}:${trace.traceId}:${trace.spanId}`,
+      metadata: {
+        kind: "trace_reference",
+        traceId: trace.traceId,
+        spanId: trace.spanId,
+        sampled: trace.sampled,
+        captureState: trace.sampled ? "pending" : "sampled_out",
+      },
+    });
   }
 
   /**
@@ -111,7 +144,8 @@ export class BobRunReporter {
   /** Attach a unified diff as a `diff` artifact (inline in metadata). */
   async pushDiff(runId: string | null, diff: string): Promise<void> {
     if (!runId || !this.enabled || !diff) return;
-    const tail = diff.length > MAX_LOG_CHARS ? diff.slice(-MAX_LOG_CHARS) : diff;
+    const tail =
+      diff.length > MAX_LOG_CHARS ? diff.slice(-MAX_LOG_CHARS) : diff;
     await this.call("POST", `/api/v1/runs/${runId}/artifacts`, {
       type: "diff",
       storageKey: `inline:${runId}:diff`,
@@ -127,6 +161,8 @@ export class BobRunReporter {
   ): Promise<void> {
     if (!runId || !this.enabled) return;
     await this.call("PATCH", `/api/v1/runs/${runId}`, { status, summary });
+    const trace = getTraceReference();
+    if (trace) await this.pushTrace(runId, trace);
   }
 }
 

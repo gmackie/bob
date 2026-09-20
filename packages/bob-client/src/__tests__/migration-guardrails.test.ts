@@ -113,7 +113,17 @@ describe("Bob Effect-RPC migration guardrails", () => {
     const violations = files.filter((file) => {
       if (allowed.has(file)) return false;
       if (file.includes("__tests__")) return false;
-      return read(file).includes("/api/trpc");
+      let text = read(file);
+      // Kanbanger owns this endpoint. Keep checking any other tRPC references
+      // in these files, and require the production transport's exact origin guard.
+      if (file === "packages/bob/src/api/src/services/integrations/traceReport.ts") {
+        expect(text).toContain('configured.origin !== "https://tasks.gmac.io"');
+        text = text.replace('new URL("/api/trpc/attachment.recordTrace", configured)', "");
+      }
+      if (file === "packages/bob/src/api/src/services/integrations/traceReport.test.ts") {
+        text = text.replace("https://tasks.gmac.io/api/trpc/attachment.recordTrace", "");
+      }
+      return text.includes("/api/trpc");
     });
 
     expect(violations).toEqual([]);

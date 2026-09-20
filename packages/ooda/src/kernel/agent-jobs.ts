@@ -1,3 +1,4 @@
+import { captureTraceCarrier, validateTraceCarrier } from "@gmacko/core/telemetry/deep";
 import { randomUUID } from "node:crypto";
 
 import { and, asc, count, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
@@ -498,6 +499,7 @@ export async function createAgentJob(
         payload: {
           prompt: input.prompt,
           inputFingerprint: stableStringify(input),
+          traceCarrier: captureTraceCarrier(),
           policy,
         },
         idempotencyKey: `create:${input.idempotencyKey}`,
@@ -811,6 +813,9 @@ export async function claimAgentJob(
       : [];
     return {
       job: mapAgentJob(claimed),
+      ...(validateTraceCarrier(queuedEvent?.payload.traceCarrier)
+        ? { traceCarrier: validateTraceCarrier(queuedEvent?.payload.traceCarrier) }
+        : {}),
       prompt,
       attempt: nextAttempt,
       leaseToken,

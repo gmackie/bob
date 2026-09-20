@@ -65,6 +65,8 @@ interface Env {
   FORGEGRAPH_API_URL?: string;
   FORGEGRAPH_API_KEY?: string;
   FORGEGRAPH_CONTEXT_APPS?: string;
+  FORGEGRAPH_TRACE_API_URL?: string;
+  FORGEGRAPH_TRACE_API_TOKEN?: string;
   HERMES_ORIGIN_TOKEN?: string;
   HERMES_PROXY_ORIGIN_TOKEN?: string;
   HERMES_ORIGIN_URL?: string;

@@ -1,3 +1,4 @@
+import { tracePostgres } from "../telemetry/database";
 import * as schema from "./schema";
 
 export type DatabaseConfig =
@@ -35,7 +36,7 @@ export async function createDatabaseConnection(config: DatabaseConfig) {
     return {
       driver: "postgres" as const,
       client,
-      db: drizzle(client, { schema }),
+      db: drizzle(tracePostgres(client), { schema }),
       close: () => client.end(),
     };
   }

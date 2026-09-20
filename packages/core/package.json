@@ -106,8 +106,10 @@
     "./desktop-shell": "./src/desktop-shell/index.ts",
     "./models": "./src/models/index.ts",
     "./inference": "./src/inference/index.ts",
+    "./telemetry/deep": "./src/telemetry/deep.ts",
     "./telemetry/node": "./src/telemetry/node.ts",
-    "./telemetry/worker": "./src/telemetry/worker.ts"
+    "./telemetry/worker": "./src/telemetry/worker.ts",
+    "./telemetry/database": "./src/telemetry/database.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
@@ -138,7 +140,8 @@
     "@opentelemetry/sdk-trace-base": "^2.11.0",
     "@opentelemetry/resources": "^2.11.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
-    "@opentelemetry/core": "^2.11.0"
+    "@opentelemetry/core": "^2.11.0",
+    "@forgegraph/otel": "0.1.8"
   },
   "peerDependencies": {
     "@tanstack/react-query": "^5.91.0",

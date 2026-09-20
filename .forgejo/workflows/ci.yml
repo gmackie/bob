@@ -6,12 +6,14 @@ on:
   pull_request:
 
 env:
+  FG_REGISTRY_TOKEN: ${{ secrets.FG_REGISTRY_TOKEN }}
   NODE_VERSION: "24"
 
 jobs:
   research-backend:
     name: Research backend
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -80,6 +82,7 @@ jobs:
     # see those packages' test files for the hardcoded connection string, and
     # test/emulate-setup.ts / emulate.config.yaml for how it's now served.
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -119,7 +122,31 @@ jobs:
       - name: Validate the worktree reaper
         run: node --test scripts/worktree-reap.test.mjs
 
+      - name: Configure private registry
+        run: |
+          printf '%s\n' '//npm.forgegraf.com/:_authToken=${FG_REGISTRY_TOKEN}' > "$RUNNER_TEMP/forgegraph.npmrc"
+          echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/forgegraph.npmrc" >> "$GITHUB_ENV"
+
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
+
+      - name: Install PostgreSQL tools for owned observability test
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql
+
+      - name: Record PostgreSQL latency/observability
+        run: python3 scripts/otel/test-database.py
+        env:
+          FG_OBSERVABILITY_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Upload private observability reports
+        if: always() && github.event.repository.private == true
+        uses: actions/upload-artifact@v3
+        with:
+          name: latency-observability-${{ github.event.pull_request.head.sha || github.sha }}
+          path: packages/core/.fg/observability/
+          retention-days: 7
+          if-no-files-found: error
 
       - name: Validate instrumented host launcher
         run: node --test scripts/otel/host-launcher.test.mjs
@@ -314,7 +341,7 @@ jobs:
             fi
           fi
 
-          HTTP=$(curl -s -o /tmp/fg_report.out -w "%{http_code}" -X POST "https://forgegraf.com/api/fg/ci/report" \
+          HTTP=$(curl -s --retry 3 --retry-all-errors --retry-max-time 45 --connect-timeout 5 --max-time 15 -o /tmp/fg_report.out -w "%{http_code}" -X POST "https://forgegraf.com/api/fg/ci/report" \
             -H "Authorization: Bearer ${FG_CI_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{
@@ -324,7 +351,7 @@ jobs:
               \"branch\": \"${BRANCH}\",
               \"status\": \"${STATUS}\",
               \"runId\": \"${{ github.run_id }}\",
-              \"runUrl\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
+              \"runUrl\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_number }}\",
               \"workflowName\": \"CI\"${TESTS_FIELD}
             }")
           echo "ForgeGraph CI report: HTTP ${HTTP}"
@@ -359,6 +386,7 @@ jobs:
     # Keep them off the general CI pool so a degraded node cannot consume
     # Wrangler's request timeout before it reaches the API.
     runs-on: forgegraph-worker
+    timeout-minutes: 30
     steps:
       - name: Refuse to deploy when a dependency of this app failed
         if: needs.ci.outputs.deployable != 'true'
@@ -378,6 +406,11 @@ jobs:
           cache: pnpm
       # The web build currently consumes root-hoisted workspace dependencies,
       # so retain the full install while suppressing unrelated desktop binaries.
+      - name: Configure private registry
+        run: |
+          printf '%s\n' '//npm.forgegraf.com/:_authToken=${FG_REGISTRY_TOKEN}' > "$RUNNER_TEMP/forgegraph.npmrc"
+          echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/forgegraph.npmrc" >> "$GITHUB_ENV"
+
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
       - name: Deploy CF Worker (vinext deploy, code-only)
         working-directory: apps/bob
@@ -403,6 +436,7 @@ jobs:
     # keeps the same safety property — no deploy on red — but says so.
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: forgegraph-worker
+    timeout-minutes: 30
     steps:
       - name: Refuse to deploy when a dependency of this app failed
         if: needs.ci.outputs.deployable != 'true'
@@ -420,6 +454,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+      - name: Configure private registry
+        run: |
+          printf '%s\n' '//npm.forgegraf.com/:_authToken=${FG_REGISTRY_TOKEN}' > "$RUNNER_TEMP/forgegraph.npmrc"
+          echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/forgegraph.npmrc" >> "$GITHUB_ENV"
+
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
       - name: Build and conditionally deploy OODA edge
         working-directory: apps/ooda-edge

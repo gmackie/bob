@@ -19,6 +19,7 @@ import {
   workspaceMembers,
 } from "@bob/db/schema";
 
+import { createTrackedExecution } from "../services/dispatch/trackedExecution";
 import { suggestAgent } from "../services/dispatch/agentHeuristics";
 import { buildExecutionPlanningTask } from "../services/dispatch/executionPlanningTask";
 
@@ -980,13 +981,17 @@ export async function dispatchExecutionBatch(
     let wiTitle = item.title ?? "";
     let wiDescription = item.description;
     let identifier = "";
+    let planningProvider = "internal";
+    let issueId: string | undefined;
 
     if (wiId) {
       const existing = await ctx.db.query.workItems.findFirst({
-        where: eq(workItems.id, wiId),
+        where: and(eq(workItems.id, wiId), eq(workItems.workspaceId, input.workspaceId)),
         with: { project: { columns: { key: true } } },
       });
       if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: `Work item ${wiId} not found` });
+      planningProvider = existing.externalProvider ?? "internal";
+      issueId = existing.externalProvider === "linear" ? existing.externalId ?? undefined : undefined;
       wiTitle = existing.title;
       wiDescription = wiDescription ?? existing.description ?? undefined;
       identifier = formatWorkItemIdentifier({
@@ -1019,9 +1024,7 @@ export async function dispatchExecutionBatch(
       identifier = newWi.id.slice(0, 8);
     }
 
-    const [session] = await ctx.db
-      .insert(chatConversations)
-      .values({
+    const session = await createTrackedExecution(ctx.db, {
         userId: ctx.userId,
         workingDirectory: "/home/bob/dev/gmacko-bob",
         agentType: input.agentType,
@@ -1030,15 +1033,9 @@ export async function dispatchExecutionBatch(
         title: `${identifier}: ${wiTitle}`,
         workItemId: wiId,
         workItemIdentifierSnapshot: identifier,
-      })
-      .returning();
-
-    if (!session) {
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: "Failed to create execution session",
-      });
-    }
+      }, {
+      workspaceId: input.workspaceId, workItemId: wiId, identifier, planningProvider, issueId,
+    });
 
     if (gatewayUrl && nudgeSecret) {
       try {
