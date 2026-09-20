@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import type { Db } from "./client.js";
-import { makePgliteDb, type PgliteDbHandle } from "./client-pglite.js";
+import type { PgliteDbHandle } from "./client-pglite.js";
+import { makePgliteDb } from "./client-pglite.js";
 import { agentRuns, chatConversations, tenants, user, workspaces } from "./schema.js";
 import { registerSessionAgentRun } from "./session-agent-run.js";
 
@@ -15,7 +16,7 @@ beforeAll(async () => {
   await handle.db.insert(tenants).values({ id: tenantId, name: "Run test", slug: "run-test" });
   await handle.db.insert(workspaces).values({ id: workspaceId, tenantId, ownerUserId: "run-owner", name: "Run test", slug: "run-test" });
 }, 30_000);
-afterAll(async () => { await handle?.close(); });
+afterAll(async () => { await handle.close(); });
 
 it("reuses one run when the gateway and reporter register the same session", async () => {
   const sessionId = randomUUID();

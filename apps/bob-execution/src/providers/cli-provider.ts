@@ -63,7 +63,7 @@ async function probeProxy(provider: ProviderId, route: ProxyProbeRoute): Promise
   }
   let ids: string[] = [];
   try {
-    const body = (await response.json()) as { data?: Array<{ id?: unknown }> };
+    const body = (await response.json()) as { data?: { id?: unknown }[] };
     ids = (body.data ?? []).map((m) => (typeof m.id === "string" ? m.id : "")).filter(Boolean);
   } catch {
     return { kind: "unreachable", detail: "malformed model list" };

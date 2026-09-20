@@ -11,7 +11,6 @@ import { useQuery } from "@tanstack/react-query";
 
 import type {
   MobileProjectDashboardColumnKey,
-  MobileProjectStatusEntry,
   MobileProjectStatusRow,
 } from "~/features/planning/project-status";
 import { Badge, Card } from "~/components/ui";

@@ -20,9 +20,11 @@ const cliInstalled = (_command: string, args: string[]): Promise<CommandResult> 
 const route = { baseUrl: "http://proxy.internal:8317", apiKey: "proxy-key" };
 
 function fetchReturning(status: number, body: unknown, seen: Request[] = []) {
-  return async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+  return (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     seen.push(new Request(input, init));
-    return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+    return Promise.resolve(
+      new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }),
+    );
   };
 }
 
@@ -33,8 +35,8 @@ describe("probeCliProvider via the inference proxy", () => {
       proxy: { ...route, fetch: fetchReturning(200, { data: [{ id: "claude-sonnet-4-5" }] }, seen) },
     });
     expect(snapshot).toMatchObject({ status: "ready", authenticated: true, installed: true, via: "proxy" });
-    expect(seen[0]!.url).toBe("http://proxy.internal:8317/v1/models");
-    expect(seen[0]!.headers.get("authorization")).toBe("Bearer proxy-key");
+    expect(seen[0]?.url).toBe("http://proxy.internal:8317/v1/models");
+    expect(seen[0]?.headers.get("authorization")).toBe("Bearer proxy-key");
   });
 
   it("never consults the host-local login check in proxy mode", async () => {
@@ -53,7 +55,7 @@ describe("probeCliProvider via the inference proxy", () => {
     // "unavailable" carries the remedy "install", which is the wrong action
     // for an installed CLI whose transport is down.
     const snapshot = await probeCliProvider("claude", cliInstalled, new Date(), {}, {
-      proxy: { ...route, fetch: async () => { throw new TypeError("fetch failed"); } },
+      proxy: { ...route, fetch: () => Promise.reject(new TypeError("fetch failed")) },
     });
     expect(snapshot).toMatchObject({ status: "proxy_unreachable", installed: true, via: "proxy" });
     expect(snapshot.error).toMatch(/proxy/i);

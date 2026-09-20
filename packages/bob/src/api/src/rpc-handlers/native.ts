@@ -14,7 +14,9 @@ import {
 import { workItemsReorderQueue } from "../handlers/workItems.js";
 import { makeProjectRpcHandlers } from "./project.js";
 
-type Args<R extends Rpc.Any> = { payload: Rpc.Payload<R> };
+interface Args<R extends Rpc.Any> {
+  payload: Rpc.Payload<R>;
+}
 export const makeNativeRpcHandlers = (ctx: HandlerContext) => {
   const project = makeProjectRpcHandlers(ctx);
   return {

@@ -4,7 +4,6 @@ import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 
 import type {
-  MobileProjectStatusEntry,
   MobileProjectStatusRow,
 } from "~/features/planning/project-status";
 import { Badge, Button, Card, Screen } from "~/components/ui";

@@ -10,12 +10,12 @@
 
 import type { ProbeOptions } from "./cli-provider.js";
 
-export type ProxyRoute = {
+export interface ProxyRoute {
   /** Origin of the proxy, no trailing slash. */
   baseUrl: string;
   /** Proxy API key; presented as a bearer token, never logged. */
   apiKey: string;
-};
+}
 
 export type ProviderAuthPreference = "proxy" | "subscription" | "api_key";
 
@@ -28,7 +28,7 @@ const PROXY_PROVIDERS = new Set(["claude", "codex", "openai"]);
 
 function trimmed(value: string | undefined): string | undefined {
   const text = value?.trim();
-  return text ? text : undefined;
+  return text === undefined || text.length === 0 ? undefined : text;
 }
 
 /** Both halves are required: a URL without a key 401s, a key without a URL is ignored. */

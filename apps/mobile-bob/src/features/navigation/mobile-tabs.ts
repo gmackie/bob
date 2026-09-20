@@ -8,7 +8,8 @@
  * and the sheet both read it, so they cannot drift apart.
  */
 
-import { MOBILE_NAV_DESTINATIONS, type MobileNavDestination } from "./mobile-nav";
+import type { MobileNavDestination } from "./mobile-nav";
+import { MOBILE_NAV_DESTINATIONS } from "./mobile-nav";
 
 export type MobileTabKey = "home" | "tasks" | "chat" | "nodes" | "more";
 
@@ -37,7 +38,7 @@ export const MORE_DESTINATIONS: readonly MobileNavDestination[] = MOBILE_NAV_DES
  * Detail routes are attributed to the tab they are reached from, so opening a
  * work item from Home does not make every tab go dark.
  */
-const ROUTE_OWNERS: ReadonlyArray<[prefix: string, tab: MobileTabKey]> = [
+const ROUTE_OWNERS: readonly [prefix: string, tab: MobileTabKey][] = [
   ["/home", "home"],
   ["/tasks", "tasks"],
   ["/work-items", "tasks"],

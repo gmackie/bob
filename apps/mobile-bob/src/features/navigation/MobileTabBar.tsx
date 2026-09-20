@@ -4,7 +4,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors } from "~/lib/colors";
 
-import { MOBILE_TABS, resolveTabForPath, type MobileTabKey } from "./mobile-tabs";
+import type { MobileTabKey } from "./mobile-tabs";
+import { MOBILE_TABS, resolveTabForPath } from "./mobile-tabs";
 
 /**
  * The phone's tab bar. Reads the tab model, so the layout cannot list a tab the

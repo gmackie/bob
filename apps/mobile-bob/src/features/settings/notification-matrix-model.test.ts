@@ -137,8 +137,8 @@ describe("notification matrix — proxy outages", () => {
     const keys = rows.map((row) => row.type);
     expect(keys.indexOf("proxy_unreachable")).toBeGreaterThan(keys.indexOf("work_item_review_ready"));
     expect(keys.indexOf("provider_no_ready_accounts")).toBe(keys.indexOf("proxy_unreachable") + 1);
-    const unreachable = rows.find((row) => row.type === "proxy_unreachable")!;
-    expect(unreachable.label).toBe("Proxy unreachable");
-    expect(unreachable.hint).toMatch(/inference proxy/i);
+    const unreachable = rows.find((row) => row.type === "proxy_unreachable");
+    expect(unreachable?.label).toBe("Proxy unreachable");
+    expect(unreachable?.hint).toMatch(/inference proxy/i);
   });
 });

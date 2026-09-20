@@ -127,10 +127,11 @@ describe("buildHomeTriage — inference proxy", () => {
       { workItems: [item({ id: "a", status: "failed" })], hostSnapshot: host({ origin: "http://p", reachable: false, checkedAt: now.toISOString() }) },
       { now },
     );
-    const [first] = t.sections[0]!.rows;
+    const rows = t.sections[0]?.rows ?? [];
+    const [first, second] = rows;
     expect(first).toMatchObject({ kind: "infrastructure", href: "/nodes", tone: "danger", statusLabel: "Check proxy" });
-    expect(first!.title).toMatch(/proxy unreachable/i);
-    expect(t.sections[0]!.rows[1]!.id).toBe("a");
+    expect(first?.title).toMatch(/proxy unreachable/i);
+    expect(second?.id).toBe("a");
     expect(t.needsYouCount).toBe(2);
   });
 
@@ -148,8 +149,9 @@ describe("buildHomeTriage — inference proxy", () => {
       { now },
     );
     expect(t.isAllClear).toBe(false);
-    expect(t.sections[0]!.rows[0]).toMatchObject({ kind: "infrastructure", tone: "warning", href: "/nodes" });
-    expect(t.sections[0]!.rows[0]!.title).toMatch(/Claude has no ready account/);
+    const first = t.sections[0]?.rows[0];
+    expect(first).toMatchObject({ kind: "infrastructure", tone: "warning", href: "/nodes" });
+    expect(first?.title).toMatch(/Claude has no ready account/);
   });
 
   it("adds nothing when the proxy is healthy or absent", () => {

@@ -15,24 +15,32 @@ vi.mock("expo/src/winter/fetch/ExpoFetchModule", () => ({
       emit(name: string, value?: unknown) {
         for (const listener of this.listeners.get(name) ?? []) listener(value);
       }
-      async startStreaming() {
-        return null;
+      startStreaming() {
+        return Promise.resolve(null);
       }
-      cancelStreaming() {}
+      cancelStreaming() {
+        // Nothing native to cancel in the mock.
+      }
     },
   },
 }));
 
 function response() {
-  return new FetchResponse(() => {}) as FetchResponse & {
+  return new FetchResponse(() => undefined) as FetchResponse & {
     emit(name: string, value?: unknown): void;
   };
+}
+
+function readerOf(res: FetchResponse) {
+  const body = res.body;
+  if (!body) throw new Error("response has no body");
+  return body.getReader();
 }
 
 describe("Expo fetch native completion races", () => {
   it("ignores native completion after the Effect consumer cancels its body", async () => {
     const res = response();
-    const reader = res.body!.getReader();
+    const reader = readerOf(res);
     await reader.cancel();
     expect(() => res.emit("didComplete")).not.toThrow();
     expect(() =>
@@ -42,7 +50,7 @@ describe("Expo fetch native completion races", () => {
 
   it("preserves the original error when completion follows native failure", async () => {
     const res = response();
-    const reader = res.body!.getReader();
+    const reader = readerOf(res);
     const read = reader.read();
     res.emit("didFailWithError", "offline");
     await expect(read).rejects.toThrow("offline");
@@ -51,7 +59,7 @@ describe("Expo fetch native completion races", () => {
 
   it("delivers bytes and closes normally while ignoring duplicate completion", async () => {
     const res = response();
-    const reader = res.body!.getReader();
+    const reader = readerOf(res);
     res.emit("didReceiveResponseData", new Uint8Array([42]));
     res.emit("didComplete");
     expect(await reader.read()).toEqual({

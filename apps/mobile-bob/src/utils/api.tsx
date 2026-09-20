@@ -20,7 +20,7 @@ export function createMobileBobRpcClient() {
   return createBobRpcClient({
     baseURL: `${getBaseUrl()}/api/rpc`,
     // Expo provides the streaming Response body required by Effect NDJSON.
-    fetch: expoFetch as typeof fetch,
+    fetch: expoFetch,
     headers: () => ({
       "x-rpc-source": "expo-react",
       ...getMobileAuthHeaders(authClient.getCookie(), isDevAuthBypassEnabled()),
@@ -31,7 +31,7 @@ export function createMobileBobRpcClient() {
 export const rpc = createBobQueryClient({
   baseURL: `${getBaseUrl()}/api/rpc`,
   // Expo provides the streaming Response body required by Effect NDJSON.
-  fetch: expoFetch as typeof fetch,
+  fetch: expoFetch,
   headers: () => ({
     "x-rpc-source": "expo-react",
     ...getMobileAuthHeaders(authClient.getCookie(), isDevAuthBypassEnabled()),

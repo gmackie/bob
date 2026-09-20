@@ -139,7 +139,7 @@ export function summariseNotificationPreferences({ masters, overrides }: MatrixI
   // person, work ready for review, and a proxy outage. Derived from the
   // defaults rather than listed here, so adding a blocking event cannot turn
   // the untouched posture into "4 events".
-  const defaultPush = ROW_ORDER.filter((type) => DEFAULT_NOTIFICATION_PREFERENCES[type]?.push);
+  const defaultPush = ROW_ORDER.filter((type) => DEFAULT_NOTIFICATION_PREFERENCES[type].push);
   const isDefaultPosture =
     pushing.length === defaultPush.length && defaultPush.every((type) => pushing.includes(type));
   if (isDefaultPosture) return "Blocking events only";

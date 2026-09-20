@@ -7,6 +7,7 @@ import { AuthMiddleware } from "@gmacko/core/auth";
 import { GmackoDb } from "@gmacko/core/db";
 import { CurrentUser } from "@gmacko/core/rpc/context";
 import { TRPCError } from "@trpc/server";
+import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { Effect, Layer, Schema } from "effect";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -55,6 +56,12 @@ vi.mock("../handlers/pullRequest.js", async (original) => ({
   pullRequestMerge: mocks.merge,
 }));
 const findOutbox = vi.fn();
+/** First argument of a mock's first call, typed by the caller; throws when it was never called. */
+function firstCallArg<T>(mock: { mock: { calls: unknown[][] } }): T {
+  const call = mock.mock.calls[0];
+  if (!call) throw new Error("mock was not called");
+  return call[0] as T;
+}
 const findApiKeys = vi.fn();
 const updateWhere = vi.fn();
 const updateSet = vi.fn(() => ({ where: updateWhere }));
@@ -238,31 +245,30 @@ describe("native Bob contracts through the production Effect HTTP assembly", () 
     ).toEqual({ success: true, mergedAt: "now" });
   });
   it("scopes unseen transition reads and acknowledgements to the authenticated user", async () => {
-    const rows = [
-      {
-        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        sessionId: "session-1",
-        transition: "completed",
-        payload: { title: "Done" },
-        createdAt: "now",
-      },
-    ];
+    const row = {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      sessionId: "session-1",
+      transition: "completed",
+      payload: { title: "Done" },
+      createdAt: "now",
+    };
+    const rows = [row];
     findOutbox.mockResolvedValue(rows);
     updateWhere.mockResolvedValue(undefined);
     expect(await rpc("notification.unseenTransitions").call(undefined)).toEqual(
       { count: 1, rows },
     );
     const dialect = new PgDialect({ casing: "snake_case" });
-    const readQuery = dialect.sqlToQuery(findOutbox.mock.calls[0]![0].where);
+    const readQuery = dialect.sqlToQuery(firstCallArg<{ where: SQL }>(findOutbox).where);
     expect(readQuery.params).toEqual(["user-1"]);
     expect(readQuery.sql).toContain('"seen_at" is null');
     expect(
       await rpc("notification.markTransitionsSeen").call({
-        ids: [rows[0]!.id],
+        ids: [row.id],
       }),
     ).toEqual({ ok: true });
-    const writeQuery = dialect.sqlToQuery(updateWhere.mock.calls[0]![0]);
-    expect(writeQuery.params).toEqual(["user-1", rows[0]!.id]);
+    const writeQuery = dialect.sqlToQuery(firstCallArg<SQL>(updateWhere));
+    expect(writeQuery.params).toEqual(["user-1", row.id]);
     expect(writeQuery.sql).toContain('"seen_at" is null');
   });
   it("rejects invalid native mutation inputs before any handler runs", () => {
