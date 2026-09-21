@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors } from "~/lib/colors";
 
-import type { MobileTabKey } from "./mobile-tabs";
+import type { MobileTab } from "./mobile-tabs";
 import { MOBILE_TABS, resolveTabForPath } from "./mobile-tabs";
 
 /**
@@ -18,15 +18,15 @@ export function MobileTabBar({ onMore }: { onMore: () => void }) {
   const insets = useSafeAreaInsets();
   const active = resolveTabForPath(pathname);
 
-  const go = (key: MobileTabKey, href: string) => {
-    if (key === "more") {
+  const go = (tab: MobileTab) => {
+    if (tab.key === "more") {
       onMore();
       return;
     }
-    if (active === key) return;
+    if (active === tab.key) return;
     // A tab is a place, not a step: replace rather than push so Back does not
     // walk through every tab ever tapped.
-    router.replace(href as never);
+    router.replace(tab.href);
   };
 
   return (
@@ -46,7 +46,7 @@ export function MobileTabBar({ onMore }: { onMore: () => void }) {
         return (
           <Pressable
             key={tab.key}
-            onPress={() => go(tab.key, tab.href)}
+            onPress={() => go(tab)}
             accessibilityRole="tab"
             accessibilityState={{ selected: isActive }}
             accessibilityLabel={tab.label}

@@ -1,5 +1,5 @@
 import type { Rpc } from "effect/unstable/rpc";
-import * as Contract from "@gmacko/bob/contracts";
+import type * as Contract from "@gmacko/bob/contracts";
 
 import { and, eq, inArray, isNull, sql } from "@bob/db";
 import { notificationOutbox } from "@bob/db/schema";

@@ -1,3 +1,4 @@
+import type { HostSnapshotWire } from "@bob/ws";
 import { describe, expect, it } from "vitest";
 
 import { buildHomeTriage, HOME_SECTION_LIMIT } from "./home-model";
@@ -111,7 +112,7 @@ describe("buildHomeTriage", () => {
 
 describe("buildHomeTriage — inference proxy", () => {
   const now = new Date("2026-09-20T12:00:00.000Z");
-  const host = (proxy: NonNullable<import("@bob/ws").HostSnapshotWire["proxy"]>) =>
+  const host = (proxy: NonNullable<HostSnapshotWire["proxy"]>) =>
     ({
       schemaVersion: 1 as const,
       hostId: "runner-a",
@@ -120,7 +121,7 @@ describe("buildHomeTriage — inference proxy", () => {
       checkedAt: now.toISOString(),
       providers: [],
       proxy,
-    }) satisfies import("@bob/ws").HostSnapshotWire;
+    }) satisfies HostSnapshotWire;
 
   it("puts an unreachable proxy at the top of Needs you, linking to Nodes", () => {
     const t = buildHomeTriage(

@@ -8,16 +8,22 @@
  * and the sheet both read it, so they cannot drift apart.
  */
 
+import type { Href } from "expo-router";
+
 import type { MobileNavDestination } from "./mobile-nav";
 import { MOBILE_NAV_DESTINATIONS } from "./mobile-nav";
 
 export type MobileTabKey = "home" | "tasks" | "chat" | "nodes" | "more";
 
-export interface MobileTab {
-  key: MobileTabKey;
-  label: string;
-  href: string;
-}
+/**
+ * Real tabs carry a routable href (the typed-routes union when generated,
+ * plain string otherwise, so no cast is needed at the call site). "More" is
+ * not a route: it opens the sheet, and its pseudo-href only marks the sheet as
+ * the owner of that path.
+ */
+export type MobileTab =
+  | { key: Exclude<MobileTabKey, "more">; label: string; href: Extract<Href, string> }
+  | { key: "more"; label: string; href: "/more" };
 
 export const MOBILE_TABS: readonly MobileTab[] = [
   { key: "home", label: "Home", href: "/home" },
