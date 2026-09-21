@@ -15,7 +15,7 @@ They need the app installed on a booted simulator and a server with data.
 
 ```sh
 # 1. A database with a workspace's worth of content.
-#    See packages/bob/src/db/seed-local.ts for what it writes and how.
+#    See packages/bob/src/db/src/seed-local.ts for what it writes and how.
 
 # 2. The app, built for the simulator and pointed at that server.
 pnpm --filter @bob/mobile ios

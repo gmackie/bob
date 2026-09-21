@@ -5,7 +5,7 @@
  * BOB_DB_PGLITE_DIR pointed at the directory the dev server will use, then
  * start the server once this process has exited (PGlite is single-writer).
  */
-import { db } from "./src/client";
+import { db } from "./client";
 import {
   chatConversations,
   notifications,
@@ -15,7 +15,7 @@ import {
   user,
   workItems,
   workspaces,
-} from "./src/schema";
+} from "./schema";
 
 const USER_ID = "default-user";
 const TENANT_ID = "11111111-1111-4111-8111-111111111111";
