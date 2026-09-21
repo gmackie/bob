@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 type AttentionCategory = "failed" | "review" | "approve";
 
@@ -23,15 +23,18 @@ const categoryConfig: Record<
 };
 
 export function AttentionPanel() {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
 
   const { data: openPrs } = useQuery({
-    ...trpc.pullRequest.list.queryOptions({ status: "open", limit: 20 }),
+    ...bobQuery("projects.pullRequest.list").queryOptions({
+      status: "open",
+      limit: 20,
+    }),
     staleTime: 30_000,
   });
 
   const { data: allRuns } = useQuery({
-    ...trpc.agentRun.listAll.queryOptions({ limit: 50 }),
+    ...bobQuery("agent.run.listAll").queryOptions({ limit: 50 }),
     staleTime: 15_000,
   });
 
@@ -48,9 +51,10 @@ export function AttentionPanel() {
       items.push({
         id: `run-${run.id}`,
         category: "approve",
-        title: typeof title === "string" && title.length > 60
-          ? title.slice(0, 60) + "..."
-          : title,
+        title:
+          typeof title === "string" && title.length > 60
+            ? title.slice(0, 60) + "..."
+            : title,
         description: `${run.agentType} · ${run.status}`,
         href: `/runs/${run.id}`,
       });
@@ -64,9 +68,10 @@ export function AttentionPanel() {
       items.push({
         id: `run-${run.id}`,
         category: "failed",
-        title: typeof title === "string" && title.length > 60
-          ? title.slice(0, 60) + "..."
-          : title,
+        title:
+          typeof title === "string" && title.length > 60
+            ? title.slice(0, 60) + "..."
+            : title,
         description: `${run.agentType} · ${run.status}`,
         href: `/runs/${run.id}`,
       });

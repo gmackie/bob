@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ServerSessionStatusChanged } from "@bob/ws";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 import {
   selectCurrentWorkspace,
   type ShellWorkspace,
@@ -30,21 +30,24 @@ type WorkspaceMembership = {
  */
 export function useWorkspaceEvents() {
   const executionAvailable = useExecutionAvailable();
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
 
   const { data: gatewayInfo } = useQuery(
-    trpc.session.getGatewayWebSocketUrl.queryOptions(undefined, { enabled: executionAvailable }),
+    bobQuery("agent.session.getGatewayWebSocketUrl").queryOptions(undefined, {
+      enabled: executionAvailable,
+    }),
   );
   const { data: workspaceMemberships } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, {
+    bobQuery("projects.workspace.list").queryOptions(undefined, {
       staleTime: 60_000,
       refetchInterval: 30_000,
     }),
   );
   const workspaces = useMemo(() => {
-    const memberships = (workspaceMemberships ?? []) as unknown as WorkspaceMembership[];
+    const memberships = (workspaceMemberships ??
+      []) as unknown as WorkspaceMembership[];
     return memberships.flatMap((membership) =>
       membership.workspace ? [membership.workspace] : [],
     );

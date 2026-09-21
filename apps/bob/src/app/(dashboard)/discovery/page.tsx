@@ -11,10 +11,10 @@ import { Card } from "@gmacko/core/ui/card";
 import { toast } from "@gmacko/core/ui/toast";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 export default function DiscoveryPage() {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [forgeBannerDismissed, setForgeBannerDismissed] = useState(false);
@@ -24,7 +24,9 @@ export default function DiscoveryPage() {
 
   // Fetch workspaces
   const { data: workspaceMemberships, isLoading: wsLoading } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
+    bobQuery("projects.workspace.list").queryOptions(undefined, {
+      staleTime: 60_000,
+    }),
   );
 
   const workspaces = (workspaceMemberships ?? [])
@@ -48,7 +50,7 @@ export default function DiscoveryPage() {
     isLoading: discoveryLoading,
     isError,
   } = useQuery(
-    trpc.project.discovery.queryOptions(
+    bobQuery("projects.discovery").queryOptions(
       { workspaceId: currentWorkspace?.id ?? "" },
       {
         enabled: !!currentWorkspace,
@@ -60,10 +62,10 @@ export default function DiscoveryPage() {
 
   // Dismiss directory mutation
   const dismissDir = useMutation(
-    trpc.project.dismissDir.mutationOptions({
+    bobQuery("projects.dismissDir").mutationOptions({
       onSuccess: () => {
         void queryClient.invalidateQueries({
-          queryKey: trpc.project.discovery.queryKey({
+          queryKey: bobQuery("projects.discovery").queryKey({
             workspaceId: currentWorkspace?.id ?? "",
           }),
         });
@@ -100,7 +102,7 @@ export default function DiscoveryPage() {
           : `Registered ${body.project?.name ?? "repository"} with ForgeGraph`,
       );
       void queryClient.invalidateQueries({
-        queryKey: trpc.project.discovery.queryKey({
+        queryKey: bobQuery("projects.discovery").queryKey({
           workspaceId: currentWorkspace.id,
         }),
       });
@@ -151,7 +153,10 @@ export default function DiscoveryPage() {
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <span>{discovery.linked.length} active</span>
             <span className="text-border">|</span>
-            <span>{discovery.gitOnly.length + discovery.forgeReady.length} discovered</span>
+            <span>
+              {discovery.gitOnly.length + discovery.forgeReady.length}{" "}
+              discovered
+            </span>
             <span className="text-border">|</span>
             <span>{discovery.nonGit.length} non-git</span>
           </div>
@@ -172,8 +177,8 @@ export default function DiscoveryPage() {
               </p>
               <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-amber-300/90">
                 <li>
-                  Install the ForgeGraph CLI on the daemon machine
-                  (<code className="font-mono">forge --version</code> to verify).
+                  Install the ForgeGraph CLI on the daemon machine (
+                  <code className="font-mono">forge --version</code> to verify).
                 </li>
                 <li>
                   Restart the Bob daemon so it re-runs discovery and heartbeats
@@ -196,7 +201,7 @@ export default function DiscoveryPage() {
               disabled={discoveryLoading}
               onClick={() =>
                 void queryClient.invalidateQueries({
-                  queryKey: trpc.project.discovery.queryKey({
+                  queryKey: bobQuery("projects.discovery").queryKey({
                     workspaceId: currentWorkspace?.id ?? "",
                   }),
                 })

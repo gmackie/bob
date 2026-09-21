@@ -107,6 +107,7 @@ export const DispatchItemRecordSchema = Schema.Struct({
   status: Schema.String,
   blockedByItems: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
   taskRunId: Schema.optional(Schema.NullOr(Schema.String)),
+  workItemId: Schema.optional(Schema.NullOr(Schema.String)),
   sortOrder: Schema.Number,
   pipelineState: Schema.optional(Schema.NullOr(Schema.String)),
   createdAt: Schema.optional(Schema.String),

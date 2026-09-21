@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 import { KanbanCard } from "./kanban-card";
 import type { KanbanCardItem } from "./kanban-card";
 
@@ -44,11 +44,11 @@ interface KanbanBoardProps {
 // ---------------------------------------------------------------------------
 
 export function KanbanBoard({ workspaceId, projectId }: KanbanBoardProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const queryClient = useQueryClient();
 
   const { data: workItems, isLoading } = useQuery(
-    trpc.workItem.list.queryOptions(
+    bobQuery("workItem.list").queryOptions(
       { workspaceId: workspaceId ?? "", projectId, limit: 100 },
       {
         enabled: !!workspaceId,
@@ -58,9 +58,11 @@ export function KanbanBoard({ workspaceId, projectId }: KanbanBoardProps) {
   );
 
   const dispatchMutation = useMutation(
-    trpc.workItem.dispatch.mutationOptions({
+    bobQuery("workItem.dispatch").mutationOptions({
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: trpc.workItem.list.queryKey() });
+        queryClient.invalidateQueries({
+          queryKey: bobQuery("workItem.list").queryKey(),
+        });
       },
     }),
   );
@@ -70,9 +72,11 @@ export function KanbanBoard({ workspaceId, projectId }: KanbanBoardProps) {
   };
 
   const updateMutation = useMutation(
-    trpc.workItems.update.mutationOptions({
+    bobQuery("workItem.update").mutationOptions({
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: trpc.workItem.list.queryKey() });
+        queryClient.invalidateQueries({
+          queryKey: bobQuery("workItem.list").queryKey(),
+        });
       },
     }),
   );
@@ -83,7 +87,7 @@ export function KanbanBoard({ workspaceId, projectId }: KanbanBoardProps) {
 
   // Group items by status into columns
   const columns = useMemo(() => {
-    const items = (workItems ?? []) as KanbanCardItem[];
+    const items = [...(workItems ?? [])] as KanbanCardItem[];
 
     const grouped = new Map<string, KanbanCardItem[]>();
     const otherItems: KanbanCardItem[] = [];

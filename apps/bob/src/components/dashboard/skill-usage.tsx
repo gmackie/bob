@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@gmacko/core/ui";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 interface SkillStat {
   name: string;
@@ -27,21 +27,19 @@ function formatRate(success: number, total: number): string {
 }
 
 export function SkillUsage() {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
 
   const { data: statsData } = useQuery({
-    ...trpc.skill.stats.queryOptions(),
+    ...bobQuery("planning.skill.stats").queryOptions(),
     staleTime: 30_000,
   });
 
   const { data: skills } = useQuery({
-    ...trpc.skill.list.queryOptions({}),
+    ...bobQuery("planning.skill.list").queryOptions({}),
     staleTime: 60_000,
   });
 
-  const statsMap = new Map(
-    (statsData ?? []).map((s: any) => [s.slug, s]),
-  );
+  const statsMap = new Map((statsData ?? []).map((s: any) => [s.slug, s]));
 
   const stats: SkillStat[] = (skills ?? []).map((skill) => {
     const s = statsMap.get(skill.slug);
@@ -86,11 +84,9 @@ export function SkillUsage() {
                   <span>{stat.count} runs</span>
                   <span
                     className={cn(
-                      stat.count > 0 &&
-                        stat.successCount / stat.count >= 0.9
+                      stat.count > 0 && stat.successCount / stat.count >= 0.9
                         ? "text-emerald-600 dark:text-emerald-400"
-                        : stat.count > 0 &&
-                            stat.successCount / stat.count < 0.5
+                        : stat.count > 0 && stat.successCount / stat.count < 0.5
                           ? "text-rose-600 dark:text-rose-400"
                           : "",
                     )}

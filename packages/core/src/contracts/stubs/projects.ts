@@ -36,15 +36,27 @@ import type {
   WorktreeWire,
   WorktreePlanWire,
 } from "../schemas/project-repository.js";
-import type { PullRequestWire, PRReviewWire } from "../schemas/project-pull-request.js";
+import type {
+  PullRequestWire,
+  PRReviewWire,
+} from "../schemas/project-pull-request.js";
 import type {
   FeatureBranchWire,
   FeatureBranchTaskPRWire,
   FeatureBranchListItemWire,
   FeatureBranchDetailWire,
 } from "../schemas/project-feature-branch.js";
-import type { GitProviderConnectionWire, ConnectionTestResultWire, RemoteDetectionResultWire } from "../schemas/project-git-provider.js";
-import type { PushAndCreatePrResultWire, JjCommitWire, JjMutationResultWire, JjDiffResultWire } from "../schemas/project-git.js";
+import type {
+  GitProviderConnectionWire,
+  ConnectionTestResultWire,
+  RemoteDetectionResultWire,
+} from "../schemas/project-git-provider.js";
+import type {
+  PushAndCreatePrResultWire,
+  JjCommitWire,
+  JjMutationResultWire,
+  JjDiffResultWire,
+} from "../schemas/project-git.js";
 
 export const STUB_TENANT_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -99,6 +111,9 @@ export const STUB_REPOSITORY_1: RepositoryWire = {
   id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
   userId: "00000000-0000-0000-0000-000000000099",
   planningProjectId: null,
+  workspaceId: null,
+  dirty: false,
+  stale: false,
   name: "acme-repo",
   path: "/home/mackieg/repos/acme-repo",
   branch: "main",
@@ -134,6 +149,10 @@ export const STUB_PULL_REQUEST_1: PullRequestWire = {
   headBranch: "feat/widgets",
   baseBranch: "main",
   status: "open",
+  additions: null,
+  deletions: null,
+  number: 42,
+  url: "https://github.com/acme/acme-repo/pull/42",
   remoteNumber: 42,
   remoteUrl: "https://github.com/acme/acme-repo/pull/42",
   mergedAt: null,
@@ -271,10 +290,8 @@ export const stubProjectsHandlers = {
     projectId: string;
     settings: Record<string, unknown>;
   }) => {
-    if (projectId === STUB_PROJECT_1.id)
-      return Effect.succeed(STUB_PROJECT_1);
-    if (projectId === STUB_PROJECT_2.id)
-      return Effect.succeed(STUB_PROJECT_2);
+    if (projectId === STUB_PROJECT_1.id) return Effect.succeed(STUB_PROJECT_1);
+    if (projectId === STUB_PROJECT_2.id) return Effect.succeed(STUB_PROJECT_2);
     return Effect.fail(
       new ProjectNotFoundError({
         tenantId: STUB_TENANT_ID,
@@ -288,10 +305,8 @@ export const stubProjectsHandlers = {
     projectId: string;
     defaultAgentType: string | null;
   }) => {
-    if (projectId === STUB_PROJECT_1.id)
-      return Effect.succeed(STUB_PROJECT_1);
-    if (projectId === STUB_PROJECT_2.id)
-      return Effect.succeed(STUB_PROJECT_2);
+    if (projectId === STUB_PROJECT_1.id) return Effect.succeed(STUB_PROJECT_1);
+    if (projectId === STUB_PROJECT_2.id) return Effect.succeed(STUB_PROJECT_2);
     return Effect.fail(
       new ProjectNotFoundError({
         tenantId: STUB_TENANT_ID,
@@ -309,8 +324,7 @@ export const stubProjectsHandlers = {
   },
 
   // --- Workspace (7B-4B Task 5) ------------------------------------------
-  "projects.workspace.list": () =>
-    Effect.succeed([STUB_WORKSPACE_MEMBER_1]),
+  "projects.workspace.list": () => Effect.succeed([STUB_WORKSPACE_MEMBER_1]),
   "projects.workspace.create": ({
     name,
     slug,
@@ -326,19 +340,14 @@ export const stubProjectsHandlers = {
       slug,
       description: description ?? null,
     } satisfies WorkspaceWire),
-  "projects.workspace.rename": ({
-    id,
-    name,
-  }: {
-    id: string;
-    name: string;
-  }) => {
+  "projects.workspace.rename": ({ id, name }: { id: string; name: string }) => {
     if (id === STUB_WORKSPACE_1.id) {
-      return Effect.succeed({ ...STUB_WORKSPACE_1, name } satisfies WorkspaceWire);
+      return Effect.succeed({
+        ...STUB_WORKSPACE_1,
+        name,
+      } satisfies WorkspaceWire);
     }
-    return Effect.fail(
-      new NotFoundError({ entity: "Workspace", id }),
-    );
+    return Effect.fail(new NotFoundError({ entity: "Workspace", id }));
   },
   "projects.workspace.setDefaultAgent": ({
     id,
@@ -349,33 +358,22 @@ export const stubProjectsHandlers = {
     if (id === STUB_WORKSPACE_1.id) {
       return Effect.succeed(STUB_WORKSPACE_1);
     }
-    return Effect.fail(
-      new NotFoundError({ entity: "Workspace", id }),
-    );
+    return Effect.fail(new NotFoundError({ entity: "Workspace", id }));
   },
   "projects.workspace.delete": ({ id }: { id: string }) => {
     if (id === STUB_WORKSPACE_1.id) {
       return Effect.succeed({ deleted: true as const });
     }
-    return Effect.fail(
-      new NotFoundError({ entity: "Workspace", id }),
-    );
+    return Effect.fail(new NotFoundError({ entity: "Workspace", id }));
   },
 
   // --- Repository (7B-4B Task 6) -------------------------------------------
-  "projects.repository.list": () =>
-    Effect.succeed([STUB_REPOSITORY_1]),
+  "projects.repository.list": () => Effect.succeed([STUB_REPOSITORY_1]),
   "projects.repository.byId": ({ id }: { id: string }) => {
     if (id === STUB_REPOSITORY_1.id) return Effect.succeed(STUB_REPOSITORY_1);
-    return Effect.fail(
-      new NotFoundError({ entity: "Repository", id }),
-    );
+    return Effect.fail(new NotFoundError({ entity: "Repository", id }));
   },
-  "projects.repository.add": ({
-    repositoryPath,
-  }: {
-    repositoryPath: string;
-  }) =>
+  "projects.repository.add": ({ repositoryPath }: { repositoryPath: string }) =>
     Effect.succeed({
       ...STUB_REPOSITORY_1,
       id: "ffffffff-ffff-ffff-ffff-ffffffffffff",
@@ -419,13 +417,10 @@ export const stubProjectsHandlers = {
   },
   "projects.repository.refreshMainBranch": ({ id }: { id: string }) => {
     if (id === STUB_REPOSITORY_1.id) return Effect.succeed(STUB_REPOSITORY_1);
-    return Effect.fail(
-      new NotFoundError({ entity: "Repository", id }),
-    );
+    return Effect.fail(new NotFoundError({ entity: "Repository", id }));
   },
-  "projects.repository.getWorktrees": (_payload: {
-    repositoryId: string;
-  }) => Effect.succeed([STUB_WORKTREE_1]),
+  "projects.repository.getWorktrees": (_payload: { repositoryId: string }) =>
+    Effect.succeed([STUB_WORKTREE_1]),
   "projects.repository.createWorktree": ({
     repositoryId,
     branchName,
@@ -549,9 +544,8 @@ export const stubProjectsHandlers = {
     limit?: number;
     includeCommits?: boolean;
   }) => Effect.succeed([STUB_PULL_REQUEST_1]),
-  "projects.pullRequest.listBySession": (_payload: {
-    sessionId: string;
-  }) => Effect.succeed([STUB_PULL_REQUEST_1]),
+  "projects.pullRequest.listBySession": (_payload: { sessionId: string }) =>
+    Effect.succeed([STUB_PULL_REQUEST_1]),
   "projects.pullRequest.create": ({
     repositoryId,
     title,
@@ -618,10 +612,9 @@ export const stubProjectsHandlers = {
         new NotFoundError({ entity: "PullRequest", id: pullRequestId }),
       );
     return Effect.succeed({
-      ...STUB_PULL_REQUEST_1,
-      status: "merged" as const,
+      success: true,
       mergedAt: "2026-04-21T14:00:00Z",
-    } satisfies PullRequestWire);
+    });
   },
   "projects.pullRequest.syncCommits": ({
     pullRequestId,
@@ -703,9 +696,7 @@ export const stubProjectsHandlers = {
     } satisfies FeatureBranchWire),
   "projects.featureBranch.get": ({ id }: { id: string }) => {
     if (id !== STUB_FEATURE_BRANCH_1.id)
-      return Effect.fail(
-        new NotFoundError({ entity: "FeatureBranch", id }),
-      );
+      return Effect.fail(new NotFoundError({ entity: "FeatureBranch", id }));
     return Effect.succeed({
       ...STUB_FEATURE_BRANCH_1,
       taskPRs: [STUB_FEATURE_BRANCH_TASK_PR_1],
@@ -795,9 +786,7 @@ export const stubProjectsHandlers = {
     status: "active" | "ready" | "merged" | "abandoned";
   }) => {
     if (id !== STUB_FEATURE_BRANCH_1.id)
-      return Effect.fail(
-        new NotFoundError({ entity: "FeatureBranch", id }),
-      );
+      return Effect.fail(new NotFoundError({ entity: "FeatureBranch", id }));
     return Effect.succeed({
       ...STUB_FEATURE_BRANCH_1,
       status,
@@ -828,7 +817,10 @@ export const stubProjectsHandlers = {
   }) => {
     if (connectionId !== STUB_GIT_PROVIDER_CONNECTION_1.id)
       return Effect.fail(
-        new NotFoundError({ entity: "GitProviderConnection", id: connectionId }),
+        new NotFoundError({
+          entity: "GitProviderConnection",
+          id: connectionId,
+        }),
       );
     return Effect.succeed({ success: true as const });
   },
@@ -855,7 +847,10 @@ export const stubProjectsHandlers = {
   }) => {
     if (connectionId !== STUB_GIT_PROVIDER_CONNECTION_1.id)
       return Effect.fail(
-        new NotFoundError({ entity: "GitProviderConnection", id: connectionId }),
+        new NotFoundError({
+          entity: "GitProviderConnection",
+          id: connectionId,
+        }),
       );
     if (repositoryId !== STUB_REPOSITORY_1.id)
       return Effect.fail(
@@ -923,8 +918,7 @@ export const stubProjectsHandlers = {
       },
     } satisfies PushAndCreatePrResultWire);
   },
-  "projects.git.jjIsRepo": (_payload: { path: string }) =>
-    Effect.succeed(true),
+  "projects.git.jjIsRepo": (_payload: { path: string }) => Effect.succeed(true),
   "projects.git.jjLog": (_payload: { path: string; limit?: number }) =>
     Effect.succeed([STUB_JJ_COMMIT_1]),
   "projects.git.jjNew": (_payload: { path: string; description?: string }) =>
@@ -944,6 +938,5 @@ export const stubProjectsHandlers = {
 } as const;
 
 /** Layer form — pass to `RpcServer.layerHttp({ group, handlers })`. */
-export const stubProjectsHandlersLayer = ProjectsRpc.toLayer(
-  stubProjectsHandlers,
-);
+export const stubProjectsHandlersLayer =
+  ProjectsRpc.toLayer(stubProjectsHandlers);

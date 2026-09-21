@@ -29,7 +29,8 @@ import type {
 } from "@bob/ws";
 
 import { useSessionSocket } from "~/hooks/use-session-socket";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
+import { ProxyPanel, type ProxyActionRequest } from "~/components/nodes/proxy-panel";
 import {
   PROVIDER_BILLING_URLS,
   buildHostMissionControl,
@@ -69,6 +70,7 @@ function statusTone(status: string): string {
     case "rate_limited":
       return "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-300";
     case "unauthenticated":
+    case "proxy_unreachable":
       return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
     default:
       return "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300";
@@ -76,8 +78,10 @@ function statusTone(status: string): string {
 }
 
 export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
-  const trpc = useTRPC();
-  const [hostSnapshot, setHostSnapshot] = useState<HostSnapshotWire | null>(null);
+  const bobQuery = useBobQueryClient();
+  const [hostSnapshot, setHostSnapshot] = useState<HostSnapshotWire | null>(
+    null,
+  );
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [codeInput, setCodeInput] = useState("");
   /**
@@ -85,9 +89,16 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
    * dispatch_state; until one arrives the host snapshot is the source of truth.
    */
   const [dispatch, setDispatch] = useState<DispatchUi>({ kind: "idle" });
+  /**
+   * Proxy actions resolve asynchronously: the runner answers with a
+   * proxy_control_result frame and then pushes a fresh snapshot. `pending` is
+   * the request in flight; `result` is the proxy's last answer.
+   */
+  const [proxyPending, setProxyPending] = useState<ProxyActionRequest | null>(null);
+  const [proxyResult, setProxyResult] = useState<{ ok: boolean; detail?: string } | null>(null);
 
   const { data: gatewayInfo } = useQuery(
-    trpc.session.getGatewayWebSocketUrl.queryOptions(undefined, {
+    bobQuery("agent.session.getGatewayWebSocketUrl").queryOptions(undefined, {
       enabled: Boolean(workspaceId),
     }),
   );
@@ -114,7 +125,10 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
     setDispatch(
       msg.ok
         ? { kind: "idle", running: msg.running }
-        : { kind: "error", detail: msg.detail ?? "Could not change the runner" },
+        : {
+            kind: "error",
+            detail: msg.detail ?? "Could not change the runner",
+          },
     );
   }, []);
 
@@ -122,7 +136,12 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
     setPhase((current) => {
       const requestId = "requestId" in current ? current.requestId : null;
       if (requestId !== msg.requestId) return current;
-      return { kind: "done", provider: msg.provider, ok: msg.ok, detail: msg.detail };
+      return {
+        kind: "done",
+        provider: msg.provider,
+        ok: msg.ok,
+        detail: msg.detail,
+      };
     });
   }, []);
 
@@ -131,6 +150,10 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
     token: gatewayInfo?.token ?? "",
     enabled: Boolean(workspaceId && gatewayInfo?.url && gatewayInfo?.token),
     onHostSnapshot: (_ws, snapshot) => setHostSnapshot(snapshot),
+    onProxyControlResult: (message) => {
+      setProxyPending(null);
+      setProxyResult({ ok: message.ok, detail: message.detail });
+    },
     onAgentAuthPrompt,
     onAgentAuthResult,
     onDispatchState,
@@ -141,10 +164,36 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
     subscribeWorkspace(undefined, workspaceId);
   }, [connectionState.status, workspaceId, subscribeWorkspace]);
 
-  const startMutation = useMutation(trpc.agentAuth.start.mutationOptions({}));
-  const codeMutation = useMutation(trpc.agentAuth.submitCode.mutationOptions({}));
-  const cancelMutation = useMutation(trpc.agentAuth.cancel.mutationOptions({}));
-  const dispatchMutation = useMutation(trpc.dispatchControl.set.mutationOptions({}));
+  const startMutation = useMutation(
+    bobQuery("agentAuth.start").mutationOptions({}),
+  );
+  const codeMutation = useMutation(
+    bobQuery("agentAuth.submitCode").mutationOptions({}),
+  );
+  const cancelMutation = useMutation(
+    bobQuery("agentAuth.cancel").mutationOptions({}),
+  );
+  const dispatchMutation = useMutation(
+    bobQuery("dispatchControl.set").mutationOptions({}),
+  );
+  const proxyMutation = useMutation(
+    bobQuery("proxyControl.set").mutationOptions({}),
+  );
+
+  const setProxyAction = (request: ProxyActionRequest) => {
+    const requestId = crypto.randomUUID();
+    setProxyPending(request);
+    setProxyResult(null);
+    proxyMutation.mutate(
+      { workspaceId, requestId, action: request.action, ...(request.accountId ? { accountId: request.accountId } : {}) },
+      {
+        onError: (error) => {
+          setProxyPending(null);
+          setProxyResult({ ok: false, detail: error.message });
+        },
+      },
+    );
+  };
 
   const host = useMemo(
     () => (hostSnapshot ? buildHostMissionControl(hostSnapshot) : null),
@@ -160,14 +209,23 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
       { workspaceId, provider: provider as never, requestId },
       {
         onError: (error) =>
-          setPhase({ kind: "done", provider, ok: false, detail: error.message }),
+          setPhase({
+            kind: "done",
+            provider,
+            ok: false,
+            detail: error.message,
+          }),
       },
     );
   };
 
   const submitCode = () => {
     if (phase.kind !== "prompt" || !codeInput.trim()) return;
-    codeMutation.mutate({ workspaceId, requestId: phase.requestId, value: codeInput.trim() });
+    codeMutation.mutate({
+      workspaceId,
+      requestId: phase.requestId,
+      value: codeInput.trim(),
+    });
     setCodeInput("");
   };
 
@@ -180,7 +238,10 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
 
   // Confirmed state wins; fall back to the host snapshot, and leave it unknown
   // when neither says. A daemon that predates dispatch control reports nothing.
-  const runnerRunning = dispatch.kind === "idle" ? (dispatch.running ?? host?.dispatchRunning) : host?.dispatchRunning;
+  const runnerRunning =
+    dispatch.kind === "idle"
+      ? (dispatch.running ?? host?.dispatchRunning)
+      : host?.dispatchRunning;
 
   const setDispatchAction = (action: DispatchAction) => {
     const requestId = crypto.randomUUID();
@@ -188,7 +249,8 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
     dispatchMutation.mutate(
       { workspaceId, action, requestId },
       {
-        onError: (error) => setDispatch({ kind: "error", detail: error.message }),
+        onError: (error) =>
+          setDispatch({ kind: "error", detail: error.message }),
       },
     );
   };
@@ -196,7 +258,9 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
   if (!hostSnapshot) {
     return (
       <Card className="p-4">
-        <h2 className="font-display text-lg font-semibold">Agent credentials</h2>
+        <h2 className="font-display text-lg font-semibold">
+          Agent credentials
+        </h2>
         <p className="mt-2 text-sm text-muted-foreground">
           {connectionState.status === "connected"
             ? "Waiting for the host to report agent status…"
@@ -209,7 +273,9 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-display text-lg font-semibold">Agent credentials</h2>
+        <h2 className="font-display text-lg font-semibold">
+          Agent credentials
+        </h2>
         <span className="text-xs text-muted-foreground">
           checked {new Date(hostSnapshot.checkedAt).toLocaleTimeString()}
         </span>
@@ -223,11 +289,12 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
           className="mt-3 rounded-md border border-red-500/50 bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-300"
           data-testid="dispatch-paused-banner"
         >
-          <strong className="font-semibold">Dispatch paused.</strong> Every agent on this node is
-          confirmed unavailable, so the runner has stopped claiming work rather than burning the
-          backlog. Fix an agent below to resume, or set{" "}
-          <code className="font-mono text-xs">BOB_DISPATCH_OVERRIDE=1</code> on the runner to force
-          dispatch anyway.
+          <strong className="font-semibold">Dispatch paused.</strong> Every
+          agent on this node is confirmed unavailable, so the runner has stopped
+          claiming work rather than burning the backlog. Fix an agent below to
+          resume, or set{" "}
+          <code className="font-mono text-xs">BOB_DISPATCH_OVERRIDE=1</code> on
+          the runner to force dispatch anyway.
         </div>
       ) : null}
 
@@ -254,7 +321,9 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
             <button
               type="button"
               disabled={dispatch.kind === "pending"}
-              onClick={() => setDispatchAction(runnerRunning ? "stop" : "start")}
+              onClick={() =>
+                setDispatchAction(runnerRunning ? "stop" : "start")
+              }
               className={cn(
                 "rounded-md px-3 py-1 text-xs font-medium disabled:opacity-50",
                 runnerRunning
@@ -270,7 +339,9 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
             </button>
           </div>
           {dispatch.kind === "error" ? (
-            <p className="w-full text-xs text-red-700 dark:text-red-400">{dispatch.detail}</p>
+            <p className="w-full text-xs text-red-700 dark:text-red-400">
+              {dispatch.detail}
+            </p>
           ) : null}
         </div>
       )}
@@ -287,7 +358,9 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
               {provider.statusLabel}
             </Badge>
             {provider.version ? (
-              <span className="text-xs text-muted-foreground">{provider.version}</span>
+              <span className="text-xs text-muted-foreground">
+                {provider.version}
+              </span>
             ) : null}
 
             <div className="ml-auto flex items-center gap-2">
@@ -323,19 +396,48 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
                   {PROVIDER_INSTALL_HINTS[provider.provider] ?? "not installed"}
                 </span>
               ) : null}
+              {/* The CLI is installed and the accounts are fine; the transport
+                  is down. Neither "sign in" nor "install" would help. */}
+              {provider.remedy === "check_proxy" ? (
+                <span className="text-xs text-red-700 dark:text-red-300">
+                  inference proxy unreachable — see below
+                </span>
+              ) : null}
+              {provider.via === "proxy" ? (
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  via proxy
+                </span>
+              ) : null}
             </div>
 
             {provider.detail ? (
-              <p className="w-full text-xs text-muted-foreground">{provider.detail}</p>
+              <p className="w-full text-xs text-muted-foreground">
+                {provider.detail}
+              </p>
             ) : null}
           </div>
         ))}
       </div>
 
+      {/* Where inference actually goes. Rendered only when this host is routed
+          through the proxy; a host that is not shows nothing here rather than
+          a panel that says "not configured". */}
+      <ProxyPanel
+        snapshot={hostSnapshot}
+        onAction={setProxyAction}
+        pending={proxyPending}
+        lastResult={proxyResult}
+      />
+
       {phase.kind !== "idle" ? (
-        <div className="mt-4 rounded-md border border-border bg-muted/40 p-3" role="dialog">
+        <div
+          className="mt-4 rounded-md border border-border bg-muted/40 p-3"
+          role="dialog"
+        >
           {phase.kind === "starting" ? (
-            <p className="text-sm">Starting {phase.provider} sign-in on the host…</p>
+            <p className="text-sm">
+              Starting {phase.provider} sign-in on the host…
+            </p>
           ) : null}
 
           {phase.kind === "prompt" ? (
@@ -353,7 +455,10 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
               ) : null}
               {phase.code ? (
                 <p className="text-sm">
-                  Code: <span className="font-mono text-base font-semibold">{phase.code}</span>
+                  Code:{" "}
+                  <span className="font-mono text-base font-semibold">
+                    {phase.code}
+                  </span>
                 </p>
               ) : null}
               {/* Fail-open: no matcher fired, so show what the CLI actually said
@@ -386,7 +491,14 @@ export function AgentCredentials({ workspaceId }: { workspaceId: string }) {
           ) : null}
 
           {phase.kind === "done" ? (
-            <p className={cn("text-sm", phase.ok ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400")}>
+            <p
+              className={cn(
+                "text-sm",
+                phase.ok
+                  ? "text-green-700 dark:text-green-400"
+                  : "text-red-700 dark:text-red-400",
+              )}
+            >
               {phase.ok
                 ? `${phase.provider} is signed in.`
                 : `${phase.provider} sign-in failed${phase.detail ? `: ${phase.detail}` : ""}`}

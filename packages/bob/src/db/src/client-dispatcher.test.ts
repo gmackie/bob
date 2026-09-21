@@ -54,6 +54,24 @@ describe("db client dispatcher (BOB_DB_DRIVER)", () => {
     expect(result.rows[0]).toMatchObject({ one: 1 });
   }, 30_000);
 
+  it("shares PGlite across repeated module evaluation", async () => {
+    process.env.BOB_DB_DRIVER = "pglite";
+    process.env.BOB_DB_PGLITE_DIR = ":memory:";
+    const first = await import("./client.js");
+    const { sql } = await import("drizzle-orm");
+    await first.db.execute(
+      sql`create temp table module_reload_probe (value integer)`,
+    );
+    await first.db.execute(sql`insert into module_reload_probe values (42)`);
+    vi.resetModules();
+    const second = await import("./client.js");
+    expect(second.db).toBe(first.db);
+    const result = await second.db.execute(
+      sql`select value from module_reload_probe`,
+    );
+    expect(result.rows).toEqual([{ value: 42 }]);
+  }, 30_000);
+
   it("PGlite path applies full schema before first query (race-safe)", async () => {
     process.env.BOB_DB_DRIVER = "pglite";
     process.env.BOB_DB_PGLITE_DIR = ":memory:";
@@ -72,6 +90,8 @@ describe("db client dispatcher (BOB_DB_DRIVER)", () => {
     process.env.BOB_DB_PGLITE_DIR = ":memory:";
     const mod = await import("./client.js");
 
-    await expect(mod.db.query.workspaces.findMany({ limit: 1 })).resolves.toEqual([]);
+    await expect(
+      mod.db.query.workspaces.findMany({ limit: 1 }),
+    ).resolves.toEqual([]);
   }, 30_000);
 });

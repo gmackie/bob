@@ -10,14 +10,18 @@ import { Card } from "@gmacko/core/ui/card";
 
 import { AgentCredentials } from "~/components/nodes/agent-credentials";
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 const STATUS_COLORS: Record<string, string> = {
-  queued: "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300",
-  running: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  queued:
+    "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300",
+  running:
+    "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  completed:
+    "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
   failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  interrupted: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+  interrupted:
+    "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
 };
 
 function isNodeOnline(lastHeartbeat: string | null): boolean {
@@ -46,20 +50,25 @@ export default function NodeDetailPage({
 }) {
   const { machineId } = use(params);
   const decodedMachineId = decodeURIComponent(machineId);
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const queryClient = useQueryClient();
 
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState("");
 
   const { data: workspaceMemberships } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, { staleTime: 10_000, refetchInterval: 15_000 }),
+    bobQuery("projects.workspace.list").queryOptions(undefined, {
+      staleTime: 10_000,
+      refetchInterval: 15_000,
+    }),
   );
 
   const renameMutation = useMutation(
-    trpc.workspace.rename.mutationOptions({
+    bobQuery("projects.workspace.rename").mutationOptions({
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: trpc.workspace.list.queryKey() });
+        queryClient.invalidateQueries({
+          queryKey: bobQuery("projects.workspace.list").queryKey(),
+        });
         setEditing(false);
       },
     }),
@@ -74,29 +83,19 @@ export default function NodeDetailPage({
   );
 
   const { data: repoData } = useQuery(
-    trpc.repository.list.queryOptions(undefined, { staleTime: 30_000 }),
+    bobQuery("projects.repository.list").queryOptions(undefined, {
+      staleTime: 30_000,
+    }),
   );
 
-  const allRepos = (repoData ?? []) as Array<{
-    id: string;
-    name: string;
-    path: string;
-    branch: string;
-    mainBranch: string;
-    remoteUrl: string | null;
-    remoteOwner: string | null;
-    remoteName: string | null;
-    workspaceId: string | null;
-    dirty: boolean | null;
-    stale: boolean | null;
-  }>;
+  const allRepos = repoData ?? [];
 
   const nodeRepos = workspace
     ? allRepos.filter((r) => r.workspaceId === workspace.id)
     : [];
 
   const { data: runs } = useQuery(
-    trpc.agentRun.list.queryOptions(
+    bobQuery("agent.run.list").queryOptions(
       { workspaceId: workspace?.id ?? "", limit: 30 },
       { enabled: !!workspace?.id, refetchInterval: 10_000 },
     ),
@@ -110,19 +109,27 @@ export default function NodeDetailPage({
     : [];
 
   const activeRuns = (runs ?? []).filter((r: any) => r.status === "running");
-  const completedRuns = (runs ?? []).filter((r: any) => r.status === "completed");
+  const completedRuns = (runs ?? []).filter(
+    (r: any) => r.status === "completed",
+  );
   const failedRuns = (runs ?? []).filter((r: any) => r.status === "failed");
 
   const online = workspace ? isNodeOnline(workspace.lastHeartbeat) : false;
 
   // Needs attention items
-  const attentionItems: Array<{ label: string; type: "warning" | "error" }> = [];
+  const attentionItems: Array<{ label: string; type: "warning" | "error" }> =
+    [];
   if (!online && workspace) {
-    attentionItems.push({ label: "Node is offline", type: "error" });
+    attentionItems.push({ label: "Environment is offline", type: "error" });
   }
   for (const repo of nodeRepos) {
-    if (repo.dirty) attentionItems.push({ label: `${repo.name} has uncommitted changes`, type: "warning" });
-    if (repo.stale) attentionItems.push({ label: `${repo.name} is stale`, type: "warning" });
+    if (repo.dirty)
+      attentionItems.push({
+        label: `${repo.name} has uncommitted changes`,
+        type: "warning",
+      });
+    if (repo.stale)
+      attentionItems.push({ label: `${repo.name} is stale`, type: "warning" });
   }
 
   if (!workspace) {
@@ -130,21 +137,24 @@ export default function NodeDetailPage({
       <main className="mx-auto max-w-5xl px-6 py-10">
         <Breadcrumbs
           items={[
-            { label: "Nodes", href: "/nodes" },
+            { label: "Environments", href: "/nodes" },
             { label: decodedMachineId },
           ]}
           className="mb-4"
         />
         <Card className="p-8 text-center">
-          <p className="text-sm font-medium text-foreground">Node not found</p>
+          <p className="text-sm font-medium text-foreground">
+            Environment not found
+          </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            No node with machine ID &ldquo;{decodedMachineId}&rdquo; is registered.
+            No execution environment with machine ID &ldquo;{decodedMachineId}
+            &rdquo; is registered.
           </p>
           <Link
             href="/nodes"
             className="mt-4 inline-block text-sm text-primary hover:underline"
           >
-            Back to nodes
+            Back to environments
           </Link>
         </Card>
       </main>
@@ -155,7 +165,7 @@ export default function NodeDetailPage({
     <main className="mx-auto max-w-7xl px-6 py-10">
       <Breadcrumbs
         items={[
-          { label: "Nodes", href: "/nodes" },
+          { label: "Environments", href: "/nodes" },
           { label: decodedMachineId },
         ]}
         className="mb-4"
@@ -200,7 +210,7 @@ export default function NodeDetailPage({
                       setEditing(true);
                     }}
                     className="group flex items-center gap-2 text-left"
-                    title="Rename node"
+                    title="Rename environment"
                   >
                     <h1 className="font-display text-2xl font-semibold text-foreground group-hover:text-primary">
                       {workspace.name || decodedMachineId}
@@ -247,7 +257,9 @@ export default function NodeDetailPage({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Slug</span>
-                  <span className="font-mono text-foreground">{workspace.slug}</span>
+                  <span className="font-mono text-foreground">
+                    {workspace.slug}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">ID</span>
@@ -261,7 +273,14 @@ export default function NodeDetailPage({
             {/* Quick stats */}
             <div className="grid grid-cols-2 gap-3">
               <Card className="p-4 text-center">
-                <div className={cn("text-2xl font-semibold", activeRuns.length > 0 ? "text-amber-500" : "text-foreground")}>
+                <div
+                  className={cn(
+                    "text-2xl font-semibold",
+                    activeRuns.length > 0
+                      ? "text-amber-500"
+                      : "text-foreground",
+                  )}
+                >
                   {activeRuns.length}
                 </div>
                 <div className="mt-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
@@ -277,7 +296,12 @@ export default function NodeDetailPage({
                 </div>
               </Card>
               <Card className="p-4 text-center">
-                <div className={cn("text-2xl font-semibold", failedRuns.length > 0 ? "text-red-500" : "text-foreground")}>
+                <div
+                  className={cn(
+                    "text-2xl font-semibold",
+                    failedRuns.length > 0 ? "text-red-500" : "text-foreground",
+                  )}
+                >
                   {failedRuns.length}
                 </div>
                 <div className="mt-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
@@ -306,9 +330,7 @@ export default function NodeDetailPage({
                       <span
                         className={cn(
                           "size-1.5 rounded-full",
-                          item.type === "error"
-                            ? "bg-red-500"
-                            : "bg-amber-500",
+                          item.type === "error" ? "bg-red-500" : "bg-amber-500",
                         )}
                       />
                       <span className="text-foreground">{item.label}</span>
@@ -328,13 +350,15 @@ export default function NodeDetailPage({
               Agents
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Configured agent capacity on this node.
+              Configured agent capacity in this environment.
             </p>
 
             {agents.length === 0 ? (
               <Card className="mt-4 p-6 text-center">
                 <p className="text-sm text-muted-foreground">
-                  No agents configured. Update <code className="font-mono">agentConfigs</code> in the workspace settings.
+                  No agents configured. Update{" "}
+                  <code className="font-mono">agentConfigs</code> in the
+                  workspace settings.
                 </p>
               </Card>
             ) : (
@@ -368,40 +392,53 @@ export default function NodeDetailPage({
               Recent Sessions
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Agent sessions running on this node.
+              Agent sessions running in this environment.
             </p>
 
             {!runs?.length ? (
               <Card className="mt-4 p-6 text-center">
                 <p className="text-sm text-muted-foreground">
-                  No sessions recorded yet. Sessions will appear here when agents run on this node.
+                  No sessions recorded yet. Sessions will appear here when
+                  agents run in this environment.
                 </p>
               </Card>
             ) : (
               <div className="mt-4 flex flex-col gap-2">
                 {(runs as any[]).map((run: any) => {
-                  const title = run.session?.title ?? run.workItemId ?? "Untitled";
+                  const title =
+                    run.session?.title ?? run.workItemId ?? "Untitled";
                   return (
-                  <Link key={run.id} href={`/runs/${run.id}`}>
-                    <Card className="hover:border-primary/30 flex items-center gap-3 p-3 transition-colors">
-                      <Badge className={cn("shrink-0 text-[10px] font-medium", STATUS_COLORS[run.status] ?? STATUS_COLORS.queued)}>
-                        {run.status}
-                      </Badge>
-                      <div className="min-w-0 flex-1">
-                        <span className="text-sm font-medium truncate block">
-                          {title}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          via {run.agentType} · {formatRelative(run.createdAt)}
-                        </span>
-                      </div>
-                      {run.completedAt && run.startedAt && (
-                        <span className="text-xs text-muted-foreground shrink-0">
-                          {Math.round((new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()) / 1000)}s
-                        </span>
-                      )}
-                    </Card>
-                  </Link>
+                    <Link key={run.id} href={`/runs/${run.id}`}>
+                      <Card className="hover:border-primary/30 flex items-center gap-3 p-3 transition-colors">
+                        <Badge
+                          className={cn(
+                            "shrink-0 text-[10px] font-medium",
+                            STATUS_COLORS[run.status] ?? STATUS_COLORS.queued,
+                          )}
+                        >
+                          {run.status}
+                        </Badge>
+                        <div className="min-w-0 flex-1">
+                          <span className="text-sm font-medium truncate block">
+                            {title}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            via {run.agentType} ·{" "}
+                            {formatRelative(run.createdAt)}
+                          </span>
+                        </div>
+                        {run.completedAt && run.startedAt && (
+                          <span className="text-xs text-muted-foreground shrink-0">
+                            {Math.round(
+                              (new Date(run.completedAt).getTime() -
+                                new Date(run.startedAt).getTime()) /
+                                1000,
+                            )}
+                            s
+                          </span>
+                        )}
+                      </Card>
+                    </Link>
                   );
                 })}
               </div>
@@ -414,13 +451,13 @@ export default function NodeDetailPage({
               Repositories
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Repos registered on this node.
+              Repositories registered in this environment.
             </p>
 
             {nodeRepos.length === 0 ? (
               <Card className="mt-4 p-6 text-center">
                 <p className="text-sm text-muted-foreground">
-                  No repositories linked to this node.
+                  No repositories linked to this environment.
                 </p>
               </Card>
             ) : (
@@ -436,7 +473,10 @@ export default function NodeDetailPage({
                   </thead>
                   <tbody className="divide-y divide-border">
                     {nodeRepos.map((repo) => (
-                      <tr key={repo.id} className="transition-colors hover:bg-accent/20">
+                      <tr
+                        key={repo.id}
+                        className="transition-colors hover:bg-accent/20"
+                      >
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-foreground">

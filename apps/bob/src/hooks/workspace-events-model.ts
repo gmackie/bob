@@ -1,5 +1,9 @@
 const WORKSPACE_EVENT_INVALIDATION_ROOTS = new Set([
   "activity",
+  "agent",
+  "projects",
+  "external",
+  "cockpit",
   "agentRun",
   "artifact",
   "capacity",
@@ -51,18 +55,27 @@ const WORKSPACE_REALTIME_INVALIDATION_MESSAGES = new Set([
   "host_snapshot",
 ]);
 
-export function getWorkspaceEventQueryRoot(queryKey: readonly unknown[]): string {
+export function getWorkspaceEventQueryRoot(
+  queryKey: readonly unknown[],
+): string {
   const first = queryKey[0];
-  const rawRoot = Array.isArray(first) ? first[0] : first;
+  const rawRoot =
+    first === "rpc" ? queryKey[1] : Array.isArray(first) ? first[0] : first;
   if (typeof rawRoot !== "string") return "";
 
   return rawRoot.split(".")[0] ?? "";
 }
 
-export function shouldInvalidateQueryForWorkspaceEvent(queryKey: readonly unknown[]): boolean {
-  return WORKSPACE_EVENT_INVALIDATION_ROOTS.has(getWorkspaceEventQueryRoot(queryKey));
+export function shouldInvalidateQueryForWorkspaceEvent(
+  queryKey: readonly unknown[],
+): boolean {
+  return WORKSPACE_EVENT_INVALIDATION_ROOTS.has(
+    getWorkspaceEventQueryRoot(queryKey),
+  );
 }
 
-export function shouldInvalidateForWorkspaceRealtimeMessage(type: string): boolean {
+export function shouldInvalidateForWorkspaceRealtimeMessage(
+  type: string,
+): boolean {
   return WORKSPACE_REALTIME_INVALIDATION_MESSAGES.has(type);
 }

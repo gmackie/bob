@@ -327,6 +327,38 @@ export const publicApiRouter = {
       z.object({
         workspaceId: z.string().uuid(),
         agentTypes: z.array(z.string()).optional(),
+        runtime: z
+          .object({
+            kind: z.enum(["bob", "t3"]),
+            version: z.string().min(1).max(64).optional(),
+            connectionMode: z.enum(["local", "remote", "tunnel"]).optional(),
+          })
+          .optional(),
+        providers: z
+          .array(
+            z.object({
+              type: z.string().min(1).max(64),
+              status: z.enum([
+                "ready",
+                "unavailable",
+                "unauthenticated",
+                "degraded",
+              ]),
+              capabilities: z
+                .array(
+                  z.enum([
+                    "approval",
+                    "follow-up",
+                    "resume",
+                    "cancel",
+                    "structured-usage",
+                  ]),
+                )
+                .optional(),
+            }),
+          )
+          .max(20)
+          .optional(),
         forgeAvailable: z.boolean().optional(),
         repos: z
           .array(

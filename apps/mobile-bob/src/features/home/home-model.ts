@@ -1,4 +1,6 @@
 import type { Href } from "expo-router";
+import type { HostSnapshotWire } from "@bob/ws";
+import { buildProxyPanel } from "@bob/ws";
 
 /**
  * Phone home: triage.
@@ -26,6 +28,12 @@ export interface HomeWorkItemInput {
 
 export interface HomeRow {
   id: string;
+  /**
+   * A work item, or something about the machinery that stops work — an
+   * unreachable inference proxy, a provider with no ready account. The latter
+   * link to Nodes, not to a work item.
+   */
+  kind: "work_item" | "infrastructure";
   identifier: string;
   title: string;
   status: string;
@@ -90,6 +98,7 @@ function toRow(item: HomeWorkItemInput): HomeRow {
   const title = item.title?.trim();
   return {
     id: item.id,
+    kind: "work_item",
     identifier: identifier?.length ? identifier : item.id.slice(0, 8),
     title: title?.length ? title : "Untitled",
     status: item.status,
@@ -99,9 +108,48 @@ function toRow(item: HomeWorkItemInput): HomeRow {
   };
 }
 
+/**
+ * Rows for the machinery that stops work. Derived from the same proxy
+ * view-model the Nodes screen renders, so the phone's home and its Nodes page
+ * agree on what counts as an outage. A stale snapshot yields nothing: an old
+ * "unreachable" is not evidence of an outage now.
+ */
+function infrastructureRows(snapshot: HostSnapshotWire | null | undefined, now: Date): HomeRow[] {
+  if (!snapshot) return [];
+  const panel = buildProxyPanel(snapshot, now);
+  if (!panel || panel.tone === "grey") return [];
+  const rows: HomeRow[] = [];
+  if (!panel.reachable) {
+    rows.push({
+      id: "proxy:unreachable",
+      kind: "infrastructure",
+      identifier: "Proxy",
+      title: "Inference proxy unreachable — no run can be served",
+      status: "proxy_unreachable",
+      statusLabel: "Check proxy",
+      tone: "danger",
+      href: "/nodes",
+    });
+  }
+  for (const provider of panel.providers) {
+    if (provider.ready > 0) continue;
+    rows.push({
+      id: `proxy:${provider.provider}`,
+      kind: "infrastructure",
+      identifier: "Proxy",
+      title: `${provider.label} has no ready account on the proxy`,
+      status: "provider_no_ready_accounts",
+      statusLabel: provider.cooling > 0 ? "Cooling down" : "Sign in",
+      tone: "warning",
+      href: "/nodes",
+    });
+  }
+  return rows;
+}
+
 function section(
   key: HomeSectionKey,
-  items: HomeWorkItemInput[],
+  items: readonly HomeWorkItemInput[],
   limit: number,
 ): HomeSection {
   // Freshest first: on a phone the top of each list is all that gets read.
@@ -118,18 +166,26 @@ function section(
 }
 
 export function buildHomeTriage(
-  input: { workItems: HomeWorkItemInput[] },
-  options: { limit?: number } = {},
+  input: { workItems: readonly HomeWorkItemInput[]; hostSnapshot?: HostSnapshotWire | null },
+  options: { limit?: number; now?: Date } = {},
 ): HomeTriage {
   const limit = options.limit ?? HOME_SECTION_LIMIT;
+  const now = options.now ?? new Date();
   const items = input.workItems;
 
   const needsYou = items.filter((i) => NEEDS_YOU.has(i.status));
   const running = items.filter((i) => i.status === "running");
   const upNext = items.filter((i) => i.status === "queued");
 
+  // Machinery outages outrank any single work item: nothing below can move
+  // until they are fixed, so they go first and are never cut by the cap.
+  const infrastructure = infrastructureRows(input.hostSnapshot, now);
+  const needsYouSection = section("needs_you", needsYou, limit);
+  needsYouSection.rows = [...infrastructure, ...needsYouSection.rows];
+  needsYouSection.total += infrastructure.length;
+
   const sections = [
-    section("needs_you", needsYou, limit),
+    needsYouSection,
     section("running", running, limit),
     section("up_next", upNext, limit),
   ].filter((s) => s.total > 0);
@@ -137,6 +193,6 @@ export function buildHomeTriage(
   return {
     sections,
     isAllClear: sections.length === 0,
-    needsYouCount: needsYou.length,
+    needsYouCount: needsYou.length + infrastructure.length,
   };
 }

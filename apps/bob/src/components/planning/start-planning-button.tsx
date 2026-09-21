@@ -19,7 +19,7 @@ import { toast } from "@gmacko/core/ui/toast";
 import { PlusIcon } from "@radix-ui/react-icons";
 
 import { useChatPanel } from "~/components/chat/chat-panel-provider";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 import { getPlanningSessionHref } from "./planning-shell-model";
 
 interface StartPlanningButtonProps {
@@ -41,7 +41,7 @@ export function StartPlanningButton({
   disabledReason = "Planning is not available yet.",
   openTarget = "panel",
 }: StartPlanningButtonProps) {
-  const trpc = useTRPC();
+  const rpc = useBobQueryClient();
   const router = useRouter();
   const { openPanel } = useChatPanel();
   const [open, setOpen] = useState(false);
@@ -49,11 +49,11 @@ export function StartPlanningButton({
   const [workingDirectory, setWorkingDirectory] = useState("/");
 
   const createSession = useMutation(
-    trpc.planSession.create.mutationOptions(),
+    rpc("planning.session.create").mutationOptions(),
   );
 
   const startSession = useMutation(
-    trpc.planSession.start.mutationOptions(),
+    rpc("planning.session.start").mutationOptions(),
   );
 
   const isPending = createSession.isPending || startSession.isPending;

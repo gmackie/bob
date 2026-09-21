@@ -26,6 +26,9 @@ export type ConfigRootId = typeof ConfigRootIdEnum.Type;
 
 export const UserPreferencesSchema = Schema.Struct({
   userId: Schema.String,
+  language: Schema.optional(Schema.String),
+  quietHoursStart: Schema.optional(Schema.NullOr(Schema.String)),
+  quietHoursEnd: Schema.optional(Schema.NullOr(Schema.String)),
   theme: Schema.optional(ThemeEnum),
   defaultModel: Schema.optional(Schema.NullOr(Schema.String)),
   editorFontSize: Schema.optional(Schema.NullOr(Schema.Number)),
@@ -34,7 +37,7 @@ export const UserPreferencesSchema = Schema.Struct({
   pushNotifications: Schema.optional(Schema.Boolean),
   timezone: Schema.optional(Schema.NullOr(Schema.String)),
   createdAt: Schema.optional(WireTimestamp),
-  updatedAt: Schema.optional(WireTimestamp),
+  updatedAt: Schema.optional(Schema.NullOr(WireTimestamp)),
 });
 export type UserPreferencesWire = typeof UserPreferencesSchema.Type;
 

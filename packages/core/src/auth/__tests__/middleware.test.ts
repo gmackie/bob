@@ -45,7 +45,7 @@ const fakeAuth = {
       const cookie = headers.get("cookie") ?? "";
       if (cookie.includes(SIGNED_COOKIE_TOKEN)) {
         return {
-          session: { userId: USER_ID, token: SIGNED_COOKIE_TOKEN },
+          session: { userId: USER_ID, token: "verified-cookie-session-token" },
           user: { id: USER_ID, email: USER_EMAIL },
         };
       }
@@ -57,7 +57,10 @@ const fakeAuth = {
 let ctx: TestCtx;
 let deps: Layer.Layer<ApiKeys | Sessions | Tenancy>;
 
-async function seedBase(memberships: ReadonlyArray<TenantId>, role: "owner" | "admin" | "member" = "owner") {
+async function seedBase(
+  memberships: ReadonlyArray<TenantId>,
+  role: "owner" | "admin" | "member" = "owner",
+) {
   await ctx.db.insert(users).values([
     { id: USER_ID, name: "MW User", email: USER_EMAIL },
     { id: SECOND_USER_ID, name: "No Members", email: SECOND_USER_EMAIL },
@@ -110,71 +113,85 @@ afterEach(async () => {
 });
 
 describe("@gmacko/auth middleware resolveCurrentUser", () => {
-  it.effect("API-key happy path: Bearer <gmk_*> resolves userId/tenantId/email/role from tenant_members", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => seedBase([TENANT_A], "admin"));
-      const apiKeys = yield* ApiKeys.asEffect();
-      const issued = yield* apiKeys.issueKey({
-        userId: USER_ID,
-        tenantId: TENANT_A,
-        name: "mw-test",
-      });
-      const user = yield* resolveCurrentUser({
-        headers: new Headers({ authorization: `Bearer ${issued.plaintext}` }),
-      });
-      expect(user.userId).toBe(USER_ID);
-      expect(user.tenantId).toBe(TENANT_A);
-      expect(user.email).toBe(USER_EMAIL);
-      expect(user.role).toBe("admin");
-    }).pipe(Effect.provide(deps)),
+  it.effect(
+    "API-key happy path: Bearer <gmk_*> resolves userId/tenantId/email/role from tenant_members",
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => seedBase([TENANT_A], "admin"));
+        const apiKeys = yield* ApiKeys.asEffect();
+        const issued = yield* apiKeys.issueKey({
+          userId: USER_ID,
+          tenantId: TENANT_A,
+          name: "mw-test",
+        });
+        const user = yield* resolveCurrentUser({
+          headers: new Headers({ authorization: `Bearer ${issued.plaintext}` }),
+        });
+        expect(user.userId).toBe(USER_ID);
+        expect(user.tenantId).toBe(TENANT_A);
+        expect(user.email).toBe(USER_EMAIL);
+        expect(user.role).toBe("admin");
+        expect(user.gatewayToken).toBe(issued.plaintext);
+      }).pipe(Effect.provide(deps)),
   );
 
-  it.effect("Session-bearer happy path: Bearer <session_token> + single membership auto-selects tenant", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => seedBase([TENANT_A], "owner"));
-      const user = yield* resolveCurrentUser({
-        headers: new Headers({ authorization: `Bearer ${VALID_SESSION_TOKEN}` }),
-      });
-      expect(user.userId).toBe(USER_ID);
-      expect(user.tenantId).toBe(TENANT_A);
-      expect(user.email).toBe(USER_EMAIL);
-      expect(user.role).toBe("owner");
-    }).pipe(Effect.provide(deps)),
+  it.effect(
+    "Session bearer wins over a different signed-cookie credential",
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => seedBase([TENANT_A], "owner"));
+        const user = yield* resolveCurrentUser({
+          headers: new Headers({
+            authorization: `Bearer ${VALID_SESSION_TOKEN}`,
+            cookie: `${DEFAULT_SESSION_COOKIE_NAME}=${SIGNED_COOKIE_TOKEN}`,
+          }),
+        });
+        expect(user.userId).toBe(USER_ID);
+        expect(user.tenantId).toBe(TENANT_A);
+        expect(user.email).toBe(USER_EMAIL);
+        expect(user.role).toBe("owner");
+        expect(user.gatewayToken).toBe(VALID_SESSION_TOKEN);
+      }).pipe(Effect.provide(deps)),
   );
 
-  it.effect("Session-cookie happy path: better-auth.session_token cookie resolves identity via validateRequest", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => seedBase([TENANT_A], "member"));
-      const user = yield* resolveCurrentUser({
-        // The signed-cookie token isn't in the DB; only the better-auth
-        // stub recognises it. This proves the cookie path delegates to
-        // `Sessions.validateRequest` (signature-aware) rather than
-        // doing a raw `validateToken` DB lookup.
-        headers: new Headers({
-          cookie: `${DEFAULT_SESSION_COOKIE_NAME}=${SIGNED_COOKIE_TOKEN}`,
-        }),
-        cookies: { [DEFAULT_SESSION_COOKIE_NAME]: SIGNED_COOKIE_TOKEN },
-      });
-      expect(user.userId).toBe(USER_ID);
-      expect(user.tenantId).toBe(TENANT_A);
-      expect(user.role).toBe("member");
-    }).pipe(Effect.provide(deps)),
+  it.effect(
+    "Session-cookie happy path: better-auth.session_token cookie resolves identity via validateRequest",
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => seedBase([TENANT_A], "member"));
+        const user = yield* resolveCurrentUser({
+          // The signed-cookie token isn't in the DB; only the better-auth
+          // stub recognises it. This proves the cookie path delegates to
+          // `Sessions.validateRequest` (signature-aware) rather than
+          // doing a raw `validateToken` DB lookup.
+          headers: new Headers({
+            cookie: `${DEFAULT_SESSION_COOKIE_NAME}=${SIGNED_COOKIE_TOKEN}`,
+          }),
+          cookies: { [DEFAULT_SESSION_COOKIE_NAME]: SIGNED_COOKIE_TOKEN },
+        });
+        expect(user.userId).toBe(USER_ID);
+        expect(user.tenantId).toBe(TENANT_A);
+        expect(user.role).toBe("member");
+        expect(user.gatewayToken).toBe("verified-cookie-session-token");
+      }).pipe(Effect.provide(deps)),
   );
 
-  it.effect("Explicit x-tenant-id honored over auto-select when user has 2 memberships", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => seedBase([TENANT_A, TENANT_B], "admin"));
-      const user = yield* resolveCurrentUser({
-        headers: new Headers({
-          "x-tenant-id": TENANT_B,
-          cookie: `${DEFAULT_SESSION_COOKIE_NAME}=${SIGNED_COOKIE_TOKEN}`,
-        }),
-        cookies: { [DEFAULT_SESSION_COOKIE_NAME]: SIGNED_COOKIE_TOKEN },
-      });
-      expect(user.userId).toBe(USER_ID);
-      expect(user.tenantId).toBe(TENANT_B);
-      expect(user.role).toBe("admin");
-    }).pipe(Effect.provide(deps)),
+  it.effect(
+    "Explicit x-tenant-id honored over auto-select when user has 2 memberships",
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => seedBase([TENANT_A, TENANT_B], "admin"));
+        const user = yield* resolveCurrentUser({
+          headers: new Headers({
+            "x-tenant-id": TENANT_B,
+            cookie: `${DEFAULT_SESSION_COOKIE_NAME}=${SIGNED_COOKIE_TOKEN}`,
+          }),
+          cookies: { [DEFAULT_SESSION_COOKIE_NAME]: SIGNED_COOKIE_TOKEN },
+        });
+        expect(user.userId).toBe(USER_ID);
+        expect(user.tenantId).toBe(TENANT_B);
+        expect(user.role).toBe("admin");
+      }).pipe(Effect.provide(deps)),
   );
 
   it.effect("No credentials → UnauthorizedError('No credentials')", () =>
@@ -188,14 +205,18 @@ describe("@gmacko/auth middleware resolveCurrentUser", () => {
     }).pipe(Effect.provide(deps)),
   );
 
-  it.effect("Invalid bearer (wrong prefix, fails isApiKey → treated as session, validateToken fails) → UnauthorizedError", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => seedBase([TENANT_A]));
-      const caught = yield* resolveCurrentUser({
-        headers: new Headers({ authorization: "Bearer not_a_real_token" }),
-      }).pipe(Effect.catchTag("UnauthorizedError", (err) => Effect.succeed(err)));
-      expect(caught).toBeInstanceOf(UnauthorizedError);
-    }).pipe(Effect.provide(deps)),
+  it.effect(
+    "Invalid bearer (wrong prefix, fails isApiKey → treated as session, validateToken fails) → UnauthorizedError",
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => seedBase([TENANT_A]));
+        const caught = yield* resolveCurrentUser({
+          headers: new Headers({ authorization: "Bearer not_a_real_token" }),
+        }).pipe(
+          Effect.catchTag("UnauthorizedError", (err) => Effect.succeed(err)),
+        );
+        expect(caught).toBeInstanceOf(UnauthorizedError);
+      }).pipe(Effect.provide(deps)),
   );
 
   it.effect("Revoked API key → UnauthorizedError", () =>
@@ -210,36 +231,51 @@ describe("@gmacko/auth middleware resolveCurrentUser", () => {
       yield* apiKeys.revokeKey(issued.id);
       const caught = yield* resolveCurrentUser({
         headers: new Headers({ authorization: `Bearer ${issued.plaintext}` }),
-      }).pipe(Effect.catchTag("UnauthorizedError", (err) => Effect.succeed(err)));
+      }).pipe(
+        Effect.catchTag("UnauthorizedError", (err) => Effect.succeed(err)),
+      );
       expect(caught).toBeInstanceOf(UnauthorizedError);
       expect((caught as UnauthorizedError).message).toContain("revoked");
     }).pipe(Effect.provide(deps)),
   );
 
-  it.effect("User with 0 memberships → TenantNotSelectedError (not collapsed to Unauthorized)", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => seedBase([TENANT_A]));
-      // SECOND_USER_ID has no memberships; log them in via their session.
-      const caught = yield* resolveCurrentUser({
-        headers: new Headers({ authorization: `Bearer ${SECOND_SESSION_TOKEN}` }),
-      }).pipe(
-        Effect.catchTag("TenantNotSelectedError", (err) => Effect.succeed(err)),
-      );
-      expect(caught).toBeInstanceOf(TenantNotSelectedError);
-      expect((caught as TenantNotSelectedError).memberships).toEqual([]);
-    }).pipe(Effect.provide(deps)),
+  it.effect(
+    "User with 0 memberships → TenantNotSelectedError (not collapsed to Unauthorized)",
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => seedBase([TENANT_A]));
+        // SECOND_USER_ID has no memberships; log them in via their session.
+        const caught = yield* resolveCurrentUser({
+          headers: new Headers({
+            authorization: `Bearer ${SECOND_SESSION_TOKEN}`,
+          }),
+        }).pipe(
+          Effect.catchTag("TenantNotSelectedError", (err) =>
+            Effect.succeed(err),
+          ),
+        );
+        expect(caught).toBeInstanceOf(TenantNotSelectedError);
+        expect((caught as TenantNotSelectedError).memberships).toEqual([]);
+      }).pipe(Effect.provide(deps)),
   );
 
-  it.effect("User with 2 memberships, no hint → TenantNotSelectedError listing both", () =>
-    Effect.gen(function* () {
-      yield* Effect.promise(() => seedBase([TENANT_A, TENANT_B], "member"));
-      const caught = yield* resolveCurrentUser({
-        headers: new Headers({ authorization: `Bearer ${VALID_SESSION_TOKEN}` }),
-      }).pipe(
-        Effect.catchTag("TenantNotSelectedError", (err) => Effect.succeed(err)),
-      );
-      expect(caught).toBeInstanceOf(TenantNotSelectedError);
-      expect((caught as TenantNotSelectedError).memberships).toHaveLength(2);
-    }).pipe(Effect.provide(deps)),
+  it.effect(
+    "User with 2 memberships, no hint → TenantNotSelectedError listing both",
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => seedBase([TENANT_A, TENANT_B], "member"));
+        const caught = yield* resolveCurrentUser({
+          headers: new Headers({
+            authorization: `Bearer ${VALID_SESSION_TOKEN}`,
+            cookie: `${DEFAULT_SESSION_COOKIE_NAME}=${SIGNED_COOKIE_TOKEN}`,
+          }),
+        }).pipe(
+          Effect.catchTag("TenantNotSelectedError", (err) =>
+            Effect.succeed(err),
+          ),
+        );
+        expect(caught).toBeInstanceOf(TenantNotSelectedError);
+        expect((caught as TenantNotSelectedError).memberships).toHaveLength(2);
+      }).pipe(Effect.provide(deps)),
   );
 });

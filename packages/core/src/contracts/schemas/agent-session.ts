@@ -24,25 +24,24 @@ export const SessionStatusEnum = Schema.Literals([
   "running",
   "idle",
   "stopping",
+  "blocked",
+  "host_unknown",
   "stopped",
   "error",
 ]);
 export type SessionStatus = Schema.Schema.Type<typeof SessionStatusEnum>;
 
 /** Direction of a session event relative to the session. */
-export const EventDirectionEnum = Schema.Literals(["client", "agent", "system"]);
+export const EventDirectionEnum = Schema.Literals([
+  "client",
+  "agent",
+  "system",
+]);
 export type EventDirection = Schema.Schema.Type<typeof EventDirectionEnum>;
 
 /** Workflow status for agent work-item tracking. */
 export const WorkflowStatusEnum = Schema.Literals([
-  "planning",
-  "implementing",
-  "testing",
-  "reviewing",
-  "awaiting_input",
-  "completed",
-  "failed",
-  "cancelled",
+  "started", "working", "awaiting_input", "blocked", "awaiting_review", "completed",
 ]);
 export type WorkflowStatus = Schema.Schema.Type<typeof WorkflowStatusEnum>;
 
@@ -81,15 +80,33 @@ export const SessionSchema = Schema.Struct({
   worktreeId: Schema.NullOr(Schema.String),
   workingDirectory: Schema.NullOr(Schema.String),
   agentType: Schema.String,
-  status: SessionStatusEnum,
+  // Read records include queued/blocked and future runtime states.
+  status: Schema.String,
   nextSeq: Schema.Number,
-  lastActivityAt: Schema.NullOr(Schema.String),
-  lastError: Schema.NullOr(Schema.Unknown),
+  lastActivityAt: Schema.NullOr(WireTimestamp),
+  lastError: Schema.NullOr(
+    Schema.Struct({
+      code: Schema.String,
+      message: Schema.String,
+      timestamp: Schema.String,
+    }),
+  ),
   workItemId: Schema.NullOr(Schema.String),
   workItemIdentifierSnapshot: Schema.NullOr(Schema.String),
+  planningWorkspaceId: Schema.optional(Schema.NullOr(Schema.String)),
+  workItemIdentifier: Schema.optional(Schema.NullOr(Schema.String)),
+  linkedTask: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        id: Schema.NullOr(Schema.String),
+        identifier: Schema.NullOr(Schema.String),
+        url: Schema.NullOr(Schema.String),
+      }),
+    ),
+  ),
   planningTaskId: Schema.NullOr(Schema.String),
   createdAt: WireTimestamp,
-  updatedAt: WireTimestamp,
+  updatedAt: Schema.NullOr(WireTimestamp),
 });
 export type SessionWire = Schema.Schema.Type<typeof SessionSchema>;
 
@@ -119,12 +136,16 @@ export type SessionConnectionWire = Schema.Schema.Type<
 
 /** Workflow state for a session. */
 export const WorkflowStateSchema = Schema.Struct({
-  sessionId: Schema.String,
-  status: WorkflowStatusEnum,
-  message: Schema.NullOr(Schema.String),
-  phase: Schema.NullOr(Schema.String),
-  progress: Schema.NullOr(Schema.String),
-  updatedAt: WireTimestamp,
+  workflowStatus: Schema.String,
+  statusMessage: Schema.NullOr(Schema.String),
+  awaitingInput: Schema.NullOr(
+    Schema.Struct({
+      question: Schema.String,
+      options: Schema.NullOr(Schema.Array(Schema.String)),
+      defaultAction: Schema.String,
+      expiresAt: WireTimestamp,
+    }),
+  ),
 });
 export type WorkflowStateWire = Schema.Schema.Type<typeof WorkflowStateSchema>;
 

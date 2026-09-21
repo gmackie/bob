@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { PlanningRpc } from "../groups/planning.js";
+import { Schema } from "effect";
+import { PlanningRpc, PlanningDispatchListBatchesRpc, PlanningDispatchGetBatchRpc } from "../groups/planning.js";
 
 describe("PlanningRpc — 7B-4C Task 6 (planning.task.* + planning.dispatch.*)", () => {
   it("has at least 55 procedures after Task 6", () => {
@@ -56,4 +57,11 @@ describe("PlanningRpc — 7B-4C Task 6 (planning.task.* + planning.dispatch.*)",
     expect(names).toContain("planning.session.commitPlan");
     expect(names).toContain("planning.session.commitPlanLocal");
   });
+});
+
+it("preserves review work-item filters over both dispatch operations", () => {
+  const list = { workItemId: "item-1", limit: 1 };
+  const get = { workItemId: "item-1", batchId: "batch-1" };
+  expect(Schema.decodeUnknownSync(PlanningDispatchListBatchesRpc.payloadSchema)(list)).toEqual(list);
+  expect(Schema.decodeUnknownSync(PlanningDispatchGetBatchRpc.payloadSchema)(get)).toEqual(get);
 });

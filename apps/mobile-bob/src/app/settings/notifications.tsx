@@ -3,18 +3,18 @@ import { ScrollView, Switch, Text, View } from "react-native";
 import { Stack } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { notificationChannels } from "@bob/notifications/preferences";
 import type {
   NotificationChannel,
   NotificationType,
 } from "@bob/notifications/preferences";
+import { notificationChannels } from "@bob/notifications/preferences";
 import { overridesFromRows } from "@bob/notifications/preferences-rows";
 
 import {
-  CHANNEL_LABELS,
   buildNotificationMatrix,
+  CHANNEL_LABELS,
 } from "~/features/settings/notification-matrix-model";
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 
 /**
  * Per-type notification control.
@@ -31,26 +31,29 @@ export default function NotificationSettingsScreen() {
   const queryClient = useQueryClient();
 
   const { data: preferences } = useQuery(
-    trpc.settings.getPreferences.queryOptions(undefined),
+    rpc("settings.getPreferences").queryOptions(undefined),
   );
   const { data: rows, isLoading } = useQuery(
-    trpc.settings.listNotificationPreferences.queryOptions(undefined),
+    rpc("settings.listNotificationPreferences").queryOptions(undefined),
   );
 
   const { mutate: setPreference } = useMutation(
-    trpc.settings.setNotificationPreference.mutationOptions({
+    rpc("settings.setNotificationPreference").mutationOptions({
       onSuccess: () => {
         void queryClient.invalidateQueries(
-          trpc.settings.listNotificationPreferences.queryFilter(),
+          rpc("settings.listNotificationPreferences").queryFilter(),
         );
       },
     }),
   );
 
   const masters = {
-    push: (preferences as { pushNotifications?: boolean } | undefined)?.pushNotifications ?? true,
+    push:
+      (preferences as { pushNotifications?: boolean } | undefined)
+        ?.pushNotifications ?? true,
     email:
-      (preferences as { emailNotifications?: boolean } | undefined)?.emailNotifications ?? true,
+      (preferences as { emailNotifications?: boolean } | undefined)
+        ?.emailNotifications ?? true,
   };
 
   const matrix = useMemo(
@@ -64,14 +67,21 @@ export default function NotificationSettingsScreen() {
     [rows, masters.push, masters.email],
   );
 
-  const toggle = (type: NotificationType, channel: NotificationChannel, next: boolean) => {
+  const toggle = (
+    type: NotificationType,
+    channel: NotificationChannel,
+    next: boolean,
+  ) => {
     setPreference({ type, channel, enabled: next });
   };
 
   return (
     <>
       <Stack.Screen options={{ title: "Notifications" }} />
-      <ScrollView className="bg-background flex-1" contentContainerClassName="p-4 pb-12">
+      <ScrollView
+        className="bg-background flex-1"
+        contentContainerClassName="p-4 pb-12"
+      >
         <Text className="text-muted text-sm leading-5">
           Push is for when you are the blocker. Everything stays in your in-app
           list either way.
@@ -102,8 +112,12 @@ export default function NotificationSettingsScreen() {
                 }`}
               >
                 <View className="flex-1 pr-2">
-                  <Text className="text-foreground text-sm font-medium">{row.label}</Text>
-                  <Text className="text-muted mt-0.5 text-xs leading-4">{row.hint}</Text>
+                  <Text className="text-foreground text-sm font-medium">
+                    {row.label}
+                  </Text>
+                  <Text className="text-muted mt-0.5 text-xs leading-4">
+                    {row.hint}
+                  </Text>
                 </View>
                 {notificationChannels.map((channel) => {
                   const cell = row.channels[channel];
@@ -115,7 +129,9 @@ export default function NotificationSettingsScreen() {
                         // but the stored choice is preserved and returns when
                         // the channel is switched back on.
                         disabled={cell.disabled}
-                        onValueChange={(next) => toggle(row.type, channel, next)}
+                        onValueChange={(next) =>
+                          toggle(row.type, channel, next)
+                        }
                         accessibilityLabel={`${row.label}, ${CHANNEL_LABELS[channel]}`}
                       />
                     </View>

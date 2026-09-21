@@ -1,6 +1,6 @@
 import { Redirect, router } from "expo-router";
 import { useMemo } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View, RefreshControl } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 
 import { Badge, Card, Screen } from "~/components/ui";
@@ -16,19 +16,19 @@ import { getMobileTasksDashboardHref } from "~/features/tablet/navigation";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { colors } from "~/lib/colors";
 import { authClient } from "~/utils/auth";
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 
 export default function RecentOutcomesScreen() {
   const { data: session, isPending } = authClient.useSession();
   const { workspace } = useSelectedWorkspace();
   const workItemsQuery = useQuery(
-    trpc.workItem.list.queryOptions(
+    rpc("workItem.list").queryOptions(
       { workspaceId: workspace?.id ?? "", limit: 100 },
       { enabled: Boolean(workspace?.id), refetchInterval: 10_000 },
     ),
   );
   const sessionsQuery = useQuery(
-    trpc.agentRun.list.queryOptions(
+    rpc("agent.run.list").queryOptions(
       { workspaceId: workspace?.id ?? "", limit: 100 },
       { enabled: Boolean(workspace?.id), refetchInterval: 10_000 },
     ),
@@ -38,7 +38,7 @@ export default function RecentOutcomesScreen() {
       workspaceId: workspace?.id,
       workItems: workItemsQuery.data ?? [],
       sessions: buildTabletShellSessionsFromAgentRuns(
-        (sessionsQuery.data ?? []) as TabletAgentRunSessionInput[],
+        [...(sessionsQuery.data ?? [])] as TabletAgentRunSessionInput[],
       ),
       limit: 100,
     }),
@@ -59,7 +59,12 @@ export default function RecentOutcomesScreen() {
 
   return (
     <Screen className="pt-6">
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={workItemsQuery.isRefetching} onRefresh={() => void workItemsQuery.refetch()} />
+        }
+      >
         <View className="mb-5 flex-row items-start justify-between gap-4">
           <View className="min-w-0 flex-1">
             <Text className="text-3xl font-semibold tracking-tight text-foreground">

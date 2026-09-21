@@ -1,0 +1,20 @@
+[Unit]
+Description=Synchronize the Hermes Obsidian vault
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=bob
+Group=bob
+Environment=HOME=/home/bob
+WorkingDirectory=/home/bob/hermes-workspace/obsidian
+RuntimeDirectory=hermes-vault-sync
+RuntimeDirectoryMode=0700
+ExecStart=/opt/bob/ops/hermes-vault-sync.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/home/bob/hermes-workspace/obsidian
+MemoryMax=256M

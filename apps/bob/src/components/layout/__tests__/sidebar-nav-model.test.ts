@@ -1,3 +1,6 @@
+import { readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -10,6 +13,7 @@ import {
   getSidebarModeItems,
   getSidebarScopedHref,
   getSidebarModeTabs,
+  getSidebarKnownChildRoutes,
   getSidebarUtilityItems,
 } from "../sidebar-nav-model";
 
@@ -61,6 +65,7 @@ describe("sidebar nav model", () => {
   it("exposes setup and operational system links in the left navigation rail", () => {
     expect(getSidebarUtilityItems().map((item) => item.label)).toEqual([
       "Onboarding",
+      "Discovery",
       "Pull Requests",
       "Nodes",
       "Hermes",
@@ -469,5 +474,46 @@ describe("sidebar nav model", () => {
         updatedAt: "2026-05-31T11:00:00.000Z",
       },
     ]);
+  });
+});
+
+describe("every dashboard route is reachable from the sidebar", () => {
+  // The Nodes, Discovery and Hermes pages were reachable only by URL for a
+  // while. This walks the route tree so a new page cannot ship unreachable:
+  // every static route must be a nav item, a tab, or a documented child of
+  // one. Dynamic segments ([id]) are children of their parent by construction.
+  const DASHBOARD = join(__dirname, "../../../app/(dashboard)");
+  const routes: string[] = [];
+  const walk = (dir: string, prefix: string) => {
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry);
+      if (!statSync(full).isDirectory()) continue;
+      if (entry.startsWith("[")) continue; // dynamic: reachable from its parent's list
+      if (entry.startsWith("_")) continue; // Next.js private folder, not a route
+      const route = `${prefix}/${entry}`;
+      let hasPage = false;
+      try {
+        statSync(join(full, "page.tsx"));
+        hasPage = true;
+      } catch {
+        hasPage = false;
+      }
+      if (hasPage) routes.push(route);
+      walk(full, route);
+    }
+  };
+  walk(DASHBOARD, "");
+
+  const reachable = new Set<string>([
+    ...getSidebarModeItems().map((item) => item.href),
+    ...getSidebarModeTabs("tasks").map((tab) => tab.href),
+    ...getSidebarModeTabs("planning").map((tab) => tab.href),
+    ...getSidebarUtilityItems().map((item) => item.href),
+    ...getSidebarKnownChildRoutes(),
+  ]);
+
+  it("names a nav entry or a parent for each static route", () => {
+    const unreachable = routes.filter((route) => !reachable.has(route));
+    expect(unreachable).toEqual([]);
   });
 });

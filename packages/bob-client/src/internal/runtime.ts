@@ -11,13 +11,15 @@ export type ClientRuntimeSerialization = "json" | "ndjson";
 export interface ClientRuntimeOptions {
   readonly baseURL: string;
   readonly fetch?: typeof fetch;
-  readonly headers?: Record<string, string>;
+  /** Read credentials at request time so sign-in changes reach long-lived clients. */
+  readonly headers?: Record<string, string> | (() => Record<string, string>);
   readonly serialization?: ClientRuntimeSerialization;
 }
 
 export interface ClientRuntime {
   readonly runEffect: <A, E>(
     effect: Effect.Effect<A, E, Scope.Scope | RpcClient.Protocol>,
+    signal?: AbortSignal,
   ) => Promise<A>;
   readonly runStream: <A, E>(
     streamEffect: Effect.Effect<
@@ -34,7 +36,12 @@ const buildTransportLayer = (opts: ClientRuntimeOptions) => {
     transformClient: opts.headers
       ? (client) =>
           HttpClient.mapRequest(client, (request) =>
-            HttpClientRequest.setHeaders(request, opts.headers!),
+            HttpClientRequest.setHeaders(
+              request,
+              typeof opts.headers === "function"
+                ? opts.headers()
+                : opts.headers!,
+            ),
           )
       : undefined,
   });
@@ -61,15 +68,15 @@ export const makeRuntime = (opts: ClientRuntimeOptions): ClientRuntime => {
 
   const runEffect = <A, E>(
     effect: Effect.Effect<A, E, Scope.Scope | RpcClient.Protocol>,
+    signal?: AbortSignal,
   ): Promise<A> =>
     Effect.runPromise(
-      (
-        effect.pipe(Effect.scoped, Effect.provide(transport)) as Effect.Effect<
-          A,
-          E,
-          never
-        >
-      ),
+      effect.pipe(Effect.scoped, Effect.provide(transport)) as Effect.Effect<
+        A,
+        E,
+        never
+      >,
+      { signal },
     );
 
   const runStream = <A, E>(
@@ -81,14 +88,13 @@ export const makeRuntime = (opts: ClientRuntimeOptions): ClientRuntime => {
   ): AsyncIterable<A> => ({
     async *[Symbol.asyncIterator]() {
       const elements = await Effect.runPromise(
-        (
-          Effect.flatMap(streamEffect, (stream) =>
-            Stream.runCollect(stream),
-          ).pipe(
-            Effect.scoped,
-            Effect.provide(transport),
-          ) as Effect.Effect<ReadonlyArray<A>, E, never>
-        ),
+        Effect.flatMap(streamEffect, (stream) =>
+          Stream.runCollect(stream),
+        ).pipe(Effect.scoped, Effect.provide(transport)) as Effect.Effect<
+          ReadonlyArray<A>,
+          E,
+          never
+        >,
       );
       for (const event of elements) {
         yield event;

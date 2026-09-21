@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 interface PromoteToTaskButtonProps {
   workItemId: string;
@@ -15,9 +15,9 @@ export function PromoteToTaskButton({
 }: PromoteToTaskButtonProps) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
-  const trpc = useTRPC();
+  const rpc = useBobQueryClient();
   const promoteToTask = useMutation(
-    trpc.workItems.promoteToTask.mutationOptions({
+    rpc("workItem.promoteToTask").mutationOptions({
       onSuccess: () => {
         router.refresh();
       },

@@ -2,12 +2,13 @@
  * Effect-RPC handler functions for the agentRun RPCs.
  *
  * Each handler accepts the RPC payload, delegates to the extracted handler
- * function via `wrapHandler`, and returns an Effect value.
+ * function via `wrapAuthorizedHandler`, and returns an Effect value.
  *
  * Phase 7B-4D-beta Task 2.
  */
+
 import type { HandlerContext } from "../handlers/context.js";
-import { wrapHandler } from "../handlers/bridge.js";
+import { wrapAuthorizedHandler } from "../handlers/authorized-rpc.js";
 import {
   agentRunGet,
   agentRunList,
@@ -20,23 +21,23 @@ export const makeAgentRunRpcHandlers = (ctx: HandlerContext) => ({
     payload,
   }: {
     payload: { runId: string };
-  }) => wrapHandler(agentRunGet, ctx, payload, "agentRun"),
+  }) => wrapAuthorizedHandler(agentRunGet, ctx, payload, "agentRun"),
 
   "agentRun.list": ({
     payload,
   }: {
     payload: { workspaceId: string; limit: number };
-  }) => wrapHandler(agentRunList, ctx, payload, "agentRun"),
+  }) => wrapAuthorizedHandler(agentRunList, ctx, payload, "agentRun"),
 
   "agentRun.listAll": ({
     payload,
   }: {
     payload: { limit: number };
-  }) => wrapHandler(agentRunListAll, ctx, payload, "agentRun"),
+  }) => wrapAuthorizedHandler(agentRunListAll, ctx, payload, "agentRun"),
 
   "agentRun.listByWorkItem": ({
     payload,
   }: {
     payload: { workItemId: string; limit: number };
-  }) => wrapHandler(agentRunListByWorkItem, ctx, payload, "agentRun"),
+  }) => wrapAuthorizedHandler(agentRunListByWorkItem, ctx, payload, "agentRun"),
 });

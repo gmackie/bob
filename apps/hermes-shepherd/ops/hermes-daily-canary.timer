@@ -1,0 +1,10 @@
+[Unit]
+Description=Check the Hermes morning briefing after its cutoff
+
+[Timer]
+OnCalendar=*-*-* 15:30:00 UTC
+Persistent=true
+Unit=hermes-daily-canary.service
+
+[Install]
+WantedBy=timers.target

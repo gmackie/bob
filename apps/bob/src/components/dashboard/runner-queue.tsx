@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 /**
  * Runner Queue — what the task runner is executing right now and what's waiting.
@@ -48,17 +48,19 @@ function QueueRow({ run, kind }: { run: any; kind: "running" | "queued" }) {
       </span>
       <span className="shrink-0 text-[10px] text-muted-foreground">
         {run.agentType}
-        {kind === "running" && run.startedAt ? ` · ${timeAgo(run.startedAt)}` : ""}
+        {kind === "running" && run.startedAt
+          ? ` · ${timeAgo(run.startedAt)}`
+          : ""}
       </span>
     </Link>
   );
 }
 
 export function RunnerQueue({ workspaceId }: RunnerQueueProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
 
   const { data: runs, isLoading } = useQuery({
-    ...trpc.agentRun.list.queryOptions({ workspaceId, limit: 50 }),
+    ...bobQuery("agent.run.list").queryOptions({ workspaceId, limit: 50 }),
     enabled: !!workspaceId,
     refetchInterval: 5_000,
   });

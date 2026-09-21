@@ -1,24 +1,35 @@
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from "react-native";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type {
+  TabletPlanningDashboardNavigationAction,
+  TabletPlanningDashboardSessionRow,
+  TabletPlanningDashboardSummaryTone,
+  TabletPlanningProject,
+  TabletPlanningSummaryTarget,
+} from "~/features/tablet/planning-dashboard";
+import type { TabletShellMode } from "~/features/tablet/shell";
 import type { GatewaySession } from "~/hooks/use-gateway";
-import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
-import { colors } from "~/lib/colors";
 import { EmptyState } from "~/components/ui";
+import { buildMobilePlanningSessionRequest } from "~/features/planning/mobile-actions";
+import { getMobileProjectQueryRefreshOptions } from "~/features/planning/project-status";
 import {
   getMobileShellGlobalActions,
   getMobileShellModeActions,
 } from "~/features/tablet/navigation";
 import {
-  buildMobilePlanningSessionRequest,
-} from "~/features/planning/mobile-actions";
-import { getMobileProjectQueryRefreshOptions } from "~/features/planning/project-status";
-import {
+  buildPlanningDashboardModel,
   buildTabletPlanningDashboardSessionRows,
   buildTabletPlanningSessionRequestInput,
-  buildPlanningDashboardModel,
   filterTabletPlanningDashboardSessions,
   getPlanningDashboardComposerAction,
   getPlanningDashboardNavigationActions,
@@ -28,24 +39,22 @@ import {
   shouldShowPlanningDashboardModeActions,
   shouldShowPlanningDashboardNavigationActions,
 } from "~/features/tablet/planning-dashboard";
-import type {
-  TabletPlanningDashboardNavigationAction,
-  TabletPlanningDashboardSessionRow,
-  TabletPlanningDashboardSummaryTone,
-  TabletPlanningSummaryTarget,
-  TabletPlanningProject,
-} from "~/features/tablet/planning-dashboard";
-import type { TabletShellMode } from "~/features/tablet/shell";
-import { trpc } from "~/utils/api";
+import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
+import { colors } from "~/lib/colors";
+import { rpc } from "~/utils/api";
 
-const SUMMARY_TONE_COLORS: Record<TabletPlanningDashboardSummaryTone, string> = {
-  default: colors.muted,
-  warning: colors.warning,
-  danger: colors.danger,
-  success: colors.success,
-};
+const SUMMARY_TONE_COLORS: Record<TabletPlanningDashboardSummaryTone, string> =
+  {
+    default: colors.muted,
+    warning: colors.warning,
+    danger: colors.danger,
+    success: colors.success,
+  };
 
-const SESSION_STATUS_TONE_COLORS: Record<TabletPlanningDashboardSessionRow["statusTone"], string> = {
+const SESSION_STATUS_TONE_COLORS: Record<
+  TabletPlanningDashboardSessionRow["statusTone"],
+  string
+> = {
   default: colors.muted,
   warning: colors.warning,
   danger: colors.danger,
@@ -69,10 +78,13 @@ function PlanningSessionRow({
     >
       <View className="flex-row items-start justify-between gap-3">
         <View className="min-w-0 flex-1">
-          <Text className="text-sm font-medium text-foreground" numberOfLines={1}>
+          <Text
+            className="text-foreground text-sm font-medium"
+            numberOfLines={1}
+          >
             {row.title}
           </Text>
-          <Text className="mt-1 text-xs text-muted" numberOfLines={1}>
+          <Text className="text-muted mt-1 text-xs" numberOfLines={1}>
             {row.outputLabel} · {row.lastUpdatedLabel}
           </Text>
         </View>
@@ -118,7 +130,9 @@ export function TabletPlanningDashboard({
   sessions: GatewaySession[];
   onOpenPlanningSession: (sessionId: string) => void;
   onOpenSummaryTarget?: (target: TabletPlanningSummaryTarget) => void;
-  onOpenNavigationAction?: (action: TabletPlanningDashboardNavigationAction) => void;
+  onOpenNavigationAction?: (
+    action: TabletPlanningDashboardNavigationAction,
+  ) => void;
   onOpenMode?: (mode: TabletShellMode) => void;
   onOpenSettings?: () => void;
   composerOpen?: boolean;
@@ -136,9 +150,12 @@ export function TabletPlanningDashboard({
   const isComposerOpen = composerOpen ?? localComposerOpen;
   const setComposerOpen = onComposerOpenChange ?? setLocalComposerOpen;
   const composerAction = getPlanningDashboardComposerAction(isComposerOpen);
-  const navigationActions = useMemo(() => getPlanningDashboardNavigationActions(), []);
+  const navigationActions = useMemo(
+    () => getPlanningDashboardNavigationActions(),
+    [],
+  );
   const projectsQuery = useQuery(
-    trpc.project.list.queryOptions(
+    rpc("project.list").queryOptions(
       { workspaceId: workspace?.id ?? "" },
       {
         enabled: Boolean(workspace?.id),
@@ -176,21 +193,22 @@ export function TabletPlanningDashboard({
   );
   const primaryProject = projects[0]?.project ?? null;
   const createPlanningSessionMutation = useMutation(
-    trpc.planSession.create.mutationOptions(),
+    rpc("planning.session.create").mutationOptions(),
   );
   const startPlanningSessionMutation = useMutation(
-    trpc.planSession.start.mutationOptions(),
+    rpc("planning.session.start").mutationOptions(),
   );
   const isStarting =
     createPlanningSessionMutation.isPending ||
     startPlanningSessionMutation.isPending;
   const liveRailPresentation = getPlanningLiveRailPresentation(width);
   const showInlineActiveRail = liveRailPresentation === "rail";
-  const showCompactNavigationActions = shouldShowPlanningDashboardNavigationActions({
-    hasModeSwitch: Boolean(onOpenMode),
-    isEmbeddedInShell,
-    width,
-  });
+  const showCompactNavigationActions =
+    shouldShowPlanningDashboardNavigationActions({
+      hasModeSwitch: Boolean(onOpenMode),
+      isEmbeddedInShell,
+      width,
+    });
   const header = getTabletPlanningDashboardHeaderModel();
   const showModeActions = shouldShowPlanningDashboardModeActions({
     hasModeSwitch: Boolean(onOpenMode),
@@ -227,11 +245,15 @@ export function TabletPlanningDashboard({
       setGoal("");
       setComposerOpen(false);
       await queryClient.invalidateQueries({
-        queryKey: trpc.session.list.queryKey({ limit: 50 }),
+        queryKey: rpc("agent.session.list").queryKey({ limit: 50 }),
       });
       onOpenPlanningSession(sessionId);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to start planning session");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Failed to start planning session",
+      );
     }
   };
 
@@ -253,12 +275,18 @@ export function TabletPlanningDashboard({
                   accessibilityLabel={`Open ${action.label}`}
                   className="rounded-md px-3 py-2 active:opacity-80"
                   style={{
-                    backgroundColor: action.isActive ? colors.primary : colors.secondary,
+                    backgroundColor: action.isActive
+                      ? colors.primary
+                      : colors.secondary,
                   }}
                 >
                   <Text
                     className="text-xs font-semibold"
-                    style={{ color: action.isActive ? colors.background : colors.foreground }}
+                    style={{
+                      color: action.isActive
+                        ? colors.background
+                        : colors.foreground,
+                    }}
                   >
                     {action.label}
                   </Text>
@@ -269,7 +297,7 @@ export function TabletPlanningDashboard({
 
           <View className="flex-row items-start justify-between gap-4">
             <View className="min-w-0 flex-1">
-              <Text className="text-3xl font-semibold tracking-tight text-foreground">
+              <Text className="text-foreground text-3xl font-semibold tracking-tight">
                 {header.title}
               </Text>
             </View>
@@ -283,7 +311,7 @@ export function TabletPlanningDashboard({
                   className="rounded-md px-3 py-2 active:opacity-80"
                   style={{ backgroundColor: colors.secondary }}
                 >
-                  <Text className="text-xs font-semibold text-foreground">
+                  <Text className="text-foreground text-xs font-semibold">
                     {action.label}
                   </Text>
                 </Pressable>
@@ -298,12 +326,18 @@ export function TabletPlanningDashboard({
                 }
                 className="rounded-md px-3 py-2 active:opacity-80"
                 style={{
-                  backgroundColor: composerAction.nextOpen ? colors.primary : colors.secondary,
+                  backgroundColor: composerAction.nextOpen
+                    ? colors.primary
+                    : colors.secondary,
                 }}
               >
                 <Text
                   className="text-xs font-semibold"
-                  style={{ color: composerAction.nextOpen ? colors.background : colors.foreground }}
+                  style={{
+                    color: composerAction.nextOpen
+                      ? colors.background
+                      : colors.foreground,
+                  }}
                 >
                   {composerAction.label}
                 </Text>
@@ -314,9 +348,12 @@ export function TabletPlanningDashboard({
           {isComposerOpen ? (
             <View
               className="mt-4 rounded-lg border p-4"
-              style={{ borderColor: colors.border, backgroundColor: colors.card }}
+              style={{
+                borderColor: colors.border,
+                backgroundColor: colors.card,
+              }}
             >
-              <Text className="mb-3 text-sm font-semibold text-foreground">
+              <Text className="text-foreground mb-3 text-sm font-semibold">
                 New planning session
               </Text>
               <TextInput
@@ -325,7 +362,7 @@ export function TabletPlanningDashboard({
                 multiline
                 placeholder="What should Bob plan?"
                 placeholderTextColor={colors.muted2}
-                className="min-h-24 rounded-lg border px-3 py-3 text-foreground"
+                className="text-foreground min-h-24 rounded-lg border px-3 py-3"
                 style={{ borderColor: colors.border }}
               />
               <Pressable
@@ -334,15 +371,18 @@ export function TabletPlanningDashboard({
                 className="mt-3 rounded-md px-4 py-2 active:opacity-80"
                 style={{
                   backgroundColor: colors.primary,
-                  opacity: !goal.trim() || !primaryProject?.name || isStarting ? 0.55 : 1,
+                  opacity:
+                    !goal.trim() || !primaryProject?.name || isStarting
+                      ? 0.55
+                      : 1,
                 }}
               >
-                <Text className="text-center text-sm font-semibold text-background">
+                <Text className="text-background text-center text-sm font-semibold">
                   {isStarting ? "Starting..." : "Start planning"}
                 </Text>
               </Pressable>
               {error ? (
-                <Text className="mt-2 text-sm text-danger">{error}</Text>
+                <Text className="text-danger mt-2 text-sm">{error}</Text>
               ) : null}
             </View>
           ) : null}
@@ -359,10 +399,12 @@ export function TabletPlanningDashboard({
                   style={{
                     borderColor: colors.border,
                     backgroundColor:
-                      action.key === "recent-sessions" ? colors.secondary : colors.card,
+                      action.key === "recent-sessions"
+                        ? colors.secondary
+                        : colors.card,
                   }}
                 >
-                  <Text className="text-xs font-semibold text-foreground">
+                  <Text className="text-foreground text-xs font-semibold">
                     {action.label}
                   </Text>
                 </Pressable>
@@ -374,16 +416,28 @@ export function TabletPlanningDashboard({
             <Pressable
               onPress={() => setLiveRailOpen((open) => !open)}
               accessibilityRole="button"
-              accessibilityLabel={liveRailOpen ? "Hide active sessions" : "Show active sessions"}
+              accessibilityLabel={
+                liveRailOpen ? "Hide active sessions" : "Show active sessions"
+              }
               className="mt-4 flex-row items-center justify-between rounded-lg border px-4 py-3 active:opacity-80"
               style={{
                 borderColor: colors.border,
                 backgroundColor: liveRailOpen ? colors.secondary : colors.card,
               }}
             >
-              <Text className="text-sm font-medium text-foreground">Active sessions</Text>
+              <Text className="text-foreground text-sm font-medium">
+                Active sessions
+              </Text>
               <View className="flex-row items-center gap-3">
-                <Text className="text-sm font-semibold" style={{ color: model.activeSessions.length > 0 ? colors.primary : colors.muted }}>
+                <Text
+                  className="text-sm font-semibold"
+                  style={{
+                    color:
+                      model.activeSessions.length > 0
+                        ? colors.primary
+                        : colors.muted,
+                  }}
+                >
                   {model.activeSessions.length}
                 </Text>
                 <Text className="text-xs" style={{ color: colors.muted }}>
@@ -421,7 +475,10 @@ export function TabletPlanningDashboard({
                   maxWidth: 260,
                 }}
               >
-                <Text className="text-xs uppercase text-muted" numberOfLines={2}>
+                <Text
+                  className="text-muted text-xs uppercase"
+                  numberOfLines={2}
+                >
                   {card.title}
                 </Text>
                 <Text
@@ -435,13 +492,19 @@ export function TabletPlanningDashboard({
           </View>
 
           <View className="mt-6">
-            <Text className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted">
+            <Text className="text-muted mb-3 text-sm font-semibold tracking-wider uppercase">
               Recent Sessions
-              {sessionFilter ? ` · ${formatPlanningSessionFilterLabel(sessionFilter)}` : ""}
+              {sessionFilter
+                ? ` · ${formatPlanningSessionFilterLabel(sessionFilter)}`
+                : ""}
             </Text>
             {visibleRecentSessionRows.length === 0 ? (
               <EmptyState
-                title={sessionFilter ? "No sessions match this filter" : "No planning sessions yet"}
+                title={
+                  sessionFilter
+                    ? "No sessions match this filter"
+                    : "No planning sessions yet"
+                }
                 hint={
                   sessionFilter
                     ? "Try another status, or clear the filter."
@@ -498,10 +561,10 @@ function PlanningActiveSessionsRail({
       style={{ borderColor: colors.border, backgroundColor: colors.card }}
     >
       <View className="mb-3 flex-row items-center justify-between">
-        <Text className="text-sm font-semibold uppercase tracking-wider text-muted">
+        <Text className="text-muted text-sm font-semibold tracking-wider uppercase">
           Active Sessions
         </Text>
-        <Text className="text-xs font-semibold text-foreground">
+        <Text className="text-foreground text-xs font-semibold">
           {rows.length}
         </Text>
       </View>

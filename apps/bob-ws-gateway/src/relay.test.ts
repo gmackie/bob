@@ -387,6 +387,73 @@ describe("Relay", () => {
       ]);
     });
 
+    it("reports no daemon rather than dropping a proxy_control silently", () => {
+      expect(
+        relay.requestProxyControl("ws-nobody", {
+          type: "proxy_control",
+          requestId: "req-p1",
+          action: "refresh",
+          accountId: "claude-1",
+        }),
+      ).toBe(false);
+    });
+
+    it("delivers a proxy_control to the workspace's daemon", async () => {
+      const daemon = new FakeWs();
+      relay.handleConnection(daemon as any);
+      daemon.receive({
+        type: "hello",
+        clientId: "hetzner-bob",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      } as ClientMessage);
+      await new Promise((r) => setImmediate(r));
+
+      const delivered = relay.requestProxyControl("ws-1", {
+        type: "proxy_control",
+        requestId: "req-p2",
+        action: "disable",
+        accountId: "claude-1",
+      });
+
+      expect(delivered).toBe(true);
+      expect(daemon.sentOfType("proxy_control")).toEqual([
+        expect.objectContaining({ requestId: "req-p2", action: "disable", accountId: "claude-1" }),
+      ]);
+    });
+
+    it("relays a daemon's proxy_control_result to workspace observers, and ignores a browser's", async () => {
+      const daemon = new FakeWs();
+      relay.handleConnection(daemon as any);
+      daemon.receive({
+        type: "hello",
+        clientId: "hetzner-bob",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      } as ClientMessage);
+      await new Promise((r) => setImmediate(r));
+
+      const browser = new FakeWs();
+      relay.handleConnection(browser as any);
+      browser.receive({ type: "hello", clientId: "web", deviceType: "web", token: "good-browser" });
+      await new Promise((r) => setImmediate(r));
+      browser.receive({ type: "subscribe_workspace", workspaceId: "ws-1" });
+      await new Promise((r) => setImmediate(r));
+
+      daemon.receive({ type: "proxy_control_result", requestId: "req-p3", ok: false, detail: "HTTP 401" } as ClientMessage);
+      await new Promise((r) => setImmediate(r));
+      expect(browser.sentOfType("proxy_control_result")).toEqual([
+        expect.objectContaining({ workspaceId: "ws-1", requestId: "req-p3", ok: false, detail: "HTTP 401" }),
+      ]);
+
+      // A browser forging a result must not be believed by the rest of the workspace.
+      browser.receive({ type: "proxy_control_result", requestId: "forged", ok: true } as ClientMessage);
+      await new Promise((r) => setImmediate(r));
+      expect(browser.sentOfType("proxy_control_result")).toHaveLength(1);
+    });
+
     it("includes planning draft and produced task counts in workspace snapshots", async () => {
       (db.query.chatConversations.findMany as any).mockResolvedValueOnce([
         {

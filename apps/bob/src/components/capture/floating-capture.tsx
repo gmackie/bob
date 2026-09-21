@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@gmacko/core/ui";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 interface CaptureResult {
   url: string;
@@ -12,18 +12,22 @@ interface CaptureResult {
 }
 
 export function FloatingCapture() {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [recentCaptures, setRecentCaptures] = useState<CaptureResult[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const captureMutation = useMutation(
-    trpc.capture.capture.mutationOptions({
+    bobQuery("agent.capture.capture").mutationOptions({
       onSuccess: (data) => {
         setRecentCaptures((prev) =>
           [
-            { url: data.url, filename: data.filename, capturedAt: data.capturedAt },
+            {
+              url: data.url,
+              filename: data.filename,
+              capturedAt: data.capturedAt,
+            },
             ...prev,
           ].slice(0, 3),
         );

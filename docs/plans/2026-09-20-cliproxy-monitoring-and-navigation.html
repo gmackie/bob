@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bob × CLIProxyAPI — monitor everything, navigate everywhere</title>
+<style>
+  :root {
+    --bg: #0c0b09; --surface: #17150f; --surface-2: #1f1c14; --ink: #efe9dc; --muted: #9a917f;
+    --line: #2d2921; --accent: #e7a505; --accent-soft: #3a2a05;
+    --warn: #f0b429; --warn-soft: #3a2f10; --bad: #ef6b5e; --bad-soft: #3a1c18;
+    --info: #7fc6f2; --info-soft: #14303e; --ok: #4ade80; --ok-soft: #113322;
+    --hero: radial-gradient(1200px 400px at 10% -10%, #3a2a05 0%, transparent 60%),
+            radial-gradient(900px 300px at 100% 110%, #14303e 0%, transparent 60%),
+            repeating-linear-gradient(0deg, transparent 0 23px, #1b1912 23px 24px),
+            repeating-linear-gradient(90deg, transparent 0 23px, #1b1912 23px 24px),
+            #0c0b09;
+    --display: Futura, "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+    --body: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: Menlo, Consolas, "SF Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16.5px/1.6 var(--body); }
+  main { max-width: 900px; margin: 0 auto; padding: 0 1.5rem 5rem; }
+
+  header.hero { background: var(--hero); border-bottom: 1px solid var(--line); padding: 4rem 1.5rem 2.5rem; margin-bottom: 2rem; }
+  .hero-inner { max-width: 900px; margin: 0 auto; }
+  h1 { font: 800 2.5rem/1.1 var(--display); letter-spacing: -.02em; margin: 0 0 .6rem; }
+  .kicker { font: 700 .78rem var(--mono); text-transform: uppercase; letter-spacing: .22em; color: var(--accent); margin-bottom: .8rem; }
+  .meta { color: var(--muted); font: .88rem var(--mono); }
+  .meta span + span::before { content: "·"; margin: 0 .5rem; }
+  .lede { font-size: 1.1rem; color: #d9d2c2; max-width: 70ch; }
+
+  h2 { font: 700 1.35rem var(--display); margin: 2.75rem 0 .75rem; padding-bottom: .35rem; border-bottom: 1px solid var(--line); }
+  h2 .badge { margin-left: .5rem; }
+  h3 { font: 650 1.02rem var(--display); margin: 1.5rem 0 .5rem; }
+  p { margin: .5rem 0 1rem; }
+
+  .badge { display: inline-block; padding: .12rem .6rem; border-radius: 999px; font: 700 .7rem var(--mono); letter-spacing: .05em; vertical-align: middle; text-transform: uppercase; }
+  .badge.draft    { background: var(--info-soft);   color: var(--info); }
+  .badge.approved { background: var(--ok-soft);     color: var(--ok); }
+  .badge.risk     { background: var(--warn-soft);   color: var(--warn); }
+  .badge.blocked  { background: var(--bad-soft);    color: var(--bad); }
+  .badge.done     { background: var(--ok-soft);     color: var(--ok); }
+  .badge.active   { background: var(--accent-soft); color: var(--accent); }
+  .badge.todo     { background: var(--line);        color: var(--muted); }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; margin: 1.5rem 0; }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; }
+  .stat b { display: block; font: 800 2rem/1.1 var(--display); color: var(--accent); }
+  .stat span { color: var(--muted); font: .75rem var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+
+  .progress { display: flex; gap: 4px; height: 10px; margin: .75rem 0 2rem; }
+  .progress i { flex: 1; border-radius: 5px; background: var(--line); }
+  .progress i.done { background: var(--ok); }
+  .progress i.active { background: var(--accent); }
+
+  .timeline { list-style: none; margin: 1rem 0; padding: 0 0 0 1.4rem; border-left: 2px solid var(--line); }
+  .timeline li { position: relative; padding: 0 0 1.1rem; }
+  .timeline li::before { content: ""; position: absolute; left: -1.75rem; top: .35rem; width: .65rem; height: .65rem; border-radius: 50%; background: var(--bg); border: 2px solid var(--muted); }
+  .timeline li.done::before { background: var(--ok); border-color: var(--ok); }
+  .timeline li.active::before { border-color: var(--accent); background: var(--accent-soft); }
+  .timeline b { font-family: var(--display); }
+
+  table { width: 100%; border-collapse: collapse; margin: .75rem 0 1.25rem; font-size: .9rem; }
+  th { text-align: left; color: var(--muted); font: 700 .7rem var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+  th, td { padding: .5rem .65rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: .08rem .35rem; font: .84em var(--mono); }
+  pre { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 1rem; overflow-x: auto; font: .84rem/1.5 var(--mono); }
+  pre code { border: none; background: none; padding: 0; }
+  ul { padding-left: 1.3rem; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.25rem; margin: 1rem 0; }
+  .goals { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 640px) { .goals { grid-template-columns: 1fr; } }
+  .goals h3 { margin-top: 0; }
+
+  details { border: 1px solid var(--line); border-radius: 10px; padding: .6rem .9rem; margin: .6rem 0; background: var(--surface); }
+  summary { cursor: pointer; font: 600 1em var(--display); }
+  .callout { border-left: 3px solid var(--warn); background: var(--warn-soft); border-radius: 0 10px 10px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  .callout.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+  .callout.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+  .callout.info { border-left-color: var(--info); background: var(--info-soft); }
+
+  figure.diagram { margin: 1.25rem 0 .25rem; background: #100f0b; border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem; overflow-x: auto; text-align: center; }
+  figure.diagram svg { max-width: 100%; height: auto; }
+  figure.diagram figcaption { color: var(--muted); font: .85rem var(--body); margin-top: .75rem; }
+
+  .lights { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .6rem; margin: 1rem 0; }
+  .light { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: .7rem .9rem; font-size: .9rem; }
+  .light i { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; margin-right: .5rem; vertical-align: middle; }
+  .light i.ok { background: var(--ok); } .light i.warn { background: var(--warn); } .light i.bad { background: var(--bad); } .light i.grey { background: var(--muted); }
+  .light small { display: block; color: var(--muted); margin-top: .2rem; }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <div class="kicker">Implementation plan · mission control</div>
+    <h1>Bob × CLIProxyAPI <span class="badge draft">Draft</span></h1>
+    <p class="lede">Route every agent run through the inference proxy, monitor the proxy and the runners from inside Bob, and make both the web dashboard and the phone app professionally navigable end to end.</p>
+    <p class="meta">
+      <span>2026-09-20</span>
+      <span>repo: <code>gmackie/bob</code> @ <code>fix/bob-post-effect</code></span>
+      <span>author: Claude</span>
+    </p>
+  </div>
+</header>
+<main>
+
+  <div class="stats">
+    <div class="stat"><b>7</b><span>Phases</span></div>
+    <div class="stat"><b>31</b><span>Tasks</span></div>
+    <div class="stat"><b>~12d</b><span>Est. effort</span></div>
+    <div class="stat"><b>6</b><span>Proxy accounts live</span></div>
+  </div>
+
+  <!-- one <i> per phase -->
+  <div class="progress" aria-label="Phase progress">
+    <i class="done"></i><i class="done"></i><i class="done"></i><i class="active"></i><i class="active"></i><i class="active"></i><i></i>
+  </div>
+
+  <h2>Overview</h2>
+  <p>CLIProxyAPI is already running in production: six subscription accounts (two Claude, two Codex Pro, Kimi, xAI), five API keys, remote management enabled, usage statistics on. The primary runner host already routes gateway sessions through it by way of a host-managed environment file and a Codex <code>model_provider</code> entry. That is the whole integration today, and it has three gaps this plan closes:</p>
+  <ul>
+    <li><strong>The proxy is invisible to Bob.</strong> Nothing in the codebase references it except one ops doc. Nodes, Providers and Runs render host-local credential probes that no longer describe what is actually serving inference.</li>
+    <li><strong>Monitoring is wrong in production right now.</strong> The host credential probe checks <code>~/.claude/.credentials.json</code> and <code>codex login status</code> directly, reports Grok as "missing", and its unit is in a failed state — while the proxy holds a working xAI account. The proxy is the source of truth and nothing reads it.</li>
+    <li><strong>Half the execution paths bypass the proxy.</strong> Isolated OODA agent jobs build their environment from a broker that forwards only <code>PATH</code>, <code>LANG</code>, <code>LC_ALL</code> and <code>TERM</code>; the proxy variables never reach them, so they still copy OAuth credential files per run.</li>
+  </ul>
+  <p>The approach: make <em>proxy</em> a first-class provider auth mode in the runner, feed proxy state into the same host-snapshot heartbeat that already drives the agent lights, expose it through RPC to web and mobile, and then do a navigation and polish pass across both surfaces so every screen is reachable and reads as one product.</p>
+
+  <h2>Architecture</h2>
+  <figure class="diagram">
+    <svg id="plan-arch" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" style="max-width: 1477.77px; background-color: transparent;" viewBox="0 0 1477.765625 645.2630615234375" role="graphics-document document" aria-roledescription="flowchart-v2"><style>#plan-arch{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#ccc;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#plan-arch .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#plan-arch .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#plan-arch .error-icon{fill:#a44141;}#plan-arch .error-text{fill:#ddd;stroke:#ddd;}#plan-arch .edge-thickness-normal{stroke-width:1px;}#plan-arch .edge-thickness-thick{stroke-width:3.5px;}#plan-arch .edge-pattern-solid{stroke-dasharray:0;}#plan-arch .edge-thickness-invisible{stroke-width:0;fill:none;}#plan-arch .edge-pattern-dashed{stroke-dasharray:3;}#plan-arch .edge-pattern-dotted{stroke-dasharray:2;}#plan-arch .marker{fill:lightgrey;stroke:lightgrey;}#plan-arch .marker.cross{stroke:lightgrey;}#plan-arch svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#plan-arch p{margin:0;}#plan-arch .label{font-family:"trebuchet ms",verdana,arial,sans-serif;color:#ccc;}#plan-arch .cluster-label text{fill:#F9FFFE;}#plan-arch .cluster-label span{color:#F9FFFE;}#plan-arch .cluster-label span p{background-color:transparent;}#plan-arch .label text,#plan-arch span{fill:#ccc;color:#ccc;}#plan-arch .node rect,#plan-arch .node circle,#plan-arch .node ellipse,#plan-arch .node polygon,#plan-arch .node path{fill:#1f2020;stroke:#ccc;stroke-width:1px;}#plan-arch .rough-node .label text,#plan-arch .node .label text,#plan-arch .image-shape .label,#plan-arch .icon-shape .label{text-anchor:middle;}#plan-arch .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#plan-arch .rough-node .label,#plan-arch .node .label,#plan-arch .image-shape .label,#plan-arch .icon-shape .label{text-align:center;}#plan-arch .node.clickable{cursor:pointer;}#plan-arch .root .anchor path{fill:lightgrey!important;stroke-width:0;stroke:lightgrey;}#plan-arch .arrowheadPath{fill:lightgrey;}#plan-arch .edgePaths .path{stroke:lightgrey;stroke-width:1px;}#plan-arch .flowchart-link{stroke:lightgrey;fill:none;}#plan-arch .edgeLabel{background-color:hsl(0, 0%, 34.4117647059%);text-align:center;}#plan-arch .edgeLabel p{background-color:hsl(0, 0%, 34.4117647059%);}#plan-arch .edgeLabel rect{opacity:0.5;background-color:hsl(0, 0%, 34.4117647059%);fill:hsl(0, 0%, 34.4117647059%);}#plan-arch .labelBkg{background-color:rgba(87.75, 87.75, 87.75, 0.5);}#plan-arch .cluster rect{fill:hsl(180, 1.5873015873%, 28.3529411765%);stroke:rgba(255, 255, 255, 0.25);stroke-width:1px;}#plan-arch .cluster text{fill:#F9FFFE;}#plan-arch .cluster span{color:#F9FFFE;}#plan-arch .node .collapsed-indicator{fill:rgba(255, 255, 255, 0.25);stroke:none;opacity:0.6;}#plan-arch .node .collapsed-separator{stroke:rgba(255, 255, 255, 0.25);stroke-width:0.75px;}#plan-arch div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:12px;background:hsl(20, 1.5873015873%, 12.3529411765%);border:1px solid rgba(255, 255, 255, 0.25);border-radius:2px;pointer-events:none;z-index:100;}#plan-arch .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#ccc;}#plan-arch rect.text{fill:none;stroke-width:0;}#plan-arch .icon-shape,#plan-arch .image-shape{background-color:hsl(0, 0%, 34.4117647059%);text-align:center;}#plan-arch .icon-shape p,#plan-arch .image-shape p{background-color:hsl(0, 0%, 34.4117647059%);padding:2px;}#plan-arch .icon-shape .label rect,#plan-arch .image-shape .label rect{opacity:0.5;background-color:hsl(0, 0%, 34.4117647059%);fill:hsl(0, 0%, 34.4117647059%);}#plan-arch .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#plan-arch .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#plan-arch .node .neo-node{stroke:#ccc;}#plan-arch [data-look="neo"].node rect,#plan-arch [data-look="neo"].cluster rect,#plan-arch [data-look="neo"].node polygon{stroke:url(#plan-arch-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#plan-arch [data-look="neo"].swimlane.cluster rect{filter:none;}#plan-arch [data-look="neo"].node path{stroke:url(#plan-arch-gradient);stroke-width:1px;}#plan-arch [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#plan-arch [data-look="neo"].node .neo-line path{stroke:#ccc;filter:none;}#plan-arch [data-look="neo"].node circle{stroke:url(#plan-arch-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#plan-arch [data-look="neo"].node circle .state-start{fill:#000000;}#plan-arch [data-look="neo"].icon-shape .icon{fill:url(#plan-arch-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#plan-arch [data-look="neo"].icon-shape .icon-neo path{stroke:url(#plan-arch-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#plan-arch :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="plan-arch_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="plan-arch_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="plan-arch_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="plan-arch_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="plan-arch_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="plan-arch_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="plan-arch_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="plan-arch_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="plan-arch_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="plan-arch_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="plan-arch_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="plan-arch_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"><g class="cluster" id="plan-arch-PX" data-look="classic"><rect style="" x="864.15625" y="323.66712951660156" width="605.609375" height="306.4418029785156"/><g class="cluster-label" transform="translate(1125.046875, 323.66712951660156)"><foreignObject width="83.828125" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5;"><span class="nodeLabel"><p>CLIProxyAPI</p></span></div></foreignObject></g></g><g class="cluster" id="plan-arch-RUN" data-look="classic"><rect style="" x="8" y="283.0130310058594" width="606.15625" height="354.25"/><g class="cluster-label" transform="translate(265.34375, 283.0130310058594)"><foreignObject width="91.46875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5;"><span class="nodeLabel"><p>Runner hosts</p></span></div></foreignObject></g></g><g class="cluster" id="plan-arch-SRV" data-look="classic"><rect style="" x="368" y="8" width="824.15625" height="255.01303100585938"/><g class="cluster-label" transform="translate(692.546875, 8)"><foreignObject width="175.0625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5;"><span class="nodeLabel"><p>Bob server · ws-gateway</p></span></div></foreignObject></g></g><g class="cluster" id="plan-arch-UI" data-look="classic"><rect style="" x="8" y="10.259773254394531" width="310" height="252"/><g class="cluster-label" transform="translate(52.7890625, 10.259773254394531)"><foreignObject width="220.421875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5;"><span class="nodeLabel"><p>Bob UI — web · mobile · tablet</p></span></div></foreignObject></g></g></g><g class="edgePaths"><path d="M293,84.26L297.167,84.26C301.333,84.26,309.667,84.26,318,84.26C326.333,84.26,334.667,84.26,343,84.26C351.333,84.26,359.667,84.26,374.194,89.142C388.722,94.025,409.443,103.79,419.804,108.672L430.165,113.555" id="plan-arch-L_N_RPC_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_N_RPC_0" data-points="W3sieCI6MjkzLCJ5Ijo4NC4yNTk3NzMyNTQzOTQ1M30seyJ4IjozMTgsInkiOjg0LjI1OTc3MzI1NDM5NDUzfSx7IngiOjM0MywieSI6ODQuMjU5NzczMjU0Mzk0NTN9LHsieCI6MzY4LCJ5Ijo4NC4yNTk3NzMyNTQzOTQ1M30seyJ4Ijo0MzMuNzgzMTM1Nzc1ODYyMSwieSI6MTE1LjI1OTc3MzI1NDM5NDUzfV0=" data-look="classic" marker-end="url(#plan-arch_flowchart-v2-pointEnd)"/><path d="M529.493,115.26L543.603,105.342C557.714,95.424,585.935,75.589,620.879,65.671C655.823,55.753,697.49,55.753,739.156,55.753C780.823,55.753,822.49,55.753,856.732,58.022C890.974,60.292,917.793,64.83,931.202,67.099L944.611,69.368" id="plan-arch-L_RPC_GW_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_RPC_GW_0" data-points="W3sieCI6NTI5LjQ5MjY4MDg5NDIwMjYsInkiOjExNS4yNTk3NzMyNTQzOTQ1M30seyJ4Ijo2MTQuMTU2MjUsInkiOjU1Ljc1MzI1Nzc1MTQ2NDg0NH0seyJ4Ijo3MzkuMTU2MjUsInkiOjU1Ljc1MzI1Nzc1MTQ2NDg0NH0seyJ4Ijo4NjQuMTU2MjUsInkiOjU1Ljc1MzI1Nzc1MTQ2NDg0NH0seyJ4Ijo5NDguNTU0Njg3NSwieSI6NzAuMDM1NzY3NDQ1MTEzNn1d" data-look="classic" marker-end="url(#plan-arch_flowchart-v2-pointEnd)"/><path d="M290.594,200.26L295.161,200.26C299.729,200.26,308.865,200.26,317.599,200.26C326.333,200.26,334.667,200.26,343,200.26C351.333,200.26,359.667,200.26,374.194,195.377C388.722,190.495,409.443,180.73,419.804,175.847L430.165,170.965" id="plan-arch-L_ST_RPC_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_ST_RPC_0" data-points="W3sieCI6MjkwLjU5Mzc1LCJ5IjoyMDAuMjU5NzczMjU0Mzk0NTN9LHsieCI6MzE4LCJ5IjoyMDAuMjU5NzczMjU0Mzk0NTN9LHsieCI6MzQzLCJ5IjoyMDAuMjU5NzczMjU0Mzk0NTN9LHsieCI6MzY4LCJ5IjoyMDAuMjU5NzczMjU0Mzk0NTN9LHsieCI6NDMzLjc4MzEzNTc3NTg2MjEsInkiOjE2OS4yNTk3NzMyNTQzOTQ1M31d" data-look="classic" marker-end="url(#plan-arch_flowchart-v2-pointEnd)"/><path d="M547.639,169.26L558.725,174.552C569.811,179.844,591.984,190.429,623.903,195.721C655.823,201.013,697.49,201.013,739.156,201.013C780.823,201.013,822.49,201.013,853.212,201.013C883.935,201.013,903.714,201.013,913.603,201.013L923.492,201.013" id="plan-arch-L_RPC_PA_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_RPC_PA_0" data-points="W3sieCI6NTQ3LjYzODU1MjQ5MjUwMTgsInkiOjE2OS4yNTk3NzMyNTQzOTQ1M30seyJ4Ijo2MTQuMTU2MjUsInkiOjIwMS4wMTMwMzEwMDU4NTkzOH0seyJ4Ijo3MzkuMTU2MjUsInkiOjIwMS4wMTMwMzEwMDU4NTkzOH0seyJ4Ijo4NjQuMTU2MjUsInkiOjIwMS4wMTMwMzEwMDU4NTkzOH0seyJ4Ijo5MjcuNDkyMTg3NSwieSI6MjAxLjAxMzAzMTAwNTg1OTM4fV0=" data-look="classic" marker-end="url(#plan-arch_flowchart-v2-pointEnd)"/><path d="M1128.82,201.013L1139.376,201.013C1149.932,201.013,1171.044,201.013,1185.767,227.664C1200.49,254.314,1208.823,307.616,1221.622,335.512C1234.42,363.409,1251.684,365.9,1260.316,367.146L1268.948,368.392" id="plan-arch-L_PA_MG_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_PA_MG_0" data-points="W3sieCI6MTEyOC44MjAzMTI1LCJ5IjoyMDEuMDEzMDMxMDA1ODU5Mzh9LHsieCI6MTE5Mi4xNTYyNSwieSI6MjAxLjAxMzAzMTAwNTg1OTM4fSx7IngiOjEyMTcuMTU2MjUsInkiOjM2MC45MTcxMjk1MTY2MDE1Nn0seyJ4IjoxMjcyLjkwNjc4MDYwNDA0NzMsInkiOjM2OC45NjI5NDMzMDg1MDcxfV0=" data-look="classic" marker-end="url(#plan-arch_flowchart-v2-pointEnd)"/><path d="M564.961,345.013L573.16,345.013C581.359,345.013,597.758,345.013,626.79,307.554C655.823,270.095,697.49,195.178,739.156,157.719C780.823,120.26,822.49,120.26,856.739,117.253C890.988,114.247,917.82,108.234,931.236,105.227L944.652,102.22" id="plan-arch-L_R_GW_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_R_GW_0" data-points="W3sieCI6NTY0Ljk2MDkzNzUsInkiOjM0NS4wMTMwMzEwMDU4NTk0fSx7IngiOjYxNC4xNTYyNSwieSI6MzQ1LjAxMzAzMTAwNTg1OTR9LHsieCI6NzM5LjE1NjI1LCJ5IjoxMjAuMjU5NzczMjU0Mzk0NTN9LHsieCI6ODY0LjE1NjI1LCJ5IjoxMjAuMjU5NzczMjU0Mzk0NTN9LHsieCI6OTQ4LjU1NDY4NzUsInkiOjEwMS4zNDU2NDE5OTA2MjM4Mn1d" data-look="classic" marker-end="url(#plan-arch_flowchart-v2-pointEnd)"/><path d="M243.914,392.196L256.262,394.665C268.609,397.135,293.305,402.074,309.819,404.543C326.333,407.013,334.667,407.013,343,407.013C351.333,407.013,359.667,407.013,384.346,407.013C409.026,407.013,450.052,407.013,491.078,407.013C532.104,407.013,573.13,407.013,614.477,407.013C655.823,407.013,697.49,407.013,739.156,407.013C780.823,407.013,822.49,407.013,870.656,407.013C918.823,407.013,973.49,407.013,1028.156,407.013C1082.823,407.013,1137.49,407.013,1168.99,407.013C1200.49,407.013,1208.823,407.013,1219.241,405.678C1229.66,404.343,1242.163,401.673,1248.415,400.338L1254.666,399.003" id="plan-arch-L_PM_MG_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_PM_MG_0" data-points="W3sieCI6MjQzLjkxNDA2MjUsInkiOjM5Mi4xOTU4NDM1MDU4NTk0fSx7IngiOjMxOCwieSI6NDA3LjAxMzAzMTAwNTg1OTR9LHsieCI6MzQzLCJ5Ijo0MDcuMDEzMDMxMDA1ODU5NH0seyJ4IjozNjgsInkiOjQwNy4wMTMwMzEwMDU4NTk0fSx7IngiOjQ5MS4wNzgxMjUsInkiOjQwNy4wMTMwMzEwMDU4NTk0fSx7IngiOjYxNC4xNTYyNSwieSI6NDA3LjAxMzAzMTAwNTg1OTR9LHsieCI6NzM5LjE1NjI1LCJ5Ijo0MDcuMDEzMDMxMDA1ODU5NH0seyJ4Ijo4NjQuMTU2MjUsInkiOjQwNy4wMTMwMzEwMDU4NTk0fSx7IngiOjEwMjguMTU2MjUsInkiOjQwNy4wMTMwMzEwMDU4NTk0fSx7IngiOjExOTIuMTU2MjUsInkiOjQwNy4wMTMwMzEwMDU4NTk0fSx7IngiOjEyMTcuMTU2MjUsInkiOjQwNy4wMTMwMzEwMDU4NTk0fSx7IngiOjEyNTguNTc4MjIxNzkwMjA2NywieSI6Mzk4LjE2NzEyOTUxNjYwMTU2fV0=" data-look="classic" marker-end="url(#plan-arch_flowchart-v2-pointEnd)"/><path d="M243.914,359.83L256.262,357.361C268.609,354.891,293.305,349.952,309.819,347.483C326.333,345.013,334.667,345.013,343,345.013C351.333,345.013,359.667,345.013,371.366,345.013C383.065,345.013,398.13,345.013,405.663,345.013L413.195,345.013" id="plan-arch-L_PM_R_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_PM_R_0" data-points="W3sieCI6MjQzLjkxNDA2MjUsInkiOjM1OS44MzAyMTg1MDU4NTkzNn0seyJ4IjozMTgsInkiOjM0NS4wMTMwMzEwMDU4NTk0fSx7IngiOjM0MywieSI6MzQ1LjAxMzAzMTAwNTg1OTR9LHsieCI6MzY4LCJ5IjozNDUuMDEzMDMxMDA1ODU5NH0seyJ4Ijo0MTcuMTk1MzEyNSwieSI6MzQ1LjAxMzAzMTAwNTg1OTR9XQ==" data-look="classic" marker-end="url(#plan-arch_flowchart-v2-pointEnd)"/><path d="M581.609,471.263L587.034,471.263C592.458,471.263,603.307,471.263,629.565,471.263C655.823,471.263,697.49,471.263,739.156,471.263C780.823,471.263,822.49,471.263,853.547,474.559C884.605,477.854,905.054,484.445,915.279,487.74L925.503,491.036" id="plan-arch-L_GS_INF_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_GS_INF_0" data-points="W3sieCI6NTgxLjYwOTM3NSwieSI6NDcxLjI2MzAzMTAwNTg1OTR9LHsieCI6NjE0LjE1NjI1LCJ5Ijo0NzEuMjYzMDMxMDA1ODU5NH0seyJ4Ijo3MzkuMTU2MjUsInkiOjQ3MS4yNjMwMzEwMDU4NTk0fSx7IngiOjg2NC4xNTYyNSwieSI6NDcxLjI2MzAzMTAwNTg1OTR9LHsieCI6OTI5LjMxMDA5NjE1Mzg0NjIsInkiOjQ5Mi4yNjMwMzEwMDU4NTk0fV0=" data-look="classic" marker-end="url(#plan-arch_flowchart-v2-pointEnd)"/><path d="M589.156,575.263L593.323,575.263C597.49,575.263,605.823,575.263,630.823,575.263C655.823,575.263,697.49,575.263,739.156,575.263C780.823,575.263,822.49,575.263,853.545,572.125C884.6,568.988,905.043,562.712,915.265,559.575L925.486,556.437" id="plan-arch-L_OJ_INF_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_OJ_INF_0" data-points="W3sieCI6NTg5LjE1NjI1LCJ5Ijo1NzUuMjYzMDMxMDA1ODU5NH0seyJ4Ijo2MTQuMTU2MjUsInkiOjU3NS4yNjMwMzEwMDU4NTk0fSx7IngiOjczOS4xNTYyNSwieSI6NTc1LjI2MzAzMTAwNTg1OTR9LHsieCI6ODY0LjE1NjI1LCJ5Ijo1NzUuMjYzMDMxMDA1ODU5NH0seyJ4Ijo5MjkuMzEwMDk2MTUzODQ2MiwieSI6NTU1LjI2MzAzMTAwNTg1OTR9XQ==" data-look="classic" marker-end="url(#plan-arch_flowchart-v2-pointEnd)"/><path d="M1151.906,523.763L1158.615,523.68C1165.323,523.596,1178.74,523.43,1189.615,523.346C1200.49,523.263,1208.823,523.263,1216.49,523.263C1224.156,523.263,1231.156,523.263,1234.656,523.263L1238.156,523.263" id="plan-arch-L_INF_AC_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_INF_AC_0" data-points="W3sieCI6MTE1MS45MDYyNSwieSI6NTIzLjc2MzAzMTAwNTg1OTR9LHsieCI6MTE5Mi4xNTYyNSwieSI6NTIzLjI2MzAzMTAwNTg1OTR9LHsieCI6MTIxNy4xNTYyNSwieSI6NTIzLjI2MzAzMTAwNTg1OTR9LHsieCI6MTI0Mi4xNTYyNSwieSI6NTIzLjI2MzAzMTAwNTg1OTR9XQ==" data-look="classic" marker-end="url(#plan-arch_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="L_N_RPC_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_RPC_GW_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_ST_RPC_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_RPC_PA_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_PA_MG_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(739.15625, 120.25977325439453)"><g class="label" data-id="L_R_GW_0" transform="translate(-100, -24)"><foreignObject width="200" height="48"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="edgeLabel"><p>heartbeat: providers + proxy</p></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(739.15625, 407.0130310058594)"><g class="label" data-id="L_PM_MG_0" transform="translate(-13.46875, -12)"><foreignObject width="26.9375" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>poll</p></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_PM_R_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(739.15625, 471.2630310058594)"><g class="label" data-id="L_GS_INF_0" transform="translate(-100, -24)"><foreignObject width="200" height="48"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="edgeLabel"><p>ANTHROPIC_BASE_URL / OPENAI_BASE_URL</p></span></div></foreignObject></g></g><g class="edgeLabel" transform="translate(739.15625, 575.2630310058594)"><g class="label" data-id="L_OJ_INF_0" transform="translate(-60.0703125, -12)"><foreignObject width="120.140625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"><p>authMode: proxy</p></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_INF_AC_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="plan-arch-flowchart-N-0" data-look="classic" transform="translate(163, 84.25977325439453)"><rect class="basic label-container" style="" x="-130" y="-39" width="260" height="78"/><g class="label" style="" transform="translate(-100, -24)"><rect/><foreignObject width="200" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>Nodes · Providers · Runs · Home</p></span></div></foreignObject></g></g><g class="node default" id="plan-arch-flowchart-ST-1" data-look="classic" transform="translate(163, 200.25977325439453)"><rect class="basic label-container" style="" x="-127.59375" y="-27" width="255.1875" height="54"/><g class="label" style="" transform="translate(-97.59375, -12)"><rect/><foreignObject width="195.1875" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Settings → Inference proxy</p></span></div></foreignObject></g></g><g class="node default" id="plan-arch-flowchart-RPC-2" data-look="classic" transform="translate(491.078125, 142.25977325439453)"><rect class="basic label-container" style="" x="-68.0078125" y="-27" width="136.015625" height="54"/><g class="label" style="" transform="translate(-38.0078125, -12)"><rect/><foreignObject width="76.015625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>Effect RPC</p></span></div></foreignObject></g></g><g class="node default" id="plan-arch-flowchart-GW-3" data-look="classic" transform="translate(1028.15625, 83.50651550292969)"><path d="M0,14.004343284402662 a79.6015625,14.004343284402662 0,0,0 159.203125,0 a79.6015625,14.004343284402662 0,0,0 -159.203125,0 l0,53.004343284402665 a79.6015625,14.004343284402662 0,0,0 159.203125,0 l0,-53.004343284402665" class="basic label-container outer-path" style="" transform="translate(-79.6015625, -40.506514926604)"/><g class="label" style="" transform="translate(-72.1015625, -2)"><rect/><foreignObject width="144.203125" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>host snapshot cache</p></span></div></foreignObject></g></g><g class="node default" id="plan-arch-flowchart-PA-4" data-look="classic" transform="translate(1028.15625, 201.01303100585938)"><rect class="basic label-container" style="" x="-100.6640625" y="-27" width="201.328125" height="54"/><g class="label" style="" transform="translate(-70.6640625, -12)"><rect/><foreignObject width="141.328125" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>proxy actions client</p></span></div></foreignObject></g></g><g class="node default" id="plan-arch-flowchart-R-5" data-look="classic" transform="translate(491.078125, 345.0130310058594)"><rect class="basic label-container" style="" x="-73.8828125" y="-27" width="147.765625" height="54"/><g class="label" style="" transform="translate(-43.8828125, -12)"><rect/><foreignObject width="87.765625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>ooda-runner</p></span></div></foreignObject></g></g><g class="node default" id="plan-arch-flowchart-PM-6" data-look="classic" transform="translate(163, 376.0130310058594)"><rect class="basic label-container" style="" x="-80.9140625" y="-27" width="161.828125" height="54"/><g class="label" style="" transform="translate(-50.9140625, -12)"><rect/><foreignObject width="101.828125" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>proxy-monitor</p></span></div></foreignObject></g></g><g class="node default" id="plan-arch-flowchart-GS-7" data-look="classic" transform="translate(491.078125, 471.2630310058594)"><rect class="basic label-container" style="" x="-90.53125" y="-27" width="181.0625" height="54"/><g class="label" style="" transform="translate(-60.53125, -12)"><rect/><foreignObject width="121.0625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>gateway sessions</p></span></div></foreignObject></g></g><g class="node default" id="plan-arch-flowchart-OJ-8" data-look="classic" transform="translate(491.078125, 575.2630310058594)"><rect class="basic label-container" style="" x="-98.078125" y="-27" width="196.15625" height="54"/><g class="label" style="" transform="translate(-68.078125, -12)"><rect/><foreignObject width="136.15625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>isolated OODA jobs</p></span></div></foreignObject></g></g><g class="node default" id="plan-arch-flowchart-MG-9" data-look="classic" transform="translate(1343.4609375, 378.16712951660156)"><polygon points="-19.5,0 132.3125,0 151.8125,-39 0,-39" class="label-container" transform="translate(-66.15625,19.5)"/><g class="label" style="" transform="translate(-58.65625, -12)"><rect/><foreignObject width="117.3125" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>v0/management</p></span></div></foreignObject></g></g><g class="node default" id="plan-arch-flowchart-INF-10" data-look="classic" transform="translate(1028.15625, 523.2630310058594)"><polygon points="-31.5,0 215,0 246.5,-63 0,-63" class="label-container" transform="translate(-107.5,31.5)"/><g class="label" style="" transform="translate(-100, -24)"><rect/><foreignObject width="200" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table; white-space: break-spaces; line-height: 1.5; max-width: 200px; text-align: center; width: 200px;"><span class="nodeLabel"><p>v1/messages · /v1/responses</p></span></div></foreignObject></g></g><g class="node default" id="plan-arch-flowchart-AC-11" data-look="classic" transform="translate(1343.4609375, 523.2630310058594)"><path d="M0,15.46120093480231 a101.3046875,15.46120093480231 0,0,0 202.609375,0 a101.3046875,15.46120093480231 0,0,0 -202.609375,0 l0,78.4612009348023 a101.3046875,15.46120093480231 0,0,0 202.609375,0 l0,-78.4612009348023" class="basic label-container outer-path" style="" transform="translate(-101.3046875, -54.69180140220347)"/><g class="label" style="" transform="translate(-93.8046875, -14)"><rect/><foreignObject width="187.609375" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>auth accounts<br />claude · codex · kimi · xai</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="plan-arch-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#FFFFFF"/></filter></defs><defs><filter id="plan-arch-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#FFFFFF"/></filter></defs><linearGradient id="plan-arch-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#cccccc" stop-opacity="1"/><stop offset="100%" stop-color="hsl(180, 0%, 18.3529411765%)" stop-opacity="1"/></linearGradient></svg>
+    <figcaption>Proxy state flows into the existing host-snapshot heartbeat; management actions go server-side with the key held as a workspace secret.</figcaption>
+  </figure>
+  <details class="mermaid-source">
+    <summary>Diagram source (mermaid)</summary>
+    <pre><code>flowchart LR
+  subgraph UI["Bob UI — web · mobile · tablet"]
+    N[Nodes · Providers · Runs · Home]
+    ST[Settings → Inference proxy]
+  end
+  subgraph SRV["Bob server · ws-gateway"]
+    RPC[Effect RPC]
+    GW[(host snapshot cache)]
+    PA[proxy actions client]
+  end
+  subgraph RUN["Runner hosts"]
+    R[ooda-runner]
+    PM[proxy-monitor]
+    GS[gateway sessions]
+    OJ[isolated OODA jobs]
+  end
+  subgraph PX["CLIProxyAPI"]
+    MG[/v0/management/]
+    INF[/v1/messages · /v1/responses/]
+    AC[(auth accounts\nclaude · codex · kimi · xai)]
+  end
+  N --> RPC --> GW
+  ST --> RPC --> PA --> MG
+  R -- heartbeat: providers + proxy --> GW
+  PM -- poll --> MG
+  PM --> R
+  GS -- ANTHROPIC_BASE_URL / OPENAI_BASE_URL --> INF
+  OJ -- authMode: proxy --> INF
+  INF --> AC</code></pre>
+  </details>
+
+  <h2>What the lights should say when this is done</h2>
+  <div class="lights">
+    <div class="light"><i class="ok"></i>Proxy reachable<small>version, latency, last poll</small></div>
+    <div class="light"><i class="ok"></i>claude · 2 accounts<small>1 ready · 1 cooling down (resets 14:00)</small></div>
+    <div class="light"><i class="ok"></i>codex · 2 accounts<small>both ready · 1.2k req / 24h</small></div>
+    <div class="light"><i class="warn"></i>xai · 1 account<small>rate limited · wait</small></div>
+    <div class="light"><i class="grey"></i>kimi · 1 account<small>no runs in 7d</small></div>
+    <div class="light"><i class="ok"></i>Runners · 3 of 4<small>1 stale &gt; 90s</small></div>
+  </div>
+
+  <h2>Goals &amp; Non-goals</h2>
+  <div class="goals">
+    <div class="card">
+      <h3>Goals</h3>
+      <ul>
+        <li>Every agent run — gateway sessions <em>and</em> isolated OODA jobs — can use the proxy, selected by configuration, not by hand-edited host files.</li>
+        <li>Provider health in Bob reflects the proxy: per-account status, cooldowns, quota, usage, model availability.</li>
+        <li>Operators can act on the proxy from Bob: refresh, enable/disable an account, test the connection, read recent proxy logs.</li>
+        <li>Web and mobile expose every screen through a coherent navigation model; no dead ends, no tablet-only routes.</li>
+        <li>Alerts for the things that stop work: proxy unreachable, a provider with no ready accounts, a runner gone stale.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Non-goals</h3>
+      <ul>
+        <li>Replacing CLIProxyAPI's own control panel. Bob shows what an operator needs to keep runs flowing, not every config knob.</li>
+        <li>Adding new providers to the proxy (Kimi/xAI accounts exist; wiring them as Bob run providers is a follow-up).</li>
+        <li>Fixing the App Store listing (screenshots, privacy labels) — tracked separately in Preflight.</li>
+        <li>Rewriting the Effect RPC migration on this branch; this plan builds on it as-is.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Milestones</h2>
+  <ul class="timeline">
+    <li class="done"><b>Phase 0 — Baseline</b><br>Production state surveyed; gaps confirmed; branch chosen. 2026-09-20.</li>
+    <li class="done"><b>Phase 1 — Proxy as an auth mode</b><br>Landed 2026-09-20: proxy transport for jobs and host turns, proxy-aware probe, <code>check_proxy</code> remedy. 24 new tests.</li>
+    <li class="done"><b>Phase 2 — Proxy telemetry</b><br>Landed 2026-09-20: wire model, runner monitor, proxyControl.set end to end (API → gateway → runner → proxy).</li>
+    <li><b>Phase 3 — Web monitoring</b><br>Nodes, Providers, Runs and Settings render and act on proxy state.</li>
+    <li><b>Phase 4 — Mobile &amp; tablet monitoring</b><br>Same model on the phone; notifications for the two failure modes that matter.</li>
+    <li class="active"><b>Phase 5 — Navigation &amp; polish</b><br>Web sidebar audit, mobile tab bar, consistent headers, empty and error states.</li>
+    <li><b>Phase 6 — Deploy &amp; certify</b><br>Runner hosts, server, gateway, TestFlight; acceptance receipts recorded here.</li>
+  </ul>
+
+  <h2>Phase 0 — Baseline <span class="badge done">Done</span></h2>
+  <p>Facts established by inspection on 2026-09-20; each later phase cites these rather than re-deriving them.</p>
+  <table>
+    <thead><tr><th>Finding</th><th>Where</th><th>Consequence</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Proxy runs as a container unit on the proxy host; management API on, secret set, usage stats on, 5 API keys, 6 auth accounts.</td><td>proxy host config (values not recorded)</td><td>Monitoring data exists; nothing consumes it.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Primary runner loads a host-managed env file supplying <code>CLIPROXY_BASE_URL</code>, <code>CLIPROXY_API_KEY</code>, <code>ANTHROPIC_BASE_URL</code>, <code>ANTHROPIC_AUTH_TOKEN</code>, <code>OPENAI_BASE_URL</code>; Codex <code>config.toml</code> selects a <code>cliproxy</code> provider.</td><td>runner unit</td><td>Gateway sessions already use the proxy; configuration is invisible to Bob.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Isolated job broker forwards only <code>PATH</code>/<code>LANG</code>/<code>LC_ALL</code>/<code>TERM</code>.</td><td><code>apps/ooda-runner/src/agent-jobs/subscription-runtime-broker.ts</code></td><td>OODA jobs bypass the proxy.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Host credential probe unit is failed; probes local OAuth files, reports Grok missing.</td><td>runner host unit</td><td>Production health is misreported today.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td><code>fix/bob-post-effect</code> is the live workstream (21 commits, Effect RPC migration, signed-in mobile acceptance). PR #190 is fully contained in master and should be closed, not merged.</td><td>forge</td><td>Build here; open a PR for this branch early.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Web has a full dashboard (nodes, providers, runs, settings, cockpit, hermes console); mobile has home/nav from the TestFlight work; mobile nav sheet lists 8 destinations, routes exist for 26.</td><td><code>apps/bob</code>, <code>apps/mobile-bob</code></td><td>Navigation gaps are enumerable, not architectural.</td><td><span class="badge done">Done</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Phase 1 — Proxy as a provider auth mode <span class="badge done">Done</span></h2>
+  <p>Make the runner understand the proxy as a third auth mode alongside <code>subscription</code> and <code>api_key</code>, so every execution path can use it and health checks look at the thing that actually serves requests.</p>
+  <table>
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Add <code>authMode: "proxy"</code>: forward <code>ANTHROPIC_BASE_URL</code>, <code>ANTHROPIC_AUTH_TOKEN</code>, <code>OPENAI_BASE_URL</code>, <code>CLIPROXY_API_KEY</code>; no credential copies; strip metered keys as today.</td><td><code>subscription-runtime-broker.ts</code></td><td>Unit tests: proxy env forwarded, OAuth files not copied, metered keys absent.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Write a per-run <code>CODEX_HOME/config.toml</code> with the <code>cliproxy</code> Responses provider so isolated jobs use it without touching the host's shared config.</td><td><code>subscription-runtime-broker.ts</code>, new <code>codex-proxy-config.ts</code></td><td>Test renders <code>model_provider="cliproxy"</code>, <code>wire_api="responses"</code>, <code>env_key="CLIPROXY_API_KEY"</code>.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Runner config: <code>BOB_PROVIDER_AUTH_MODE</code> (<code>proxy</code> | <code>subscription</code> | <code>api_key</code>) with per-provider overrides; default <code>proxy</code> when <code>CLIPROXY_BASE_URL</code> is set.</td><td><code>apps/ooda-runner/src/config.ts</code>, <code>agent-job-worker.ts</code>, <code>host-turn-worker.ts</code></td><td>Tests for resolution order; existing callers that hardcode <code>"subscription"</code> read the resolver.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Proxy-aware probe: in proxy mode, <code>probeCliProvider</code> checks <code>GET /v1/models</code> with the API key and per-provider model presence instead of <code>codex login status</code>; outcome latch unchanged.</td><td><code>apps/bob-execution/src/providers/cli-provider.ts</code></td><td>Test: 401 → <code>unauthenticated</code>; missing provider models → <code>unavailable</code>; ok → <code>ready</code>; latched 402 still wins.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Retire the host credential-health unit's direct OAuth checks: run the proxy-aware probe from the runner instead; document the change in the ops doc.</td><td><code>docs/ops/multi-provider-host-setup.md</code></td><td>Unit no longer in failed state after deploy (Phase 6).</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Dispatch gate remedy <code>proxy_unreachable</code> → "check proxy", distinct from <code>sign_in</code>.</td><td><code>dispatch-gate.ts</code>, <code>provider-health.ts</code></td><td>Test maps the new failure kind to the new remedy.</td><td><span class="badge done">Done</span></td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>Implementation notes</summary>
+    <p>The Claude CLI honours <code>ANTHROPIC_BASE_URL</code> + <code>ANTHROPIC_AUTH_TOKEN</code>; Codex needs the explicit Responses provider in <code>config.toml</code> because <code>OPENAI_BASE_URL</code> alone does not switch the wire API. Writing that file into the per-run <code>CODEX_HOME</code> keeps the host's shared config untouched, which the ops doc explicitly warns about. The broker already creates an ephemeral credential home outside the workspace; the proxy config goes there.</p>
+    <p>The probe stays an <em>estimate</em>: the outcome latch (402 / 401 / 429 from real runs) remains authoritative. The change is only <em>what</em> the estimate looks at.</p>
+  </details>
+
+  <h2>Phase 2 — Proxy telemetry <span class="badge done">Done</span></h2>
+  <p>Carry proxy state through the same heartbeat that already carries agent health, and give the server a way to act on the proxy without the runner in the loop.</p>
+  <table>
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Shared wire model: <code>ProxySnapshotWire</code> (reachable, version, latencyMs, checkedAt, accounts[], usage) and <code>ProxyAccountWire</code> (provider, label with the email masked, status ready|cooldown|disabled|error, cooldownUntil, models[], lastRefresh). Add optional <code>proxy?</code> to <code>HostSnapshotWire</code>; <code>undefined</code> means "not configured".</td><td><code>packages/bob/src/ws/src/protocol.ts</code>, new <code>proxy-health.ts</code></td><td>Type tests; redaction test (no raw email survives).</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Runner <code>proxy-monitor.ts</code>: on each heartbeat poll <code>auth-files</code>, <code>quota/providers</code>, <code>api-key-usage</code>; fold into the snapshot; derive <code>ProviderHealthWire.status</code> per provider from account states (all cooling → <code>rate_limited</code>, none → <code>unauthenticated</code>).</td><td><code>apps/ooda-runner/src/proxy-monitor.ts</code>, <code>agent-credentials.ts</code></td><td>Tests with recorded management responses; fold rules covered per state.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Management key custody: the key stays on the runner host only (<code>CLIPROXY_MANAGEMENT_KEY</code> in its env file). Actions relay through the gateway to the daemon, like dispatch control; the server never holds the key and it never crosses the wire.</td><td><code>apps/ooda-runner/src/proxy-control.ts</code>, gateway <code>/internal/proxy-control</code></td><td>Runner tests: refuses actions without the key; results never echo a key.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>RPC: <code>nodes.proxy.get</code> (from gateway snapshot cache), <code>nodes.proxy.logs</code> (last N lines, redacted), actions <code>proxy.refreshAccount</code>, <code>proxy.setAccountEnabled</code>, <code>proxy.testConnection</code>; admin-gated.</td><td><code>packages/core/src/contracts</code>, <code>packages/bob/src/api/src/handlers/proxy.ts</code>, edge router</td><td>Handler tests; contract typechecks in web, mobile, desktop clients.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Gateway: broadcast <code>proxy_state_changed</code> when an account flips state, alongside <code>provider_capacity_changed</code>.</td><td><code>apps/bob-ws-gateway/src/relay.ts</code></td><td>Relay test: state flip emits once, not per heartbeat.</td><td><span class="badge done">Done</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Phase 3 — Web monitoring <span class="badge active">Active</span></h2>
+  <p>Render proxy state where operators already look, and make the three actions available without leaving Bob.</p>
+  <table>
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Nodes page: "Inference proxy" panel — reachability, version, latency; accounts table (provider, masked account, status, cooldown countdown, quota bar, models); refresh / enable / disable per row.</td><td><code>apps/bob/src/app/(dashboard)/nodes/page.tsx</code>, new <code>components/nodes/proxy-panel.tsx</code></td><td>Storybook-free: vitest on the view-model; manual check against production.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Provider capacity cards derive from proxy accounts when present; fall back to host probe otherwise; badge says which source.</td><td><code>components/dashboard/provider-capacity-cards.tsx</code>, <code>provider-health.ts</code></td><td>View-model tests for both sources.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Runs: show auth mode and, when the proxy reports it, the account that served the run.</td><td><code>runs/[runId]/page.tsx</code>, run metadata</td><td>Run detail renders <code>proxy · codex-…</code>.</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Settings → Providers → "Inference proxy": base URL, management key (write-only), test connection, auth-mode default per provider.</td><td><code>settings/page.tsx</code>, settings section</td><td>Test connection round-trips through <code>proxy.testConnection</code>.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Usage: 24h request/token sparkline per provider on Nodes, reusing the existing chart primitives.</td><td><code>proxy-panel.tsx</code></td><td>Renders from recorded usage fixture.</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Phase 4 — Mobile &amp; tablet monitoring <span class="badge active">Active</span></h2>
+  <table>
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Nodes screen: proxy card with one light per account; tap → account detail (status, cooldown, models, last refresh); refresh / enable / disable with confirmation.</td><td><code>apps/mobile-bob/src/app/nodes.tsx</code>, <code>features/nodes/proxy-lights-model.ts</code></td><td>Model tests: stale → grey, cooldown → amber, disabled → grey with label.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Home host light incorporates proxy reachability; "Needs you" gains a row when a provider has no ready accounts.</td><td><code>features/home/home-model.ts</code>, <code>node-lights-model.ts</code></td><td>Home model tests extended.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Settings → Providers section shows proxy config read-only with test connection (phone) and editable on tablet split view.</td><td><code>features/settings/sections.tsx</code></td><td>Both shells render from one section definition.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Notification types <code>proxy_unreachable</code> and <code>provider_no_ready_accounts</code> in the preferences matrix; push on by default for both.</td><td><code>packages/bob/src/notifications/src/preferences.ts</code>, ws-gateway <code>push-gate.ts</code></td><td>Preference resolver tests; gateway emits once per state change.</td><td><span class="badge done">Done</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Phase 5 — Navigation &amp; professional polish <span class="badge active">Active</span></h2>
+  <p>Make every screen reachable and make the app read as one product. Findings drive this phase: the phone sheet lists 8 destinations against 26 routes; several web pages are reachable only by URL.</p>
+  <table>
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Web sidebar audit: every page in <code>app/(dashboard)</code> reachable from the sidebar or a parent page (providers, runs detail, projects, discovery, hermes console, cockpit); active-state highlighting; breadcrumbs on detail pages.</td><td><code>components/layout/sidebar-nav-model.ts</code> + tests</td><td>Test asserts each route file has a nav entry or a documented parent.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Web status strip in the sidebar footer: proxy light, runners online/total, queue depth.</td><td><code>components/layout/</code></td><td>Renders from snapshot cache; manual.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Mobile: bottom tab bar — Home, Tasks, Runs, Chat, More — replacing the menu sheet as the primary model; "More" holds Planning, PRs, Nodes, Projects, Notifications, Settings.</td><td><code>src/app/_layout.tsx</code>, <code>features/navigation/</code></td><td>Model test: every route maps to a tab or More; nav tests updated.</td><td><span class="badge done">Done</span></td></tr>
+      <tr><td>Mobile: consistent screen headers (title, back where history exists, primary action), pull-to-refresh on every list, skeleton loaders, error banners that name the failing call and offer retry.</td><td>screens under <code>src/app/</code>, <code>components/ui/</code></td><td>Manual walk on phone and tablet; screenshots recorded in the receipt.</td><td><span class="badge active">Active</span></td></tr>
+      <tr><td>Mobile: projects and sessions reachable from Home and Tasks; work-item detail links to its run, PR and workspace.</td><td><code>home.tsx</code>, <code>tasks.tsx</code>, <code>work-items/[id].tsx</code></td><td>Link model tests.</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Design review pass on web and tablet (spacing, hierarchy, empty states, dark-mode contrast), then fix findings.</td><td>—</td><td><code>/design-review</code> report with zero P1 findings.</td><td><span class="badge todo">Todo</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Phase 6 — Deploy &amp; certify <span class="badge active">Active</span></h2>
+  <table>
+    <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Open the PR for <code>fix/bob-post-effect</code>; close #190 (already contained in master).</td><td>forge</td><td>PR green on CI.</td><td><span class="badge active">Active</span></td></tr>
+      <tr><td>Runner hosts: add <code>CLIPROXY_MANAGEMENT_KEY</code> and <code>BOB_PROVIDER_AUTH_MODE=proxy</code> to the host env file; restart; confirm heartbeat carries <code>proxy</code>.</td><td>host env (values not recorded)</td><td>Nodes page shows the proxy panel populated.</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Deploy server + gateway; deploy web.</td><td>ForgeGraph</td><td>Health deep check passes.</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>Live acceptance: one Claude run and one Codex run dispatched from the phone, both served by the proxy, both visible on Runs with auth mode <code>proxy</code>; disable an account from web, watch the light change on the phone.</td><td>—</td><td>Receipt appended to this plan.</td><td><span class="badge todo">Todo</span></td></tr>
+      <tr><td>TestFlight build of the branch through the existing production profile and ship script.</td><td><code>apps/mobile-bob</code></td><td>Build VALID in App Store Connect.</td><td><span class="badge done">Done</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Phase 6 receipts</h2>
+  <div class="callout ok"><strong>TestFlight · 2026-09-20.</strong> Build 17 (0.1.0) built by EAS from <code>6529cbb1</code>, verified in the binary before upload (icon name, photo-library purpose string, no unresolved <code>${…}</code> in the runtime config, <code>API_URL</code>/<code>AUTH_URL</code> = production), uploaded via altool (delivery <code>cc7f4e0e…</code>), <strong>VALID</strong> in App Store Connect.</div>
+  <div class="callout ok"><strong>Migration 0033 · 2026-09-20.</strong> Applied to production as <code>postgres</code> and recorded in <code>bob_migrations</code>; enum now carries <code>proxy_unreachable</code> and <code>provider_no_ready_accounts</code>.</div>
+  <div class="callout"><strong>CI on PR #205 (run 1172).</strong> typecheck passed; test 4003/4055 with one failure that is identical on master (<code>createRunOwnership</code> fixture lacked <code>db.transaction</code> — fixed on the branch); lint failed (being addressed). Master's own CI has been red since 2026-09-16.</div>
+
+<h2>Risks &amp; Mitigations</h2>
+  <table>
+    <thead><tr><th>Risk</th><th>Severity</th><th>Mitigation</th></tr></thead>
+    <tbody>
+      <tr><td>Management key exposure through snapshots, logs or the mobile bundle.</td><td><span class="badge blocked">High</span></td><td>Key lives only in runner env and the server secrets store; a CI grep test fails the build if the variable name appears in any serialiser; mobile only ever calls server RPC.</td></tr>
+      <tr><td>Proxy becomes a single point of failure for all inference.</td><td><span class="badge risk">Medium</span></td><td>Auth mode is per provider and per host; <code>proxy_unreachable</code> is a distinct remedy; operators can flip a provider back to <code>subscription</code> from Settings without a deploy.</td></tr>
+      <tr><td>CLIProxyAPI management API shape drifts between versions.</td><td><span class="badge risk">Medium</span></td><td>Pin the container tag; record the version in the snapshot; parse defensively with recorded fixtures per version.</td></tr>
+      <tr><td>Mobile tab-bar refactor destabilises a branch that just passed signed-in acceptance.</td><td><span class="badge risk">Medium</span></td><td>Phase 5 lands after Phases 1–4 are verified; nav model stays pure and tested; the sheet remains behind "More" so nothing becomes unreachable mid-migration.</td></tr>
+      <tr><td>Per-run Codex config diverges from the host's working config.</td><td><span class="badge risk">Low</span></td><td>Generate the per-run file from the same template the ops doc specifies; test asserts the four required keys.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Verification</h2>
+  <ul>
+    <li>Automated, per package: <code>pnpm typecheck</code> and <code>pnpm test</code> in <code>apps/ooda-runner</code>, <code>apps/bob-execution</code>, <code>apps/bob-ws-gateway</code>, <code>packages/bob/src/ws</code>, <code>apps/bob</code>, <code>apps/mobile-bob</code>; the monorepo run <code>pnpm exec turbo run test --concurrency=1 -- --no-file-parallelism</code>.</li>
+    <li>Contract: web, mobile and desktop clients typecheck against the extended RPC contracts.</li>
+    <li>Live: the Phase 6 acceptance run, recorded as a receipt section in this document with timestamps and run ids.</li>
+    <li>Navigation: a model test enumerates route files and asserts each is reachable; a manual walk on phone and tablet with screenshots.</li>
+  </ul>
+
+  <h2>Open Questions</h2>
+  <div class="callout">
+    <strong>Proxy-only in production?</strong> After Phase 1 verifies both providers through the proxy, should runner hosts drop direct OAuth entirely? <em>Recommended: yes</em> — one place to sign in, one place to watch, and the failed host probe goes away.
+  </div>
+  <div class="callout">
+    <strong>Mobile primary navigation.</strong> Tab bar (recommended, standard iOS pattern, five primaries) versus keeping the menu sheet. The sheet stays either way behind "More".
+  </div>
+  <div class="callout">
+    <strong>Kimi and xAI as Bob run providers.</strong> The proxy already holds accounts. Exposing them as dispatchable providers is a small follow-up once the proxy auth mode exists; not in this plan's scope unless wanted.
+  </div>
+</main>
+</body>
+</html>

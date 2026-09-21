@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  createBobQueryClient,
+  type BobQueryClient,
+} from "@gmacko/bob-client/query";
 import { createContext, useContext, useState } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -9,7 +13,7 @@ import {
   type BobRpcClient,
 } from "@gmacko/bob-client";
 
-import { createQueryClient } from "~/trpc/query-client";
+import { createQueryClient } from "~/rpc/query-client";
 
 let clientQueryClientSingleton: QueryClient | undefined;
 
@@ -20,15 +24,18 @@ function getQueryClient() {
   return (clientQueryClientSingleton ??= createQueryClient());
 }
 
-const BobRpcContext = createContext<BobRpcClient | null>(null);
+const BobRpcContext = createContext<{
+  rpc: BobRpcClient;
+  query: BobQueryClient;
+} | null>(null);
 
 export function BobRpcProvider(props: {
   children: React.ReactNode;
   options?: Partial<BobClientOptions>;
 }) {
   const queryClient = getQueryClient();
-  const [client] = useState(() =>
-    createBobRpcClient({
+  const [client] = useState(() => {
+    const options: BobClientOptions = {
       baseURL: getBaseUrl() + "/api/rpc",
       headers: {
         "x-rpc-source": "bob-react",
@@ -42,8 +49,12 @@ export function BobRpcProvider(props: {
       fetch: ((input: RequestInfo | URL, init?: RequestInit) =>
         fetch(input, { ...init, credentials: "include" })) as typeof fetch,
       ...props.options,
-    }),
-  );
+    };
+    return {
+      rpc: createBobRpcClient(options),
+      query: createBobQueryClient(options),
+    };
+  });
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -59,7 +70,14 @@ export function useBobRpcClient(): BobRpcClient {
   if (!client) {
     throw new Error("useBobRpcClient must be used within BobRpcProvider");
   }
-  return client;
+  return client.rpc;
+}
+
+export function useBobQueryClient(): BobQueryClient {
+  const client = useContext(BobRpcContext);
+  if (!client)
+    throw new Error("useBobQueryClient must be used within BobRpcProvider");
+  return client.query;
 }
 
 function getBaseUrl() {

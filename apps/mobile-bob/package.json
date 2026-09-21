@@ -35,7 +35,6 @@
     "@tanstack/react-query": "catalog:",
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
-    "@trpc/tanstack-react-query": "catalog:",
     "better-auth": "catalog:",
     "expo": "~55.0.11",
     "expo-asset": "~55.0.20",
@@ -73,7 +72,6 @@
   },
   "devDependencies": {
     "@babel/plugin-transform-react-jsx": "^7.29.7",
-    "@bob/api": "workspace:*",
     "@bob/eslint-config": "workspace:*",
     "@bob/prettier-config": "workspace:*",
     "@bob/tailwind-config": "workspace:*",

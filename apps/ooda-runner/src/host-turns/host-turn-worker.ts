@@ -20,6 +20,7 @@ import { wrapInProcessSandbox } from "../agent-jobs/process-sandbox";
 import {
   createSubscriptionCredentialHome,
   materializeCredentialCopies,
+  materializeCredentialWrites,
   type SubscriptionCredentialHome,
 } from "../agent-jobs/subscription-credentials";
 import { extractAgentResponse } from "../pty-output-parser";
@@ -168,6 +169,10 @@ export class HostTurnWorker {
           credentialHome.path,
           prepared.credentialCopies,
         );
+        await materializeCredentialWrites(
+          credentialHome.path,
+          prepared.credentialWrites,
+        );
         // Credential HOME and native session artifacts are deliberately disposable.
         // Even an older gateway's runtimeSession is provenance, not resumable state.
         // Canonical branch-visible history is the complete input to every attempt.
@@ -188,9 +193,10 @@ export class HostTurnWorker {
           this.config.processSandbox ?? wrapInProcessSandbox;
         const containedCommand = await processSandbox(command, sandbox.path, {
           environment: prepared.environment,
-          readOnlyPaths: prepared.credentialCopies.map(
-            (copy) => copy.destinationPath,
-          ),
+          readOnlyPaths: [
+            ...prepared.credentialCopies.map((copy) => copy.destinationPath),
+            ...prepared.credentialWrites.map((write) => write.destinationPath),
+          ],
           writablePaths: [credentialHome.path],
         });
         const result = await adapter.execute(

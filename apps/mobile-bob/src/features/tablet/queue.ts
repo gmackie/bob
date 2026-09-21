@@ -16,8 +16,8 @@ export interface TabletQueueItem {
   completedAt?: string | Date | null;
   agentStatus?: TabletQueueAgentStatus | null;
   project?: TabletProjectSummary | null;
-  dependencies?: TabletRelatedWorkItem[] | null;
-  dependents?: TabletRelatedWorkItem[] | null;
+  dependencies?: readonly TabletRelatedWorkItem[] | null;
+  dependents?: readonly TabletRelatedWorkItem[] | null;
 }
 
 export interface TabletProjectSummary {
@@ -105,7 +105,7 @@ function hasActiveAgent(item: TabletQueueItem): boolean {
 }
 
 export function buildExecutionQueue(
-  items: TabletQueueItem[] | null | undefined,
+  items: readonly TabletQueueItem[] | null | undefined,
 ): TabletQueueItem[] {
   return [...(items ?? [])].sort((left, right) => {
     const leftOrder = left.queueSortOrder ?? Number.MAX_SAFE_INTEGER;
@@ -127,7 +127,7 @@ export function getMobilePriorityQueueHeaderModel(): MobilePriorityQueueHeaderMo
 }
 
 export function buildPriorityQueueItems(
-  items: TabletQueueItem[] | null | undefined,
+  items: readonly TabletQueueItem[] | null | undefined,
 ): TabletQueueItem[] {
   const upcomingItems = (items ?? []).filter((item) => {
     if (item.kind !== "task") return false;
@@ -143,7 +143,7 @@ export function buildPriorityQueueItems(
   return sortQueueItemsByPriority(upcomingItems);
 }
 
-export function buildPriorityQueueSaveOrder(items: TabletQueueItem[]): string[] {
+export function buildPriorityQueueSaveOrder(items: readonly TabletQueueItem[]): string[] {
   return items.map((item) => item.id);
 }
 
@@ -192,7 +192,7 @@ const PRIORITY_WEIGHT: Record<string, number> = {
 };
 
 export function sortQueueItemsByPriority(
-  items: TabletQueueItem[],
+  items: readonly TabletQueueItem[],
 ): TabletQueueItem[] {
   return [...items].sort((left, right) => {
     const leftPriority = priorityWeight(left.priority);
@@ -204,7 +204,7 @@ export function sortQueueItemsByPriority(
   });
 }
 
-export function buildQueueLanes(items: TabletQueueItem[]) {
+export function buildQueueLanes(items: readonly TabletQueueItem[]) {
   const ordered = buildExecutionQueue(items);
 
   return {
@@ -259,7 +259,7 @@ export function moveQueueItem(
   itemIds: string[],
   itemId: string,
   direction: QueueMoveDirection,
-  orderedItems?: TabletQueueItem[],
+  orderedItems?: readonly TabletQueueItem[],
 ): string[] {
   if (orderedItems && !canMoveQueueItem(orderedItems, itemId, direction)) {
     return itemIds;
@@ -288,7 +288,7 @@ export function moveQueueItem(
 }
 
 export function canMoveQueueItem(
-  orderedItems: TabletQueueItem[],
+  orderedItems: readonly TabletQueueItem[],
   itemId: string,
   direction: QueueMoveDirection,
 ): boolean {

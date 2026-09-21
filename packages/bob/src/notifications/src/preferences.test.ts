@@ -172,4 +172,15 @@ describe("quiet hours", () => {
       }),
     ).toBe(true);
   });
+  it("pushes a proxy outage by default — nothing runs until someone looks", () => {
+    // Two new blocking events: the inference proxy unreachable, and a provider
+    // with no ready account on it. Same footing as a blocked agent.
+    for (const type of ["proxy_unreachable", "provider_no_ready_accounts"] as const) {
+      const on = (channel: "push" | "email" | "in_app") =>
+        resolveNotificationDelivery({ type, channel, masters: { push: true, email: true }, overrides: noRows });
+      expect(on("push"), type).toBe(true);
+      expect(on("in_app"), type).toBe(true);
+      expect(on("email"), type).toBe(false);
+    }
+  });
 });

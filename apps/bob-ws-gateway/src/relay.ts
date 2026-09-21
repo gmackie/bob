@@ -1,7 +1,7 @@
 import { readTraceReportScope } from "./trace-report-scope.js";
 import type { WebSocket } from "ws";
 import { spawnFailureAgent } from "./spawn-failure";
-import { eq, and, or, gt, lt, inArray, asc, desc, sql, isNull } from "@bob/db";
+import { eq, and, or, gt, lt, inArray, asc, desc, sql, isNull, registerSessionAgentRun } from "@bob/db";
 import { db } from "@bob/db/client";
 import { chatConversations, repositories, sessionEvents, taskRuns, workItems, agentRuns, activities, workspaces, tenants, tenantMembers, planDrafts, pullRequests, runnerLeases, gatewayConfig, eventLog, workspaceMembers, user } from "@bob/db/schema";
 
@@ -32,8 +32,11 @@ import {
   type ServerAgentAuthCancel,
   type SessionPresenceParticipant,
 } from "./protocol.js";
+import type { ServerProxyControl } from "./protocol.js";
 import type { SessionEventRecord } from "./persistence.js";
 import { pushToUser } from "./push.js";
+import { workspaceOwnerId } from "./auth.js";
+import { ProxyAlertNotifier } from "./proxy-alert-notifier.js";
 import { enqueueTransition } from "./outbox.js";
 import { parsePrUrl } from "./pr-url.js";
 import { orphanReapCutoffs } from "./reap-orphans.js";
@@ -160,6 +163,7 @@ export class Relay {
   private readonly connections = new Map<string, Connection>();
   private readonly clientsByUser = new Map<string, Set<Connection>>();
   private readonly daemonByWorkspace = new Map<string, Connection>();
+  private readonly proxyAlerts = new ProxyAlertNotifier({ push: pushToUser, ownerOf: workspaceOwnerId });
   /** hostId -> agent types that host demonstrably cannot spawn (learned from ENOENT). */
   private readonly hostMissingAgents = new Map<string, Set<string>>();
 
@@ -840,6 +844,20 @@ export class Relay {
           });
         }
         return;
+      // Daemon-only for the same reason as dispatch_state: a browser forging a
+      // proxy result could tell the workspace an account was re-enabled when
+      // the proxy refused, which is exactly what the panel exists to show.
+      case "proxy_control_result":
+        if (conn.kind === "daemon" && conn.workspaceId) {
+          await this.broadcastToWorkspace(conn.workspaceId, {
+            type: "proxy_control_result",
+            workspaceId: conn.workspaceId,
+            requestId: msg.requestId,
+            ok: msg.ok,
+            detail: msg.detail,
+          });
+        }
+        return;
       case "ping":
         this.send(conn, { type: "pong", ts: new Date().toISOString() });
         // Daemon pings double as liveness. The runner LEASE is the
@@ -850,6 +868,9 @@ export class Relay {
           if (msg.hostSnapshot) {
             conn.hostSnapshot = msg.hostSnapshot;
             await this.broadcastHostSnapshot(conn.workspaceId, msg.hostSnapshot);
+            // One push to the owner when the proxy stops serving; nothing per
+            // heartbeat and nothing on recovery. Never blocks the heartbeat.
+            void this.proxyAlerts.observe(conn.workspaceId, msg.hostSnapshot);
           }
           await db
             .update(runnerLeases)
@@ -1883,7 +1904,7 @@ export class Relay {
         // tenant-less workspace used to drop every run from the dashboard.
         const tenantId = await this.resolveWorkspaceTenantId(conn.workspaceId);
         if (tenantId) {
-          await db.insert(agentRuns).values({
+          await registerSessionAgentRun(db, {
             sessionId: session.id,
             workItemId: session.workItemId ?? session.title ?? session.id,
             workspaceId: conn.workspaceId,
@@ -1891,7 +1912,7 @@ export class Relay {
             agentType: session.agentType ?? "claude",
             agentConfig: (session as any).personaMetadata ?? undefined,
             status: "running",
-            startedAt: sql`now()`,
+            startedAt: new Date(),
           });
         } else {
           console.warn(
@@ -2823,6 +2844,14 @@ export class Relay {
    * offline" instead of leaving the operator watching a spinner.
    */
   requestDispatchControl(workspaceId: string, msg: ServerDispatchControl): boolean {
+    const daemon = this.daemonByWorkspace.get(workspaceId);
+    if (!daemon) return false;
+    this.send(daemon, msg);
+    return true;
+  }
+
+  /** Same contract as dispatch control: false means "no daemon", never a silent drop. */
+  requestProxyControl(workspaceId: string, msg: ServerProxyControl): boolean {
     const daemon = this.daemonByWorkspace.get(workspaceId);
     if (!daemon) return false;
     this.send(daemon, msg);

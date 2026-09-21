@@ -37,3 +37,9 @@ describe("native CSS normalization", () => {
     ).not.toThrow();
   });
 });
+
+it("compiles Tailwind numeric font variants with empty variable fallbacks", () => {
+  const normalized = normalizeTailwindForReactNativeCss(".tabular-nums { --tw-numeric-spacing: tabular-nums; font-variant-numeric: var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,); }");
+  expect(() => compile(normalized, { filename: "numeric.css", projectRoot: process.cwd() }).stylesheet()).not.toThrow();
+  expect(normalized).toMatch(/font-variant-numeric:\s*tabular-nums/);
+});

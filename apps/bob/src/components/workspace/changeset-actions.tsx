@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@gmacko/core/ui/button";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 interface ChangesetActionsProps {
   worktreePath: string;
@@ -18,7 +18,7 @@ export function ChangesetActions({
   worktreePath,
   onAction,
 }: ChangesetActionsProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const queryClient = useQueryClient();
 
   const [activeForm, setActiveForm] = useState<ActiveForm>(null);
@@ -27,13 +27,13 @@ export function ChangesetActions({
 
   const invalidateAndNotify = useCallback(() => {
     void queryClient.invalidateQueries({
-      queryKey: trpc.git.jjLog.queryKey(),
+      queryKey: bobQuery("projects.git.jjLog").queryKey(),
     });
     onAction?.();
-  }, [queryClient, trpc, onAction]);
+  }, [queryClient, bobQuery, onAction]);
 
   const newMutation = useMutation(
-    trpc.git.jjNew.mutationOptions({
+    bobQuery("projects.git.jjNew").mutationOptions({
       onSuccess: () => {
         setActiveForm(null);
         setDescription("");
@@ -43,7 +43,7 @@ export function ChangesetActions({
   );
 
   const squashMutation = useMutation(
-    trpc.git.jjSquash.mutationOptions({
+    bobQuery("projects.git.jjSquash").mutationOptions({
       onSuccess: () => {
         setConfirmSquash(false);
         invalidateAndNotify();
@@ -52,7 +52,7 @@ export function ChangesetActions({
   );
 
   const describeMutation = useMutation(
-    trpc.git.jjDescribe.mutationOptions({
+    bobQuery("projects.git.jjDescribe").mutationOptions({
       onSuccess: () => {
         setActiveForm(null);
         setDescription("");
@@ -164,11 +164,7 @@ export function ChangesetActions({
           >
             {newMutation.isPending ? "Creating..." : "Create"}
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setActiveForm(null)}
-          >
+          <Button size="sm" variant="ghost" onClick={() => setActiveForm(null)}>
             Cancel
           </Button>
         </div>
@@ -213,7 +209,9 @@ export function ChangesetActions({
       )}
 
       {/* Error display */}
-      {(newMutation.error ?? squashMutation.error ?? describeMutation.error) && (
+      {(newMutation.error ??
+        squashMutation.error ??
+        describeMutation.error) && (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           {(newMutation.error ?? squashMutation.error ?? describeMutation.error)
             ?.message ?? "Action failed"}

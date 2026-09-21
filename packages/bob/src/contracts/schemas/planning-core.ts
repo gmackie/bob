@@ -121,6 +121,7 @@ export const PlanningTaskByIdentifierResultSchema = Schema.Struct({
 
 export const PlanningTaskMutationResultSchema = Schema.Struct({
   id: Schema.String,
+  workItemId: Schema.optional(Schema.String),
   identifier: Schema.String,
   title: Schema.String,
   status: Schema.String,

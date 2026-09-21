@@ -10,6 +10,15 @@
  */
 
 export { probeCliProvider } from "./cli-provider.js";
+export type { ProbeOptions, ProxyProbeRoute } from "./cli-provider.js";
+export {
+  probeOptionsFor,
+  proxySupportsProvider,
+  resolveProviderAuthPreference,
+  resolveProxyRoute,
+  type ProviderAuthPreference,
+  type ProxyRoute,
+} from "./proxy-route.js";
 export type { CommandResult, RunCommand } from "./cli-provider.js";
 export { providerIds } from "./contract.js";
 export type { ProviderHealthSnapshot, ProviderId } from "./contract.js";

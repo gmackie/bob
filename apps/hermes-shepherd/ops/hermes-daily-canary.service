@@ -1,0 +1,14 @@
+[Unit]
+Description=Check that Hermes produced today's daily briefing
+
+[Service]
+Type=oneshot
+User=bob
+Group=bob
+Environment=HOME=/home/bob
+ExecStart=/opt/bob/ops/hermes-daily-canary.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+MemoryMax=64M

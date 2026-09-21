@@ -24,9 +24,14 @@ import {
   CreditLatch,
   FileCreditStore,
   probeCliProvider,
+  probeOptionsFor,
   providerIds,
+  resolveProxyRoute,
 } from "@bob/execution/providers";
 import type { AuthPrompt, AuthPty, AuthResult, ProviderId } from "@bob/execution/providers";
+import { deriveProviderStatusFromProxy, type ProxySnapshotWire } from "@bob/ws";
+
+import { collectProxySnapshot } from "./proxy-monitor";
 
 const PROBE_TIMEOUT_MS = 10_000;
 const PROBE_CACHE_MS = 5 * 60_000;
@@ -63,6 +68,14 @@ export interface AgentCredentialsOptions {
    */
   run?: typeof runCommand;
   /**
+   * Environment the proxy route is resolved from (CLIPROXY_BASE_URL,
+   * CLIPROXY_API_KEY, BOB_PROVIDER_AUTH_MODE…). Defaults to the process
+   * environment; injectable so tests can put a host on or off the proxy.
+   */
+  environment?: Record<string, string | undefined>;
+  /** Fetch used to ask the proxy; injectable for tests. */
+  fetch?: typeof fetch;
+  /**
    * Whether the host's standalone task runner process is up. Optional because
    * the credential surface is useful without dispatch control; when it throws
    * the snapshot reports `undefined` rather than guessing, since the UI offers
@@ -79,6 +92,8 @@ export class AgentCredentials {
   private readonly creditLatch = new CreditLatch(new FileCreditStore());
   private readonly auth: AuthSessionManager;
   private providerSnapshot: Awaited<ReturnType<typeof probeCliProvider>>[] = [];
+  /** The inference proxy as last polled; undefined when this host is not routed through one. */
+  private proxySnapshot: ProxySnapshotWire | undefined;
   private lastProbeAt = 0;
 
   constructor(private readonly opts: AgentCredentialsOptions) {
@@ -158,16 +173,49 @@ export class AgentCredentials {
       // keeps serving whatever it loaded at startup, which is how the node
       // page went on reporting "Ready" for agents already latched as dead.
       this.creditLatch.reload();
-      this.providerSnapshot = await Promise.all(
-        providerIds.map((provider) =>
-          probeCliProvider(
-            provider,
-            this.opts.run ?? runCommand,
-            new Date(),
-            this.creditLatch.get(provider),
+      const environment = this.opts.environment ?? process.env;
+      const route = resolveProxyRoute(environment);
+      const [providers, proxy] = await Promise.all([
+        Promise.all(
+          providerIds.map((provider) =>
+            probeCliProvider(
+              provider,
+              this.opts.run ?? runCommand,
+              new Date(),
+              this.creditLatch.get(provider),
+              // On a host routed through the inference proxy the host's own
+              // login state is not what serves runs; ask the proxy instead.
+              probeOptionsFor(provider, environment, this.opts.fetch),
+            ),
           ),
         ),
-      );
+        route
+          ? collectProxySnapshot({
+              route,
+              managementKey: environment.CLIPROXY_MANAGEMENT_KEY?.trim() || undefined,
+              fetch: this.opts.fetch,
+            })
+          : Promise.resolve(undefined),
+      ]);
+      this.providerSnapshot = providers.map((snapshot) => {
+        // The account states are finer than the /v1/models probe: every
+        // account cooling down is "rate limited" even though the proxy still
+        // lists the models. Downgrade only — a probe that already found the
+        // proxy unreachable or the key rejected stays that way.
+        if (snapshot.via !== "proxy" || snapshot.status !== "ready" || !proxy?.accounts) return snapshot;
+        const derived = deriveProviderStatusFromProxy(snapshot.provider, proxy.accounts);
+        if (derived === "ready") return snapshot;
+        return {
+          ...snapshot,
+          status: derived,
+          authenticated: derived !== "unauthenticated",
+          error:
+            derived === "rate_limited"
+              ? "every proxy account for this provider is cooling down"
+              : "the proxy has no serviceable account for this provider",
+        };
+      });
+      this.proxySnapshot = proxy;
       this.lastProbeAt = Date.now();
     }
     return {
@@ -177,6 +225,7 @@ export class AgentCredentials {
       queueDepth: this.opts.queueDepth(),
       checkedAt: new Date().toISOString(),
       providers: this.providerSnapshot,
+      ...(this.proxySnapshot ? { proxy: this.proxySnapshot } : {}),
       dispatchRunning: await this.readDispatchRunning(),
     };
   }
@@ -189,6 +238,16 @@ export class AgentCredentials {
     } catch {
       return undefined;
     }
+  }
+
+  /** The proxy accounts from the last poll — the only ids proxy control may act on. */
+  proxyAccounts() {
+    return this.proxySnapshot?.accounts ?? [];
+  }
+
+  /** Re-probe now and push the result up the socket. Used after a proxy action. */
+  refreshSnapshot(): Promise<void> {
+    return this.pushFreshSnapshot();
   }
 
   private async pushFreshSnapshot(): Promise<void> {

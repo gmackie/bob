@@ -2,6 +2,7 @@ import type { TRPCRouterRecord } from "@trpc/server";
 
 import { agentAuthRouter } from "./router/agentAuth";
 import { dispatchControlRouter } from "./router/dispatchControl";
+import { proxyControlRouter } from "./router/proxyControl";
 import { agentRunRouter } from "./router/agentRun";
 import { authRouter } from "./router/auth";
 import { billingRouter } from "./router/billing";
@@ -53,6 +54,7 @@ const appRouterRecord = {
   activity: activityRouter,
   agentAuth: agentAuthRouter,
   dispatchControl: dispatchControlRouter,
+  proxyControl: proxyControlRouter,
   agentRun: agentRunRouter,
   artifact: artifactRouter,
   auth: authRouter,

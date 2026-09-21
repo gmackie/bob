@@ -98,13 +98,13 @@ export interface MobileWorkItemEntrySourceItem {
   completedAt?: string | Date | null;
   agentStatus?: TabletQueueAgentStatus | null;
   project?: MobileWorkItemEntryProjectSummary | null;
-  dependencies?: MobileWorkItemEntryRelatedWorkItem[] | null;
-  dependents?: MobileWorkItemEntryRelatedWorkItem[] | null;
+  dependencies?: readonly MobileWorkItemEntryRelatedWorkItem[] | null;
+  dependents?: readonly MobileWorkItemEntryRelatedWorkItem[] | null;
 }
 
 export type MobileWorkItemEntryItem = TabletQueueItem & {
-  dependencies?: MobileWorkItemEntryRelatedWorkItem[] | null;
-  dependents?: MobileWorkItemEntryRelatedWorkItem[] | null;
+  dependencies?: readonly MobileWorkItemEntryRelatedWorkItem[] | null;
+  dependents?: readonly MobileWorkItemEntryRelatedWorkItem[] | null;
 };
 
 export interface MobileWorkItemOutcomeRun {
@@ -247,8 +247,8 @@ export function buildMobileWorkItemEntryContext({
 }: {
   view: MobileWorkItemEntryView;
   workItem: TabletQueueItem & {
-    dependencies?: MobileWorkItemEntryRelatedWorkItem[] | null;
-    dependents?: MobileWorkItemEntryRelatedWorkItem[] | null;
+    dependencies?: readonly MobileWorkItemEntryRelatedWorkItem[] | null;
+    dependents?: readonly MobileWorkItemEntryRelatedWorkItem[] | null;
   };
 }): MobileWorkItemEntryContext {
   if (view === "queue" && workItem.kind === "task") {
@@ -618,8 +618,8 @@ const OPEN_DEPENDENCY_STATUSES = new Set([
 ]);
 
 function buildDependencySummary(workItem: {
-  dependencies?: MobileWorkItemEntryRelatedWorkItem[] | null;
-  dependents?: MobileWorkItemEntryRelatedWorkItem[] | null;
+  dependencies?: readonly MobileWorkItemEntryRelatedWorkItem[] | null;
+  dependents?: readonly MobileWorkItemEntryRelatedWorkItem[] | null;
 }): MobileWorkItemEntryDependencySummary {
   const dependencies = (workItem.dependencies ?? []).map(formatRelatedWorkItem);
   const dependents = (workItem.dependents ?? []).map(formatRelatedWorkItem);

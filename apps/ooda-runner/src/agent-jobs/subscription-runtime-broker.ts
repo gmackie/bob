@@ -2,6 +2,13 @@ import { join, relative, resolve, sep } from "node:path";
 
 import type { AgentJobClassV1 } from "@gmacko/ooda/contracts/v1";
 
+import {
+  proxyEnvironmentFor,
+  renderCodexProxyConfig,
+  resolveProviderAuthPreference,
+  resolveProxyRoute,
+} from "./proxy-route";
+
 const PROVIDER_API_KEY: Record<string, string | undefined> = {
   codex: "OPENAI_API_KEY",
   openai: "OPENAI_API_KEY",
@@ -9,8 +16,16 @@ const PROVIDER_API_KEY: Record<string, string | undefined> = {
   grok: "XAI_API_KEY",
 };
 
+/**
+ * Which credential actually served the run. `authMode` is the policy
+ * (subscription accounts vs metered keys); this is the transport, so the run
+ * record can say "proxy" rather than implying an OAuth file was copied.
+ */
+export type CredentialSource = "proxy" | "host_oauth" | "metered";
+
 export type PreparedAgentRuntime = {
   authMode: "subscription" | "api_key";
+  credentialSource: CredentialSource;
   environment: Record<string, string>;
   permissionMode: "prompt" | "skip";
   allowedTools: string[];
@@ -18,6 +33,15 @@ export type PreparedAgentRuntime = {
   credentialCopies: Array<{
     sourcePath: string;
     destinationPath: string;
+  }>;
+  /**
+   * Files the run needs that do not exist on the host — today only the per-run
+   * Codex provider config pointing at the proxy. Materialised into the
+   * ephemeral credential home and mounted read-only like the copies.
+   */
+  credentialWrites: Array<{
+    destinationPath: string;
+    contents: string;
   }>;
 };
 
@@ -138,11 +162,13 @@ export class SubscriptionRuntimeBroker {
       environment[credential] = source[credential]!;
       return {
         authMode: "api_key",
+        credentialSource: "metered",
         environment,
         permissionMode: "skip",
         allowedTools: [],
         useOuterProcessSandbox: true,
         credentialCopies: [],
+        credentialWrites: [],
       };
     }
 
@@ -168,21 +194,57 @@ export class SubscriptionRuntimeBroker {
       if (credential) delete environment[credential];
     }
 
-    return {
-      authMode: "subscription",
-      environment,
-      permissionMode: input.provider === "codex" ? "skip" : "prompt",
+    const shared = {
+      authMode: "subscription" as const,
+      permissionMode: input.provider === "codex" ? ("skip" as const) : ("prompt" as const),
       allowedTools:
         input.provider === "claude"
           ? allowedClaudeTools(input.capabilities)
           : [],
       useOuterProcessSandbox: true,
+    };
+
+    // Proxy transport: the subscription accounts live behind CLIProxyAPI, so
+    // the run gets a base URL and a bearer key instead of a copied OAuth file.
+    // The route is derived from CLIPROXY_* only; any ANTHROPIC_BASE_URL or
+    // OPENAI_BASE_URL sitting in the host environment is deliberately not
+    // trusted, because the two can drift apart and the stale one wins silently.
+    const route = resolveProxyRoute(source);
+    const proxyEnvironment =
+      route && resolveProviderAuthPreference(input.provider, source) === "proxy"
+        ? proxyEnvironmentFor(input.provider, route)
+        : undefined;
+    if (route && proxyEnvironment) {
+      Object.assign(environment, proxyEnvironment);
+      const credentialWrites =
+        input.provider === "codex" || input.provider === "openai"
+          ? [
+              {
+                destinationPath: join(credentialHome, ".codex", "config.toml"),
+                contents: renderCodexProxyConfig(route),
+              },
+            ]
+          : [];
+      return {
+        ...shared,
+        credentialSource: "proxy",
+        environment,
+        credentialCopies: [],
+        credentialWrites,
+      };
+    }
+
+    return {
+      ...shared,
+      credentialSource: "host_oauth",
+      environment,
       credentialCopies: isolatedSubscriptionCredentials({
         provider: input.provider,
         source,
         sourceHome: source.HOME,
         sandboxHome: credentialHome,
       }),
+      credentialWrites: [],
     };
   }
 }

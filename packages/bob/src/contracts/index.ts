@@ -85,6 +85,7 @@ export {
   WorkItemStatusCountsRpc,
   WorkItemGetRpc,
   WorkItemUpdateRpc,
+  WorkItemDispatchRpc,
   WorkItemPromoteToTaskRpc,
   WorkItemCommentListRpc,
   WorkItemCommentCreateRpc,
@@ -369,3 +370,7 @@ export {
 export { WorkItemsStubLayer } from "./stubs/work-items.js";
 export { PlanningStubLayer } from "./stubs/planning.js";
 export { ExternalStubLayer } from "./stubs/external.js";
+
+export * from "./groups/native.js";
+
+export { OperationsRpc } from "./groups/operations.js";

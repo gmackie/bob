@@ -1,3 +1,4 @@
+import { createBobRpcClient } from "@gmacko/bob-client";
 import { WebSocket } from "ws";
 
 export interface ConnectedDesktop {
@@ -41,12 +42,18 @@ export function readDesktopMode(env: Record<string, string | undefined>): Deskto
 /** Authenticated probe uses a browser hello, so it cannot supersede an active
  * workspace daemon. The API's owned workspace and gateway principal must agree. */
 export async function verifyConnectedDesktop(config: ConnectedDesktop): Promise<void> {
-  const response = await fetch(`${config.apiUrl}/trpc/workspace.list`, {
-    headers: { authorization: `Bearer ${config.apiKey}` }, redirect: "error", signal: AbortSignal.timeout(8_000),
+  const client = createBobRpcClient({
+    baseURL: `${config.apiUrl}/rpc`,
+    headers: { authorization: `Bearer ${config.apiKey}` },
+    fetch: (input, init) => fetch(input, {
+      ...init, redirect: "error",
+      signal: init?.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(8_000)]) : AbortSignal.timeout(8_000),
+    }),
   });
-  if (!response.ok) throw new Error("Connected Bob API rejected the desktop credential");
-  const body = await response.json() as { result?: { data?: { json?: Array<{ workspace?: { id?: string; ownerUserId?: string } }> } } };
-  const workspace = body.result?.data?.json?.find((row) => row.workspace?.id === config.workspaceId)?.workspace;
+  const memberships = await client.projects.workspace.list().catch(() => {
+    throw new Error("Connected Bob API rejected the desktop credential or is unreachable");
+  });
+  const workspace = memberships.find((row) => row.workspace?.id === config.workspaceId)?.workspace;
   if (!workspace || workspace.ownerUserId !== config.userId) throw new Error("Configured workspace is not owned by the configured user on this Bob API");
   await new Promise<void>((resolve, reject) => {
     const socket = new WebSocket(config.gatewayUrl);

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 interface UseLiveActivityOptions {
   /** Fetch recent activities across a workspace (uses activity.listRecent) */
@@ -21,7 +21,8 @@ function countNewSince(
   since: Date,
 ): number {
   return items.filter((a) => {
-    const ts = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
+    const ts =
+      a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
     return ts > since;
   }).length;
 }
@@ -38,7 +39,7 @@ export function useLiveActivity({
   limit = 50,
   interval = 5_000,
 }: UseLiveActivityOptions) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
 
   const lastSeenRef = useRef<Date>(new Date());
 
@@ -48,14 +49,17 @@ export function useLiveActivity({
   // Workspace-level query (listRecent) — scoped to the workspace so the feed
   // doesn't mix activity across workspaces.
   const workspaceQuery = useQuery({
-    ...trpc.activity.listRecent.queryOptions({ limit, workspaceId }),
+    ...bobQuery("workItem.activity.listRecent").queryOptions({
+      limit,
+      workspaceId,
+    }),
     enabled: useWorkspace,
     refetchInterval: useWorkspace ? interval : false,
   });
 
   // Work-item-level query (listByWorkItem)
   const workItemQuery = useQuery({
-    ...trpc.activity.listByWorkItem.queryOptions({
+    ...bobQuery("workItem.activity.list").queryOptions({
       workItemId: workItemId ?? "",
       limit,
     }),

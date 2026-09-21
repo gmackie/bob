@@ -63,13 +63,7 @@ export const makeWorkItemsRpcHandlers = (ctx: HandlerContext) => ({
   "workItems.update": ({
     payload,
   }: {
-    payload: {
-      id: string;
-      title?: string;
-      description?: string;
-      status?: string;
-      priority?: string;
-    };
+    payload: Parameters<typeof workItemsUpdate>[1];
   }) => wrapHandler(workItemsUpdate, ctx, payload, "workItem"),
 
   "workItems.promoteToTask": ({
@@ -81,7 +75,7 @@ export const makeWorkItemsRpcHandlers = (ctx: HandlerContext) => ({
   "workItems.dispatch": ({
     payload,
   }: {
-    payload: { workItemId: string; agentType?: string };
+    payload: Parameters<typeof workItemsDispatch>[1];
   }) => wrapHandler(workItemsDispatch, ctx, payload, "workItem"),
 
   "workItems.listComments": ({

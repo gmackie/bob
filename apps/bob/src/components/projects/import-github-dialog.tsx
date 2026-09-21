@@ -16,7 +16,7 @@ import {
 } from "@gmacko/core/ui/dialog";
 import { Input } from "@gmacko/core/ui/input";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 interface ImportGitHubDialogProps {
   open: boolean;
@@ -74,7 +74,7 @@ export function ImportGitHubDialog({
   workspaceId,
 }: ImportGitHubDialogProps) {
   const router = useRouter();
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
@@ -99,27 +99,26 @@ export function ImportGitHubDialog({
   }, [repos, search]);
 
   const allFilteredSelected = useMemo(() => {
-    return filtered.length > 0 && filtered.every((r) => selected.has(r.fullName));
+    return (
+      filtered.length > 0 && filtered.every((r) => selected.has(r.fullName))
+    );
   }, [filtered, selected]);
 
-  const toggleRepo = useCallback(
-    (repo: RepoOption) => {
-      setSelected((prev) => {
-        const next = new Map(prev);
-        if (next.has(repo.fullName)) {
-          next.delete(repo.fullName);
-        } else {
-          const shortName = repoShortName(repo.fullName);
-          next.set(repo.fullName, {
-            name: shortName,
-            key: deriveKey(shortName),
-          });
-        }
-        return next;
-      });
-    },
-    [],
-  );
+  const toggleRepo = useCallback((repo: RepoOption) => {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (next.has(repo.fullName)) {
+        next.delete(repo.fullName);
+      } else {
+        const shortName = repoShortName(repo.fullName);
+        next.set(repo.fullName, {
+          name: shortName,
+          key: deriveKey(shortName),
+        });
+      }
+      return next;
+    });
+  }, []);
 
   const toggleAll = useCallback(() => {
     setSelected((prev) => {
@@ -152,7 +151,8 @@ export function ImportGitHubDialog({
       const next = new Map(prev);
       next.set(fullName, {
         name: newName,
-        key: entry.key === deriveKey(entry.name) ? deriveKey(newName) : entry.key,
+        key:
+          entry.key === deriveKey(entry.name) ? deriveKey(newName) : entry.key,
       });
       return next;
     });
@@ -169,11 +169,11 @@ export function ImportGitHubDialog({
   }, []);
 
   const createProject = useMutation(
-    trpc.project.create.mutationOptions({}),
+    bobQuery("project.create").mutationOptions({}),
   );
 
   const addRepo = useMutation(
-    trpc.repository.addFromProvider.mutationOptions({}),
+    bobQuery("projects.repository.addFromProvider").mutationOptions({}),
   );
 
   async function handleImport() {
@@ -202,17 +202,20 @@ export function ImportGitHubDialog({
 
         // Also register the repository so agent sessions can use it
         if (repo) {
-          void addRepo.mutateAsync({
-            fullName,
-            cloneUrl: repo.preferred.sshUrl || repo.preferred.htmlUrl + ".git",
-            htmlUrl: repo.preferred.htmlUrl,
-            defaultBranch: repo.preferred.defaultBranch || "main",
-            provider: repo.preferred.provider,
-            instanceUrl: repo.preferred.instanceUrl,
-            projectId: project?.id,
-          }).catch((err) => {
-            console.warn(`Failed to register repo ${fullName}:`, err);
-          });
+          void addRepo
+            .mutateAsync({
+              fullName,
+              cloneUrl:
+                repo.preferred.sshUrl || repo.preferred.htmlUrl + ".git",
+              htmlUrl: repo.preferred.htmlUrl,
+              defaultBranch: repo.preferred.defaultBranch || "main",
+              provider: repo.preferred.provider,
+              instanceUrl: repo.preferred.instanceUrl,
+              projectId: project?.id,
+            })
+            .catch((err) => {
+              console.warn(`Failed to register repo ${fullName}:`, err);
+            });
         }
 
         successCount++;
@@ -229,7 +232,9 @@ export function ImportGitHubDialog({
       toast(
         `Imported ${successCount} project${successCount !== 1 ? "s" : ""}${errorCount > 0 ? ` (${errorCount} failed)` : ""}`,
       );
-      void queryClient.invalidateQueries({ queryKey: trpc.project.list.queryKey() });
+      void queryClient.invalidateQueries({
+        queryKey: bobQuery("project.list").queryKey(),
+      });
       router.refresh();
       onOpenChange(false);
       setSelected(new Map());

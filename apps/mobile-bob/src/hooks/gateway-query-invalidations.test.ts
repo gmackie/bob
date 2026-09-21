@@ -61,3 +61,10 @@ describe("gateway query invalidations", () => {
     expect(shouldInvalidateGatewayEventQuery([["auth", "getSession"]])).toBe(false);
   });
 });
+
+it("refreshes Effect work, agent, project and planning caches but leaves settings alone", () => {
+  for (const tag of ["workItem.get", "agent.run.list", "agent.session.getEvents", "projects.list", "planning.session.list", "external.provider.list"]) {
+    expect(shouldInvalidateGatewayEventQuery(["rpc", tag, { workspaceId: "ws" }])).toBe(true);
+  }
+  expect(shouldInvalidateGatewayEventQuery(["rpc", "settings.getPreferences"])).toBe(false);
+});

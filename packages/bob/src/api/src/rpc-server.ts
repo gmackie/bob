@@ -1,46 +1,51 @@
 import type { Layer as LayerType } from "effect";
-import { Effect, Layer, Schema, Option } from "effect";
-import { Rpc, RpcGroup, RpcSerialization, RpcServer } from "effect/unstable/rpc";
-import { HttpRouter, HttpServerRequest } from "effect/unstable/http";
-
-import { AuthMiddleware } from "@gmacko/core/auth";
-import { CurrentUser } from "@gmacko/core/rpc/context";
-import { GmackoDb } from "@gmacko/core/db";
-
 import {
-  WorkItemsRpc,
-  PlanningRpc,
   ExternalRpc,
+  NativeRpc,
+  OperationsRpc,
+  PlanningRpc,
+  WorkItemsRpc,
 } from "@gmacko/bob/contracts";
-
+import { AuthMiddleware } from "@gmacko/core/auth";
 import { AgentRpc } from "@gmacko/core/contracts/groups/agent";
-import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
-import { SettingsRpc } from "@gmacko/core/contracts/groups/settings";
-import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
 import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
+import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
+import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
+import { SettingsRpc } from "@gmacko/core/contracts/groups/settings";
+import { GmackoDb } from "@gmacko/core/db";
+import { CurrentUser } from "@gmacko/core/rpc/context";
+import { Effect, Layer, Option, Schema } from "effect";
+import { HttpRouter, HttpServerRequest } from "effect/unstable/http";
+import {
+  Rpc,
+  RpcGroup,
+  RpcSerialization,
+  RpcServer,
+} from "effect/unstable/rpc";
 
 import type { HandlerContext } from "./handlers/context.js";
 import { LocalFilesystemAuthority } from "./handlers/local-filesystem-authority.js";
-import { makeWorkItemsRpcHandlers } from "./rpc-handlers/workItems.js";
+import { makeCheckpointRpcHandlers } from "./rpc-handlers/checkpoint.js";
+import { makeDispatchRpcHandlers } from "./rpc-handlers/dispatch.js";
+import { makeForgeGraphRpcHandlers } from "./rpc-handlers/forgegraph.js";
+import { makeIntegrationRpcHandlers } from "./rpc-handlers/integration.js";
+import { makeLinkRpcHandlers } from "./rpc-handlers/link.js";
+import { makeNativeRpcHandlers } from "./rpc-handlers/native.js";
+import { makeOperationsHandlers } from "./rpc-handlers/operations.js";
+import { makePlanRpcHandlers } from "./rpc-handlers/plan.js";
 import { makePlanningRpcHandlers } from "./rpc-handlers/planning.js";
 import { makePlanSessionRpcHandlers } from "./rpc-handlers/planSession.js";
-import { makePlanRpcHandlers } from "./rpc-handlers/plan.js";
-import { makeDispatchRpcHandlers } from "./rpc-handlers/dispatch.js";
+import { makePublicApiRpcHandlers } from "./rpc-handlers/publicApi.js";
+import { makeRequirementRpcHandlers } from "./rpc-handlers/requirement.js";
 import { makeSkillRpcHandlers } from "./rpc-handlers/skill.js";
 import { makeSnapshotRpcHandlers } from "./rpc-handlers/snapshot.js";
-import { makeCheckpointRpcHandlers } from "./rpc-handlers/checkpoint.js";
-import { makeForgeGraphRpcHandlers } from "./rpc-handlers/forgegraph.js";
 import { makeWebhookRpcHandlers } from "./rpc-handlers/webhook.js";
-import { makePublicApiRpcHandlers } from "./rpc-handlers/publicApi.js";
-import { makeIntegrationRpcHandlers } from "./rpc-handlers/integration.js";
-import { makeRequirementRpcHandlers } from "./rpc-handlers/requirement.js";
-import { makeLinkRpcHandlers } from "./rpc-handlers/link.js";
-
+import { makeWorkItemsRpcHandlers } from "./rpc-handlers/workItems.js";
 import { makeAgentHandlers } from "./rpc-layers/agent.js";
-import { makeProjectsHandlers } from "./rpc-layers/projects.js";
-import { makeSettingsHandlers } from "./rpc-layers/settings.js";
-import { makeSecretsHandlers } from "./rpc-layers/secrets.js";
 import { makeAuthHandlers } from "./rpc-layers/auth.js";
+import { makeProjectsHandlers } from "./rpc-layers/projects.js";
+import { makeSecretsHandlers } from "./rpc-layers/secrets.js";
+import { makeSettingsHandlers } from "./rpc-layers/settings.js";
 
 // ---------------------------------------------------------------------------
 // Bob Effect-RPC server assembly — the shared, runtime-agnostic core.
@@ -75,6 +80,8 @@ const HealthRpc = Rpc.make("health", {
 // contract surface is BOB_RPC_GROUPS in ./contracts/bob-rpc-groups.
 const BobRpcGroup = RpcGroup.make(HealthRpc)
   .merge(
+    NativeRpc,
+    OperationsRpc,
     WorkItemsRpc,
     PlanningRpc,
     ExternalRpc,
@@ -103,33 +110,52 @@ const BobRpcGroup = RpcGroup.make(HealthRpc)
  * cannot catch it.
  */
 export function liftHandlers<
-  H extends Record<string, (input: never) => Effect.Effect<unknown, unknown, unknown>>,
+  H extends Record<
+    string,
+    (input: never) => Effect.Effect<unknown, unknown, unknown>
+  >,
 >(
   factory: (ctx: HandlerContext) => H,
-): { [K in keyof H]: (input: never) => Effect.Effect<unknown, unknown, unknown> } {
+): {
+  [K in keyof H]: (input: never) => Effect.Effect<unknown, unknown, unknown>;
+} {
   // Call once with a dummy ctx to discover keys (no side effects — factories
   // just return object literals of closures that capture ctx). The closures
   // are never invoked.
-  const sentinel: HandlerContext = { db: null as unknown as HandlerContext["db"], userId: "", tenantId: "" };
+  const sentinel: HandlerContext = {
+    db: null as unknown as HandlerContext["db"],
+    userId: "",
+    tenantId: "",
+  };
   const keys = Object.keys(factory(sentinel)) as (keyof H & string)[];
 
-  const lifted = {} as Record<string, (input: never) => Effect.Effect<unknown, unknown, unknown>>;
+  const lifted = {} as Record<
+    string,
+    (input: never) => Effect.Effect<unknown, unknown, unknown>
+  >;
   for (const key of keys) {
     lifted[key] = (input: never) =>
       Effect.gen(function* () {
         const db = yield* GmackoDb.asEffect();
         const user = yield* CurrentUser.asEffect();
         const localAuthority = yield* LocalFilesystemAuthority;
-        const httpRequest = yield* Effect.serviceOption(HttpServerRequest.HttpServerRequest);
-        const filesystem = typeof localAuthority === "function"
-          ? localAuthority(user.userId, Option.isSome(httpRequest) ? httpRequest.value.headers : {})
-          : localAuthority;
+        const httpRequest = yield* Effect.serviceOption(
+          HttpServerRequest.HttpServerRequest,
+        );
+        const filesystem =
+          typeof localAuthority === "function"
+            ? localAuthority(
+                user.userId,
+                Option.isSome(httpRequest) ? httpRequest.value.headers : {},
+              )
+            : localAuthority;
         const ctx: HandlerContext = {
           // GmackoDb is typed against the core schema; Bob's handlers expect the
           // Bob-schema-typed `Db`. The underlying runtime client carries both
           // table sets — this is a Drizzle cross-instance schema variance only.
           db: db as unknown as HandlerContext["db"],
           userId: user.userId,
+          gatewayToken: user.gatewayToken,
           tenantId: process.env.BOB_TENANT_ID,
           filesystem,
         };
@@ -140,7 +166,9 @@ export function liftHandlers<
           // above (see the sentinel call), so a per-request call to the
           // same factory is guaranteed to produce the same key set — this
           // is a real invariant check, not an expected runtime path.
-          throw new Error(`liftHandlers: handler "${key}" missing at request time`);
+          throw new Error(
+            `liftHandlers: handler "${key}" missing at request time`,
+          );
         }
         // Effect calls us as `(payload, options)` — see Effect's own
         // `ToHandlerFn`. Bob's handlers are written as `({ payload })`, so
@@ -154,7 +182,9 @@ export function liftHandlers<
         return yield* handler({ payload: input } as never);
       });
   }
-  return lifted as { [K in keyof H]: (input: never) => Effect.Effect<unknown, unknown, unknown> };
+  return lifted as {
+    [K in keyof H]: (input: never) => Effect.Effect<unknown, unknown, unknown>;
+  };
 }
 
 // -- Handler layers ---------------------------------------------------------
@@ -175,23 +205,28 @@ const workItemsHandlers = WorkItemsRpc.toLayer({
       "workItem.statusCounts": wi["workItems.statusCounts"],
       "workItem.get": wi["workItems.get"],
       "workItem.update": wi["workItems.update"],
+      "workItem.dispatch": wi["workItems.dispatch"],
       "workItem.promoteToTask": wi["workItems.promoteToTask"],
       "workItem.comment.list": wi["workItems.listComments"],
       "workItem.comment.create": wi["workItems.createComment"],
       "workItem.artifact.create": wi["workItems.createArtifact"],
       "workItem.artifact.listCurrent": wi["workItems.listCurrentArtifacts"],
-      "workItem.artifact.listChildGroups": wi["workItems.listChildArtifactGroups"],
+      "workItem.artifact.listChildGroups":
+        wi["workItems.listChildArtifactGroups"],
       "workItem.activity.list": wi["workItems.listActivities"],
       "workItem.activity.listRecent": wi["workItems.listRecentActivities"],
       "workItem.notification.list": wi["workItems.listNotifications"],
       "workItem.notification.create": wi["workItems.createNotification"],
-      "workItem.notification.markAsRead": wi["workItems.markNotificationAsRead"],
+      "workItem.notification.markAsRead":
+        wi["workItems.markNotificationAsRead"],
       "workItem.notification.markAllAsRead":
         wi["workItems.markAllNotificationsAsRead"],
-      "workItem.notification.registerPushToken": wi["workItems.registerPushToken"],
+      "workItem.notification.registerPushToken":
+        wi["workItems.registerPushToken"],
       "workItem.taskRun.listByWorkItem": wi["workItems.taskRun.listByWorkItem"],
       "workItem.taskRun.execute": wi["workItems.taskRun.execute"],
-      "workItem.taskRun.listLifecycleEvents": wi["workItems.taskRun.listLifecycleEvents"],
+      "workItem.taskRun.listLifecycleEvents":
+        wi["workItems.taskRun.listLifecycleEvents"],
       "workItem.requirement.list": req["requirement.list"],
       "workItem.requirement.create": req["requirement.create"],
       "workItem.requirement.update": req["requirement.update"],
@@ -252,7 +287,8 @@ const planningHandlers = PlanningRpc.toLayer({
       "planning.session.get": ps["planSession.get"],
       "planning.session.list": ps["planSession.list"],
       "planning.session.listByWorkItem": ps["planSession.listByWorkItem"],
-      "planning.session.getActiveForWorkItem": ps["planSession.getActiveForWorkItem"],
+      "planning.session.getActiveForWorkItem":
+        ps["planSession.getActiveForWorkItem"],
       "planning.session.saveArtifact": ps["planSession.saveArtifact"],
       "planning.session.getPriorContext": ps["planSession.getPriorContext"],
       "planning.session.createDraft": ps["planSession.createDraft"],
@@ -309,13 +345,16 @@ const externalHandlers = ExternalRpc.toLayer({
       "external.forgegraph.getRevision": fg["forgegraph.getRevision"],
       "external.forgegraph.createRevision": fg["forgegraph.createRevision"],
       "external.forgegraph.triggerBuild": fg["forgegraph.triggerBuild"],
-      "external.forgegraph.updateBuildStatus": fg["forgegraph.updateBuildStatus"],
+      "external.forgegraph.updateBuildStatus":
+        fg["forgegraph.updateBuildStatus"],
       "external.forgegraph.createDeployment": fg["forgegraph.createDeployment"],
-      "external.forgegraph.updateDeploymentStatus": fg["forgegraph.updateDeploymentStatus"],
+      "external.forgegraph.updateDeploymentStatus":
+        fg["forgegraph.updateDeploymentStatus"],
       "external.forgegraph.ingestRunEvent": fg["forgegraph.ingestRunEvent"],
       "external.forgegraph.listDeployments": fg["forgegraph.listDeployments"],
       "external.forgegraph.listBuilds": fg["forgegraph.listBuilds"],
-      "external.forgegraph.approveProdDeploy": fg["forgegraph.approveProdDeploy"],
+      "external.forgegraph.approveProdDeploy":
+        fg["forgegraph.approveProdDeploy"],
       "external.forgegraph.listApps": fg["forgegraph.listApps"],
       "external.forgegraph.listUnlinkedApps": fg["forgegraph.listUnlinkedApps"],
       "external.forgegraph.importApp": fg["forgegraph.importApp"],
@@ -333,13 +372,15 @@ const externalHandlers = ExternalRpc.toLayer({
       "external.publicApi.createArtifact": pa["publicApi.createArtifact"],
       "external.publicApi.getRun": pa["publicApi.getRun"],
       "external.publicApi.listRuns": pa["publicApi.listRuns"],
-      "external.publicApi.listRunsByWorkItem": pa["publicApi.listRunsByWorkItem"],
+      "external.publicApi.listRunsByWorkItem":
+        pa["publicApi.listRunsByWorkItem"],
       "external.publicApi.heartbeat": pa["publicApi.heartbeat"],
       "external.publicApi.generateApiKey": pa["publicApi.generateApiKey"],
       "external.integration.list": int["integration.list"],
       "external.integration.get": int["integration.get"],
       "external.integration.save": int["integration.save"],
-      "external.integration.fetchLinearTeams": int["integration.fetchLinearTeams"],
+      "external.integration.fetchLinearTeams":
+        int["integration.fetchLinearTeams"],
       "external.integration.setupLinear": int["integration.setupLinear"],
       "external.integration.delete": int["integration.delete"],
     };
@@ -375,7 +416,21 @@ const authHandlers = AuthRpc.toLayer({
  * The merged Layer of every group's handlers. Exported so the REST bridge
  * (Task 4b) can dispatch through the same handlers as the RPC transport.
  */
+const nativeHandlers = NativeRpc.toLayer(
+  liftHandlers(makeNativeRpcHandlers) as unknown as Parameters<
+    typeof NativeRpc.toLayer
+  >[0],
+);
+
+const operationsHandlers = OperationsRpc.toLayer(
+  liftHandlers(makeOperationsHandlers) as unknown as Parameters<
+    typeof OperationsRpc.toLayer
+  >[0],
+);
+
 export const allHandlers = Layer.mergeAll(
+  operationsHandlers,
+  nativeHandlers,
   healthHandlers,
   workItemsHandlers,
   planningHandlers,

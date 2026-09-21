@@ -5,8 +5,11 @@ import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "@gmacko/core/ui/toast";
 
-import { useTRPC } from "~/trpc/react";
-import { WorkflowPage, type WorkflowPageProps } from "~/components/workflow/workflow-page";
+import { useBobQueryClient } from "~/rpc/react";
+import {
+  WorkflowPage,
+  type WorkflowPageProps,
+} from "~/components/workflow/workflow-page";
 import {
   WorkflowLaunchDialog,
   type WorkflowLaunchIntent,
@@ -57,15 +60,15 @@ export function WorkflowPageClient({
   entryContext,
 }: WorkflowPageClientProps) {
   const router = useRouter();
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const createSession = useMutation(
-    trpc.planSession.create.mutationOptions(),
+    bobQuery("planning.session.create").mutationOptions(),
   );
   const executeTask = useMutation(
-    trpc.taskRun.execute.mutationOptions(),
+    bobQuery("workItem.taskRun.execute").mutationOptions(),
   );
   const mergePR = useMutation(
-    trpc.pullRequest.merge.mutationOptions(),
+    bobQuery("projects.pullRequest.merge").mutationOptions(),
   );
   const [launchIntent, setLaunchIntent] = useState<WorkflowLaunchIntent | null>(
     null,
@@ -135,7 +138,10 @@ export function WorkflowPageClient({
 
           let started = 0;
           const dispatchable = childTasks.filter(
-            (c) => c.status === "todo" || c.status === "backlog" || c.status === "draft",
+            (c) =>
+              c.status === "todo" ||
+              c.status === "backlog" ||
+              c.status === "draft",
           );
 
           for (const child of dispatchable) {
@@ -145,14 +151,23 @@ export function WorkflowPageClient({
                 agentType: "claude",
               });
               started++;
-              toast(`Agent started on ${child.identifier} (${started}/${dispatchable.length})`);
+              toast(
+                `Agent started on ${child.identifier} (${started}/${dispatchable.length})`,
+              );
             } catch (err: any) {
-              console.error(`Failed to start agent on ${child.identifier}:`, err);
-              toast(`Failed to start agent on ${child.identifier}: ${err.message ?? "Unknown error"}`);
+              console.error(
+                `Failed to start agent on ${child.identifier}:`,
+                err,
+              );
+              toast(
+                `Failed to start agent on ${child.identifier}: ${err.message ?? "Unknown error"}`,
+              );
             }
           }
 
-          toast(`${started} agents dispatched! Check each task's workspace for progress.`);
+          toast(
+            `${started} agents dispatched! Check each task's workspace for progress.`,
+          );
           setDispatching(false);
           router.refresh();
         }}
@@ -180,7 +195,9 @@ export function WorkflowPageClient({
               toast(`Merged PR #${pr.number}`);
             } catch (err: any) {
               console.error(`Failed to merge PR #${pr.number}:`, err);
-              toast(`Failed to merge PR #${pr.number}: ${err.message ?? "Unknown error"}`);
+              toast(
+                `Failed to merge PR #${pr.number}: ${err.message ?? "Unknown error"}`,
+              );
             }
           }
 
@@ -208,7 +225,9 @@ export function WorkflowPageClient({
         childTaskCount={childTasks.length}
         onConfirm={(launchContext) => {
           if (!workItem.project?.id) {
-            toast("This workflow needs a project-linked work item to start planning.");
+            toast(
+              "This workflow needs a project-linked work item to start planning.",
+            );
             return;
           }
 
@@ -217,7 +236,9 @@ export function WorkflowPageClient({
               ? `Shape ${workItem.title}`
               : `Plan ${workItem.title}`;
           const planningSessionType =
-            launchContext.intent === "shape" ? "office_hours" as const : "breakdown" as const;
+            launchContext.intent === "shape"
+              ? ("office_hours" as const)
+              : ("breakdown" as const);
 
           createSession.mutate(
             {
@@ -230,7 +251,13 @@ export function WorkflowPageClient({
             {
               onSuccess: (session) => {
                 setLaunchIntent(null);
-                router.push(getWorkItemEntryPlanSessionHref(workItem.id, session.id, workspaceId));
+                router.push(
+                  getWorkItemEntryPlanSessionHref(
+                    workItem.id,
+                    session.id,
+                    workspaceId,
+                  ),
+                );
               },
               onError: (err) => {
                 toast(err.message ?? "Failed to create planning session");

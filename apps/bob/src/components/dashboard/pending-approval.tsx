@@ -1,9 +1,11 @@
 "use client";
 
+import { timestampString } from "~/rpc/timestamp";
+
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 import {
   buildPendingApprovalRows,
   type PendingApprovalSessionLike,
@@ -16,11 +18,15 @@ import {
 // Data comes from tRPC session.list (full rows, status field intact) rather than
 // the Effect-RPC agent.run.list — a blocked *session* still has a *running*
 // agent_run, so run status can't distinguish "needs you" from "healthy".
-export function PendingApproval({ workspaceId }: { workspaceId?: string | null }) {
-  const trpc = useTRPC();
+export function PendingApproval({
+  workspaceId,
+}: {
+  workspaceId?: string | null;
+}) {
+  const bobQuery = useBobQueryClient();
 
   const { data } = useQuery(
-    trpc.session.list.queryOptions(
+    bobQuery("agent.session.list").queryOptions(
       { status: "blocked", limit: 20 },
       { refetchInterval: 10_000 },
     ),
@@ -31,7 +37,14 @@ export function PendingApproval({ workspaceId }: { workspaceId?: string | null }
   // `.filter` on the object and threw, which — with no error boundary around
   // MissionControl — unmounted the entire /tasks page (blank screen).
   const rows = buildPendingApprovalRows({
-    sessions: (data?.items ?? []) as PendingApprovalSessionLike[],
+    sessions: (data?.items ?? []).map((session) => ({
+      ...session,
+      createdAt: timestampString(session.createdAt),
+      updatedAt: session.updatedAt ? timestampString(session.updatedAt) : null,
+      lastActivityAt: session.lastActivityAt
+        ? timestampString(session.lastActivityAt)
+        : null,
+    })),
     workspaceId,
   });
 

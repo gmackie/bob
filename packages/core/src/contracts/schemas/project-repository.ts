@@ -40,6 +40,9 @@ export const RepositorySchema = Schema.Struct({
   id: Schema.String, // UUID
   userId: Schema.String,
   planningProjectId: Schema.NullOr(Schema.String),
+  workspaceId: Schema.NullOr(Schema.String),
+  dirty: Schema.NullOr(Schema.Boolean),
+  stale: Schema.NullOr(Schema.Boolean),
   name: Schema.String,
   path: Schema.String,
   branch: Schema.String,
@@ -74,7 +77,9 @@ export const WorktreePlanTaskSchema = Schema.Struct({
   content: Schema.String,
   status: Schema.optional(PlanTaskStatusEnum),
 });
-export type WorktreePlanTaskWire = Schema.Schema.Type<typeof WorktreePlanTaskSchema>;
+export type WorktreePlanTaskWire = Schema.Schema.Type<
+  typeof WorktreePlanTaskSchema
+>;
 
 /** A worktree plan record (from the `worktree_plans` table). */
 export const WorktreePlanSchema = Schema.Struct({

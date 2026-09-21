@@ -1,7 +1,7 @@
 import { Text, View, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
 import { LinkedExecutionRunsCard } from "./LinkedExecutionRunsCard";
 import { OutcomeReadableOutputCard } from "./OutcomeReadableOutputCard";
@@ -42,15 +42,15 @@ export function WorkItemPane({
   onOpenSession,
 }: WorkItemPaneProps) {
   const queryClient = useQueryClient();
-  const workItemQuery = useQuery(trpc.workItem.get.queryOptions(
+  const workItemQuery = useQuery(rpc("workItem.get").queryOptions(
     { id: workItemId },
     { enabled: Boolean(workItemId) },
   ));
   const dispatchMutation = useMutation(
-    trpc.workItem.dispatch.mutationOptions({
+    rpc("workItem.dispatch").mutationOptions({
       onSuccess: async (result) => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.workItem.get.queryKey({ id: workItemId }),
+          queryKey: rpc("workItem.get").queryKey({ id: workItemId }),
         });
         if (typeof result.sessionId === "string") {
           onOpenSession?.(result.sessionId);

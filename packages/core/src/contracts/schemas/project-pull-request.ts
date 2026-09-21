@@ -12,7 +12,12 @@ import { Schema } from "effect";
 // --- Enums ------------------------------------------------------------------
 
 /** Pull request lifecycle status. */
-export const PRStatusEnum = Schema.Literals(["draft", "open", "merged", "closed"]);
+export const PRStatusEnum = Schema.Literals([
+  "draft",
+  "open",
+  "merged",
+  "closed",
+]);
 export type PRStatus = Schema.Schema.Type<typeof PRStatusEnum>;
 
 /** Merge method for pull requests. */
@@ -40,8 +45,16 @@ export const PullRequestSchema = Schema.Struct({
   headBranch: Schema.String,
   baseBranch: Schema.String,
   status: PRStatusEnum,
-  remoteNumber: Schema.NullOr(Schema.Number),
-  remoteUrl: Schema.NullOr(Schema.String),
+  remoteNumber: Schema.optional(Schema.NullOr(Schema.Number)),
+  number: Schema.Number,
+  provider: Schema.optional(Schema.String),
+  remoteOwner: Schema.optional(Schema.String),
+  remoteName: Schema.optional(Schema.String),
+  url: Schema.String,
+  additions: Schema.NullOr(Schema.Number),
+  deletions: Schema.NullOr(Schema.Number),
+  changedFiles: Schema.optional(Schema.NullOr(Schema.Number)),
+  remoteUrl: Schema.optional(Schema.NullOr(Schema.String)),
   mergedAt: Schema.NullOr(Schema.String),
   planningTaskId: Schema.NullOr(Schema.String),
   createdAt: Schema.String,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { PlanningRpc } from "../groups/planning.js";
+import { Schema } from "effect";
+import { PlanningRpc, PlanningCreateTaskRpc } from "../groups/planning.js";
 
 describe("PlanningRpc — 7B-4C Task 4", () => {
   it("has 55 procedures after Task 4 + Task 5 + Task 6", () => {
@@ -21,4 +22,9 @@ describe("PlanningRpc — 7B-4C Task 4", () => {
     expect(names).toContain("planning.agentFailTask");
     expect(names).toContain("planning.agentGetAvailableTasks");
   });
+});
+
+it("preserves the canonical work item identity in the create response", () => {
+  const result = { id: "provider-id", workItemId: "local-id", identifier: "TASK-1", title: "Work", status: "backlog", priority: "no_priority" };
+  expect(Schema.decodeUnknownSync(PlanningCreateTaskRpc.successSchema)(result)).toEqual(result);
 });

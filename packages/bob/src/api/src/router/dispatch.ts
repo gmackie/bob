@@ -39,7 +39,7 @@ export const dispatchRouter = {
 
   /** Get a batch with all its items. */
   getBatch: protectedProcedure
-    .input(z.object({ batchId: z.string().uuid() }))
+    .input(z.object({ batchId: z.string().uuid(), workItemId: z.string().uuid().optional() }))
     .query(({ ctx, input }) =>
       dispatchGetBatch({ db: ctx.db, userId: ctx.session.user.id }, input),
     ),
@@ -87,6 +87,7 @@ export const dispatchRouter = {
     .input(
       z.object({
         status: z.string().optional(),
+        workItemId: z.string().uuid().optional(),
         limit: z.number().int().min(1).max(50).default(5),
       }),
     )

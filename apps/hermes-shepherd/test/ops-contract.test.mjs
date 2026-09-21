@@ -79,3 +79,65 @@ test("Hermes operator install validates secrets and refuses tool overrides", asy
   );
   assert.doesNotMatch(script, /Bearer\s+[A-Za-z0-9_-]{8,}/);
 });
+
+// --- Production units shepherded onto hetzner-bob -------------------------
+// Ported from feat/hermes-shepherd. The nginx case from that branch is not
+// carried over: it asserted the older workspace.list auth subrequest, and the
+// config here uses the dedicated hermes-origin-auth endpoint and additionally
+// strips Bob credentials — covered by the loopback-only test above.
+const readOps = (name) =>
+  readFile(new URL(`../ops/${name}`, import.meta.url), "utf8");
+
+test("Hermes dashboard stays loopback-only and resource bounded", async () => {
+  const unit = await readOps("hermes-dashboard.service");
+  assert.match(unit, /--host 127\.0\.0\.1/);
+  assert.match(unit, /--port 9119/);
+  assert.match(unit, /^User=bob$/m);
+  assert.match(unit, /^MemoryMax=1G$/m);
+  assert.match(unit, /^NoNewPrivileges=true$/m);
+  assert.match(unit, /^ProtectSystem=strict$/m);
+});
+
+test("Hermes gateway is capped by a drop-in, not a replacement unit", async () => {
+  assert.equal(await readOps("hermes-gateway-memory.conf"), "[Service]\nMemoryMax=2G\n");
+});
+
+test("Hermes backups run nightly and survive downtime", async () => {
+  const service = await readOps("hermes-backup.service");
+  const timer = await readOps("hermes-backup.timer");
+  assert.match(service, /^User=bob$/m);
+  assert.match(service, /^MemoryMax=512M$/m);
+  assert.match(timer, /^Persistent=true$/m);
+  assert.match(timer, /^OnCalendar=.*03:17:00 UTC$/m);
+});
+
+test("Hermes backup transport pins the host key and prunes both ends", async () => {
+  const script = await readOps("hermes-backup.sh");
+  assert.match(script, /StrictHostKeyChecking=yes/);
+  assert.match(script, /UserKnownHostsFile=/);
+  assert.match(script, /-mtime \+7 -delete/);
+  assert.match(script, /-mtime \+30 -delete/);
+  assert.doesNotMatch(script, /StrictHostKeyChecking=no/);
+});
+
+test("Hermes vault sync never overwrites a dirty checkout", async () => {
+  const script = await readOps("hermes-vault-sync.sh");
+  const service = await readOps("hermes-vault-sync.service");
+  const timer = await readOps("hermes-vault-sync.timer");
+  assert.match(script, /git status --porcelain/);
+  assert.match(script, /git pull --ff-only origin master/);
+  assert.match(script, /git push origin master/);
+  assert.doesNotMatch(script, /reset --hard|clean -f/);
+  assert.match(service, /^User=bob$/m);
+  assert.match(service, /^RuntimeDirectory=hermes-vault-sync$/m);
+  assert.match(service, /^ProtectSystem=strict$/m);
+  assert.match(timer, /^OnUnitActiveSec=10min$/m);
+});
+
+test("Hermes daily canary alerts when the note misses its cutoff", async () => {
+  const script = await readOps("hermes-daily-canary.sh");
+  const timer = await readOps("hermes-daily-canary.timer");
+  assert.match(script, /Daily\/\$\{today\}\.md/);
+  assert.match(script, /systemd-cat/);
+  assert.match(timer, /^OnCalendar=.*15:30:00 UTC$/m);
+});

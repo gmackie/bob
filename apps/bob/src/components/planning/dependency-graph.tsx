@@ -15,8 +15,8 @@ interface DraftEdge {
 }
 
 interface DependencyGraphProps {
-  drafts: DraftNode[];
-  dependencies: DraftEdge[];
+  drafts: readonly DraftNode[];
+  dependencies: readonly DraftEdge[];
 }
 
 const NODE_WIDTH = 120;
@@ -25,7 +25,10 @@ const NODE_RADIUS = 8;
 const EDGE_STROKE = 1.5;
 const ARROW_SIZE = 6;
 
-export function DependencyGraph({ drafts, dependencies }: DependencyGraphProps) {
+export function DependencyGraph({
+  drafts,
+  dependencies,
+}: DependencyGraphProps) {
   const layout = useMemo(() => {
     if (dependencies.length === 0) return null;
 
@@ -82,11 +85,7 @@ export function DependencyGraph({ drafts, dependencies }: DependencyGraphProps) 
       role="img"
       aria-label="Task dependency graph"
     >
-      <svg
-        width={layout.width}
-        height={layout.height}
-        className="mx-auto"
-      >
+      <svg width={layout.width} height={layout.height} className="mx-auto">
         <defs>
           <marker
             id="arrow"

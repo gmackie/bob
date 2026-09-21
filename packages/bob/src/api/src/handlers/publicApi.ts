@@ -9,7 +9,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 
 import type { Db } from "@bob/db/client";
-import { and, desc, eq, inArray, sql } from "@bob/db";
+import { and, desc, eq, inArray, sql, registerSessionAgentRun } from "@bob/db";
 import {
   agentRuns,
   apiKeys,
@@ -649,18 +649,17 @@ export async function publicApiCreateRun(
     });
   }
 
-  const [run] = await ctx.db
-    .insert(agentRuns)
-    .values({
-      workItemId: resolvedWorkItemId,
-      ...(sessionId ? { sessionId } : {}),
-      workspaceId: input.workspaceId,
-      tenantId: workspace.tenantId,
-      agentType,
-      agentConfig: input.agentConfig ?? {},
-      status: "queued",
-    })
-    .returning();
+  const values = {
+    workItemId: resolvedWorkItemId,
+    workspaceId: input.workspaceId,
+    tenantId: workspace.tenantId,
+    agentType,
+    agentConfig: input.agentConfig ?? {},
+    status: "queued" as const,
+  };
+  const run = sessionId
+    ? await registerSessionAgentRun(ctx.db, { ...values, sessionId })
+    : (await ctx.db.insert(agentRuns).values(values).returning())[0];
 
   await notifyAgentRunChanged({
     workspaceId: run?.workspaceId ?? input.workspaceId,
@@ -1615,6 +1614,22 @@ export async function publicApiHeartbeat(
   input: {
     workspaceId: string;
     agentTypes?: string[];
+    runtime?: {
+      kind: "bob" | "t3";
+      version?: string;
+      connectionMode?: "local" | "remote" | "tunnel";
+    };
+    providers?: {
+      type: string;
+      status: "ready" | "unavailable" | "unauthenticated" | "degraded";
+      capabilities?: (
+        | "approval"
+        | "follow-up"
+        | "resume"
+        | "cancel"
+        | "structured-usage"
+      )[];
+    }[];
     forgeAvailable?: boolean;
     repos?: {
       name: string;
@@ -1640,10 +1655,38 @@ export async function publicApiHeartbeat(
     lastHeartbeat: new Date().toISOString(),
   };
 
-  if (input.agentTypes && input.agentTypes.length > 0) {
+  if (input.providers && input.providers.length > 0) {
+    const runtime = input.runtime?.kind ?? "bob";
+    updates.agentConfigs = Object.fromEntries(
+      input.providers.map((provider) => [
+        provider.type,
+        {
+          available: provider.status === "ready",
+          status: provider.status,
+          runtime,
+          ...(input.runtime?.version
+            ? { runtimeVersion: input.runtime.version }
+            : {}),
+          ...(input.runtime?.connectionMode
+            ? { connectionMode: input.runtime.connectionMode }
+            : {}),
+          capabilities: provider.capabilities ?? [],
+        },
+      ]),
+    );
+  } else if (input.agentTypes && input.agentTypes.length > 0) {
     const agentConfigs: Record<string, unknown> = {};
     for (const agent of input.agentTypes) {
-      agentConfigs[agent] = { available: true };
+      agentConfigs[agent] = {
+        available: true,
+        runtime: input.runtime?.kind ?? "bob",
+        ...(input.runtime?.version
+          ? { runtimeVersion: input.runtime.version }
+          : {}),
+        ...(input.runtime?.connectionMode
+          ? { connectionMode: input.runtime.connectionMode }
+          : {}),
+      };
     }
     updates.agentConfigs = agentConfigs;
   }

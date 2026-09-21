@@ -7,6 +7,11 @@ export interface WorkItemsClient {
   readonly list: RpcMethod;
   readonly statusCounts: RpcMethod;
   readonly get: RpcMethod;
+  readonly dispatch: RpcMethod<{
+    workItemId: string;
+    agentType?: string;
+    personaId?: string;
+  }, { sessionId: string; identifier: string; status: "pending" }>;
   readonly update: RpcMethod;
   readonly promoteToTask: RpcMethod;
   readonly comment: {
@@ -63,6 +68,7 @@ export const makeWorkItemsClient = (
     statusCounts: (input) => invoke("workItem.statusCounts", input),
     get: (input) => invoke("workItem.get", input),
     update: (input) => invoke("workItem.update", input),
+    dispatch: (input) => invoke("workItem.dispatch", input),
     promoteToTask: (input) => invoke("workItem.promoteToTask", input),
     comment: {
       list: (input) => invoke("workItem.comment.list", input),

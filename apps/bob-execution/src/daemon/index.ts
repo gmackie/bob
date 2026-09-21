@@ -41,6 +41,7 @@ import {
 import { readOracleConfig } from "../oracle-config.js";
 import { AuthSessionManager } from "../providers/auth-session.js";
 import { probeCliProvider } from "../providers/cli-provider.js";
+import { probeOptionsFor } from "../providers/proxy-route.js";
 import { providerIds } from "../providers/contract.js";
 import { FileCreditStore } from "../providers/credit-store.js";
 import { CreditLatch } from "../providers/credit.js";
@@ -394,6 +395,8 @@ async function collectHostSnapshot() {
             }),
           new Date(),
           creditLatch.get(provider),
+          // Ask the proxy, not the host login state, when the host is routed through it.
+          probeOptionsFor(provider, process.env),
         ),
       ),
     );

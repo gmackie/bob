@@ -2,6 +2,9 @@ import type { QueryClient } from "@tanstack/react-query";
 
 const GATEWAY_EVENT_INVALIDATION_ROOTS = new Set([
   "activity",
+  "agent",
+  "projects",
+  "external",
   "agentRun",
   "artifact",
   "capacity",
@@ -52,7 +55,7 @@ const GATEWAY_REALTIME_INVALIDATION_MESSAGES = new Set([
 ]);
 
 export function getGatewayEventQueryRoot(queryKey: readonly unknown[]): string {
-  const first = queryKey[0];
+  const first = queryKey[0] === "rpc" ? queryKey[1] : queryKey[0];
   // `Array.isArray` narrows to `any[]` in TS's lib types (a known limitation
   // of its `value is any[]` signature), so re-assert the element type as
   // `unknown` explicitly rather than letting the `any` leak through.

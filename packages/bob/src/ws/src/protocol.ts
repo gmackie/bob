@@ -70,12 +70,64 @@ export interface ProviderHealthWire {
     | "unauthenticated"
     | "degraded"
     | "no_credit"
-    | "rate_limited";
+    | "rate_limited"
+    /** CLI installed, accounts fine, inference proxy unreachable. */
+    | "proxy_unreachable";
+  /** Source of the estimate. Absent from daemons that predate the proxy; readers treat it as "host". */
+  via?: "proxy" | "host";
   capabilities: ProviderCapabilityWire;
   checkedAt: string;
   error?: string;
   /** Provider's own wording, redacted. Drives "top up" vs "sign in". */
   detail?: string;
+}
+
+/**
+ * One subscription account held by the inference proxy. Redacted at the
+ * source: `label` is the masked email or the file id, never the address.
+ */
+export interface ProxyAccountWire {
+  id: string;
+  /** Bob provider id; proxy names are normalised (xai → grok, openai → codex). */
+  provider: "claude" | "codex" | "grok" | "kimi" | "gemini" | (string & {});
+  label: string;
+  status: "ready" | "cooldown" | "disabled" | "error";
+  /** When a cooldown lifts; present only while status is "cooldown". */
+  cooldownUntil?: string;
+  cooldownReason?: string;
+  /** The proxy's own wording for an error, already redacted. */
+  detail?: string;
+  lastRefreshAt?: string;
+  requests24h: { success: number; failed: number };
+  /**
+   * Handles the proxy's management API addresses an account by (file name,
+   * auth_index). Needed to refresh, enable or disable it; neither is a secret.
+   */
+  ref?: { name?: string; authIndex?: string };
+}
+
+export interface ProxyUsageWire {
+  total: { success: number; failed: number };
+  byProvider: Record<string, { success: number; failed: number }>;
+}
+
+/**
+ * The inference proxy as seen from a runner host. Absent from hosts that are
+ * not routed through a proxy, and from daemons that predate it; the UI must
+ * treat `undefined` as "not configured", never as "down".
+ */
+export interface ProxySnapshotWire {
+  /** Origin only (scheme + host + port); never a path, never a key. */
+  origin: string;
+  reachable: boolean;
+  version?: string;
+  latencyMs?: number;
+  checkedAt: string;
+  /** Present when the management API answered; absent when only /v1/models did. */
+  accounts?: ProxyAccountWire[];
+  usage?: ProxyUsageWire;
+  /** Why accounts are absent: no management key configured, or the call failed. */
+  managementError?: string;
 }
 
 export interface HostSnapshotWire {
@@ -85,6 +137,8 @@ export interface HostSnapshotWire {
   queueDepth: number;
   checkedAt: string;
   providers: ProviderHealthWire[];
+  /** The inference proxy this host routes through, when it does. */
+  proxy?: ProxySnapshotWire;
   /**
    * Whether the host's standalone task runner process is up, as systemd
    * reports it. Absent from daemons that predate dispatch control, which is
@@ -595,6 +649,33 @@ export interface ServerDispatchState {
   detail?: string;
 }
 
+export type ProxyControlAction = "refresh" | "enable" | "disable" | "test";
+/**
+ * Server → daemon: act on the inference proxy. The daemon holds the proxy's
+ * management key; the server never does. `accountId` is the ProxyAccountWire
+ * id from the last heartbeat and is required for everything but "test".
+ */
+export interface ServerProxyControl {
+  type: "proxy_control";
+  requestId: string;
+  action: ProxyControlAction;
+  accountId?: string;
+}
+/** Daemon → server: what the proxy said. A fresh host snapshot follows. */
+export interface ClientProxyControlResult {
+  type: "proxy_control_result";
+  requestId: string;
+  ok: boolean;
+  detail?: string;
+}
+/** Server → UI: relayed from the daemon. */
+export interface ServerProxyControlResult {
+  type: "proxy_control_result";
+  workspaceId: string;
+  requestId: string;
+  ok: boolean;
+  detail?: string;
+}
 export interface SessionPresenceParticipant {
   userId: string;
   clientId: string;
@@ -674,7 +755,8 @@ export type ClientMessage =
   | ClientCollabChat
   | ClientAgentAuthPrompt
   | ClientAgentAuthResult
-  | ClientDispatchState;
+  | ClientDispatchState
+  | ClientProxyControlResult;
 
 export type ServerMessage =
   | ServerHelloOk
@@ -703,6 +785,8 @@ export type ServerMessage =
   | ServerAgentAuthCancel
   | ServerDispatchControl
   | ServerDispatchState
+  | ServerProxyControl
+  | ServerProxyControlResult
   | ServerAgentAuthPrompt
   | ServerAgentAuthResult;
 

@@ -10,7 +10,7 @@ import { Button } from "@gmacko/core/ui/button";
 import { Input } from "@gmacko/core/ui/input";
 import { toast } from "@gmacko/core/ui/toast";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 /* -------------------------------------------------------------------------- */
 /*  Props                                                                     */
@@ -88,18 +88,19 @@ function branchStatusColor(status: string): string {
 /* -------------------------------------------------------------------------- */
 
 export function FeatureBranchView({ workItemId }: FeatureBranchViewProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const router = useRouter();
 
   const { data: branches, isLoading } = useQuery(
-    trpc.featureBranch.list.queryOptions(
+    bobQuery("projects.featureBranch.list").queryOptions(
       { workItemId },
       { staleTime: 15_000 },
     ),
   );
 
   // Pick the first active (or most recent) feature branch
-  const activeBranch = branches?.find((b) => b.status === "active") ?? branches?.[0];
+  const activeBranch =
+    branches?.find((b) => b.status === "active") ?? branches?.[0];
 
   if (isLoading) {
     return (
@@ -132,7 +133,7 @@ export function FeatureBranchView({ workItemId }: FeatureBranchViewProps) {
 /* -------------------------------------------------------------------------- */
 
 function EmptyState({ workItemId }: { workItemId: string }) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const router = useRouter();
   const [branchName, setBranchName] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -142,7 +143,7 @@ function EmptyState({ workItemId }: { workItemId: string }) {
   const [repositoryId, setRepositoryId] = useState("");
 
   const createBranch = useMutation(
-    trpc.featureBranch.create.mutationOptions({
+    bobQuery("projects.featureBranch.create").mutationOptions({
       onSuccess: () => {
         toast("Feature branch created");
         router.refresh();
@@ -167,11 +168,7 @@ function EmptyState({ workItemId }: { workItemId: string }) {
             model.
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowForm(true)}
-        >
+        <Button variant="outline" size="sm" onClick={() => setShowForm(true)}>
           Create feature branch
         </Button>
       </div>
@@ -209,11 +206,7 @@ function EmptyState({ workItemId }: { workItemId: string }) {
         >
           {createBranch.isPending ? "Creating..." : "Create"}
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowForm(false)}
-        >
+        <Button variant="ghost" size="sm" onClick={() => setShowForm(false)}>
           Cancel
         </Button>
       </div>
@@ -242,18 +235,18 @@ function FeatureBranchDetail({
   featurePrId,
   repositoryId,
 }: FeatureBranchDetailProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const router = useRouter();
 
   const { data: branchDetail } = useQuery(
-    trpc.featureBranch.get.queryOptions(
+    bobQuery("projects.featureBranch.get").queryOptions(
       { id: branchId },
       { staleTime: 15_000 },
     ),
   );
 
   const createFeaturePR = useMutation(
-    trpc.featureBranch.createFeaturePR.mutationOptions({
+    bobQuery("projects.featureBranch.createFeaturePR").mutationOptions({
       onSuccess: () => {
         toast("Feature PR created");
         router.refresh();
@@ -267,7 +260,9 @@ function FeatureBranchDetail({
   );
 
   const taskPRs = branchDetail?.taskPRs ?? [];
-  const featurePr = branchDetail?.featurePrId ? branchDetail.featurePrId : featurePrId;
+  const featurePr = branchDetail?.featurePrId
+    ? branchDetail.featurePrId
+    : featurePrId;
 
   return (
     <div className="space-y-0">
@@ -310,10 +305,7 @@ function FeatureBranchDetail({
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {taskPRs.map((taskPR) => (
-              <TaskPRCard
-                key={taskPR.id}
-                taskPR={taskPR}
-              />
+              <TaskPRCard key={taskPR.id} taskPR={taskPR} />
             ))}
           </div>
         )}

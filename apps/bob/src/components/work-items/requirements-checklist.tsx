@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 const CATEGORY_LABELS: Record<string, string> = {
   data: "DATA LAYER",
@@ -33,31 +33,35 @@ export function RequirementsChecklist({
 }
 
 function RequirementsChecklistInner({ workItemId }: { workItemId: string }) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const queryClient = useQueryClient();
 
   const { data: grouped } = useQuery(
-    trpc.requirement.list.queryOptions(
+    bobQuery("workItem.requirement.list").queryOptions(
       { workItemId },
       { staleTime: 15_000 },
     ),
   );
 
   const updateRequirement = useMutation(
-    trpc.requirement.update.mutationOptions({
+    bobQuery("workItem.requirement.update").mutationOptions({
       onSuccess: () => {
         void queryClient.invalidateQueries({
-          queryKey: trpc.requirement.list.queryKey({ workItemId }),
+          queryKey: bobQuery("workItem.requirement.list").queryKey({
+            workItemId,
+          }),
         });
       },
     }),
   );
 
   const createRequirement = useMutation(
-    trpc.requirement.create.mutationOptions({
+    bobQuery("workItem.requirement.create").mutationOptions({
       onSuccess: () => {
         void queryClient.invalidateQueries({
-          queryKey: trpc.requirement.list.queryKey({ workItemId }),
+          queryKey: bobQuery("workItem.requirement.list").queryKey({
+            workItemId,
+          }),
         });
       },
     }),
@@ -117,7 +121,9 @@ function RequirementsChecklistInner({ workItemId }: { workItemId: string }) {
                 description,
               });
             }}
-            isPending={updateRequirement.isPending || createRequirement.isPending}
+            isPending={
+              updateRequirement.isPending || createRequirement.isPending
+            }
           />
         );
       })}
@@ -148,7 +154,7 @@ function CategoryGroup({
   isPending,
 }: {
   category: string;
-  items: Array<{
+  items: ReadonlyArray<{
     id: string;
     description: string;
     status: string;
@@ -260,9 +266,7 @@ function RequirementRow({
       {/* Description */}
       <span
         className={`flex-1 text-sm ${
-          isDone
-            ? "text-muted-foreground line-through"
-            : "text-foreground"
+          isDone ? "text-muted-foreground line-through" : "text-foreground"
         }`}
       >
         {item.description}
@@ -300,7 +304,8 @@ function AddRequirementRow({
   isPending: boolean;
 }) {
   const [desc, setDesc] = useState("");
-  const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("other");
+  const [category, setCategory] =
+    useState<(typeof CATEGORIES)[number]>("other");
 
   return (
     <form
@@ -323,7 +328,9 @@ function AddRequirementRow({
       />
       <select
         value={category}
-        onChange={(e) => setCategory(e.target.value as (typeof CATEGORIES)[number])}
+        onChange={(e) =>
+          setCategory(e.target.value as (typeof CATEGORIES)[number])
+        }
         className="rounded-lg border border-border bg-accent px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
         disabled={isPending}
       >

@@ -1,3 +1,4 @@
+import type { HostSnapshotWire } from "@bob/ws";
 import { describe, expect, it } from "vitest";
 
 import { buildHomeTriage, HOME_SECTION_LIMIT } from "./home-model";
@@ -106,5 +107,68 @@ describe("buildHomeTriage", () => {
 
   it("handles an empty workspace", () => {
     expect(buildHomeTriage({ workItems: [] }).isAllClear).toBe(true);
+  });
+});
+
+describe("buildHomeTriage — inference proxy", () => {
+  const now = new Date("2026-09-20T12:00:00.000Z");
+  const host = (proxy: NonNullable<HostSnapshotWire["proxy"]>) =>
+    ({
+      schemaVersion: 1 as const,
+      hostId: "runner-a",
+      daemonVersion: "1.0.0",
+      queueDepth: 0,
+      checkedAt: now.toISOString(),
+      providers: [],
+      proxy,
+    }) satisfies HostSnapshotWire;
+
+  it("puts an unreachable proxy at the top of Needs you, linking to Nodes", () => {
+    const t = buildHomeTriage(
+      { workItems: [item({ id: "a", status: "failed" })], hostSnapshot: host({ origin: "http://p", reachable: false, checkedAt: now.toISOString() }) },
+      { now },
+    );
+    const rows = t.sections[0]?.rows ?? [];
+    const [first, second] = rows;
+    expect(first).toMatchObject({ kind: "infrastructure", href: "/nodes", tone: "danger", statusLabel: "Check proxy" });
+    expect(first?.title).toMatch(/proxy unreachable/i);
+    expect(second?.id).toBe("a");
+    expect(t.needsYouCount).toBe(2);
+  });
+
+  it("raises a row for a provider with no ready account", () => {
+    const t = buildHomeTriage(
+      {
+        workItems: [],
+        hostSnapshot: host({
+          origin: "http://p",
+          reachable: true,
+          checkedAt: now.toISOString(),
+          accounts: [{ id: "x", provider: "claude", label: "g…@x", status: "cooldown", cooldownUntil: "2026-09-20T14:00:00.000Z", requests24h: { success: 0, failed: 0 } }],
+        }),
+      },
+      { now },
+    );
+    expect(t.isAllClear).toBe(false);
+    const first = t.sections[0]?.rows[0];
+    expect(first).toMatchObject({ kind: "infrastructure", tone: "warning", href: "/nodes" });
+    expect(first?.title).toMatch(/Claude has no ready account/);
+  });
+
+  it("adds nothing when the proxy is healthy or absent", () => {
+    const healthy = buildHomeTriage(
+      { workItems: [], hostSnapshot: host({ origin: "http://p", reachable: true, checkedAt: now.toISOString(), accounts: [{ id: "x", provider: "claude", label: "g", status: "ready", requests24h: { success: 1, failed: 0 } }] }) },
+      { now },
+    );
+    expect(healthy.isAllClear).toBe(true);
+    expect(buildHomeTriage({ workItems: [] }).isAllClear).toBe(true);
+  });
+
+  it("does not count a stale snapshot as an outage", () => {
+    const t = buildHomeTriage(
+      { workItems: [], hostSnapshot: host({ origin: "http://p", reachable: false, checkedAt: now.toISOString() }) },
+      { now: new Date("2026-09-20T12:10:00.000Z") },
+    );
+    expect(t.isAllClear).toBe(true);
   });
 });

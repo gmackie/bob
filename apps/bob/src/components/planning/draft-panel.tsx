@@ -9,7 +9,7 @@ import { Button } from "@gmacko/core/ui/button";
 import { toast } from "@gmacko/core/ui/toast";
 
 import { KIND_COLOR, PRIORITY_COLOR, formatLabel } from "~/lib/design/colors";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 import { DependencyGraph } from "./dependency-graph";
 import { getPlanningDispatchHref } from "./planning-shell-model";
 
@@ -20,20 +20,20 @@ interface DraftPanelProps {
 }
 
 export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const router = useRouter();
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    ...trpc.planSession.get.queryOptions({ sessionId }),
+    ...bobQuery("planning.session.get").queryOptions({ sessionId }),
     refetchInterval: 5000,
   });
 
   const removeDraft = useMutation(
-    trpc.planSession.removeDraft.mutationOptions({
+    bobQuery("planning.session.removeDraft").mutationOptions({
       onSuccess: () => {
         void queryClient.invalidateQueries({
-          queryKey: trpc.planSession.get.queryKey({ sessionId }),
+          queryKey: bobQuery("planning.session.get").queryKey({ sessionId }),
         });
       },
       onError: (err) => {
@@ -45,7 +45,7 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
   );
 
   const createBatch = useMutation(
-    trpc.dispatch.createBatch.mutationOptions({
+    bobQuery("planning.dispatch.createBatch").mutationOptions({
       onSuccess: (result) => {
         // planSession.get's session detail doesn't expose workspaceId here, so
         // the dispatch href is unscoped — matches prior runtime behavior (the
@@ -61,7 +61,7 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
   );
 
   const commitPlan = useMutation(
-    trpc.planSession.commitPlan.mutationOptions({
+    bobQuery("planning.session.commitPlan").mutationOptions({
       onSuccess: (result) => {
         if (result.committed === 0) {
           toast("No tasks were committed");
@@ -71,7 +71,7 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
           `Committed ${result.committed} task${result.committed === 1 ? "" : "s"} — creating dispatch batch...`,
         );
         void queryClient.invalidateQueries({
-          queryKey: trpc.planSession.get.queryKey({ sessionId }),
+          queryKey: bobQuery("planning.session.get").queryKey({ sessionId }),
         });
         createBatch.mutate({ sessionId, tasks: result.tasks });
       },
@@ -85,7 +85,9 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
 
   if (isLoading) {
     return (
-      <div className="px-4 py-3 text-sm text-muted-foreground">Loading drafts...</div>
+      <div className="px-4 py-3 text-sm text-muted-foreground">
+        Loading drafts...
+      </div>
     );
   }
 
@@ -181,7 +183,11 @@ export function DraftPanel({ sessionId, expanded = false }: DraftPanelProps) {
         <Button
           size="sm"
           onClick={() => commitPlan.mutate({ sessionId })}
-          disabled={commitPlan.isPending || createBatch.isPending || activeDrafts.length === 0}
+          disabled={
+            commitPlan.isPending ||
+            createBatch.isPending ||
+            activeDrafts.length === 0
+          }
         >
           {commitPlan.isPending ? "Committing..." : "Commit Plan"}
         </Button>

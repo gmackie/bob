@@ -19,6 +19,8 @@
  * `client-dispatcher.test.ts` for the pattern.
  */
 
+import os from "node:os";
+import path from "node:path";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { drizzle as drizzleNodePg } from "drizzle-orm/node-postgres";
 
@@ -58,9 +60,26 @@ function initDb(): Db {
   const driver = process.env.BOB_DB_DRIVER ?? "pg";
 
   if (driver === "pglite") {
-    return makePgliteDbSync({
-      dataDir: process.env.BOB_DB_PGLITE_DIR,
-    }) as unknown as Db;
+    // Vinext imports its server entry both with a cache-busting query and
+    // through plain dynamic imports. ESM caches those separately. Two PGlite
+    // instances writing the same directory lose data even on graceful close.
+    const registryKey = Symbol.for("bob.pglite.databases");
+    const registry = globalThis as typeof globalThis & {
+      [registryKey]?: Map<string, Db>;
+    };
+    const databases = (registry[registryKey] ??= new Map<string, Db>());
+    const configuredDir = process.env.BOB_DB_PGLITE_DIR;
+    const dataDir =
+      configuredDir === ":memory:"
+        ? configuredDir
+        : path.resolve(
+            configuredDir ?? path.join(os.homedir(), ".bob", "userdata", "db"),
+          );
+    const existing = databases.get(dataDir);
+    if (existing) return existing;
+    const database = makePgliteDbSync({ dataDir }) as unknown as Db;
+    databases.set(dataDir, database);
+    return database;
   }
 
   if (driver === "pg") {

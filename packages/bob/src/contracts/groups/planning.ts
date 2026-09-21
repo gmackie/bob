@@ -6,7 +6,7 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
-import { BobNotFoundError, BobForbiddenError } from "../errors.js";
+import { BobNotFoundError, BobForbiddenError, BobConflictError } from "../errors.js";
 import {
   PlanningStatusEnum,
   PlanningPriorityEnum,
@@ -135,7 +135,7 @@ export const PlanningCreateTaskRpc = Rpc.make("planning.createTask", {
     dueDate: Schema.optional(Schema.String),
   }),
   success: PlanningTaskMutationResultSchema,
-  error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+  error: Schema.Union([BobNotFoundError, BobForbiddenError, BobConflictError]),
 });
 
 export const PlanningUpdateTaskRpc = Rpc.make("planning.updateTask", {
@@ -617,7 +617,7 @@ export const PlanningDispatchCreateBatchRpc = Rpc.make(
 export const PlanningDispatchGetBatchRpc = Rpc.make(
   "planning.dispatch.getBatch",
   {
-    payload: Schema.Struct({ batchId: Schema.String }),
+    payload: Schema.Struct({ batchId: Schema.String, workItemId: Schema.optional(Schema.String) }),
     success: DispatchBatchWithItemsSchema,
     error: BobNotFoundError,
   },
@@ -669,6 +669,7 @@ export const PlanningDispatchListBatchesRpc = Rpc.make(
   "planning.dispatch.listBatches",
   {
     payload: Schema.Struct({
+      workItemId: Schema.optional(Schema.String),
       status: Schema.optional(Schema.String),
       limit: Schema.optional(Schema.Number),
     }),

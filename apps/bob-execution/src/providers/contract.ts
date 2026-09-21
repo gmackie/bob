@@ -49,7 +49,17 @@ export interface ProviderHealthSnapshot {
    * a flavour of no_credit — claude's weekly cap stopped every run while the
    * page said Ready.
    */
-  status: "ready" | "unavailable" | "unauthenticated" | "degraded" | "no_credit" | "rate_limited";
+  status:
+    | "ready"
+    | "unavailable"
+    | "unauthenticated"
+    | "degraded"
+    | "no_credit"
+    | "rate_limited"
+    /** The CLI is installed and the accounts are fine, but the inference proxy cannot be reached. */
+    | "proxy_unreachable";
+  /** Which source the estimate looked at. Absent from daemons that predate the proxy; treat as "host". */
+  via?: "proxy" | "host";
   capabilities: ProviderCapabilities;
   checkedAt: string;
   error?: string;

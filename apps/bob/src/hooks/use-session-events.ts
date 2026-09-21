@@ -3,19 +3,12 @@
 import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
-interface SessionEventRecord {
-  id: string;
-  sessionId: string;
-  seq: number;
-  direction: string;
-  eventType: string;
-  payload: Record<string, unknown>;
-  // tRPC events may arrive pre-serialized (string) or as Date depending on
-  // the route's serializer. Allow both so this hook stays transport-agnostic.
-  createdAt: Date | string;
-}
+import type { BobRpcOutput } from "@gmacko/bob-client/query";
+
+type SessionEventRecord =
+  BobRpcOutput<"agent.session.getEvents">["events"][number];
 
 interface UseSessionEventsOptions {
   /** The session to poll events for */
@@ -29,7 +22,7 @@ interface UseSessionEventsOptions {
 }
 
 /**
- * Polls session events via trpc.session.getEvents at a configurable interval.
+ * Polls session events via bobQuery("agent.session.getEvents") at a configurable interval.
  * Tracks the latest seen sequence number so only new events are fetched.
  */
 export function useSessionEvents({
@@ -38,7 +31,7 @@ export function useSessionEvents({
   interval = 3_000,
   eventTypes,
 }: UseSessionEventsOptions) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const active = Boolean(sessionId) && enabled;
   const activeId = sessionId ?? "";
 
@@ -46,7 +39,7 @@ export function useSessionEvents({
   const lastSeqRef = useRef(0);
 
   const { data, isLoading, error } = useQuery(
-    trpc.session.getEvents.queryOptions(
+    bobQuery("agent.session.getEvents").queryOptions(
       { sessionId: activeId, fromSeq: lastSeqRef.current, limit: 200 },
       {
         enabled: active,
@@ -73,12 +66,10 @@ export function useSessionEvents({
   }, [activeId]);
 
   // Filter by eventTypes if specified
-  const events: SessionEventRecord[] =
+  const events: readonly SessionEventRecord[] =
     data?.events && eventTypes
-      ? (data.events as SessionEventRecord[]).filter((e) =>
-          eventTypes.includes(e.eventType),
-        )
-      : ((data?.events as SessionEventRecord[] | undefined) ?? []);
+      ? data.events.filter((e) => eventTypes.includes(e.eventType))
+      : (data?.events ?? []);
 
   return {
     events,

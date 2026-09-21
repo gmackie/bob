@@ -24,7 +24,7 @@ export const RequirementRecordSchema = Schema.Struct({
   category: Schema.String,
   description: Schema.String,
   status: Schema.String,
-  linkedTaskId: Schema.optional(Schema.NullOr(Schema.String)),
+  linkedTaskId: Schema.NullOr(Schema.String),
   sortOrder: Schema.Number,
   createdAt: Schema.optional(Schema.String),
 });

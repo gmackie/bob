@@ -1,3 +1,6 @@
+import { NativeRpc } from "@gmacko/bob/contracts";
+import type { Rpc } from "effect/unstable/rpc";
+import type { ProjectsWorkspaceListRpc } from "@gmacko/core/contracts/groups/projects";
 import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
 
 import type { ClientRuntime } from "./internal/runtime.js";
@@ -19,7 +22,10 @@ export interface ProjectsClient extends Record<string, unknown> {
   readonly setDefaultAgent: RpcMethod;
   readonly dismissDir: RpcMethod;
   readonly workspace: {
-    readonly list: RpcMethod;
+    readonly list: RpcMethod<
+      void,
+      Rpc.Success<typeof ProjectsWorkspaceListRpc>
+    >;
     readonly create: RpcMethod;
     readonly rename: RpcMethod;
     readonly setDefaultAgent: RpcMethod;
@@ -62,18 +68,18 @@ export interface ProjectsClient extends Record<string, unknown> {
 
 export const makeProjectsClient = (runtime: ClientRuntime): ProjectsClient => {
   const invoke = makeInvoke(runtime, ProjectsRpc);
+  const native = makeInvoke(runtime, NativeRpc);
 
   return {
-    create: (input) => invoke("projects.create", input),
-    list: (input) => invoke("projects.list", input),
-    get: (input) => invoke("projects.get", input),
+    create: (input) => native("project.create", input),
+    list: (input) => native("project.list", input),
+    get: (input) => native("project.get", input),
     getBySlug: (input) => invoke("projects.getBySlug", input),
     delete: (input) => invoke("projects.delete", input),
     discovery: (input) => invoke("projects.discovery", input),
     updateAutomationSettings: (input) =>
-      invoke("projects.updateAutomationSettings", input),
-    setDefaultAgent: (input) =>
-      invoke("projects.setDefaultAgent", input),
+      native("project.updateAutomationSettings", input),
+    setDefaultAgent: (input) => native("project.setDefaultAgent", input),
     dismissDir: (input) => invoke("projects.dismissDir", input),
     workspace: {
       list: (input) => invoke("projects.workspace.list", input),
@@ -115,22 +121,18 @@ export const makeProjectsClient = (runtime: ClientRuntime): ProjectsClient => {
       create: (input) => invoke("projects.pullRequest.create", input),
       update: (input) => invoke("projects.pullRequest.update", input),
       merge: (input) => invoke("projects.pullRequest.merge", input),
-      syncCommits: (input) =>
-        invoke("projects.pullRequest.syncCommits", input),
+      syncCommits: (input) => invoke("projects.pullRequest.syncCommits", input),
       linkToPlanningTask: (input) =>
         invoke("projects.pullRequest.linkToPlanningTask", input),
       refresh: (input) => invoke("projects.pullRequest.refresh", input),
-      listReviews: (input) =>
-        invoke("projects.pullRequest.listReviews", input),
-      addReview: (input) =>
-        invoke("projects.pullRequest.addReview", input),
+      listReviews: (input) => invoke("projects.pullRequest.listReviews", input),
+      addReview: (input) => invoke("projects.pullRequest.addReview", input),
     },
     featureBranch: {
       create: (input) => invoke("projects.featureBranch.create", input),
       get: (input) => invoke("projects.featureBranch.get", input),
       list: (input) => invoke("projects.featureBranch.list", input),
-      addTaskPR: (input) =>
-        invoke("projects.featureBranch.addTaskPR", input),
+      addTaskPR: (input) => invoke("projects.featureBranch.addTaskPR", input),
       markTaskPRMerged: (input) =>
         invoke("projects.featureBranch.markTaskPRMerged", input),
       createFeaturePR: (input) =>
@@ -139,12 +141,9 @@ export const makeProjectsClient = (runtime: ClientRuntime): ProjectsClient => {
         invoke("projects.featureBranch.updateStatus", input),
     },
     gitProvider: {
-      listConnections: () =>
-        invoke("projects.gitProvider.listConnections"),
-      connectPat: (input) =>
-        invoke("projects.gitProvider.connectPat", input),
-      disconnect: (input) =>
-        invoke("projects.gitProvider.disconnect", input),
+      listConnections: () => invoke("projects.gitProvider.listConnections"),
+      connectPat: (input) => invoke("projects.gitProvider.connectPat", input),
+      disconnect: (input) => invoke("projects.gitProvider.disconnect", input),
       testConnection: (input) =>
         invoke("projects.gitProvider.testConnection", input),
       setDefaultForRepo: (input) =>
@@ -153,8 +152,7 @@ export const makeProjectsClient = (runtime: ClientRuntime): ProjectsClient => {
         invoke("projects.gitProvider.detectRemote", input),
     },
     git: {
-      pushAndCreatePr: (input) =>
-        invoke("projects.git.pushAndCreatePr", input),
+      pushAndCreatePr: (input) => invoke("projects.git.pushAndCreatePr", input),
       jjIsRepo: (input) => invoke("projects.git.jjIsRepo", input),
       jjLog: (input) => invoke("projects.git.jjLog", input),
       jjNew: (input) => invoke("projects.git.jjNew", input),

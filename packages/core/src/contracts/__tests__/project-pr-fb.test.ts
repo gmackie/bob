@@ -53,9 +53,9 @@ describe("ProjectsRpc group — pullRequest + featureBranch (7B-4B Task 7)", () 
     expect(
       ProjectsRpc.requests.get("projects.pullRequest.listByRepository"),
     ).toBe(ProjectsPullRequestListByRepositoryRpc);
-    expect(
-      ProjectsRpc.requests.get("projects.pullRequest.listBySession"),
-    ).toBe(ProjectsPullRequestListBySessionRpc);
+    expect(ProjectsRpc.requests.get("projects.pullRequest.listBySession")).toBe(
+      ProjectsPullRequestListBySessionRpc,
+    );
     expect(ProjectsRpc.requests.get("projects.pullRequest.create")).toBe(
       ProjectsPullRequestCreateRpc,
     );
@@ -74,9 +74,9 @@ describe("ProjectsRpc group — pullRequest + featureBranch (7B-4B Task 7)", () 
     expect(ProjectsRpc.requests.get("projects.pullRequest.refresh")).toBe(
       ProjectsPullRequestRefreshRpc,
     );
-    expect(
-      ProjectsRpc.requests.get("projects.pullRequest.listReviews"),
-    ).toBe(ProjectsPullRequestListReviewsRpc);
+    expect(ProjectsRpc.requests.get("projects.pullRequest.listReviews")).toBe(
+      ProjectsPullRequestListReviewsRpc,
+    );
     expect(ProjectsRpc.requests.get("projects.pullRequest.addReview")).toBe(
       ProjectsPullRequestAddReviewRpc,
     );
@@ -115,9 +115,9 @@ describe("ProjectsRpc group — pullRequest + featureBranch (7B-4B Task 7)", () 
     // Task 5 — project core
     expect(ProjectsRpc.requests.has("projects.get")).toBe(true);
     expect(ProjectsRpc.requests.has("projects.discovery")).toBe(true);
-    expect(
-      ProjectsRpc.requests.has("projects.updateAutomationSettings"),
-    ).toBe(true);
+    expect(ProjectsRpc.requests.has("projects.updateAutomationSettings")).toBe(
+      true,
+    );
     expect(ProjectsRpc.requests.has("projects.dismissDir")).toBe(true);
     // Task 5 — workspace
     expect(ProjectsRpc.requests.has("projects.workspace.list")).toBe(true);
@@ -135,21 +135,21 @@ describe("ProjectsRpc group — pullRequest + featureBranch (7B-4B Task 7)", () 
     expect(
       ProjectsRpc.requests.has("projects.repository.refreshMainBranch"),
     ).toBe(true);
-    expect(
-      ProjectsRpc.requests.has("projects.repository.getWorktrees"),
-    ).toBe(true);
-    expect(
-      ProjectsRpc.requests.has("projects.repository.createWorktree"),
-    ).toBe(true);
+    expect(ProjectsRpc.requests.has("projects.repository.getWorktrees")).toBe(
+      true,
+    );
+    expect(ProjectsRpc.requests.has("projects.repository.createWorktree")).toBe(
+      true,
+    );
     expect(
       ProjectsRpc.requests.has("projects.repository.getWorktreePlanning"),
     ).toBe(true);
     expect(
       ProjectsRpc.requests.has("projects.repository.updateWorktreePlanning"),
     ).toBe(true);
-    expect(
-      ProjectsRpc.requests.has("projects.repository.deleteWorktree"),
-    ).toBe(true);
+    expect(ProjectsRpc.requests.has("projects.repository.deleteWorktree")).toBe(
+      true,
+    );
     expect(
       ProjectsRpc.requests.has("projects.repository.getWorktreeMergeStatus"),
     ).toBe(true);
@@ -201,7 +201,7 @@ describe("stubProjectsHandlers — pullRequest (7B-4B Task 7)", () => {
         pullRequestId: STUB_PULL_REQUEST_1.id,
       }),
     );
-    expect(result.status).toBe("merged");
+    expect(result.success).toBe(true);
     expect(result.mergedAt).toBeTruthy();
   });
 

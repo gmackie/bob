@@ -9,7 +9,7 @@ import type { HomeTone } from "~/features/home/home-model";
 import { buildNodeLights } from "~/features/nodes/node-lights-model";
 import { useGateway } from "~/hooks/use-gateway";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
-import { trpc } from "~/utils/api";
+import { rpc } from "~/utils/api";
 
 /**
  * Phone home.
@@ -44,15 +44,15 @@ export default function HomeScreen() {
   const { hostSnapshot, sessions } = useGateway();
 
   const workItemsQuery = useQuery(
-    trpc.workItem.list.queryOptions(
+    rpc("workItem.list").queryOptions(
       { workspaceId: workspace?.id ?? "", limit: 100 },
       { enabled: Boolean(workspace?.id), refetchInterval: 10_000 },
     ),
   );
 
   const triage = useMemo(
-    () => buildHomeTriage({ workItems: workItemsQuery.data ?? [] }),
-    [workItemsQuery.data],
+    () => buildHomeTriage({ workItems: workItemsQuery.data ?? [], hostSnapshot }),
+    [workItemsQuery.data, hostSnapshot],
   );
 
   const activeRunCount = sessions.filter((s) => s.status === "running").length;

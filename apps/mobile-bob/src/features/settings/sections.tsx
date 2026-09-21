@@ -11,28 +11,24 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type { ProviderKey } from "~/features/tablet/dashboard";
 import {
   buildMobileSettingsDeviceSummary,
   buildMobileSettingsProviderRows,
   buildWorkspaceSettingRows,
 } from "~/features/settings/settings-model";
 import { SELECTED_WORKSPACE_KEY } from "~/features/settings/workspace-selection";
+import { buildProxyPanel } from "@bob/ws";
 import { colors } from "~/lib/colors";
-import { trpc } from "~/utils/api";
+import { useGateway } from "~/hooks/use-gateway";
+import { rpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
-import type { ProviderKey } from "~/features/tablet/dashboard";
 
 const PERMISSIONS = ["read", "write", "delete", "admin"] as const;
 
@@ -40,14 +36,6 @@ interface PreferencesData {
   theme: "light" | "dark" | "system";
   emailNotifications: boolean;
   pushNotifications: boolean;
-}
-
-interface ApiKeyData {
-  id: string;
-  name: string;
-  keyPrefix: string;
-  permissions: string[];
-  lastUsedAt: string | Date | null;
 }
 
 interface CreatedApiKeyData {
@@ -145,7 +133,9 @@ export function WorkspacesSection() {
     null,
   );
   const { data: memberships, isLoading } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
+    rpc("projects.workspace.list").queryOptions(undefined, {
+      staleTime: 60_000,
+    }),
   );
 
   useEffect(() => {
@@ -167,13 +157,13 @@ export function WorkspacesSection() {
     setSelectedWorkspaceId(workspaceId);
     void AsyncStorage.setItem(SELECTED_WORKSPACE_KEY, workspaceId).then(() => {
       void queryClient.invalidateQueries({
-        queryKey: trpc.workspace.list.queryKey(),
+        queryKey: rpc("projects.workspace.list").queryKey(),
       });
       void queryClient.invalidateQueries({
-        queryKey: trpc.project.list.queryKey(),
+        queryKey: rpc("project.list").queryKey(),
       });
       void queryClient.invalidateQueries({
-        queryKey: trpc.workItem.list.queryKey(),
+        queryKey: rpc("workItem.list").queryKey(),
       });
     });
   };
@@ -234,6 +224,8 @@ export function ProvidersSection({
   onOpenProvider?: (provider: ProviderKey) => void;
 } = {}) {
   const rows = buildMobileSettingsProviderRows();
+  const { hostSnapshot } = useGateway();
+  const proxy = buildProxyPanel(hostSnapshot);
 
   return (
     <View className="border-border bg-card mt-4 rounded-lg border p-4">
@@ -241,12 +233,33 @@ export function ProvidersSection({
       <Text className="text-muted mt-2 text-sm">
         Review Codex and Cursor capacity, limits, active sessions, and outcomes.
       </Text>
+      {/* Where inference actually goes. Configured on the runner host, shown
+          here, acted on from Nodes. */}
+      {proxy ? (
+        <Pressable
+          onPress={() => router.push("/nodes")}
+          accessibilityRole="button"
+          accessibilityLabel="Open the inference proxy on Nodes"
+          className="border-border mt-4 rounded-lg border p-3 active:opacity-80"
+          style={{ backgroundColor: colors.background }}
+          testID="settings-inference-proxy"
+        >
+          <Text className="text-foreground text-sm font-semibold">Inference proxy · {proxy.statusLabel}</Text>
+          <Text className="text-muted mt-1 text-xs leading-5" numberOfLines={2}>
+            {proxy.accountsState === "listed"
+              ? proxy.providers.map((row) => `${row.label} ${row.summary}`).join(" · ") || "no accounts"
+              : `Accounts not reported: ${proxy.accountsNote}`}
+          </Text>
+        </Pressable>
+      ) : null}
       <View className="mt-4 gap-2">
         {rows.map((row) => (
           <Pressable
             key={row.key}
             onPress={() =>
-              onOpenProvider ? onOpenProvider(row.key as ProviderKey) : router.push(row.href)
+              onOpenProvider
+                ? onOpenProvider(row.key as ProviderKey)
+                : router.push(row.href)
             }
             accessibilityRole="button"
             accessibilityLabel={`Open ${row.label} provider settings`}
@@ -270,15 +283,15 @@ export function PreferencesSection() {
   const queryClient = useQueryClient();
 
   const { data: preferences, isLoading } = useQuery(
-    trpc.settings.getPreferences.queryOptions(undefined),
+    rpc("settings.getPreferences").queryOptions(undefined),
   );
   const currentPreferences = preferences as PreferencesData | undefined;
 
   const { mutate: updatePreferences } = useMutation(
-    trpc.settings.updatePreferences.mutationOptions({
+    rpc("settings.updatePreferences").mutationOptions({
       onSuccess: () => {
         void queryClient.invalidateQueries(
-          trpc.settings.getPreferences.queryFilter(),
+          rpc("settings.getPreferences").queryFilter(),
         );
       },
     }),
@@ -382,7 +395,7 @@ export function PreferencesSection() {
 
 export function DeviceSection() {
   const { data: apiKeys } = useQuery(
-    trpc.settings.listApiKeys.queryOptions(undefined, { staleTime: 60_000 }),
+    rpc("settings.listApiKeys").queryOptions(undefined, { staleTime: 60_000 }),
   );
   const apiKeyCount = Array.isArray(apiKeys) ? apiKeys.length : 0;
   const summary = buildMobileSettingsDeviceSummary({ apiKeyCount });
@@ -410,29 +423,29 @@ export function ApiKeysSection() {
   const [newKey, setNewKey] = useState<string | null>(null);
 
   const { data: apiKeys, isLoading } = useQuery(
-    trpc.settings.listApiKeys.queryOptions(undefined),
+    rpc("settings.listApiKeys").queryOptions(undefined),
   );
-  const apiKeyRows = (apiKeys ?? []) as ApiKeyData[];
+  const apiKeyRows = apiKeys ?? [];
 
   const { mutate: createKey, isPending: isCreating } = useMutation(
-    trpc.settings.createApiKey.mutationOptions({
+    rpc("settings.createApiKey").mutationOptions({
       onSuccess: (data: CreatedApiKeyData) => {
         setNewKey(data.key);
         setNewKeyName("");
         setSelectedPermissions(["read"]);
         setShowCreateForm(false);
         void queryClient.invalidateQueries(
-          trpc.settings.listApiKeys.queryFilter(),
+          rpc("settings.listApiKeys").queryFilter(),
         );
       },
     }),
   );
 
   const { mutate: revokeKey, isPending: isRevoking } = useMutation(
-    trpc.settings.revokeApiKey.mutationOptions({
+    rpc("settings.revokeApiKey").mutationOptions({
       onSuccess: () => {
         void queryClient.invalidateQueries(
-          trpc.settings.listApiKeys.queryFilter(),
+          rpc("settings.listApiKeys").queryFilter(),
         );
       },
     }),
@@ -593,7 +606,8 @@ export function ApiKeysSection() {
                 </Text>
                 {key.lastUsedAt && (
                   <Text className="text-muted text-xs">
-                    Last used: {new Date(key.lastUsedAt).toLocaleDateString()}
+                    Last used:{" "}
+                    {new Date(String(key.lastUsedAt)).toLocaleDateString()}
                   </Text>
                 )}
               </View>

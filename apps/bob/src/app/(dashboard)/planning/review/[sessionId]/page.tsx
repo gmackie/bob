@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
-import { createPlanningCaller } from "~/lib/planning/server";
+import { createPlanningClient } from "~/lib/planning/server";
 import { DraftPanel } from "~/components/planning/draft-panel";
 import { getPlanningDashboardHref } from "~/components/planning/planning-shell-model";
 import { getWorkItemEntryPlanSessionHref } from "~/components/work-items/work-item-entry-model";
@@ -17,8 +17,10 @@ export default async function PlanReviewPage({ params }: ReviewPageProps) {
   const { sessionId } = await params;
 
   // Fetch session data to check for work-item linkage
-  const caller = (await createPlanningCaller()) as any;
-  const sessionData = await caller.planSession.get({ sessionId }).catch(() => null);
+  const caller = await createPlanningClient();
+  const sessionData = await caller("planning.session.get")
+    .call({ sessionId })
+    .catch(() => null);
 
   // Redirect to split-view if session is linked to a work item
   if (sessionData?.session?.workItemId) {
@@ -26,11 +28,13 @@ export default async function PlanReviewPage({ params }: ReviewPageProps) {
       getWorkItemEntryPlanSessionHref(
         sessionData.session.workItemId,
         sessionId,
-        sessionData.session.workspaceId,
+        sessionData.session.planningWorkspaceId,
       ),
     );
   }
-  const planningHref = getPlanningDashboardHref(sessionData?.session?.workspaceId);
+  const planningHref = getPlanningDashboardHref(
+    sessionData?.session?.planningWorkspaceId,
+  );
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
@@ -53,7 +57,8 @@ export default async function PlanReviewPage({ params }: ReviewPageProps) {
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
               Review the tasks created during your planning session. Remove any
-              you don&apos;t need, then commit to create them as real work items.
+              you don&apos;t need, then commit to create them as real work
+              items.
             </p>
           </div>
           <Link

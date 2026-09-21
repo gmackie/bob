@@ -436,8 +436,39 @@ export async function planningCreateTask(
     labels: input.labelIds,
   });
 
+  // Provider IDs are not Bob work-item IDs. Materialize the local identity
+  // before returning so session creation and navigation need not wait for a webhook.
+  let workItemId = result.externalId;
+  if (project.planningProvider !== "internal") {
+    const [created] = await ctx.db.insert(workItems).values({
+      ownerUserId: ctx.userId,
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+      kind: "task",
+      title: result.title,
+      description: result.description,
+      status: input.status ?? "backlog",
+      externalId: result.externalId,
+      externalProvider: project.planningProvider,
+      externalUrl: result.url,
+    }).onConflictDoNothing().returning();
+    const local = created ?? await ctx.db.query.workItems.findFirst({
+      where: and(
+        eq(workItems.externalProvider, project.planningProvider),
+        eq(workItems.externalId, result.externalId),
+        eq(workItems.workspaceId, project.workspaceId),
+        eq(workItems.projectId, project.id),
+      ),
+    });
+    if (!local) {
+      throw new TRPCError({ code: "CONFLICT", message: "Created task could not be linked to this project" });
+    }
+    workItemId = local.id;
+  }
+
   return {
     id: result.externalId,
+    workItemId,
     identifier: result.identifier,
     title: result.title,
     status: result.status,
@@ -476,7 +507,10 @@ export async function planningUpdateTask(
 
   if (project?.planningProvider === "linear" && project.linearProjectId) {
     const provider = await resolvePlanningProvider(ctx.db, project, project.workspaceId);
-    const result = await provider.updateTask(input.id, {
+    if (!oldItem.externalId) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Task has no linked Linear issue" });
+    }
+    const result = await provider.updateTask(oldItem.externalId, {
       title: input.title,
       description: input.description,
       status: input.status,

@@ -25,7 +25,8 @@ export const makeWorkItemsLayer = (ctx: HandlerContext) => {
     "workItem.statusCounts": wi["workItems.statusCounts"],
     "workItem.get": wi["workItems.get"],
     "workItem.update": wi["workItems.update"],
-    "workItem.promoteToTask": wi["workItems.promoteToTask"],
+    "workItem.dispatch": wi["workItems.dispatch"],
+      "workItem.promoteToTask": wi["workItems.promoteToTask"],
     "workItem.comment.list": wi["workItems.listComments"],
     "workItem.comment.create": wi["workItems.createComment"],
 

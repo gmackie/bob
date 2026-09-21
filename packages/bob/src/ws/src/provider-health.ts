@@ -43,18 +43,22 @@ const PROVIDER_STATUS_LABELS: Record<string, string> = {
   rate_limited: "Rate limited",
   degraded: "Degraded",
   unavailable: "Unavailable",
+  proxy_unreachable: "Proxy unreachable",
 };
 
 /** Mirrors DispatchRemedy in providers/dispatch-gate.ts. `wait` has no
  *  control: a quota lifts on its own, and offering an action that cannot help
  *  is how an operator loops on the wrong remedy for a week. */
-export type ProviderRemedy = "sign_in" | "top_up" | "install" | "wait";
+export type ProviderRemedy = "sign_in" | "top_up" | "install" | "wait" | "check_proxy";
 
 const PROVIDER_REMEDIES: Record<string, ProviderRemedy> = {
   unauthenticated: "sign_in",
   no_credit: "top_up",
   rate_limited: "wait",
   unavailable: "install",
+  // The CLI is present and the accounts are fine; the transport is down.
+  // "install" or "sign in" here would loop the operator on the wrong fix.
+  proxy_unreachable: "check_proxy",
 };
 
 /** Where an operator goes to add credit. Shown instead of a sign-in button. */
@@ -97,6 +101,8 @@ export function buildHostMissionControl(snapshot: HostSnapshotWire, now = new Da
       /** The provider's own wording, already redacted daemon-side. */
       detail: provider.detail,
       status: provider.status,
+      /** Which source produced the estimate; older daemons omit it and are host-probed. */
+      via: provider.via ?? "host",
       controls: [
         provider.capabilities.approval ? "approve" : null,
         provider.capabilities.followUp ? "follow-up" : null,

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 import { useSessionEvents } from "./use-session-events";
 
@@ -33,7 +33,7 @@ export function useFileChangeEvents({
   interval = 3_000,
   onFileChange,
 }: UseFileChangeEventsOptions) {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const queryClient = useQueryClient();
 
   // Track which event seqs we've already processed to avoid duplicate callbacks
@@ -65,17 +65,23 @@ export function useFileChangeEvents({
       // Invalidate the filesystem.list query for the parent directory
       const parentDir = payload.path.replace(/\/[^/]+$/, "") || "/";
       void queryClient.invalidateQueries({
-        queryKey: trpc.filesystem.list.queryKey({ path: parentDir, showHidden: false }),
+        queryKey: bobQuery("agent.filesystem.list").queryKey({
+          path: parentDir,
+          showHidden: false,
+        }),
       });
 
       // Also invalidate without showHidden to catch both variants
       void queryClient.invalidateQueries({
-        queryKey: trpc.filesystem.list.queryKey({ path: parentDir, showHidden: true }),
+        queryKey: bobQuery("agent.filesystem.list").queryKey({
+          path: parentDir,
+          showHidden: true,
+        }),
       });
 
       onFileChange?.(payload);
     }
-  }, [events, queryClient, trpc.filesystem.list, onFileChange]);
+  }, [events, queryClient, bobQuery("agent.filesystem.list"), onFileChange]);
 
   return {
     latestSeq,

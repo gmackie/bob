@@ -34,7 +34,7 @@ import {
   ChatConversationSchema,
   ChatMessageSchema,
 } from "../schemas/agent.js";
-import { AgentRunSchema } from "../schemas/agent-run.js";
+import { AgentRunSchema, AgentRunDetailSchema } from "../schemas/agent-run.js";
 import {
   CaptureTargetSchema,
   CaptureResultSchema,
@@ -79,7 +79,11 @@ import {
   PersonaReadOnlyError,
   PersonaSyncResultSchema,
 } from "../schemas/agent-persona.js";
-import { NotFoundError, UnauthorizedError, RpcError } from "../../rpc/errors.js";
+import {
+  NotFoundError,
+  UnauthorizedError,
+  RpcError,
+} from "../../rpc/errors.js";
 
 /** Union of every error `agent.sendTurn` can surface (on its stream). */
 export const AgentStreamErrorSchema = Schema.Union([
@@ -157,8 +161,8 @@ export const AgentRunGetRpc = Rpc.make("agent.run.get", {
   payload: Schema.Struct({
     runId: Schema.String, // UUID
   }),
-  success: AgentRunSchema,
-  error: NotFoundError,
+  success: AgentRunDetailSchema,
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
 });
 
 // --- agent.run.list ----------------------------------------------------------
@@ -169,6 +173,7 @@ export const AgentRunListRpc = Rpc.make("agent.run.list", {
     limit: Schema.optional(Schema.Number),
   }),
   success: Schema.Array(AgentRunSchema),
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
 });
 
 // --- agent.run.listAll -------------------------------------------------------
@@ -178,6 +183,7 @@ export const AgentRunListAllRpc = Rpc.make("agent.run.listAll", {
     limit: Schema.optional(Schema.Number),
   }),
   success: Schema.Array(AgentRunSchema),
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
 });
 
 // --- agent.run.listByWorkItem ------------------------------------------------
@@ -188,7 +194,7 @@ export const AgentRunListByWorkItemRpc = Rpc.make("agent.run.listByWorkItem", {
     limit: Schema.optional(Schema.Number),
   }),
   success: Schema.Array(AgentRunSchema),
-  error: NotFoundError,
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
 });
 
 // --- agent.capture.listTargets -----------------------------------------------
@@ -230,6 +236,7 @@ export const AgentSessionListRpc = Rpc.make("agent.session.list", {
     items: Schema.Array(SessionSchema),
     nextCursor: Schema.optional(Schema.String),
   }),
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
 });
 
 // --- agent.session.get ------------------------------------------------------
@@ -237,7 +244,7 @@ export const AgentSessionListRpc = Rpc.make("agent.session.list", {
 export const AgentSessionGetRpc = Rpc.make("agent.session.get", {
   payload: Schema.Struct({ id: Schema.String }),
   success: SessionSchema,
-  error: NotFoundError,
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
 });
 
 // --- agent.session.create ---------------------------------------------------
@@ -252,6 +259,7 @@ export const AgentSessionCreateRpc = Rpc.make("agent.session.create", {
     personaId: Schema.optional(Schema.String),
   }),
   success: SessionSchema,
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
 });
 
 // --- agent.session.bootstrapForChat -----------------------------------------
@@ -274,6 +282,7 @@ export const AgentSessionBootstrapForChatRpc = Rpc.make(
         shouldStartOnConnect: Schema.Boolean,
       }),
     }),
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -287,7 +296,7 @@ export const AgentSessionUpdateTitleRpc = Rpc.make(
       title: Schema.String,
     }),
     success: SessionSchema,
-    error: NotFoundError,
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -296,7 +305,7 @@ export const AgentSessionUpdateTitleRpc = Rpc.make(
 export const AgentSessionStopRpc = Rpc.make("agent.session.stop", {
   payload: Schema.Struct({ id: Schema.String }),
   success: SessionSchema,
-  error: NotFoundError,
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
 });
 
 // --- agent.session.delete ---------------------------------------------------
@@ -304,6 +313,7 @@ export const AgentSessionStopRpc = Rpc.make("agent.session.stop", {
 export const AgentSessionDeleteRpc = Rpc.make("agent.session.delete", {
   payload: Schema.Struct({ id: Schema.String }),
   success: Schema.Struct({ success: Schema.Boolean }),
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
 });
 
 // --- agent.session.getEvents ------------------------------------------------
@@ -319,7 +329,7 @@ export const AgentSessionGetEventsRpc = Rpc.make("agent.session.getEvents", {
     events: Schema.Array(SessionEventSchema),
     latestSeq: Schema.Number,
   }),
-  error: NotFoundError,
+  error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
 });
 
 // --- agent.session.getConnections -------------------------------------------
@@ -329,7 +339,7 @@ export const AgentSessionGetConnectionsRpc = Rpc.make(
   {
     payload: Schema.Struct({ sessionId: Schema.String }),
     success: Schema.Array(SessionConnectionSchema),
-    error: NotFoundError,
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -349,7 +359,7 @@ export const AgentSessionSendHeadlessInputRpc = Rpc.make(
         assistant: Schema.Number,
       }),
     }),
-    error: NotFoundError,
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -370,24 +380,26 @@ export const AgentSessionUpdateStatusRpc = Rpc.make(
       ),
     }),
     success: SessionSchema,
-    error: NotFoundError,
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
 // --- agent.session.claimLease -----------------------------------------------
 
-export const AgentSessionClaimLeaseRpc = Rpc.make(
-  "agent.session.claimLease",
-  {
-    payload: Schema.Struct({
-      sessionId: Schema.String,
-      gatewayId: Schema.String,
-      leaseMs: Schema.optional(Schema.Number),
-    }),
-    success: SessionSchema,
-    error: Schema.Union([NotFoundError, SessionLeaseConflictError]),
-  },
-);
+export const AgentSessionClaimLeaseRpc = Rpc.make("agent.session.claimLease", {
+  payload: Schema.Struct({
+    sessionId: Schema.String,
+    gatewayId: Schema.String,
+    leaseMs: Schema.optional(Schema.Number),
+  }),
+  success: SessionSchema,
+  error: Schema.Union([
+    NotFoundError,
+    UnauthorizedError,
+    RpcError,
+    SessionLeaseConflictError,
+  ]),
+});
 
 // --- agent.session.releaseLease ---------------------------------------------
 
@@ -396,7 +408,7 @@ export const AgentSessionReleaseLeaseRpc = Rpc.make(
   {
     payload: Schema.Struct({ sessionId: Schema.String }),
     success: SessionSchema,
-    error: NotFoundError,
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -413,7 +425,7 @@ export const AgentSessionRecordEventRpc = Rpc.make(
       payload: Schema.Record(Schema.String, Schema.Unknown),
     }),
     success: SessionEventSchema,
-    error: NotFoundError,
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -434,7 +446,7 @@ export const AgentSessionRecordEventBatchRpc = Rpc.make(
       ),
     }),
     success: Schema.Struct({ count: Schema.Number }),
-    error: NotFoundError,
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -447,7 +459,9 @@ export const AgentSessionGetGatewayWebSocketUrlRpc = Rpc.make(
     success: Schema.Struct({
       url: Schema.String,
       userId: Schema.String,
+      token: Schema.String,
     }),
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -468,6 +482,7 @@ export const AgentSessionReportWorkflowStatusRpc = Rpc.make(
       ),
     }),
     success: Schema.Struct({ success: Schema.Boolean }),
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -483,6 +498,7 @@ export const AgentSessionReportTaskProgressRpc = Rpc.make(
       progress: Schema.optional(Schema.String),
     }),
     success: Schema.Struct({ success: Schema.Boolean }),
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -500,6 +516,7 @@ export const AgentSessionLinkTaskArtifactRpc = Rpc.make(
       summary: Schema.optional(Schema.String),
     }),
     success: Schema.Struct({ success: Schema.Boolean }),
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -515,6 +532,7 @@ export const AgentSessionMarkTaskReviewReadyRpc = Rpc.make(
       notesForReviewer: Schema.optional(Schema.String),
     }),
     success: Schema.Struct({ success: Schema.Boolean }),
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -530,6 +548,7 @@ export const AgentSessionRecordVerificationResultRpc = Rpc.make(
       artifactUrl: Schema.optional(Schema.String),
     }),
     success: Schema.Struct({ success: Schema.Boolean }),
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -545,6 +564,7 @@ export const AgentSessionCompleteTaskRpc = Rpc.make(
       markIssueDone: Schema.optional(Schema.Boolean),
     }),
     success: Schema.Struct({ success: Schema.Boolean }),
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -564,6 +584,7 @@ export const AgentSessionRequestInputRpc = Rpc.make(
       promptId: Schema.String,
       status: Schema.String,
     }),
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -580,6 +601,7 @@ export const AgentSessionResolveAwaitingInputRpc = Rpc.make(
       }),
     }),
     success: Schema.Struct({ success: Schema.Boolean }),
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -590,7 +612,7 @@ export const AgentSessionGetWorkflowStateRpc = Rpc.make(
   {
     payload: Schema.Struct({ sessionId: Schema.String }),
     success: WorkflowStateSchema,
-    error: NotFoundError,
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -604,7 +626,7 @@ export const AgentSessionCreateVoiceSessionRpc = Rpc.make(
       voiceSessionId: Schema.String,
       url: Schema.String,
     }),
-    error: NotFoundError,
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -615,7 +637,7 @@ export const AgentSessionStopVoiceSessionRpc = Rpc.make(
   {
     payload: Schema.Struct({ sessionId: Schema.String }),
     success: Schema.Struct({ success: Schema.Boolean }),
-    error: NotFoundError,
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -629,7 +651,7 @@ export const AgentSessionHandleVoiceTranscriptRpc = Rpc.make(
       transcript: Schema.String,
     }),
     success: Schema.Struct({ assistantText: Schema.String }),
-    error: NotFoundError,
+    error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
   },
 );
 
@@ -945,7 +967,7 @@ export const AgentFilesystemGitStatusRpc = Rpc.make(
   {
     payload: Schema.Struct({ path: Schema.String }),
     error: Schema.Union([NotFoundError, UnauthorizedError, RpcError]),
-  success: Schema.Array(GitStatusEntrySchema),
+    success: Schema.Array(GitStatusEntrySchema),
   },
 );
 

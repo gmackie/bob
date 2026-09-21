@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock("~/lib/planning/server", () => ({
-  createPlanningCaller: async () => ({ agentRun: { get: mocks.get } }),
+  createPlanningClient: async () => (tag: string) => {
+    if (tag !== "agent.run.get") throw new Error(tag);
+    return { call: mocks.get };
+  },
 }));
 import { GET } from "./route";
 const params = Promise.resolve({ runId: "run-1", artifactId: "artifact-1" });

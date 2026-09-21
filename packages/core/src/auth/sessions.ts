@@ -24,6 +24,8 @@ export { SessionExpiredError };
 export interface SessionValidationResult {
   readonly userId: UserId;
   readonly email: string;
+  /** Canonical token returned only after session validation. */
+  readonly gatewayToken?: string;
 }
 
 export interface SessionsShape {
@@ -49,9 +51,11 @@ export class Sessions extends ServiceMap.Service<Sessions, SessionsShape>()(
   "@gmacko/auth/Sessions",
 ) {}
 
-export const layerSessions: Layer.Layer<Sessions, never, GmackoDb | BetterAuth> = Layer.effect(
+export const layerSessions: Layer.Layer<
   Sessions,
-)(
+  never,
+  GmackoDb | BetterAuth
+> = Layer.effect(Sessions)(
   Effect.gen(function* () {
     const db = yield* GmackoDb;
     const auth = yield* BetterAuth.asEffect();
@@ -98,6 +102,7 @@ export const layerSessions: Layer.Layer<Sessions, never, GmackoDb | BetterAuth> 
           // we keep the cast narrow and branded.
           userId: row.userId as UserId,
           email: row.email,
+          gatewayToken: token,
         };
       });
 
@@ -124,6 +129,7 @@ export const layerSessions: Layer.Layer<Sessions, never, GmackoDb | BetterAuth> 
         return {
           userId: result.user.id as UserId,
           email: result.user.email,
+          gatewayToken: result.session.token,
         };
       });
 

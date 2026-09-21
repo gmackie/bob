@@ -5,6 +5,7 @@
  * Phase 7B-4D-beta Task 10.
  */
 import { TRPCError } from "@trpc/server";
+
 import { and, asc, desc, eq, gt, inArray, lt, sql } from "@bob/db";
 import {
   agentPersonas,
@@ -18,6 +19,8 @@ import {
 
 import type { WorkflowStatus } from "../services/sessions/workflowStatusService";
 import type { ElevenLabsSessionService } from "../services/voice/elevenlabsSession";
+import type { HandlerContext } from "./context.js";
+import { createOpenCodeClient } from "../services/opencode/opencodeClient";
 import {
   completeTask,
   getSessionWorkflowState,
@@ -30,13 +33,13 @@ import {
   resolveAwaitingInput,
 } from "../services/sessions/workflowStatusService";
 import { createElevenLabsSessionService } from "../services/voice/elevenlabsSession";
-import { createOpenCodeClient } from "../services/opencode/opencodeClient";
-function buildWorkItemUrl(workItemId: string | null | undefined): string | null {
+
+function buildWorkItemUrl(
+  workItemId: string | null | undefined,
+): string | null {
   if (!workItemId) return null;
   return `/work-items/${workItemId}`;
 }
-
-import type { HandlerContext } from "./context.js";
 
 // ---------------------------------------------------------------------------
 // Shared helpers (moved verbatim from the router)
@@ -276,10 +279,7 @@ export async function sessionList(
   };
 }
 
-export async function sessionGet(
-  ctx: HandlerContext,
-  input: { id: string },
-) {
+export async function sessionGet(ctx: HandlerContext, input: { id: string }) {
   const accessible = await loadAccessibleSession(ctx.db, ctx.userId, input.id);
   if (!accessible) {
     throw new TRPCError({
@@ -319,9 +319,7 @@ export async function sessionGet(
   });
 
   const resolvedWorkItemId =
-    session.workItemId ??
-    latestTaskRun?.workItemId ??
-    session.planningTaskId;
+    session.workItemId ?? latestTaskRun?.workItemId ?? session.planningTaskId;
 
   let projectId = session.workItem?.projectId ?? null;
   if (!projectId && latestTaskRun?.workItemId) {
@@ -356,9 +354,7 @@ export async function sessionGet(
         }
       : null,
     issueManaged: Boolean(
-      session.workItemId ??
-        latestTaskRun?.workItemId ??
-        session.planningTaskId,
+      session.workItemId ?? latestTaskRun?.workItemId ?? session.planningTaskId,
     ),
     planningTaskId: session.planningTaskId,
   };
@@ -464,10 +460,7 @@ export async function sessionUpdateTitle(
   return updated;
 }
 
-export async function sessionStop(
-  ctx: HandlerContext,
-  input: { id: string },
-) {
+export async function sessionStop(ctx: HandlerContext, input: { id: string }) {
   const session = await ctx.db.query.chatConversations.findFirst({
     where: and(
       eq(chatConversations.id, input.id),
@@ -790,8 +783,7 @@ export async function sessionClaimLease(
   const canClaim =
     !session.claimedByGatewayId ||
     session.claimedByGatewayId === input.gatewayId ||
-    (session.leaseExpiresAt &&
-      new Date(session.leaseExpiresAt) < new Date());
+    (session.leaseExpiresAt && new Date(session.leaseExpiresAt) < new Date());
 
   if (!canClaim) {
     throw new TRPCError({
@@ -946,6 +938,7 @@ export async function sessionGetGatewayWebSocketUrl(
   return {
     url: getGatewaySocketUrl(),
     userId: ctx.userId,
+    token: ctx.gatewayToken ?? "",
   };
 }
 

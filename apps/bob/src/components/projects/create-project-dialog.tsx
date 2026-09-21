@@ -16,7 +16,7 @@ import {
 import { Input } from "@gmacko/core/ui/input";
 import { Textarea } from "@gmacko/core/ui/textarea";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 interface CreateProjectDialogProps {
   open: boolean;
@@ -51,7 +51,7 @@ export function CreateProjectDialog({
   workspaceId,
 }: CreateProjectDialogProps) {
   const router = useRouter();
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
 
   const [mode, setMode] = useState<"forge" | "manual">("forge");
   const [selectedAppId, setSelectedAppId] = useState("");
@@ -62,14 +62,14 @@ export function CreateProjectDialog({
 
   // Fetch unlinked ForgeGraph apps
   const { data: fgApps, isLoading: loadingApps } = useQuery(
-    trpc.forgegraph.listUnlinkedApps.queryOptions(
+    bobQuery("external.forgegraph.listUnlinkedApps").queryOptions(
       { workspaceId },
       { enabled: open && mode === "forge" },
     ),
   );
 
   const importApp = useMutation(
-    trpc.forgegraph.importApp.mutationOptions({
+    bobQuery("external.forgegraph.importApp").mutationOptions({
       onSuccess: () => {
         toast("Project imported from ForgeGraph");
         onOpenChange(false);
@@ -85,7 +85,7 @@ export function CreateProjectDialog({
   );
 
   const importAllApps = useMutation(
-    trpc.forgegraph.importAllApps.mutationOptions({
+    bobQuery("external.forgegraph.importAllApps").mutationOptions({
       onSuccess: (data) => {
         toast(`Imported ${data.imported} projects from ForgeGraph`);
         onOpenChange(false);
@@ -101,7 +101,7 @@ export function CreateProjectDialog({
   );
 
   const createProject = useMutation(
-    trpc.project.create.mutationOptions({
+    bobQuery("project.create").mutationOptions({
       onSuccess: () => {
         toast("Project created");
         onOpenChange(false);
@@ -163,7 +163,8 @@ export function CreateProjectDialog({
     }
   }
 
-  const isPending = importApp.isPending || createProject.isPending || importAllApps.isPending;
+  const isPending =
+    importApp.isPending || createProject.isPending || importAllApps.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -182,7 +183,9 @@ export function CreateProjectDialog({
               type="button"
               onClick={() => setMode("forge")}
               className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                mode === "forge" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+                mode === "forge"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground"
               }`}
             >
               ForgeGraph App
@@ -191,7 +194,9 @@ export function CreateProjectDialog({
               type="button"
               onClick={() => setMode("manual")}
               className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                mode === "manual" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+                mode === "manual"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground"
               }`}
             >
               Manual
@@ -216,13 +221,16 @@ export function CreateProjectDialog({
                   {(fgApps ?? []).map((app: any) => (
                     <option key={app.id} value={app.id}>
                       {app.name}
-                      {app.description ? ` — ${app.description.slice(0, 50)}` : ""}
+                      {app.description
+                        ? ` — ${app.description.slice(0, 50)}`
+                        : ""}
                     </option>
                   ))}
                 </select>
                 {fgApps && fgApps.length === 0 && !loadingApps && (
                   <p className="mt-1.5 text-xs text-muted-foreground">
-                    All ForgeGraph apps are already linked. Connect your token in Settings if you don't see apps.
+                    All ForgeGraph apps are already linked. Connect your token
+                    in Settings if you don't see apps.
                   </p>
                 )}
                 {fgApps && fgApps.length > 1 && (
@@ -232,9 +240,7 @@ export function CreateProjectDialog({
                     size="sm"
                     className="mt-2 w-full"
                     disabled={importAllApps.isPending}
-                    onClick={() =>
-                      importAllApps.mutate({ workspaceId })
-                    }
+                    onClick={() => importAllApps.mutate({ workspaceId })}
                   >
                     {importAllApps.isPending
                       ? "Importing..."
@@ -247,7 +253,9 @@ export function CreateProjectDialog({
             {/* Name (auto-filled from FG app, editable for manual) */}
             {mode === "manual" && (
               <div>
-                <label className="mb-1.5 block text-sm text-muted-foreground">Name</label>
+                <label className="mb-1.5 block text-sm text-muted-foreground">
+                  Name
+                </label>
                 <Input
                   value={name}
                   onChange={(e) => handleNameChange(e.target.value)}
@@ -258,7 +266,9 @@ export function CreateProjectDialog({
             )}
 
             <div>
-              <label className="mb-1.5 block text-sm text-muted-foreground">Key</label>
+              <label className="mb-1.5 block text-sm text-muted-foreground">
+                Key
+              </label>
               <Input
                 value={key}
                 onChange={(e) => setKey(e.target.value.toUpperCase())}
@@ -273,7 +283,9 @@ export function CreateProjectDialog({
             {mode === "manual" && (
               <>
                 <div>
-                  <label className="mb-1.5 block text-sm text-muted-foreground">Description</label>
+                  <label className="mb-1.5 block text-sm text-muted-foreground">
+                    Description
+                  </label>
                   <Textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
@@ -283,7 +295,9 @@ export function CreateProjectDialog({
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-sm text-muted-foreground">Color</label>
+                  <label className="mb-1.5 block text-sm text-muted-foreground">
+                    Color
+                  </label>
                   <div className="flex gap-2">
                     {COLORS.map((c) => (
                       <button
@@ -303,14 +317,25 @@ export function CreateProjectDialog({
           </div>
 
           <DialogFooter className="mt-6">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
               Cancel
             </Button>
             <Button
               type="submit"
-              disabled={isPending || (mode === "forge" ? !selectedAppId || !key : !name || !key)}
+              disabled={
+                isPending ||
+                (mode === "forge" ? !selectedAppId || !key : !name || !key)
+              }
             >
-              {isPending ? "Creating..." : mode === "forge" ? "Import" : "Create"}
+              {isPending
+                ? "Creating..."
+                : mode === "forge"
+                  ? "Import"
+                  : "Create"}
             </Button>
           </DialogFooter>
         </form>

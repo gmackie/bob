@@ -6,3 +6,6 @@ export type { BobWsClientOptions, ConnectionState, IWebSocket, IWebSocketConstru
 // the mobile node list and the tablet cockpit so they cannot disagree about
 // the same agent.
 export * from "./provider-health.js";
+export * from "./proxy-health.js";
+export * from "./proxy-panel-model.js";
+export * from "./proxy-alerts.js";

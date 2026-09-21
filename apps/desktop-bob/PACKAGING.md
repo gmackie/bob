@@ -156,9 +156,12 @@ Set `BOB_DESKTOP_DATA_DIR` to an absolute isolated directory for acceptance. It
 separates browser profile, local database, auth secret and logs from the user's
 installation. Without it the existing `~/.bob` backend data location is preserved.
 
-Run `BOB_PACKAGING_DIR=<resources> node scripts/verify-local-runtime.mjs` to verify
-fresh PGlite bootstrap, normal local signup/login, authenticated settings, session
-creation, account isolation and persistence after a real server restart. This
+Run `BOB_PACKAGING_DIR=<resources> node --import tsx scripts/verify-local-runtime.mjs` to verify
+fresh PGlite bootstrap, local signup/login, authenticated settings, API-key
+validation/revocation, create-work and dispatch tracking, fixture-result review,
+account isolation and persistence after a real server restart. Run from the
+workspace with development dependencies installed for the TypeScript RPC client.
+The result artifact is a fixture; this does not invoke a live agent. This
 always creates and removes a new fixture directory; it never reuses user data.
 
 Run the same check against the final `.app/Contents/Resources` directory after

@@ -216,6 +216,7 @@ const handlers = AgentRpc.of({
     }
     return Effect.succeed({
       id: STUB_RUN_ID,
+      artifacts: [],
       workspaceId: STUB_WORKSPACE_ID,
       sessionId: null,
       workItemId: null,
@@ -227,11 +228,9 @@ const handlers = AgentRpc.of({
     });
   },
 
-  "agent.run.list": (_payload) =>
-    Effect.succeed([]),
+  "agent.run.list": (_payload) => Effect.succeed([]),
 
-  "agent.run.listAll": (_payload) =>
-    Effect.succeed([]),
+  "agent.run.listAll": (_payload) => Effect.succeed([]),
 
   "agent.run.listByWorkItem": ({ workItemId }) => {
     if (workItemId !== "stub-work-item") {
@@ -284,7 +283,11 @@ const handlers = AgentRpc.of({
   "agent.session.bootstrapForChat": (_payload) =>
     Effect.succeed({
       session: { ...STUB_SESSION, status: "provisioning" as const },
-      gateway: { url: "ws://localhost:3002/sessions", shouldStartOnConnect: true },
+      gateway: {
+        url: "ws://localhost:3002/sessions",
+        token: "stub-gateway-token",
+        shouldStartOnConnect: true,
+      },
     }),
 
   "agent.session.updateTitle": ({ id, title }) =>
@@ -297,8 +300,7 @@ const handlers = AgentRpc.of({
       ? Effect.succeed({ ...STUB_SESSION, status: "stopped" as const })
       : Effect.fail(new NotFoundError({ entity: "Session", id })),
 
-  "agent.session.delete": (_payload) =>
-    Effect.succeed({ success: true }),
+  "agent.session.delete": (_payload) => Effect.succeed({ success: true }),
 
   "agent.session.getEvents": ({ sessionId }) =>
     sessionId === STUB_SESSION_ID
@@ -363,6 +365,7 @@ const handlers = AgentRpc.of({
   "agent.session.getGatewayWebSocketUrl": () =>
     Effect.succeed({
       url: "ws://localhost:3002/sessions",
+      token: "stub-gateway-token",
       userId: STUB_USER_ID,
     }),
 
@@ -381,8 +384,7 @@ const handlers = AgentRpc.of({
   "agent.session.recordVerificationResult": (_payload) =>
     Effect.succeed({ success: true }),
 
-  "agent.session.completeTask": (_payload) =>
-    Effect.succeed({ success: true }),
+  "agent.session.completeTask": (_payload) => Effect.succeed({ success: true }),
 
   "agent.session.requestInput": (_payload) =>
     Effect.succeed({ promptId: "prompt-stub-1", status: "pending" }),
@@ -393,12 +395,9 @@ const handlers = AgentRpc.of({
   "agent.session.getWorkflowState": ({ sessionId }) =>
     sessionId === STUB_SESSION_ID
       ? Effect.succeed({
-          sessionId,
-          status: "implementing" as const,
-          message: "Working on task",
-          phase: null,
-          progress: null,
-          updatedAt: STUB_DATE,
+          workflowStatus: "implementing",
+          statusMessage: "Working on task",
+          awaitingInput: null,
         })
       : Effect.fail(new NotFoundError({ entity: "Session", id: sessionId })),
 
@@ -422,19 +421,16 @@ const handlers = AgentRpc.of({
 
   // --- 7B-4B Task 3: agent.instance stubs ---------------------------------
 
-  "agent.instance.list": () =>
-    Effect.succeed([STUB_INSTANCE]),
+  "agent.instance.list": () => Effect.succeed([STUB_INSTANCE]),
 
   "agent.instance.byId": ({ id }) =>
     id === STUB_INSTANCE_ID
       ? Effect.succeed(STUB_INSTANCE)
       : Effect.fail(new NotFoundError({ entity: "AgentInstance", id })),
 
-  "agent.instance.byRepository": (_payload) =>
-    Effect.succeed([STUB_INSTANCE]),
+  "agent.instance.byRepository": (_payload) => Effect.succeed([STUB_INSTANCE]),
 
-  "agent.instance.byWorktree": (_payload) =>
-    Effect.succeed([STUB_INSTANCE]),
+  "agent.instance.byWorktree": (_payload) => Effect.succeed([STUB_INSTANCE]),
 
   "agent.instance.start": (_payload) =>
     Effect.succeed({
@@ -445,16 +441,23 @@ const handlers = AgentRpc.of({
 
   "agent.instance.stop": ({ id }) =>
     id === STUB_INSTANCE_ID
-      ? Effect.succeed({ ...STUB_INSTANCE, status: "stopped" as const, pid: null })
+      ? Effect.succeed({
+          ...STUB_INSTANCE,
+          status: "stopped" as const,
+          pid: null,
+        })
       : Effect.fail(new NotFoundError({ entity: "AgentInstance", id })),
 
   "agent.instance.restart": ({ id }) =>
     id === STUB_INSTANCE_ID
-      ? Effect.succeed({ ...STUB_INSTANCE, status: "starting" as const, pid: null })
+      ? Effect.succeed({
+          ...STUB_INSTANCE,
+          status: "starting" as const,
+          pid: null,
+        })
       : Effect.fail(new NotFoundError({ entity: "AgentInstance", id })),
 
-  "agent.instance.delete": (_payload) =>
-    Effect.succeed({ success: true }),
+  "agent.instance.delete": (_payload) => Effect.succeed({ success: true }),
 
   "agent.instance.updateStatus": ({ id }) =>
     id === STUB_INSTANCE_ID
@@ -470,7 +473,9 @@ const handlers = AgentRpc.of({
           instanceId,
           agentType: "claude",
         })
-      : Effect.fail(new NotFoundError({ entity: "AgentInstance", id: instanceId })),
+      : Effect.fail(
+          new NotFoundError({ entity: "AgentInstance", id: instanceId }),
+        ),
 
   "agent.terminal.createDirectorySession": ({ instanceId }) =>
     instanceId === STUB_INSTANCE_ID
@@ -479,7 +484,9 @@ const handlers = AgentRpc.of({
           instanceId,
           path: "/tmp/stub-worktree",
         })
-      : Effect.fail(new NotFoundError({ entity: "AgentInstance", id: instanceId })),
+      : Effect.fail(
+          new NotFoundError({ entity: "AgentInstance", id: instanceId }),
+        ),
 
   "agent.terminal.createSystemSession": (_payload) =>
     Effect.succeed({
@@ -491,24 +498,21 @@ const handlers = AgentRpc.of({
   "agent.terminal.listByInstance": ({ instanceId }) =>
     instanceId === STUB_INSTANCE_ID
       ? Effect.succeed([])
-      : Effect.fail(new NotFoundError({ entity: "AgentInstance", id: instanceId })),
+      : Effect.fail(
+          new NotFoundError({ entity: "AgentInstance", id: instanceId }),
+        ),
 
-  "agent.terminal.close": (_payload) =>
-    Effect.succeed({ success: true }),
+  "agent.terminal.close": (_payload) => Effect.succeed({ success: true }),
 
   // --- 7B-4B Task 3: agent.event stubs ------------------------------------
 
-  "agent.event.list": (_payload) =>
-    Effect.succeed([STUB_EVENT]),
+  "agent.event.list": (_payload) => Effect.succeed([STUB_EVENT]),
 
-  "agent.event.create": (_payload) =>
-    Effect.succeed(STUB_EVENT),
+  "agent.event.create": (_payload) => Effect.succeed(STUB_EVENT),
 
-  "agent.event.recentActivity": (_payload) =>
-    Effect.succeed([STUB_EVENT]),
+  "agent.event.recentActivity": (_payload) => Effect.succeed([STUB_EVENT]),
 
-  "agent.event.byWorktree": (_payload) =>
-    Effect.succeed([STUB_EVENT]),
+  "agent.event.byWorktree": (_payload) => Effect.succeed([STUB_EVENT]),
 
   "agent.event.stats": (_payload) =>
     Effect.succeed({ total: 1, byType: { "instance.started": 1 } }),
@@ -529,27 +533,21 @@ const handlers = AgentRpc.of({
   "agent.filesystem.read": (_payload) =>
     Effect.succeed({ content: "# Stub file content\n" }),
 
-  "agent.filesystem.write": (_payload) =>
-    Effect.succeed({ success: true }),
+  "agent.filesystem.write": (_payload) => Effect.succeed({ success: true }),
 
-  "agent.filesystem.delete": (_payload) =>
-    Effect.succeed({ success: true }),
+  "agent.filesystem.delete": (_payload) => Effect.succeed({ success: true }),
 
-  "agent.filesystem.mkdir": (_payload) =>
-    Effect.succeed({ success: true }),
+  "agent.filesystem.mkdir": (_payload) => Effect.succeed({ success: true }),
 
-  "agent.filesystem.move": (_payload) =>
-    Effect.succeed({ success: true }),
+  "agent.filesystem.move": (_payload) => Effect.succeed({ success: true }),
 
-  "agent.filesystem.copy": (_payload) =>
-    Effect.succeed({ success: true }),
+  "agent.filesystem.copy": (_payload) => Effect.succeed({ success: true }),
 
-  "agent.filesystem.search": (_payload) =>
-    Effect.succeed([]),
+  "agent.filesystem.search": (_payload) => Effect.succeed([]),
 
   "agent.filesystem.gitStatus": (_payload) =>
     Effect.succeed([
-      { path: "README.md", status: "modified" },
+      { path: "README.md", file: "README.md", status: "modified" },
     ]),
 
   // --- 7B-4B Task 4: agent.chat stubs -------------------------------------

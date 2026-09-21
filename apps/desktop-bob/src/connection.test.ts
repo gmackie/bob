@@ -1,3 +1,7 @@
+import { Effect, Layer } from "effect";
+import { HttpRouter } from "effect/unstable/http";
+import { RpcGroup, RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { ProjectsWorkspaceListRpc } from "@gmacko/core/contracts/groups/projects";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { once } from "node:events";
@@ -29,11 +33,28 @@ describe("connected desktop loopback acceptance", () => {
     let daemon: WebSocket | undefined;
     let gatewayUser = "alice";
     const sessions: string[] = [];
-    const http = createServer((req, res) => {
-      if (req.url === "/api/trpc/workspace.list") {
+    const group = RpcGroup.make(ProjectsWorkspaceListRpc);
+    const { handler, dispose } = HttpRouter.toWebHandler(RpcServer.layerHttp({
+      group, path: "/api/rpc", protocol: "http",
+    }).pipe(
+      Layer.provide(group.toLayer({
+        "projects.workspace.list": () => Effect.succeed([{
+          id: "membership", workspaceId: "workspace", userId: "alice", role: "owner", joinedAt: "2026-09-16",
+          workspace: { id: "workspace", ownerUserId: "alice", name: "Test", slug: "test", description: null, createdAt: "2026-09-16", updatedAt: "2026-09-16" },
+        }]),
+      })),
+      Layer.provide(RpcSerialization.layerNdjson),
+    ));
+    const http = createServer(async (req, res) => {
+      if (req.url?.replace(/\/$/, "") === "/api/rpc") {
         if (req.headers.authorization !== "Bearer fixture-key") { res.writeHead(401); res.end(); return; }
-        res.setHeader("content-type", "application/json");
-        res.end(JSON.stringify({ result: { data: { json: [{ workspace: { id: "workspace", ownerUserId: "alice" } }] } } })); return;
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(Buffer.from(chunk));
+        const response = await handler(new Request("http://localhost/api/rpc", {
+          method: "POST", headers: { "content-type": "application/ndjson" }, body: Buffer.concat(chunks),
+        }));
+        res.writeHead(response.status, Object.fromEntries(response.headers));
+        res.end(await response.text()); return;
       }
       if (req.method === "POST" && req.url === "/api/sessions") {
         if (req.headers.cookie !== "fixture_session=alice") { res.writeHead(401); res.end(); return; }
@@ -81,6 +102,7 @@ describe("connected desktop loopback acceptance", () => {
       expect(JSON.parse(String((await available)[0]))).toEqual({ type: "session_available", sessionId: created.sessionId });
       expect(sessions).toEqual([created.sessionId]);
     } finally {
+      await dispose();
       peer?.terminate(); for (const client of gateway.clients) client.terminate();
       await new Promise<void>((resolve) => gateway.close(() => resolve()));
       http.closeAllConnections(); await new Promise<void>((resolve) => http.close(() => resolve()));

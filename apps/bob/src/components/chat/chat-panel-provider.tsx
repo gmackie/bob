@@ -1,16 +1,26 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 import { useMutation } from "@tanstack/react-query";
 
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 interface ChatPanelState {
   isOpen: boolean;
   sessionId: string | null;
   workItemId: string | null;
   contextLabel: string | null;
-  openPanel: (opts?: { sessionId?: string; workItemId?: string; label?: string }) => void;
+  openPanel: (opts?: {
+    sessionId?: string;
+    workItemId?: string;
+    label?: string;
+  }) => void;
   closePanel: () => void;
   openPlanningSession: (opts: { workItemId: string; goal: string }) => void;
   isPlanningSessionLoading: boolean;
@@ -37,7 +47,7 @@ export function ChatPanelProvider({ children }: { children: React.ReactNode }) {
   const [workItemId, setWorkItemId] = useState<string | null>(null);
   const [contextLabel, setContextLabel] = useState<string | null>(null);
 
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
 
   const openPanel = useCallback(
     (opts?: { sessionId?: string; workItemId?: string; label?: string }) => {
@@ -54,7 +64,7 @@ export function ChatPanelProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const createPlanningSession = useMutation(
-    trpc.planSession.create.mutationOptions({
+    bobQuery("planning.session.create").mutationOptions({
       onSuccess: (data: { id: string }) => {
         setSessionId(data.id);
         setIsOpen(true);

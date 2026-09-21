@@ -21,6 +21,7 @@ import { checkpointRouter } from "@bob/api/router/checkpoint";
 import { chatRouter } from "@bob/api/router/chat";
 import { dispatchRouter } from "@bob/api/router/dispatch";
 import { dispatchControlRouter } from "@bob/api/router/dispatchControl";
+import { proxyControlRouter } from "@bob/api/router/proxyControl";
 import { eventRouter } from "@bob/api/router/event";
 import { featureBranchRouter } from "@bob/api/router/featureBranch";
 import { forgegraphRouter } from "@bob/api/router/forgegraph";
@@ -75,6 +76,7 @@ const edgeRouterRecord = {
   cookies: cookiesRouter,
   dispatch: dispatchRouter,
   dispatchControl: dispatchControlRouter,
+  proxyControl: proxyControlRouter,
   event: eventRouter,
   featureBranch: featureBranchRouter,
   filesystem: filesystemRouter,

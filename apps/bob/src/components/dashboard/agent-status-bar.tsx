@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@gmacko/core/ui";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 function formatUptime(createdAt: Date | string): string {
   const start = new Date(createdAt);
@@ -17,34 +17,35 @@ function formatUptime(createdAt: Date | string): string {
 }
 
 export function AgentStatusBar() {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
 
   const { data: instances, isLoading: instancesLoading } = useQuery(
-    trpc.instance.list.queryOptions(),
+    bobQuery("agent.instance.list").queryOptions(),
   );
 
   const { data: allRuns, isLoading: runsLoading } = useQuery({
-    ...trpc.agentRun.listAll.queryOptions({ limit: 100 }),
+    ...bobQuery("agent.run.listAll").queryOptions({ limit: 100 }),
     refetchInterval: 10_000,
   });
 
   const isLoading = instancesLoading && runsLoading;
 
   if (isLoading) {
-    return (
-      <div className="h-10 animate-pulse rounded-xl bg-muted/50" />
-    );
+    return <div className="h-10 animate-pulse rounded-xl bg-muted/50" />;
   }
 
   const runs = (allRuns ?? []) as any[];
   const runningCount = runs.filter((r) => r.status === "running").length;
   const completedCount = runs.filter((r) => r.status === "completed").length;
-  const failedCount = runs.filter((r) => r.status === "failed" || r.status === "interrupted").length;
+  const failedCount = runs.filter(
+    (r) => r.status === "failed" || r.status === "interrupted",
+  ).length;
   const queuedCount = runs.filter((r) => r.status === "queued").length;
 
-  const activeInstances = instances?.filter(
-    (i) => i.status === "running" || i.status === "starting",
-  ) ?? [];
+  const activeInstances =
+    instances?.filter(
+      (i) => i.status === "running" || i.status === "starting",
+    ) ?? [];
 
   const hasFailures = failedCount > 0;
   const hasRunning = runningCount > 0 || activeInstances.length > 0;

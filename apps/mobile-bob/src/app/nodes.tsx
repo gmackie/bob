@@ -2,9 +2,11 @@ import { ScrollView, Text, View } from "react-native";
 import { Stack } from "expo-router";
 
 import { useGateway } from "~/hooks/use-gateway";
+import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { RelatedAppsCard } from "~/features/links/RelatedAppsCard";
 import { buildNodeLights } from "~/features/nodes/node-lights-model";
 import type { LightTone } from "~/features/nodes/node-lights-model";
+import { ProxyCard } from "~/features/nodes/ProxyCard";
 
 /**
  * Agent lights for the workspace's host.
@@ -25,7 +27,8 @@ const DOT: Record<LightTone, string> = {
 };
 
 export default function NodesScreen() {
-  const { hostSnapshot, sessions, connectionState } = useGateway();
+  const { hostSnapshot, sessions, connectionState, lastProxyResult } = useGateway();
+  const { selectedWorkspaceId } = useSelectedWorkspace();
 
   const activeRunCount = sessions.filter((s) => s.status === "running").length;
   const model = buildNodeLights(hostSnapshot, { activeRunCount });
@@ -76,6 +79,14 @@ export default function NodesScreen() {
             ))}
           </View>
         ) : null}
+
+        {/* Where inference actually goes. Nothing is rendered for a host that
+            is not routed through the proxy. */}
+        <ProxyCard
+          snapshot={hostSnapshot}
+          workspaceId={selectedWorkspaceId}
+          lastResult={lastProxyResult}
+        />
 
         {/* Bob does not render deploys or node infra; ForgeGraph does. */}
         <RelatedAppsCard

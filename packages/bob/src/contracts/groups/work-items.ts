@@ -4,10 +4,15 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
-import { BobNotFoundError, BobForbiddenError } from "../errors.js";
+import {
+  BobNotFoundError,
+  BobForbiddenError,
+  BobConflictError,
+} from "../errors.js";
 import {
   WorkItemKindEnum,
   WorkItemRecordSchema,
+  WorkItemDisplaySchema,
   ArtifactRecordSchema,
   CommentRecordSchema,
   GetWorkItemResultSchema,
@@ -42,7 +47,7 @@ export const WorkItemListRpc = Rpc.make("workItem.list", {
     statuses: Schema.optional(Schema.Array(Schema.String)),
     limit: Schema.optional(Schema.Number),
   }),
-  success: Schema.Array(WorkItemRecordSchema),
+  success: Schema.Array(WorkItemDisplaySchema),
   error: BobNotFoundError,
 });
 
@@ -71,9 +76,24 @@ export const WorkItemUpdateRpc = Rpc.make("workItem.update", {
     description: Schema.optional(Schema.NullOr(Schema.String)),
     status: Schema.optional(Schema.String),
     priority: Schema.optional(Schema.String),
+    agentTypeOverride: Schema.optional(Schema.NullOr(Schema.String)),
   }),
   success: Schema.NullOr(WorkItemRecordSchema),
-  error: Schema.Union([BobNotFoundError, BobForbiddenError]),
+  error: Schema.Union([BobNotFoundError, BobForbiddenError, BobConflictError]),
+});
+
+export const WorkItemDispatchRpc = Rpc.make("workItem.dispatch", {
+  payload: Schema.Struct({
+    workItemId: Schema.String,
+    agentType: Schema.optional(Schema.String),
+    personaId: Schema.optional(Schema.String),
+  }),
+  success: Schema.Struct({
+    sessionId: Schema.String,
+    identifier: Schema.String,
+    status: Schema.Literal("pending"),
+  }),
+  error: Schema.Union([BobNotFoundError, BobForbiddenError, BobConflictError]),
 });
 
 export const WorkItemPromoteToTaskRpc = Rpc.make("workItem.promoteToTask", {
@@ -245,17 +265,14 @@ export const WorkItemTaskRunListByWorkItemRpc = Rpc.make(
   },
 );
 
-export const WorkItemTaskRunExecuteRpc = Rpc.make(
-  "workItem.taskRun.execute",
-  {
-    payload: Schema.Struct({
-      workItemId: Schema.String,
-      agentType: Schema.optional(Schema.String),
-    }),
-    success: TaskRunRecordSchema,
-    error: BobNotFoundError,
-  },
-);
+export const WorkItemTaskRunExecuteRpc = Rpc.make("workItem.taskRun.execute", {
+  payload: Schema.Struct({
+    workItemId: Schema.String,
+    agentType: Schema.optional(Schema.String),
+  }),
+  success: TaskRunRecordSchema,
+  error: BobNotFoundError,
+});
 
 export const WorkItemTaskRunListLifecycleEventsRpc = Rpc.make(
   "workItem.taskRun.listLifecycleEvents",
@@ -275,7 +292,14 @@ export const WorkItemRequirementListRpc = Rpc.make(
   "workItem.requirement.list",
   {
     payload: Schema.Struct({ workItemId: Schema.String }),
-    success: Schema.Array(RequirementRecordSchema),
+    success: Schema.Record(
+      Schema.String,
+      Schema.Struct({
+        items: Schema.Array(RequirementRecordSchema),
+        total: Schema.Number,
+        done: Schema.Number,
+      }),
+    ),
     error: BobNotFoundError,
   },
 );
@@ -420,6 +444,7 @@ export const WorkItemsRpc = RpcGroup.make(
   WorkItemStatusCountsRpc,
   WorkItemGetRpc,
   WorkItemUpdateRpc,
+  WorkItemDispatchRpc,
   WorkItemPromoteToTaskRpc,
   WorkItemCommentListRpc,
   WorkItemCommentCreateRpc,

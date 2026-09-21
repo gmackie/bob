@@ -82,6 +82,9 @@ export interface GatewaySession {
 }
 
 export interface UseGatewayResult {
+  /** The proxy's answer to the last proxy action asked for from this device. */
+  lastProxyResult: { ok: boolean; detail?: string } | null;
+  clearProxyResult: () => void;
   connectionState: ConnectionState;
   sessions: GatewaySession[];
   /**
@@ -121,6 +124,8 @@ export function useGateway(): UseGatewayResult {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedSessionEvents, setSelectedSessionEvents] = useState<ServerEvent[]>([]);
   const [hostSnapshot, setHostSnapshot] = useState<HostSnapshotWire | null>(null);
+  /** The proxy's answer to the last proxy action asked for from this device. */
+  const [lastProxyResult, setLastProxyResult] = useState<{ ok: boolean; detail?: string } | null>(null);
   const [selectedWorkItemId, setSelectedWorkItemId] = useState<string | null>(null);
   const [activePlanningSessionId, setActivePlanningSessionId] = useState<string | null>(null);
 
@@ -231,6 +236,9 @@ export function useGateway(): UseGatewayResult {
       onHostSnapshot: (_workspaceId: string, snapshot: HostSnapshotWire) => {
         setHostSnapshot(snapshot);
       },
+      onProxyControlResult: (message) => {
+        setLastProxyResult({ ok: message.ok, detail: message.detail });
+      },
       onWorkspaceSnapshot: (snapshot: WorkspaceSessionInfo[]) => {
         setSessions(
           snapshot.map((s) => ({
@@ -303,6 +311,8 @@ export function useGateway(): UseGatewayResult {
   return {
     connectionState,
     hostSnapshot,
+    lastProxyResult,
+    clearProxyResult: () => setLastProxyResult(null),
     sessions,
     selectedSessionId,
     selectedSessionEvents,

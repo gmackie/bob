@@ -27,6 +27,7 @@
 import { execFile } from "node:child_process";
 
 import { probeCliProvider } from "./providers/cli-provider.js";
+import { probeOptionsFor } from "./providers/proxy-route.js";
 import type { ProviderId } from "./providers/contract.js";
 import { providerIds } from "./providers/contract.js";
 import { FileCreditStore } from "./providers/credit-store.js";
@@ -112,7 +113,13 @@ async function main(): Promise<void> {
 
   const agentReports = await Promise.all(
     agents.map(async (provider) => {
-      const snapshot = await probeCliProvider(provider, run, new Date(), latch.get(provider));
+      const snapshot = await probeCliProvider(
+        provider,
+        run,
+        new Date(),
+        latch.get(provider),
+        probeOptionsFor(provider, process.env),
+      );
       return {
         name: snapshot.provider,
         status: snapshot.status,

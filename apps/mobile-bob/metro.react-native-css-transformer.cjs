@@ -135,6 +135,21 @@ function normalizeTailwindForReactNativeCss(css) {
       );
     }
 
+    // Tailwind composes numeric variants with empty fallbacks. Lightning CSS
+    // cannot deserialize those variable tokens in font-variant-numeric.
+    // Resolve this rule's numeric variables before handing it to the compiler.
+    if (decl.prop === "font-variant-numeric") {
+      const localValues = new Map(
+        (decl.parent?.nodes ?? [])
+          .filter((node) => node.type === "decl" && node.prop.startsWith("--tw-"))
+          .map((node) => [node.prop, node.value]),
+      );
+      decl.value = decl.value.replace(
+        /var\((--tw-[a-z-]+),\s*\)/g,
+        (_match, prop) => localValues.get(prop) ?? "",
+      ).trim() || "normal";
+    }
+
     // Remove declarations with lab()/oklch()/oklab() colors that
     // react-native-css cannot parse.
     if (/\b(?:lab|oklch|oklab)\(/.test(decl.value)) {

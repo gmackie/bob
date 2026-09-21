@@ -7,7 +7,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./openapi/bob.json": "./openapi/bob.json"
+    "./openapi/bob.json": "./openapi/bob.json",
+    "./query": "./src/query.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -18,7 +19,8 @@
     "@gmacko/bob": "workspace:*",
     "@gmacko/core": "workspace:*",
     "effect": "4.0.0-beta.43",
-    "openapi-fetch": "catalog:"
+    "openapi-fetch": "catalog:",
+    "@tanstack/react-query": "catalog:"
   },
   "devDependencies": {
     "@gmacko/tsconfig": "workspace:*",

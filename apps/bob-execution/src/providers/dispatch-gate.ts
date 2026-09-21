@@ -25,7 +25,7 @@
 
 /** `wait` has no button: a quota lifts on its own, and offering an action
  *  that cannot help is how an operator loops on the wrong remedy. */
-export type DispatchRemedy = "sign_in" | "top_up" | "install" | "wait";
+export type DispatchRemedy = "sign_in" | "top_up" | "install" | "wait" | "check_proxy";
 
 /** Structurally typed so the runner can pass raw JSON from agent-health. */
 export interface HealthLike {
@@ -59,6 +59,10 @@ const CONFIRMED_DEAD: Record<string, DispatchRemedy> = {
   // Temporary, but no dispatch can succeed until it lifts.
   rate_limited: "wait",
   unavailable: "install",
+  // The CLI is installed and the accounts are fine; the inference proxy is
+  // down. Confirmed dead — nothing can be served — but the remedy is to look
+  // at the proxy, not to reinstall or re-authenticate.
+  proxy_unreachable: "check_proxy",
 };
 
 export function decideDispatch(

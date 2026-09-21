@@ -12,7 +12,7 @@ import { Button } from "@gmacko/core/ui/button";
 import { OpenChatPanelButton } from "~/components/chat/open-chat-panel-button";
 import { getWorkItemEntryPlanSessionHref } from "~/components/work-items/work-item-entry-model";
 import { BUILD_COLOR, formatLabel } from "~/lib/design/colors";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 
 interface WorkspaceControlsProps {
   workItemId: string;
@@ -32,19 +32,19 @@ export function WorkspaceControls({
   liveHref,
 }: WorkspaceControlsProps) {
   const router = useRouter();
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const queryClient = useQueryClient();
 
   // Poll task runs for status updates
   const { data: taskRuns } = useQuery(
-    trpc.taskRun.listByWorkItem.queryOptions(
+    bobQuery("workItem.taskRun.listByWorkItem").queryOptions(
       { workItemId },
       { refetchInterval: 10_000 },
     ),
   );
 
   const stopSession = useMutation(
-    trpc.session.stop.mutationOptions({
+    bobQuery("agent.session.stop").mutationOptions({
       onSuccess: () => {
         toast("Session stopped");
         router.refresh();
@@ -116,7 +116,10 @@ export function WorkspaceControls({
           </>
         ) : canExecute ? (
           <>
-            <StartAgentButton workItemId={workItemId} workspaceId={workspaceId} />
+            <StartAgentButton
+              workItemId={workItemId}
+              workspaceId={workspaceId}
+            />
             <OpenChatPanelButton
               workItemId={workItemId}
               label={workItemIdentifier}
@@ -130,7 +133,10 @@ export function WorkspaceControls({
       </div>
 
       {/* Runner health at the point of dispatch */}
-      <RunnerStatusChip runner={runner} showOfflineHint={!activeSessionId && canExecute} />
+      <RunnerStatusChip
+        runner={runner}
+        showOfflineHint={!activeSessionId && canExecute}
+      />
     </div>
   );
 }
@@ -147,9 +153,9 @@ type RunnerStatus =
  * the most recently seen workspace (single-runner setups).
  */
 function useRunnerStatus(workspaceId?: string | null): RunnerStatus {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const { data: memberships } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, {
+    bobQuery("projects.workspace.list").queryOptions(undefined, {
       staleTime: 15_000,
       refetchInterval: 30_000,
     }),
@@ -170,7 +176,9 @@ function useRunnerStatus(workspaceId?: string | null): RunnerStatus {
         new Date(a.lastHeartbeat ?? 0).getTime(),
     )[0];
 
-  const last = target.lastHeartbeat ? new Date(target.lastHeartbeat).getTime() : 0;
+  const last = target.lastHeartbeat
+    ? new Date(target.lastHeartbeat).getTime()
+    : 0;
   const online = Date.now() - last < 5 * 60 * 1000;
   const name = target.name ?? target.hostname ?? "runner";
   if (online) return { state: "online", name };
@@ -224,7 +232,8 @@ function RunnerStatusChip({
       </p>
       {showOfflineHint && (
         <p className="text-xs text-muted-foreground">
-          You can still start the agent — it will run when the runner reconnects.
+          You can still start the agent — it will run when the runner
+          reconnects.
         </p>
       )}
     </div>
@@ -246,20 +255,30 @@ function StartAgentButton({
   workspaceId?: string | null;
 }) {
   const router = useRouter();
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const [agentType, setAgentType] = useState<string>("claude");
 
   const executeTask = useMutation(
-    trpc.taskRun.execute.mutationOptions({
+    bobQuery("workItem.taskRun.execute").mutationOptions({
       onSuccess: (result: any) => {
         if (result.status === "blocked") {
           toast(result.blockedReason ?? "Agent blocked");
         } else if (result.sessionId) {
-          toast(`${agentLabel(agentType)} started on branch ${result.branch ?? "unknown"}`);
-          router.push(getWorkItemEntryPlanSessionHref(workItemId, result.sessionId, workspaceId));
+          toast(
+            `${agentLabel(agentType)} started on branch ${result.branch ?? "unknown"}`,
+          );
+          router.push(
+            getWorkItemEntryPlanSessionHref(
+              workItemId,
+              result.sessionId,
+              workspaceId,
+            ),
+          );
           return;
         } else {
-          toast(`${agentLabel(agentType)} started on branch ${result.branch ?? "unknown"}`);
+          toast(
+            `${agentLabel(agentType)} started on branch ${result.branch ?? "unknown"}`,
+          );
         }
         router.refresh();
       },

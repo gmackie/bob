@@ -23,6 +23,8 @@ import {
 import { bobRunReporterFromEnv, type BobRunReporter } from "./bob-run-reporter";
 import { AgentCredentials } from "./agent-credentials.js";
 import { DispatchControl } from "./dispatch-control.js";
+import { resolveProxyRoute } from "@bob/execution/providers";
+import { ProxyControl } from "./proxy-control";
 import { releaseBranchFromStaleWorktrees } from "./worktree-prepare.js";
 import { EventBuffer } from "./event-buffer";
 import {
@@ -232,6 +234,7 @@ type ServerMessage =
   | { type: "agent_auth_input"; requestId: string; value: string }
   | { type: "agent_auth_cancel"; requestId: string }
   | { type: "dispatch_control"; requestId: string; action: "start" | "stop" }
+  | { type: "proxy_control"; requestId: string; action: "refresh" | "enable" | "disable" | "test"; accountId?: string }
   | { type: string };
 
 export class BobGatewayConnector {
@@ -243,6 +246,7 @@ export class BobGatewayConnector {
    */
   private readonly credentials: AgentCredentials;
   private readonly dispatch: DispatchControl;
+  private readonly proxyControl: ProxyControl | undefined;
   /**
    * Last few KB of each run's output, kept only until the run ends. Needed
    * because a provider's billing error (the 402 that went undetected for
@@ -298,6 +302,19 @@ export class BobGatewayConnector {
       queueDepth: () => this.activeSessions.size,
       dispatchRunning: () => this.dispatch.isRunning(),
     });
+    // The proxy's management key lives on this host and nowhere else, so this
+    // is the only place that can act on a proxy account. Absent a route the
+    // control plane answers every request with "not routed through a proxy".
+    const proxyRoute = resolveProxyRoute(process.env);
+    this.proxyControl = proxyRoute
+      ? new ProxyControl({
+          route: proxyRoute,
+          managementKey: process.env.CLIPROXY_MANAGEMENT_KEY?.trim() || undefined,
+          send: (msg) => this.send(msg as never),
+          accounts: () => this.credentials.proxyAccounts(),
+          refreshSnapshot: () => this.credentials.refreshSnapshot(),
+        })
+      : undefined;
   }
 
   start(): void {
@@ -785,6 +802,29 @@ export class BobGatewayConnector {
         void this.dispatch.apply(m.requestId, m.action).catch((error: unknown) => {
           console.error(
             "[bob-gw] dispatch control failed:",
+            error instanceof Error ? error.message : error,
+          );
+        });
+        break;
+      }
+      case "proxy_control": {
+        const m = msg as {
+          requestId: string;
+          action: "refresh" | "enable" | "disable" | "test";
+          accountId?: string;
+        };
+        if (!this.proxyControl) {
+          this.send({
+            type: "proxy_control_result",
+            requestId: m.requestId,
+            ok: false,
+            detail: "this host is not routed through an inference proxy",
+          } as never);
+          break;
+        }
+        void this.proxyControl.apply(m.requestId, m.action, m.accountId).catch((error: unknown) => {
+          console.error(
+            "[bob-gw] proxy control failed:",
             error instanceof Error ? error.message : error,
           );
         });

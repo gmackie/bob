@@ -1,8 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { createTRPCRouter } from "../../trpc.js";
+import type { createTRPCContext, createTRPCRouter } from "../../trpc.js";
 import type { publicApiRouter } from "../publicApi.js";
-import type { createTRPCContext } from "../../trpc.js";
 
 process.env.DATABASE_URL ??= "postgres://postgres:postgres@localhost:5432/test";
 
@@ -11,7 +10,9 @@ process.env.DATABASE_URL ??= "postgres://postgres:postgres@localhost:5432/test";
 // these handlers actually call, cast through `unknown` (not `any`) at the
 // single construction site so every caller.* call below stays fully typed.
 type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
-type TestRouter = ReturnType<typeof createTRPCRouter<{ publicApi: typeof publicApiRouter }>>;
+type TestRouter = ReturnType<
+  typeof createTRPCRouter<{ publicApi: typeof publicApiRouter }>
+>;
 
 type MockDb = ReturnType<typeof createMockDb>;
 
@@ -35,7 +36,9 @@ const createMockDb = () => {
     set: updateSet,
   }));
 
-  return {
+  const mockDb = {
+    transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb)),
+    select: vi.fn(() => ({ from: () => ({ where: () => ({ for: () => Promise.resolve([{ id: "session" }]) }) }) })),
     query: {
       tenantMembers: {
         findFirst: vi.fn(),
@@ -45,6 +48,7 @@ const createMockDb = () => {
         findFirst: vi.fn(),
       },
       workItems: { findFirst: vi.fn() },
+      chatConversations: { findFirst: vi.fn() },
       repositories: {
         findFirst: vi.fn(),
       },
@@ -63,6 +67,7 @@ const createMockDb = () => {
       updateSet,
     },
   };
+  return mockDb;
 };
 
 let createCaller: (db: MockDb) => ReturnType<TestRouter["createCaller"]>;
@@ -382,11 +387,10 @@ describe("publicApi router tenant isolation", () => {
 
   it("registerWorkspace adds the caller as an owner workspace member", async () => {
     const db = createMockDb();
-    db.query.tenantMembers.findFirst
-      .mockResolvedValueOnce({
-        tenantId: "tenant-1",
-        tenant: { id: "tenant-1" },
-      });
+    db.query.tenantMembers.findFirst.mockResolvedValueOnce({
+      tenantId: "tenant-1",
+      tenant: { id: "tenant-1" },
+    });
     db.__mock.insertReturning
       .mockResolvedValueOnce([
         {
@@ -473,6 +477,63 @@ describe("publicApi router tenant isolation", () => {
       }),
     );
   });
+
+  it("persists typed T3 runtime and provider health from an environment heartbeat", async () => {
+    const db = createMockDb();
+    db.query.tenantMembers.findMany.mockResolvedValueOnce([
+      { tenantId: "tenant-1" },
+    ]);
+    db.query.workspaces.findFirst.mockResolvedValueOnce({
+      id: "77777777-7777-4777-8777-777777777777",
+      tenantId: "tenant-1",
+    });
+
+    const caller = createCaller(db);
+
+    await caller.publicApi.heartbeat({
+      workspaceId: "77777777-7777-4777-8777-777777777777",
+      runtime: {
+        kind: "t3",
+        version: "0.18.0",
+        connectionMode: "tunnel",
+      },
+      providers: [
+        {
+          type: "codex",
+          status: "ready",
+          capabilities: ["approval", "follow-up", "resume", "cancel"],
+        },
+        {
+          type: "claude",
+          status: "unauthenticated",
+          capabilities: ["approval", "cancel"],
+        },
+      ],
+    });
+
+    expect(db.__mock.updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentConfigs: {
+          codex: {
+            available: true,
+            status: "ready",
+            runtime: "t3",
+            runtimeVersion: "0.18.0",
+            connectionMode: "tunnel",
+            capabilities: ["approval", "follow-up", "resume", "cancel"],
+          },
+          claude: {
+            available: false,
+            status: "unauthenticated",
+            runtime: "t3",
+            runtimeVersion: "0.18.0",
+            connectionMode: "tunnel",
+            capabilities: ["approval", "cancel"],
+          },
+        },
+      }),
+    );
+  });
 });
 
 describe("publicApi dispatchExecution model validation", () => {
@@ -524,4 +585,20 @@ describe("publicApi dispatchExecution model validation", () => {
       }
     },
   );
+});
+
+it("reuses the gateway run when the runner reports a session", async () => {
+  const db = createMockDb();
+  const sessionId = "11111111-1111-4111-8111-111111111111";
+  const workspaceId = "33333333-3333-4333-8333-333333333333";
+  const workItemId = "44444444-4444-4444-8444-444444444444";
+  db.query.tenantMembers.findMany.mockResolvedValue([{ tenantId: "tenant-1" }]);
+  db.query.workspaces.findFirst.mockResolvedValue({ id: workspaceId, tenantId: "tenant-1" });
+  db.query.chatConversations.findFirst.mockResolvedValue({ id: sessionId, workItemId });
+  db.query.workItems.findFirst.mockResolvedValue({ id: workItemId, workspaceId });
+  const existing = { id: "gateway-run", sessionId, tenantId: "tenant-1", workspaceId, workItemId, agentType: "codex", status: "completed" };
+  db.query.agentRuns.findFirst.mockResolvedValue(existing);
+  const run = await createCaller(db).publicApi.createRun({ workspaceId, workItemId, agentType: "codex", agentConfig: { sessionId } });
+  expect(run).toEqual(existing);
+  expect(db.insert).not.toHaveBeenCalled();
 });

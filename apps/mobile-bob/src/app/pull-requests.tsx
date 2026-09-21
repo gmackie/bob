@@ -3,8 +3,11 @@ import { Stack } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 
 import { RelatedAppsCard } from "~/features/links/RelatedAppsCard";
-import { buildPrList, prStatusTone } from "~/features/pull-requests/pr-list-model";
-import { trpc } from "~/utils/api";
+import {
+  buildPrList,
+  prStatusTone,
+} from "~/features/pull-requests/pr-list-model";
+import { rpc } from "~/utils/api";
 
 /**
  * Pull requests, for review on the road.
@@ -17,8 +20,10 @@ import { trpc } from "~/utils/api";
  * — so the link out sits at the bottom as an escape hatch.
  */
 export default function PullRequestsScreen() {
-  const query = useQuery(trpc.pullRequest.list.queryOptions({ limit: 50 }));
-  const rows = buildPrList((query.data ?? []));
+  const query = useQuery(
+    rpc("projects.pullRequest.list").queryOptions({ limit: 50 }),
+  );
+  const rows = buildPrList(query.data ?? []);
 
   return (
     <>
@@ -27,7 +32,10 @@ export default function PullRequestsScreen() {
         className="bg-background flex-1"
         contentContainerClassName="p-4 pb-12"
         refreshControl={
-          <RefreshControl refreshing={query.isRefetching} onRefresh={() => void query.refetch()} />
+          <RefreshControl
+            refreshing={query.isRefetching}
+            onRefresh={() => void query.refetch()}
+          />
         }
       >
         {query.isLoading ? <Text className="text-muted">Loading…</Text> : null}
@@ -49,21 +57,30 @@ export default function PullRequestsScreen() {
                   {/* The one thing worth spotting from a train. */}
                   {row.needsYou ? (
                     <View className="rounded bg-amber-100 px-1.5 py-0.5 dark:bg-amber-900/30">
-                      <Text className="text-[10px] font-semibold uppercase text-amber-900 dark:text-amber-300">
+                      <Text className="text-[10px] font-semibold text-amber-900 uppercase dark:text-amber-300">
                         Needs you
                       </Text>
                     </View>
                   ) : null}
-                  <View className={`rounded px-1.5 py-0.5 ${prStatusTone(row.status)}`}>
-                    <Text className="text-[10px] font-semibold uppercase">{row.status}</Text>
+                  <View
+                    className={`rounded px-1.5 py-0.5 ${prStatusTone(row.status)}`}
+                  >
+                    <Text className="text-[10px] font-semibold uppercase">
+                      {row.status}
+                    </Text>
                   </View>
                   <Text className="text-muted text-xs">#{row.number}</Text>
                 </View>
-                <Text className="text-foreground mt-1 text-sm font-medium" numberOfLines={2}>
+                <Text
+                  className="text-foreground mt-1 text-sm font-medium"
+                  numberOfLines={2}
+                >
                   {row.title}
                 </Text>
                 {row.repositoryName ? (
-                  <Text className="text-muted mt-0.5 text-xs">{row.repositoryName}</Text>
+                  <Text className="text-muted mt-0.5 text-xs">
+                    {row.repositoryName}
+                  </Text>
                 ) : null}
               </View>
             ))}

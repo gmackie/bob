@@ -13,6 +13,7 @@ import { wrapInProcessSandbox } from "./process-sandbox";
 import {
   createSubscriptionCredentialHome,
   materializeCredentialCopies,
+  materializeCredentialWrites,
   type SubscriptionCredentialHome,
 } from "./subscription-credentials";
 import { SubscriptionRuntimeBroker } from "./subscription-runtime-broker";
@@ -116,14 +117,19 @@ export class AgentJobExecutor {
           credentialHome.path,
           prepared.credentialCopies,
         );
+        await materializeCredentialWrites(
+          credentialHome.path,
+          prepared.credentialWrites,
+        );
       }
       const processSandbox = this.config.processSandbox ?? wrapInProcessSandbox;
       const command = prepared.useOuterProcessSandbox
         ? await processSandbox(requestedCommand, sandbox.path, {
             environment: prepared.environment,
-            readOnlyPaths: prepared.credentialCopies.map(
-              (copy) => copy.destinationPath,
-            ),
+            readOnlyPaths: [
+              ...prepared.credentialCopies.map((copy) => copy.destinationPath),
+              ...prepared.credentialWrites.map((write) => write.destinationPath),
+            ],
             writablePaths: credentialHome ? [credentialHome.path] : [],
           })
         : requestedCommand;

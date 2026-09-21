@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { PlanningSessionWorkspace } from "~/components/planning/planning-session-workspace";
-import { createPlanningCaller } from "~/lib/planning/server";
+import { createPlanningClient } from "~/lib/planning/server";
 
 interface PlanningSessionRouteProps {
   params: Promise<{ sessionId: string }>;
@@ -13,8 +13,10 @@ export default async function PlanningSessionRoute({
   params,
 }: PlanningSessionRouteProps) {
   const { sessionId } = await params;
-  const caller = (await createPlanningCaller()) as any;
-  const sessionData = await caller.planSession.get({ sessionId }).catch(() => null);
+  const caller = await createPlanningClient();
+  const sessionData = await caller("planning.session.get")
+    .call({ sessionId })
+    .catch(() => null);
 
   if (!sessionData?.session) {
     notFound();
@@ -29,9 +31,9 @@ export default async function PlanningSessionRoute({
         workingDirectory: sessionData.session.workingDirectory,
         planningProjectName: sessionData.session.planningProjectName,
         planningSessionType: sessionData.session.planningSessionType,
-        workspaceId: sessionData.session.workspaceId,
+        workspaceId: sessionData.session.planningWorkspaceId,
       }}
-      drafts={(sessionData.drafts ?? []).map((draft: any) => ({
+      drafts={(sessionData.drafts ?? []).map((draft) => ({
         id: draft.id,
         title: draft.title,
         status: draft.status,

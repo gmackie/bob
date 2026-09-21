@@ -21,14 +21,18 @@ import {
   isActiveRunStatus,
   normalizeProviderParam,
 } from "~/components/dashboard/provider-runs-model";
-import { useTRPC } from "~/trpc/react";
+import { useBobQueryClient } from "~/rpc/react";
 import { DeviceHeartbeatsSection } from "../settings/_components/device-heartbeats";
 
-const AMBER = "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
-const GREEN = "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+const AMBER =
+  "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
+const GREEN =
+  "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
 const RED = "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
-const ORANGE = "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
-const NEUTRAL = "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300";
+const ORANGE =
+  "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
+const NEUTRAL =
+  "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300";
 
 const STATUS_COLORS: Record<string, string> = {
   queued: NEUTRAL,
@@ -142,24 +146,36 @@ function ProviderRunRow({
         aria-label={row.accessibilityLabel}
         className="hover:border-primary/30 flex items-center gap-4 p-4 transition-colors"
       >
-        <Badge className={cn("shrink-0 text-xs font-medium", ROW_STATUS_COLORS[row.statusTone])}>
+        <Badge
+          className={cn(
+            "shrink-0 text-xs font-medium",
+            ROW_STATUS_COLORS[row.statusTone],
+          )}
+        >
           {row.statusLabel}
         </Badge>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium">
-              {row.title}
-            </span>
+            <span className="truncate text-sm font-medium">{row.title}</span>
             <span className="text-muted-foreground text-xs">via</span>
-            <span className="text-xs font-medium text-muted-foreground">{row.agentLabel}</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              {row.agentLabel}
+            </span>
           </div>
           {run.summary && (
             <div className="text-muted-foreground mt-0.5 flex gap-3 text-xs">
-              {run.summary.files_changed > 0 && <span>{run.summary.files_changed} files</span>}
-              {run.summary.duration_ms && <span>{formatDuration(run.summary.duration_ms)}</span>}
-              {run.summary.exit_code !== undefined && run.summary.exit_code !== 0 && (
-                <span className="text-red-500">exit {run.summary.exit_code}</span>
+              {run.summary.files_changed > 0 && (
+                <span>{run.summary.files_changed} files</span>
               )}
+              {run.summary.duration_ms && (
+                <span>{formatDuration(run.summary.duration_ms)}</span>
+              )}
+              {run.summary.exit_code !== undefined &&
+                run.summary.exit_code !== 0 && (
+                  <span className="text-red-500">
+                    exit {run.summary.exit_code}
+                  </span>
+                )}
             </div>
           )}
         </div>
@@ -170,7 +186,8 @@ function ProviderRunRow({
         ) : null}
         {run.artifacts?.length > 0 && (
           <span className="text-muted-foreground text-xs">
-            {run.artifacts.length} artifact{run.artifacts.length !== 1 ? "s" : ""}
+            {run.artifacts.length} artifact
+            {run.artifacts.length !== 1 ? "s" : ""}
           </span>
         )}
         <span className="text-muted-foreground shrink-0 text-xs">
@@ -218,60 +235,73 @@ function ProviderRunSection({
 }
 
 export default function RunsPage() {
-  const trpc = useTRPC();
+  const bobQuery = useBobQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
   const workspaceId = searchParams?.get("workspace") ?? "";
-  const provider = normalizeProviderParam(searchParams?.get("provider") ?? null);
+  const provider = normalizeProviderParam(
+    searchParams?.get("provider") ?? null,
+  );
   const [fleetExpanded, setFleetExpanded] = useState(false);
 
   const { data: workspaceMemberships } = useQuery(
-    trpc.workspace.list.queryOptions(undefined, { staleTime: 60_000 }),
+    bobQuery("projects.workspace.list").queryOptions(undefined, {
+      staleTime: 60_000,
+    }),
   );
-  const workspaceRows = (Array.isArray(workspaceMemberships)
-    ? workspaceMemberships
-    : []) as WorkspaceMembership[];
+  const workspaceRows = (
+    Array.isArray(workspaceMemberships) ? workspaceMemberships : []
+  ) as WorkspaceMembership[];
   const workspaces = workspaceRows
     .map((m) => m.workspace)
-    .filter((workspace): workspace is NonNullable<WorkspaceMembership["workspace"]> =>
-      Boolean(workspace),
+    .filter(
+      (workspace): workspace is NonNullable<WorkspaceMembership["workspace"]> =>
+        Boolean(workspace),
     );
 
   // agentRun.list and agentRun.listAll return differently-shaped rows
   // (workspace-scoped vs. global), so their queryOptions types don't unify.
   // Both run results are consumed as any[] below; cast to one branch's shape.
-  const runsQueryOptions = (
-    workspaceId
-      ? trpc.agentRun.list.queryOptions(
-          { workspaceId, limit: 50 },
-          { refetchInterval: 10_000 },
-        )
-      : trpc.agentRun.listAll.queryOptions(
-          { limit: 50 },
-          { refetchInterval: 10_000 },
-        )
-  ) as ReturnType<typeof trpc.agentRun.listAll.queryOptions>;
+  const runsQueryOptions = workspaceId
+    ? bobQuery("agent.run.list").queryOptions(
+        { workspaceId, limit: 50 },
+        { refetchInterval: 10_000 },
+      )
+    : bobQuery("agent.run.listAll").queryOptions(
+        { limit: 50 },
+        { refetchInterval: 10_000 },
+      );
 
   const { data: runs, isLoading } = useQuery(runsQueryOptions);
 
   const { data: instances } = useQuery(
-    trpc.instance.list.queryOptions(undefined, { staleTime: 30_000 }),
+    bobQuery("agent.instance.list").queryOptions(undefined, {
+      staleTime: 30_000,
+    }),
   );
 
-  const providerFilteredRuns = filterRunsByProvider((runs ?? []) as any[], provider);
-  const filteredRuns = provider === "all"
-    ? filterRecentOutcomeRuns(providerFilteredRuns)
-    : providerFilteredRuns;
+  const providerFilteredRuns = filterRunsByProvider(
+    (runs ?? []) as any[],
+    provider,
+  );
+  const filteredRuns =
+    provider === "all"
+      ? filterRecentOutcomeRuns(providerFilteredRuns)
+      : providerFilteredRuns;
   const providerGroups = buildProviderRunGroups(filteredRuns);
   const providerHeader = getProviderRunsHeaderModel(provider);
   const emptyState = getProviderRunsEmptyState(provider);
 
   // Fleet stats
-  const onlineNodes = workspaces.filter((w: any) => isNodeOnline(w.lastHeartbeat));
+  const onlineNodes = workspaces.filter((w: any) =>
+    isNodeOnline(w.lastHeartbeat),
+  );
   // Count everything still alive, not just "running": blocked (needs you),
   // starting/stopping, and host_unknown are all active. The old exact-match
   // silently under-reported the fleet's "N running" chip.
-  const activeRuns = filteredRuns.filter((r: any) => isActiveRunStatus(r.status));
+  const activeRuns = filteredRuns.filter((r: any) =>
+    isActiveRunStatus(r.status),
+  );
   const todayRuns = filteredRuns.filter((r: any) => {
     const created = new Date(r.createdAt);
     const today = new Date();
@@ -296,74 +326,85 @@ export default function RunsPage() {
       {/* Provider + workspace filters share one wrapping row instead of two
           stacked control bars, so the feed sits closer to the top. */}
       <div className="flex flex-wrap items-center gap-3">
-      <div className="flex w-fit items-center gap-1 rounded-lg border border-border bg-card p-1">
-        {[
-          { key: "all", label: "All" },
-          { key: "claude", label: "Claude" },
-          { key: "codex", label: "Codex" },
-          { key: "cursor", label: "Cursor" },
-          { key: "grok", label: "Grok" },
-        ].map((item) => (
-          <button
-            key={item.key}
-            aria-pressed={provider === item.key}
-            onClick={() => {
-              router.push(getProviderRunsFilterHref(searchParams?.toString() ?? "", {
-                provider: item.key as "all" | "claude" | "codex" | "cursor" | "grok",
-              }));
-            }}
-            className={cn(
-              "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              provider === item.key
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-            )}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Workspace filter */}
-      {workspaces.length > 1 && (
-        <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
-          <button
-            aria-pressed={!workspaceId}
-            onClick={() =>
-              router.push(getProviderRunsFilterHref(searchParams?.toString() ?? "", {
-                workspaceId: null,
-              }))
-            }
-            className={cn(
-              "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              !workspaceId
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-            )}
-          >
-            All
-          </button>
-          {workspaces.map((ws: any) => (
+        <div className="flex w-fit items-center gap-1 rounded-lg border border-border bg-card p-1">
+          {[
+            { key: "all", label: "All" },
+            { key: "claude", label: "Claude" },
+            { key: "codex", label: "Codex" },
+            { key: "cursor", label: "Cursor" },
+            { key: "grok", label: "Grok" },
+          ].map((item) => (
             <button
-              key={ws.id}
-              aria-pressed={ws.id === workspaceId}
-              onClick={() =>
-                router.push(getProviderRunsFilterHref(searchParams?.toString() ?? "", {
-                  workspaceId: ws.id,
-                }))
-              }
+              key={item.key}
+              aria-pressed={provider === item.key}
+              onClick={() => {
+                router.push(
+                  getProviderRunsFilterHref(searchParams?.toString() ?? "", {
+                    provider: item.key as
+                      | "all"
+                      | "claude"
+                      | "codex"
+                      | "cursor"
+                      | "grok",
+                  }),
+                );
+              }}
               className={cn(
                 "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                ws.id === workspaceId
+                provider === item.key
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
               )}
             >
-              {ws.name || ws.machineId || ws.id.slice(0, 8)}
+              {item.label}
             </button>
           ))}
         </div>
-      )}
+
+        {/* Workspace filter */}
+        {workspaces.length > 1 && (
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
+            <button
+              aria-pressed={!workspaceId}
+              onClick={() =>
+                router.push(
+                  getProviderRunsFilterHref(searchParams?.toString() ?? "", {
+                    workspaceId: null,
+                  }),
+                )
+              }
+              className={cn(
+                "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                !workspaceId
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+              )}
+            >
+              All
+            </button>
+            {workspaces.map((ws: any) => (
+              <button
+                key={ws.id}
+                aria-pressed={ws.id === workspaceId}
+                onClick={() =>
+                  router.push(
+                    getProviderRunsFilterHref(searchParams?.toString() ?? "", {
+                      workspaceId: ws.id,
+                    }),
+                  )
+                }
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                  ws.id === workspaceId
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                )}
+              >
+                {ws.name || ws.machineId || ws.id.slice(0, 8)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Fleet Status Bar */}
@@ -374,18 +415,19 @@ export default function RunsPage() {
         className="flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-accent/50"
       >
         <div className="flex items-center gap-2">
-          <span className={cn(
-            "size-2 rounded-full",
-            onlineNodes.length > 0 ? "bg-green-500" : "bg-neutral-400",
-          )} />
+          <span
+            className={cn(
+              "size-2 rounded-full",
+              onlineNodes.length > 0 ? "bg-green-500" : "bg-neutral-400",
+            )}
+          />
           <span className="text-sm font-medium">
-            {onlineNodes.length} node{onlineNodes.length !== 1 ? "s" : ""} online
+            {onlineNodes.length} node{onlineNodes.length !== 1 ? "s" : ""}{" "}
+            online
           </span>
         </div>
         <span className="text-muted-foreground text-xs">·</span>
-        <span className="text-sm">
-          {activeRuns.length} active
-        </span>
+        <span className="text-sm">{activeRuns.length} active</span>
         <span className="text-muted-foreground text-xs">·</span>
         <span className="text-sm text-muted-foreground">
           {todayRuns.length} today
@@ -408,7 +450,9 @@ export default function RunsPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {workspaces.length === 0 ? (
             <p className="text-sm text-muted-foreground col-span-full">
-              No nodes registered. Run <code className="font-mono text-xs">bob init</code> to register a workspace.
+              No nodes registered. Run{" "}
+              <code className="font-mono text-xs">bob init</code> to register a
+              workspace.
             </p>
           ) : (
             workspaces.map((ws: any) => {
@@ -416,18 +460,29 @@ export default function RunsPage() {
               return (
                 <Card key={ws.id} className="p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className={cn(
-                      "size-2 rounded-full",
-                      online ? "bg-green-500" : "bg-neutral-400",
-                    )} />
+                    <span
+                      className={cn(
+                        "size-2 rounded-full",
+                        online ? "bg-green-500" : "bg-neutral-400",
+                      )}
+                    />
                     <span className="text-sm font-medium truncate">
                       {ws.machineId || ws.name || ws.slug}
                     </span>
                   </div>
                   <div className="space-y-1 text-xs text-muted-foreground">
-                    <p>{online ? "Online" : "Offline"} · {ws.lastHeartbeat ? formatRelativeTime(ws.lastHeartbeat) : "never"}</p>
+                    <p>
+                      {online ? "Online" : "Offline"} ·{" "}
+                      {ws.lastHeartbeat
+                        ? formatRelativeTime(ws.lastHeartbeat)
+                        : "never"}
+                    </p>
                     {ws.agentConfigs && (
-                      <p>Agents: {Object.keys(ws.agentConfigs).join(", ") || "none configured"}</p>
+                      <p>
+                        Agents:{" "}
+                        {Object.keys(ws.agentConfigs).join(", ") ||
+                          "none configured"}
+                      </p>
                     )}
                   </div>
                 </Card>
@@ -441,13 +496,18 @@ export default function RunsPage() {
               <div className="col-span-full mt-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Agent Instances
               </div>
-              {((instances ?? []) as AgentInstance[]).map((inst) => (
+              {(instances ?? []).map((inst) => (
                 <Card key={inst.id} className="p-4">
                   <div className="flex items-center gap-2 mb-1">
-                    <Badge variant={inst.status === "running" ? "default" : "slate"} className="text-[10px]">
+                    <Badge
+                      variant={inst.status === "running" ? "default" : "slate"}
+                      className="text-[10px]"
+                    >
                       {inst.status}
                     </Badge>
-                    <span className="text-sm font-medium">{inst.agentType}</span>
+                    <span className="text-sm font-medium">
+                      {inst.agentType}
+                    </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {formatRelativeTime(inst.createdAt)}
@@ -461,10 +521,25 @@ export default function RunsPage() {
 
       {provider !== "all" && !isLoading ? (
         <div className="grid gap-3 sm:grid-cols-4">
-          <ProviderMetricCard label="Total" value={providerGroups.metrics.total} />
-          <ProviderMetricCard label="Active" value={providerGroups.metrics.active} tone="warning" />
-          <ProviderMetricCard label="Completed" value={providerGroups.metrics.completed} tone="success" />
-          <ProviderMetricCard label="Failed" value={providerGroups.metrics.failed} tone="danger" />
+          <ProviderMetricCard
+            label="Total"
+            value={providerGroups.metrics.total}
+          />
+          <ProviderMetricCard
+            label="Active"
+            value={providerGroups.metrics.active}
+            tone="warning"
+          />
+          <ProviderMetricCard
+            label="Completed"
+            value={providerGroups.metrics.completed}
+            tone="success"
+          />
+          <ProviderMetricCard
+            label="Failed"
+            value={providerGroups.metrics.failed}
+            tone="danger"
+          />
         </div>
       ) : null}
       <DeviceHeartbeatsSection
@@ -477,7 +552,10 @@ export default function RunsPage() {
       {isLoading ? (
         <div className="flex flex-col gap-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-muted/50 h-20 animate-pulse rounded-lg" />
+            <div
+              key={i}
+              className="bg-muted/50 h-20 animate-pulse rounded-lg"
+            />
           ))}
         </div>
       ) : !filteredRuns.length ? (

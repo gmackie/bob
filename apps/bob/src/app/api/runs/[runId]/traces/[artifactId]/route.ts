@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildTraceViewerUrl } from "@gmacko/core/telemetry/deep";
-import { createPlanningCaller } from "~/lib/planning/server";
+import { createPlanningClient } from "~/lib/planning/server";
 
 export async function GET(
   _request: Request,
@@ -12,9 +12,9 @@ export async function GET(
 ) {
   try {
     const { runId, artifactId } = await params;
-    const caller = await createPlanningCaller();
+    const caller = await createPlanningClient();
     // get enforces workspace membership before returning any artifacts.
-    const run = await caller.agentRun.get({ runId });
+    const run = await caller("agent.run.get").call({ runId });
     const artifact = run.artifacts.find((entry) => entry.id === artifactId);
     const metadata = artifact?.metadata;
     const url =

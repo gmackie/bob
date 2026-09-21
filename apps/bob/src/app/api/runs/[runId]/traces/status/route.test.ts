@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ get: vi.fn(), lookup: vi.fn() }));
 vi.mock("~/lib/planning/server", () => ({
-  createPlanningCaller: async () => ({ agentRun: { get: mocks.get } }),
+  createPlanningClient: async () => (tag: string) => {
+    if (tag !== "agent.run.get") throw new Error(tag);
+    return { call: mocks.get };
+  },
 }));
 vi.mock("~/lib/traces/run-trace-status", () => ({
   getRunTraceStatuses: mocks.lookup,

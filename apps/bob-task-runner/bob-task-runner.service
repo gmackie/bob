@@ -23,5 +23,20 @@ ExecStart=/usr/bin/node task-runner.js
 Restart=always
 RestartSec=10
 
+# Sandbox hardening. IMPORTANT: with ProtectSystem=strict the filesystem is
+# read-only except ReadWritePaths, so ReadWritePaths MUST cover wherever the
+# runner lazy-clones repos. The clone root is /home/bob/dev, which on
+# hetzner-bob is a symlink to a mounted Hetzner volume
+# (/mnt/HC_Volume_106611335); without whitelisting that volume, every fresh
+# `git clone` fails with "Read-only file system" and no code-lane issue can
+# ever be claimed. Host-specific mount paths are added via a drop-in
+# (bob-task-runner.service.d/clone-volume.conf) so this reference unit stays
+# node-agnostic.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+PrivateTmp=true
+ReadWritePaths=/opt/bob/task-runner /home/bob /tmp
+
 [Install]
 WantedBy=multi-user.target

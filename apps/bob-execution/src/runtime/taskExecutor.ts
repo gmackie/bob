@@ -79,6 +79,19 @@ export interface TaskExecutionResult {
   blockedReason?: string;
 }
 
+export function buildExecutionPersonaMetadata(input: {
+  personaMetadata?: Record<string, unknown> | null;
+  executionTargetId?: string;
+}): Record<string, unknown> | null {
+  if (!input.personaMetadata && !input.executionTargetId) return null;
+  return {
+    ...(input.personaMetadata ?? {}),
+    ...(input.executionTargetId
+      ? { executionTargetId: input.executionTargetId }
+      : {}),
+  };
+}
+
 export interface IssueContextFieldChange {
   field:
     | "title"
@@ -255,6 +268,7 @@ export async function executeTask(
     // gateway → daemon and applied to the agent command at execution time.
     personaId?: string;
     personaMetadata?: Record<string, unknown> | null;
+    executionTargetId?: string;
   },
 ): Promise<TaskExecutionResult> {
   // Resolve the planning provider and snapshot fresh task details.
@@ -331,13 +345,16 @@ export async function executeTask(
       gitBranch: branch,
       planningTaskId: task.id,
       personaId: options?.personaId ?? null,
-      personaMetadata: {
-        ...(options?.personaMetadata ?? UNATTENDED_PERSONA),
-        metadata: {
-          ...((options?.personaMetadata?.metadata as Record<string, unknown> | undefined) ?? {}),
-          traceCarrier: captureTraceCarrier(),
+      personaMetadata: buildExecutionPersonaMetadata({
+        personaMetadata: {
+          ...(options?.personaMetadata ?? UNATTENDED_PERSONA),
+          metadata: {
+            ...((options?.personaMetadata?.metadata as Record<string, unknown> | undefined) ?? {}),
+            traceCarrier: captureTraceCarrier(),
+          },
         },
-      },
+        executionTargetId: options?.executionTargetId,
+      }),
     })
     .returning();
   const insertedSession = expectInsertedRow(

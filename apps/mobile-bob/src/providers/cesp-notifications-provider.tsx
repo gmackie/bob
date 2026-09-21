@@ -1,13 +1,13 @@
-import {  useCallback, useEffect, useRef } from "react";
-import type {ReactNode} from "react";
+import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Linking, Platform } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 
-import { scheduleLocalNotification, Notifications } from "@bob/notifications";
+import { Notifications, scheduleLocalNotification } from "@bob/notifications";
 
-import { getBaseUrl } from "~/utils/base-url";
+import { rpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
-import { trpc } from "~/utils/api";
+import { getBaseUrl } from "~/utils/base-url";
 
 type CespSeverity = "info" | "warning" | "error";
 type CespCategory =
@@ -211,7 +211,8 @@ function getInitialSince(): string {
 function getNextSince(value: string | undefined): string {
   if (!value) return new Date(Date.now() - 60 * 1000).toISOString();
   const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) return new Date(Date.now() - 60 * 1000).toISOString();
+  if (Number.isNaN(parsed))
+    return new Date(Date.now() - 60 * 1000).toISOString();
   return new Date(Math.max(parsed - MAX_TIME_TOLERANCE_MS, 0)).toISOString();
 }
 
@@ -234,7 +235,7 @@ async function hasNotificationPermission(): Promise<boolean> {
 export function CESPNotificationsProvider({ children }: ProvidersProps) {
   const { data: session } = authClient.useSession();
   const { data: preferences } = useQuery({
-    ...trpc.settings.getPreferences.queryOptions(undefined),
+    ...rpc("settings.getPreferences").queryOptions(undefined),
     enabled: !!session,
   });
 
@@ -265,36 +266,43 @@ export function CESPNotificationsProvider({ children }: ProvidersProps) {
     );
   }, []);
 
-  const handleNotificationResponse = useCallback((response: Notifications.NotificationResponse) => {
-    const responseId = response.notification.request.identifier;
-    logCespDebug("notification response received", { responseId });
-    if (lastHandledResponseIdRef.current === responseId) {
-      logCespDebug("skipping duplicate notification response", { responseId });
-      return;
-    }
-    lastHandledResponseIdRef.current = responseId;
+  const handleNotificationResponse = useCallback(
+    (response: Notifications.NotificationResponse) => {
+      const responseId = response.notification.request.identifier;
+      logCespDebug("notification response received", { responseId });
+      if (lastHandledResponseIdRef.current === responseId) {
+        logCespDebug("skipping duplicate notification response", {
+          responseId,
+        });
+        return;
+      }
+      lastHandledResponseIdRef.current = responseId;
 
-    const data = response.notification.request.content.data as
-      | CESPDestPayload
-      | undefined;
-    logCespDebug("notification response payload", {
-      responseId,
-      hasData: Boolean(data),
-    });
-    const destinationPath = buildDestinationFromPayload(data);
-    if (!destinationPath) {
-      logCespDebug("notification response missing destination", { responseId });
-      return;
-    }
+      const data = response.notification.request.content.data as
+        | CESPDestPayload
+        | undefined;
+      logCespDebug("notification response payload", {
+        responseId,
+        hasData: Boolean(data),
+      });
+      const destinationPath = buildDestinationFromPayload(data);
+      if (!destinationPath) {
+        logCespDebug("notification response missing destination", {
+          responseId,
+        });
+        return;
+      }
 
-    const absoluteDestination = toAbsolutePlanningUrl(destinationPath);
-    logCespDebug("opening destination from notification response", {
-      responseId,
-      destinationPath,
-      absoluteDestination,
-    });
-    void Linking.openURL(absoluteDestination);
-  }, []);
+      const absoluteDestination = toAbsolutePlanningUrl(destinationPath);
+      logCespDebug("opening destination from notification response", {
+        responseId,
+        destinationPath,
+        absoluteDestination,
+      });
+      void Linking.openURL(absoluteDestination);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!enabled || !canUseNotificationsApi()) return;
@@ -307,9 +315,8 @@ export function CESPNotificationsProvider({ children }: ProvidersProps) {
       },
     );
 
-    const subscription =
-      Notifications.addNotificationResponseReceivedListener(
-        (response: Notifications.NotificationResponse) => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      (response: Notifications.NotificationResponse) => {
         handleNotificationResponse(response);
       },
     );

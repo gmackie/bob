@@ -1,15 +1,34 @@
 import { useState } from "react";
-import { Text, View, Pressable, ScrollView, RefreshControl, ActivityIndicator } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { GatewaySession } from "~/hooks/use-gateway";
 import type { ConnectionState } from "@bob/ws";
-import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
-import { trpc } from "~/utils/api";
-import { colors } from "~/lib/colors";
-import { OodaConversationsTab } from "./OodaConversationsTab";
+
+import type { MobileProjectStatusEntry } from "~/features/planning/project-status";
+import type {
+  QueueMoveDirection,
+  TabletQueueItem,
+} from "~/features/tablet/queue";
+import type {
+  TabletLeftRailTab,
+  TabletLeftRailTabBadges,
+  TabletRecentOutcomeRailRow,
+  TabletShellMode,
+  TabletShellSessionRow,
+  TabletShellStatusFilter,
+  TabletShellStatusTone,
+} from "~/features/tablet/shell";
+import type { MobileWorkItemEntryView } from "~/features/tablet/work-item-entry";
+import type { GatewaySession } from "~/hooks/use-gateway";
 import { EmptyState } from "~/components/ui";
-import { hapticLight, hapticSelection } from "~/lib/haptics";
+import { buildMobileProjectRailRows } from "~/features/planning/project-status";
 import {
   buildExecutionQueue,
   buildPriorityQueueControls,
@@ -24,36 +43,22 @@ import {
   getTabletRailProjectQueryOptions,
   getTabletRailWorkItemQueryOptions,
 } from "~/features/tablet/rail-refresh";
-import type {
-  QueueMoveDirection,
-  TabletQueueItem,
-} from "~/features/tablet/queue";
 import {
   buildLeftRailTabBadges,
   buildRecentOutcomeRailRows,
-  getShellModeItems,
-  getShellHeaderTitle,
   buildShellSessionRows,
   getLeftRailTabs,
   getShellHeaderStatusLabel,
+  getShellHeaderTitle,
+  getShellModeItems,
   groupShellSessions,
   matchesShellSessionStatusFilter,
 } from "~/features/tablet/shell";
-import {
-  buildMobileProjectRailRows
-
-} from "~/features/planning/project-status";
-import type {MobileProjectStatusEntry} from "~/features/planning/project-status";
-import type {
-  TabletLeftRailTabBadges,
-  TabletRecentOutcomeRailRow,
-  TabletShellSessionRow,
-  TabletShellStatusFilter,
-  TabletShellStatusTone,
-  TabletLeftRailTab,
-  TabletShellMode,
-} from "~/features/tablet/shell";
-import type { MobileWorkItemEntryView } from "~/features/tablet/work-item-entry";
+import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
+import { colors } from "~/lib/colors";
+import { hapticLight, hapticSelection } from "~/lib/haptics";
+import { rpc } from "~/utils/api";
+import { OodaConversationsTab } from "./OodaConversationsTab";
 
 // ---------------------------------------------------------------------------
 // Shared
@@ -92,7 +97,9 @@ function ModeSwitch({
         >
           <Text
             className="text-center text-xs font-semibold"
-            style={{ color: mode === item.key ? colors.background : colors.muted }}
+            style={{
+              color: mode === item.key ? colors.background : colors.muted,
+            }}
           >
             {item.label}
           </Text>
@@ -124,7 +131,10 @@ function TabBar({
         <Pressable
           key={t.key}
           testID={`tablet-tab-${t.key}`}
-          onPress={() => { hapticSelection(); onTabChange(t.key); }}
+          onPress={() => {
+            hapticSelection();
+            onTabChange(t.key);
+          }}
           accessibilityRole="tab"
           accessibilityLabel={t.label}
           accessibilityState={{ selected: tab === t.key }}
@@ -140,7 +150,9 @@ function TabBar({
           >
             <Text
               className="text-sm font-medium"
-              style={{ color: tab === t.key ? colors.foreground : colors.muted }}
+              style={{
+                color: tab === t.key ? colors.foreground : colors.muted,
+              }}
             >
               {t.label}
             </Text>
@@ -149,7 +161,8 @@ function TabBar({
               style={{
                 minWidth: 20,
                 minHeight: 18,
-                backgroundColor: tab === t.key ? colors.primary + "25" : colors.secondary,
+                backgroundColor:
+                  tab === t.key ? colors.primary + "25" : colors.secondary,
               }}
             >
               <Text
@@ -195,7 +208,10 @@ function SessionRow({
 }) {
   return (
     <Pressable
-      onPress={() => { hapticLight(); onPress(); }}
+      onPress={() => {
+        hapticLight();
+        onPress();
+      }}
       accessibilityRole="button"
       accessibilityLabel={`${row.title}, ${row.statusLabel}, updated ${row.lastUpdatedLabel}`}
       accessibilityState={{ selected: isSelected }}
@@ -215,10 +231,7 @@ function SessionRow({
         }}
       />
       <View className="flex-1">
-        <Text
-          className="text-sm font-medium text-foreground"
-          numberOfLines={1}
-        >
+        <Text className="text-foreground text-sm font-medium" numberOfLines={1}>
           {row.title}
         </Text>
         <View className="mt-1 flex-row items-center gap-2">
@@ -232,7 +245,7 @@ function SessionRow({
             {row.statusLabel}
           </Text>
           <Text
-            className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-muted"
+            className="text-muted rounded-full px-2 py-0.5 text-[10px] font-semibold"
             numberOfLines={1}
             style={{ backgroundColor: colors.secondary, maxWidth: 78 }}
           >
@@ -240,14 +253,14 @@ function SessionRow({
           </Text>
           {row.detailLabel ? (
             <Text
-              className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-muted"
+              className="text-muted rounded-full px-2 py-0.5 text-[10px] font-semibold"
               numberOfLines={1}
               style={{ backgroundColor: colors.secondary, maxWidth: 96 }}
             >
               {row.detailLabel}
             </Text>
           ) : null}
-          <Text className="text-xs text-muted" numberOfLines={1}>
+          <Text className="text-muted text-xs" numberOfLines={1}>
             {row.lastUpdatedLabel}
           </Text>
         </View>
@@ -272,11 +285,12 @@ function AgentsTab({
   const [filter, setFilter] = useState<TabletShellStatusFilter>("all");
   const [refreshing, setRefreshing] = useState(false);
 
-  const filtered = filter === "all"
-    ? sessions
-    : sessions.filter((session) =>
-        matchesShellSessionStatusFilter(session.status, filter),
-      );
+  const filtered =
+    filter === "all"
+      ? sessions
+      : sessions.filter((session) =>
+          matchesShellSessionStatusFilter(session.status, filter),
+        );
   const rows = buildShellSessionRows(filtered);
 
   const handleRefresh = () => {
@@ -294,20 +308,26 @@ function AgentsTab({
         {FILTERS.map((f) => (
           <Pressable
             key={f.key}
-            onPress={() => { hapticSelection(); setFilter(f.key); }}
+            onPress={() => {
+              hapticSelection();
+              setFilter(f.key);
+            }}
             accessibilityRole="button"
             accessibilityLabel={`Filter: ${f.label}`}
             accessibilityState={{ selected: filter === f.key }}
             className="mr-1.5 rounded-full px-3 py-1 active:opacity-70"
             style={{
-              backgroundColor: filter === f.key ? colors.primary + "30" : colors.secondary,
+              backgroundColor:
+                filter === f.key ? colors.primary + "30" : colors.secondary,
               minHeight: 32,
               justifyContent: "center",
             }}
           >
             <Text
               className="text-xs font-medium"
-              style={{ color: filter === f.key ? colors.primary : colors.muted }}
+              style={{
+                color: filter === f.key ? colors.primary : colors.muted,
+              }}
             >
               {f.label}
             </Text>
@@ -318,13 +338,21 @@ function AgentsTab({
       <ScrollView
         className="flex-1"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.muted} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.muted}
+          />
         }
       >
         {rows.length === 0 ? (
           <EmptyState
             variant="plain"
-            title={connectionState === "connected" ? "No planning sessions" : "Connecting…"}
+            title={
+              connectionState === "connected"
+                ? "No planning sessions"
+                : "Connecting…"
+            }
             hint={
               connectionState === "connected"
                 ? "Start planning from the dashboard to see sessions here."
@@ -334,7 +362,9 @@ function AgentsTab({
         ) : (
           <>
             <View>
-              <Text className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-muted">Recent Outcomes</Text>
+              <Text className="text-muted px-4 pt-3 pb-1 text-xs font-semibold tracking-wider uppercase">
+                Recent Outcomes
+              </Text>
               {rows.map((row) => (
                 <SessionRow
                   key={row.sessionId}
@@ -396,7 +426,10 @@ function WorkItemRow({
       }}
     >
       <Pressable
-        onPress={() => { hapticLight(); onPress(); }}
+        onPress={() => {
+          hapticLight();
+          onPress();
+        }}
         accessibilityRole="button"
         accessibilityLabel={`${item.identifier} ${item.title}, ${item.status}`}
         accessibilityState={{ selected: isSelected }}
@@ -412,18 +445,18 @@ function WorkItemRow({
               backgroundColor: colors.primary + "25",
             }}
           >
-            <Text className="text-xs font-bold text-primary">
+            <Text className="text-primary text-xs font-bold">
               {KIND_ICONS[item.kind] ?? item.kind[0]?.toUpperCase()}
             </Text>
           </View>
           <View className="flex-1" style={{ minWidth: 0 }}>
             <Text
-              className="text-sm font-medium text-foreground"
+              className="text-foreground text-sm font-medium"
               numberOfLines={2}
             >
               {item.title}
             </Text>
-            <Text className="mt-0.5 text-xs text-muted">
+            <Text className="text-muted mt-0.5 text-xs">
               {item.identifier} · {formatStatusLabel(item.status)}
               {activeSession ? ` · ${activeSession.status}` : ""}
             </Text>
@@ -445,7 +478,7 @@ function WorkItemRow({
             justifyContent: "center",
           }}
         >
-          <Text className="text-xs font-medium text-foreground">Up</Text>
+          <Text className="text-foreground text-xs font-medium">Up</Text>
         </Pressable>
         <Pressable
           onPress={() => onMove(item.id, "down")}
@@ -460,7 +493,7 @@ function WorkItemRow({
             justifyContent: "center",
           }}
         >
-          <Text className="text-xs font-medium text-foreground">Down</Text>
+          <Text className="text-foreground text-xs font-medium">Down</Text>
         </Pressable>
 
         <View className="flex-1" />
@@ -477,7 +510,7 @@ function WorkItemRow({
               justifyContent: "center",
             }}
           >
-            <Text className="text-xs font-semibold text-primary">Live</Text>
+            <Text className="text-primary text-xs font-semibold">Live</Text>
           </Pressable>
         ) : (
           <Pressable
@@ -493,7 +526,7 @@ function WorkItemRow({
               justifyContent: "center",
             }}
           >
-            <Text className="text-xs font-semibold text-background">
+            <Text className="text-background text-xs font-semibold">
               {isDispatching ? "Starting" : "Run"}
             </Text>
           </Pressable>
@@ -518,16 +551,18 @@ function ItemsTab({
   const { workspace: primaryWorkspace } = useSelectedWorkspace();
   const listInput = { workspaceId: primaryWorkspace?.id ?? "", limit: 30 };
 
-  const workItemsQuery = useQuery(trpc.workItem.list.queryOptions(
-    listInput,
-    getTabletRailWorkItemQueryOptions(Boolean(primaryWorkspace?.id)),
-  ));
+  const workItemsQuery = useQuery(
+    rpc("workItem.list").queryOptions(
+      listInput,
+      getTabletRailWorkItemQueryOptions(Boolean(primaryWorkspace?.id)),
+    ),
+  );
 
   const reorderMutation = useMutation(
-    trpc.workItems.reorderQueue.mutationOptions({
+    rpc("workItem.reorderQueue").mutationOptions({
       onSuccess: async () => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.workItem.list.queryKey(listInput),
+          queryKey: rpc("workItem.list").queryKey(listInput),
         });
         onRefresh?.();
       },
@@ -535,10 +570,10 @@ function ItemsTab({
   );
 
   const dispatchMutation = useMutation(
-    trpc.workItem.dispatch.mutationOptions({
+    rpc("workItem.dispatch").mutationOptions({
       onSuccess: async (result) => {
         await queryClient.invalidateQueries({
-          queryKey: trpc.workItem.list.queryKey(listInput),
+          queryKey: rpc("workItem.list").queryKey(listInput),
         });
         onRefresh?.();
         if (typeof result.sessionId === "string") {
@@ -548,7 +583,9 @@ function ItemsTab({
     }),
   );
 
-  const workItemRows = (workItemsQuery.data ?? []) as unknown as TabletQueueItem[];
+  const workItemRows = [
+    ...(workItemsQuery.data ?? []),
+  ] as unknown as TabletQueueItem[];
   const items = buildExecutionQueue(workItemRows);
   const queueItems = buildPriorityQueueItems(workItemRows);
 
@@ -562,7 +599,10 @@ function ItemsTab({
       queueItems,
     );
 
-    if (workItemIds.join("|") === buildPriorityQueueSaveOrder(queueItems).join("|")) {
+    if (
+      workItemIds.join("|") ===
+      buildPriorityQueueSaveOrder(queueItems).join("|")
+    ) {
       return;
     }
 
@@ -584,8 +624,13 @@ function ItemsTab({
   const handleSortByPriority = () => {
     if (!primaryWorkspace?.id) return;
 
-    const workItemIds = buildPriorityQueueSaveOrder(sortQueueItemsByPriority(queueItems));
-    if (workItemIds.join("|") === buildPriorityQueueSaveOrder(queueItems).join("|")) {
+    const workItemIds = buildPriorityQueueSaveOrder(
+      sortQueueItemsByPriority(queueItems),
+    );
+    if (
+      workItemIds.join("|") ===
+      buildPriorityQueueSaveOrder(queueItems).join("|")
+    ) {
       return;
     }
 
@@ -630,14 +675,16 @@ function ItemsTab({
     <ScrollView className="flex-1">
       {queueItems.length === 0 ? (
         <View className="items-center justify-center px-4 py-12">
-          <Text className="text-sm text-muted">No queued work items</Text>
+          <Text className="text-muted text-sm">No queued work items</Text>
         </View>
       ) : (
         <View>
-          <View className="flex-row items-center justify-between px-4 pb-1 pt-3">
+          <View className="flex-row items-center justify-between px-4 pt-3 pb-1">
             <View className="min-w-0 flex-1">
-              <Text className="text-xs font-semibold uppercase tracking-wider text-muted">Priority Order</Text>
-              <Text className="mt-0.5 text-[10px] text-muted">
+              <Text className="text-muted text-xs font-semibold tracking-wider uppercase">
+                Priority Order
+              </Text>
+              <Text className="text-muted mt-0.5 text-[10px]">
                 {reorderMutation.isPending ? "Saving queue..." : "Queue saved"}
               </Text>
             </View>
@@ -653,7 +700,7 @@ function ItemsTab({
                   opacity: queueControls[0]?.disabled ? 0.55 : 1,
                 }}
               >
-                <Text className="text-xs font-semibold text-background">
+                <Text className="text-background text-xs font-semibold">
                   {queueControls[0]?.label ?? "Save queue"}
                 </Text>
               </Pressable>
@@ -668,11 +715,13 @@ function ItemsTab({
                   opacity: queueControls[1]?.disabled ? 0.55 : 1,
                 }}
               >
-                <Text className="text-xs font-medium text-foreground">
+                <Text className="text-foreground text-xs font-medium">
                   {queueControls[1]?.label ?? "Sort priority"}
                 </Text>
               </Pressable>
-              <Text className="text-xs text-muted">{queueItems.length} queued</Text>
+              <Text className="text-muted text-xs">
+                {queueItems.length} queued
+              </Text>
             </View>
           </View>
           {renderRows(queueItems)}
@@ -717,7 +766,10 @@ function RecentOutcomeRailRow({
 }) {
   return (
     <Pressable
-      onPress={() => { hapticLight(); onPress(); }}
+      onPress={() => {
+        hapticLight();
+        onPress();
+      }}
       accessibilityRole="button"
       accessibilityLabel={row.accessibilityLabel}
       accessibilityState={{ selected: isSelected }}
@@ -737,17 +789,24 @@ function RecentOutcomeRailRow({
         }}
       />
       <View className="min-w-0 flex-1">
-        <Text className="text-sm font-medium text-foreground" numberOfLines={1}>
+        <Text className="text-foreground text-sm font-medium" numberOfLines={1}>
           {row.title}
         </Text>
         <View className="mt-1 flex-row items-center gap-2">
-          <Text className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-muted" style={{ backgroundColor: colors.secondary }}>
+          <Text
+            className="text-muted rounded-full px-2 py-0.5 text-[10px] font-semibold"
+            style={{ backgroundColor: colors.secondary }}
+          >
             {row.statusLabel}
           </Text>
-          <Text className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-muted" numberOfLines={1} style={{ backgroundColor: colors.secondary, maxWidth: 96 }}>
+          <Text
+            className="text-muted rounded-full px-2 py-0.5 text-[10px] font-semibold"
+            numberOfLines={1}
+            style={{ backgroundColor: colors.secondary, maxWidth: 96 }}
+          >
             {row.agentLabel}
           </Text>
-          <Text className="text-xs text-muted" numberOfLines={1}>
+          <Text className="text-muted text-xs" numberOfLines={1}>
             {row.lastUpdatedLabel}
           </Text>
         </View>
@@ -771,7 +830,7 @@ function RecentOutcomeItemsTab({
 }) {
   const { workspace: primaryWorkspace } = useSelectedWorkspace();
   const workItemsQuery = useQuery(
-    trpc.workItem.list.queryOptions(
+    rpc("workItem.list").queryOptions(
       { workspaceId: primaryWorkspace?.id ?? "", limit: 100 },
       getTabletRailWorkItemQueryOptions(Boolean(primaryWorkspace?.id)),
     ),
@@ -799,7 +858,9 @@ function RecentOutcomeItemsTab({
         />
       ) : (
         <View>
-          <Text className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-muted">Recent Outcomes</Text>
+          <Text className="text-muted px-4 pt-3 pb-1 text-xs font-semibold tracking-wider uppercase">
+            Recent Outcomes
+          </Text>
           {rows.map((row) => (
             <RecentOutcomeRailRow
               key={row.id}
@@ -812,7 +873,10 @@ function RecentOutcomeItemsTab({
               }
               onPress={() => {
                 if (row.target.type === "work-item") {
-                  onSelectWorkItem(row.target.workItemId, row.entryView ?? "outcome");
+                  onSelectWorkItem(
+                    row.target.workItemId,
+                    row.entryView ?? "outcome",
+                  );
                   return;
                 }
                 if (row.target.type === "execution-session") {
@@ -834,13 +898,13 @@ function ProjectsTab({
 }) {
   const { workspace: primaryWorkspace } = useSelectedWorkspace();
   const projectsQuery = useQuery(
-    trpc.project.list.queryOptions(
+    rpc("project.list").queryOptions(
       { workspaceId: primaryWorkspace?.id ?? "" },
       getTabletRailProjectQueryOptions(Boolean(primaryWorkspace?.id)),
     ),
   );
-  const projects =
-    (projectsQuery.data ?? []) as unknown as MobileProjectStatusEntry[];
+  const projects = (projectsQuery.data ??
+    []) as unknown as MobileProjectStatusEntry[];
   const rows = buildMobileProjectRailRows({
     workspaceName: primaryWorkspace?.name,
     projects,
@@ -858,11 +922,13 @@ function ProjectsTab({
     <ScrollView className="flex-1">
       {rows.length === 0 ? (
         <View className="items-center justify-center px-4 py-12">
-          <Text className="text-sm text-muted">No projects yet</Text>
+          <Text className="text-muted text-sm">No projects yet</Text>
         </View>
       ) : (
         <View>
-          <Text className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-muted">Projects</Text>
+          <Text className="text-muted px-4 pt-3 pb-1 text-xs font-semibold tracking-wider uppercase">
+            Projects
+          </Text>
           {rows.map((row) => (
             <Pressable
               key={row.id}
@@ -886,7 +952,10 @@ function ProjectsTab({
                   }}
                 />
                 <View className="min-w-0 flex-1">
-                  <Text className="text-sm font-medium text-foreground" numberOfLines={1}>
+                  <Text
+                    className="text-foreground text-sm font-medium"
+                    numberOfLines={1}
+                  >
                     {row.title}
                   </Text>
                   <View className="mt-1 flex-row items-center gap-2">
@@ -900,17 +969,20 @@ function ProjectsTab({
                       {row.statusLabel}
                     </Text>
                     <Text
-                      className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-muted"
+                      className="text-muted rounded-full px-2 py-0.5 text-[10px] font-semibold"
                       numberOfLines={1}
-                      style={{ backgroundColor: colors.secondary, maxWidth: 110 }}
+                      style={{
+                        backgroundColor: colors.secondary,
+                        maxWidth: 110,
+                      }}
                     >
                       {row.detailLabel}
                     </Text>
-                    <Text className="text-xs text-muted" numberOfLines={1}>
+                    <Text className="text-muted text-xs" numberOfLines={1}>
                       {row.lastUpdatedLabel}
                     </Text>
                   </View>
-                  <Text className="mt-1 text-xs text-muted" numberOfLines={1}>
+                  <Text className="text-muted mt-1 text-xs" numberOfLines={1}>
                     {row.activityLabel}
                   </Text>
                 </View>
@@ -964,13 +1036,13 @@ export function TabletSidebar({
 }: TabletSidebarProps) {
   const { workspace: primaryWorkspace } = useSelectedWorkspace();
   const workItemsQuery = useQuery(
-    trpc.workItem.list.queryOptions(
+    rpc("workItem.list").queryOptions(
       { workspaceId: primaryWorkspace?.id ?? "", limit: 100 },
       getTabletRailWorkItemQueryOptions(Boolean(primaryWorkspace?.id)),
     ),
   );
   const projectsQuery = useQuery(
-    trpc.project.list.queryOptions(
+    rpc("project.list").queryOptions(
       { workspaceId: primaryWorkspace?.id ?? "" },
       getTabletRailProjectQueryOptions(Boolean(primaryWorkspace?.id)),
     ),
@@ -981,37 +1053,53 @@ export function TabletSidebar({
   const groupedSessions = groupShellSessions(sessions);
   const headerTitle = getShellHeaderTitle();
   const recentSessions =
-    mode === "tasks" ? groupedSessions.recentOutcomes : groupedSessions.recentPlanning;
+    mode === "tasks"
+      ? groupedSessions.recentOutcomes
+      : groupedSessions.recentPlanning;
   const leftRailBadges = buildLeftRailTabBadges({
     sessions,
     workItems: workItemsQuery.data ?? [],
-    projects: ((projectsQuery.data ?? []) as unknown as { project?: { id?: string } | null }[])
-      .flatMap((entry) => entry.project?.id ? [{ id: entry.project.id }] : []),
+    projects: (
+      (projectsQuery.data ?? []) as unknown as {
+        project?: { id?: string } | null;
+      }[]
+    ).flatMap((entry) => (entry.project?.id ? [{ id: entry.project.id }] : [])),
   });
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.background }}>
       {/* Header */}
-      <View className="px-4 py-3" style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}>
+      <View
+        className="px-4 py-3"
+        style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
+      >
         <View className="flex-row items-start justify-between">
           <View className="flex-1" style={{ minWidth: 0 }}>
             {headerTitle ? (
-              <Text className="text-lg font-semibold text-foreground" numberOfLines={1}>
+              <Text
+                className="text-foreground text-lg font-semibold"
+                numberOfLines={1}
+              >
                 {headerTitle}
               </Text>
             ) : null}
             <View className="mt-1 flex-row items-center">
               <View
                 style={{
-                  width: 6, height: 6, borderRadius: 3,
+                  width: 6,
+                  height: 6,
+                  borderRadius: 3,
                   backgroundColor:
-                    connectionState === "connected" ? colors.success
-                    : connectionState === "reconnecting" || connectionState === "connecting" ? colors.warning
-                    : colors.danger,
+                    connectionState === "connected"
+                      ? colors.success
+                      : connectionState === "reconnecting" ||
+                          connectionState === "connecting"
+                        ? colors.warning
+                        : colors.danger,
                   marginRight: 6,
                 }}
               />
-              <Text className="text-xs text-muted" numberOfLines={1}>
+              <Text className="text-muted text-xs" numberOfLines={1}>
                 {getShellHeaderStatusLabel({
                   workspaceName: primaryWorkspace?.name,
                   connectionState,
@@ -1075,10 +1163,17 @@ export function TabletSidebar({
             accessibilityLabel="Open settings"
             className="flex-row items-center justify-between px-4 py-3 active:opacity-70"
           >
-            <Text className="text-sm font-medium" style={{ color: colors.secondaryForeground }}>
+            <Text
+              className="text-sm font-medium"
+              style={{ color: colors.secondaryForeground }}
+            >
               Settings
             </Text>
-            <Text className="text-xs" style={{ color: colors.muted }} numberOfLines={1}>
+            <Text
+              className="text-xs"
+              style={{ color: colors.muted }}
+              numberOfLines={1}
+            >
               {primaryWorkspace?.name ?? "Workspace"}
             </Text>
           </Pressable>
