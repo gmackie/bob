@@ -1,0 +1,22 @@
+appId: com.gmacko.bob.dev
+name: Clear the dev LogBox toast that overlaps the tab bar
+---
+# expo-notifications auto-registers a device push token at import time
+# (DevicePushTokenAutoRegistration.fx.js). In the simulator that fails — no push
+# entitlement, so the keychain read is refused — and RN's LogBox parks a toast
+# across the bottom of the screen, directly over the tab bar. It is a dev-only
+# artifact, but it swallows the first tap of every flow, so clear it first.
+# The toast appears a beat after launch, hence the wait before tapping.
+- extendedWaitUntil:
+    visible: ".*expo-notifications.*"
+    timeout: 20000
+    optional: true
+- tapOn:
+    text: ".*expo-notifications.*"
+    optional: true
+- tapOn:
+    text: "Dismiss"
+    optional: true
+- assertNotVisible:
+    text: ".*expo-notifications.*"
+    optional: true

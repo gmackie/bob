@@ -76,8 +76,11 @@
   --color-muted: #6e6b63;
   --color-muted-foreground: #6e6b63;
   --color-muted2: #565349;
-  --color-accent: #232220;
-  --color-accent-foreground: #e7a505;
+  /* Accent is the brand amber. It was the dark surface #232220, which made
+     every `text-accent` label render at 1.17:1 against the background —
+     invisible. The surface lives on as --color-secondary/card-elevated. */
+  --color-accent: #e7a505;
+  --color-accent-foreground: #141310;
   --color-border: #2e2d2a;
   --color-input: #232220;
   --color-ring: #e7a505;

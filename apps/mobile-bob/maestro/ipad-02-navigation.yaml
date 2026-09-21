@@ -1,0 +1,46 @@
+appId: com.gmacko.bob.dev
+name: iPad navigation reaches each mode and lists the seeded work
+---
+- launchApp:
+    clearState: false
+- runFlow: 00-dismiss-logbox.yaml
+
+# The dashboard is the landing pane.
+- assertVisible: "OPERATIONS"
+- assertVisible: "10 work items"
+- takeScreenshot: /tmp/bob-shots/ipad-20-dashboard
+
+# Recent Outcomes: the badge must match the rows, which it did not before.
+- tapOn: "Open navigation menu"
+- extendedWaitUntil:
+    visible: "RECENT OUTCOMES"
+    timeout: 10000
+- assertVisible: ".*BOB-2 Tab bar loses the active tab on deep links.*"
+- assertVisible: ".*OODA-3 Heartbeat drops the proxy snapshot.*"
+- assertVisible: ".*BOB-10 Mobile navigation rebuilt around tabs.*"
+- takeScreenshot: /tmp/bob-shots/ipad-21-outcomes
+
+# Choosing a rail tab navigates and dismisses the overlay.
+- tapOn: "Priority Queue"
+- assertVisible: "OPERATIONS"
+- takeScreenshot: /tmp/bob-shots/ipad-22-after-queue
+
+# Mode switching from the same overlay.
+- tapOn: "Open navigation menu"
+- extendedWaitUntil:
+    visible: "Planning"
+    timeout: 10000
+- tapOn: "Planning"
+- takeScreenshot: /tmp/bob-shots/ipad-23-planning
+
+- tapOn: "Open navigation menu"
+- extendedWaitUntil:
+    visible: "Tasks"
+    timeout: 10000
+- tapOn: "Tasks"
+- assertVisible: "OPERATIONS"
+- takeScreenshot: /tmp/bob-shots/ipad-24-tasks
+
+# Settings is reachable from the tablet chrome.
+- tapOn: "Open settings"
+- takeScreenshot: /tmp/bob-shots/ipad-25-settings

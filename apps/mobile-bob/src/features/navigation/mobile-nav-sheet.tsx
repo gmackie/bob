@@ -3,6 +3,7 @@ import { router } from "expo-router";
 
 import { colors } from "~/lib/colors";
 import { markActiveDestination } from "./mobile-nav";
+import { MORE_DESTINATIONS } from "./mobile-tabs";
 
 interface MobileNavSheetProps {
   visible: boolean;
@@ -20,7 +21,13 @@ export function MobileNavSheet({
   pathname,
   onClose,
 }: MobileNavSheetProps) {
-  const destinations = markActiveDestination(pathname);
+  // Only what the tab bar does not already show: repeating Home/Chat/Tasks/
+  // Nodes here made "More" look like a second, fuller navigation rather than
+  // the overflow it is. MORE_DESTINATIONS is the model's own split.
+  const moreHrefs = new Set(MORE_DESTINATIONS.map((d) => d.href));
+  const destinations = markActiveDestination(pathname).filter((d) =>
+    moreHrefs.has(d.href),
+  );
 
   return (
     <Modal

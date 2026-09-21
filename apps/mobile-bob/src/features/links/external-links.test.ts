@@ -90,7 +90,7 @@ describe("linkAffordance", () => {
     const affordance = linkAffordance("kanbanger.tasks");
 
     expect(affordance.primary).toBe("in_app");
-    expect(affordance.externalLabel).toBe("Open in KanBanger");
+    expect(affordance.externalLabel).toBe("Tasks in KanBanger");
   });
 
   it("sends deploys and infra straight out, because Bob has no equivalent", () => {
@@ -100,6 +100,12 @@ describe("linkAffordance", () => {
   });
 
   it("labels each destination by name, so a person knows where a tap goes", () => {
-    expect(linkAffordance("forgegraph.node").externalLabel).toBe("Open in ForgeGraph");
+    // The work item asks for two ForgeGraph targets at once. Labelling both
+    // "Open in ForgeGraph" rendered two identical buttons side by side.
+    expect(linkAffordance("forgegraph.node").externalLabel).toBe("Node in ForgeGraph");
+    expect(linkAffordance("forgegraph.alerts").externalLabel).toBe("Alerts in ForgeGraph");
+    expect(linkAffordance("forgegraph.pullRequests").externalLabel).toBe(
+      "Pull requests in ForgeGraph",
+    );
   });
 });

@@ -99,6 +99,31 @@ const TARGETS: Record<ExternalTarget, TargetSpec> = {
 
 const APP_LABELS = { forgegraph: "ForgeGraph", kanbanger: "KanBanger" } as const;
 
+/**
+ * What the link opens, not just where. A screen can request two targets in the
+ * same app — the work item asks for ForgeGraph's pull requests and its alerts —
+ * and labelling both "Open in ForgeGraph" rendered two identical buttons with
+ * no way to tell them apart.
+ */
+const TARGET_LABELS: Record<ExternalTarget, string> = {
+  "forgegraph.app": "App",
+  "forgegraph.node": "Node",
+  "forgegraph.ci": "CI",
+  "forgegraph.alerts": "Alerts",
+  "forgegraph.pullRequests": "Pull requests",
+  "kanbanger.tasks": "Tasks",
+  "kanbanger.myTasks": "My tasks",
+  "kanbanger.triage": "Triage",
+  "kanbanger.cycles": "Cycles",
+};
+
+function linkLabel(
+  target: ExternalTarget,
+  app: keyof typeof APP_LABELS,
+): string {
+  return `${TARGET_LABELS[target]} in ${APP_LABELS[app]}`;
+}
+
 export function buildExternalLink(
   request: ExternalLinkRequest,
   config: ExternalLinkConfig,
@@ -130,7 +155,7 @@ export function buildExternalLink(
   return {
     appUrl: `${scheme}://${path}`,
     webUrl: `${origin.replace(/\/+$/, "")}/${path}`,
-    label: `Open in ${APP_LABELS[spec.app]}`,
+    label: linkLabel(request.target, spec.app),
   };
 }
 
@@ -146,7 +171,7 @@ export interface LinkAffordance {
 
 export function linkAffordance(target: ExternalTarget): LinkAffordance {
   const spec = TARGETS[target];
-  const label = `Open in ${APP_LABELS[spec.app]}`;
+  const label = linkLabel(target, spec.app);
 
   // KanBanger task detail renders inside Bob. The link out exists for what Bob
   // does not do — reordering a cycle, triaging a board — not for reading.

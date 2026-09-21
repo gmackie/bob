@@ -60,6 +60,25 @@ const ROUTE_OWNERS: readonly [prefix: string, tab: MobileTabKey][] = [
   ["/projects", "more"],
 ];
 
+/**
+ * Whether tapping a tab should navigate.
+ *
+ * Tapping the tab you are already on used to be a no-op, which stranded you on
+ * any screen the tab owns: open a work item from Home, and the Tasks tab lit
+ * up but would not take you to Tasks — the only way out was the back gesture.
+ * iOS convention is that the active tab returns to that tab's root, so the only
+ * case that stays inert is already standing on the root itself.
+ */
+export function shouldNavigateToTab(input: {
+  tab: MobileTabKey;
+  href: string;
+  pathname: string;
+}): boolean {
+  if (input.tab === "more") return false;
+  const path = input.pathname.split("?")[0] ?? input.pathname;
+  return path !== input.href;
+}
+
 export function resolveTabForPath(pathname: string): MobileTabKey {
   const path = pathname.split("?")[0] ?? pathname;
   for (const [prefix, tab] of ROUTE_OWNERS) {

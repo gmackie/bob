@@ -86,6 +86,36 @@ function firstRouteParam(value: string | string[] | undefined): string | undefin
   return Array.isArray(value) ? value[0] : value;
 }
 
+/**
+ * Human titles for every phone route, in navigation order. Screens that draw
+ * their own header (chat, index) are excluded above.
+ */
+const PHONE_SCREEN_TITLES: readonly (readonly [string, string])[] = [
+  ["home", "Home"],
+  ["tasks", "Tasks"],
+  ["tasks/queue", "Priority Queue"],
+  ["tasks/outcomes", "Recent Outcomes"],
+  ["planning", "Planning"],
+  ["planning/sessions/[sessionId]", "Planning Session"],
+  ["projects/index", "Projects"],
+  ["projects/[projectId]", "Project"],
+  ["providers/[provider]", "Provider"],
+  ["pull-requests", "Pull Requests"],
+  ["nodes", "Nodes"],
+  ["notifications", "Inbox"],
+  ["sessions/[sessionId]", "Session"],
+  ["work-items/[workItemId]", "Work Item"],
+  ["work-items/[workItemId]/workspace", "Workspace"],
+  ["settings/index", "Settings"],
+  ["settings/account", "Account"],
+  ["settings/workspace", "Workspace"],
+  ["settings/notifications", "Notifications"],
+  ["settings/providers", "Providers"],
+  ["settings/api-keys", "API Keys"],
+  ["settings/device", "Device"],
+  ["settings/appearance", "Appearance"],
+];
+
 function PhoneLayout() {
   const [navVisible, setNavVisible] = useState(false);
   const pathname = usePathname();
@@ -110,6 +140,15 @@ function PhoneLayout() {
         <Stack screenOptions={phoneScreenOptions}>
           <Stack.Screen name="chat" options={{ headerShown: false }} />
           <Stack.Screen name="index" options={{ headerShown: false }} />
+          {/* Titles live here rather than in each screen. A route without one
+              falls back to its file path, so the header read "tasks/queue",
+              "projects/index" and "work-items/[workItemId]" on the phone —
+              and the back button inherited that as its label. Declaring them
+              centrally means a new route cannot ship without a title being an
+              obvious omission in one list. */}
+          {PHONE_SCREEN_TITLES.map(([name, title]) => (
+            <Stack.Screen key={name} name={name} options={{ title }} />
+          ))}
         </Stack>
       </View>
       {/* A tab bar is the primary navigation; the sheet remains behind More so

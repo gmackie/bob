@@ -1,0 +1,64 @@
+appId: com.gmacko.bob.dev
+name: Every phone screen shows a human title, and detail opens from a list
+---
+- launchApp:
+    clearState: false
+- runFlow: 00-dismiss-logbox.yaml
+
+# A work item opens from the Home triage list and keeps its own title.
+- tapOn: "Proxy accounts stop serving after a cooldown, BOB-1, Blocked"
+- assertVisible: "Work Item"
+- assertVisible: "BOB-1"
+- assertNotVisible: "work-items/[workItemId]"
+- takeScreenshot: /tmp/bob-shots/m-10-work-item
+
+# The Tasks tab owns work-item detail, so tapping it must leave the detail
+# screen rather than sit inert.
+- tapOn:
+    id: "mobile-tab-tasks"
+- assertVisible: "Open priority queue"
+- assertNotVisible: "Work Item"
+
+# Queue and outcomes are the two task lanes; both had path-shaped titles.
+- assertNotVisible: "tasks/queue"
+- tapOn: "Open priority queue"
+- assertVisible: "Priority Queue"
+- assertNotVisible: "tasks/queue"
+- takeScreenshot: /tmp/bob-shots/m-11-queue
+- tapOn:
+    id: "mobile-tab-tasks"
+- tapOn: "Open recent outcomes"
+- assertVisible: "Recent Outcomes"
+- assertNotVisible: "tasks/outcomes"
+- takeScreenshot: /tmp/bob-shots/m-12-outcomes
+
+# The rest of the destinations live behind More.
+- tapOn:
+    id: "mobile-tab-more"
+- extendedWaitUntil:
+    visible: "Go to"
+    timeout: 10000
+- tapOn: "Planning"
+- assertVisible: "Planning"
+- assertVisible: "Start planning session"
+- takeScreenshot: /tmp/bob-shots/m-13-planning
+
+- tapOn:
+    id: "mobile-tab-more"
+- extendedWaitUntil:
+    visible: "Go to"
+    timeout: 10000
+- tapOn: "Notifications"
+- assertVisible: "Inbox"
+- assertVisible: "Inference proxy unreachable, The runner could not reach the proxy for 3 minutes."
+- takeScreenshot: /tmp/bob-shots/m-14-notifications
+
+- tapOn:
+    id: "mobile-tab-more"
+- extendedWaitUntil:
+    visible: "Go to"
+    timeout: 10000
+- tapOn: "Settings"
+- assertVisible: "Settings"
+- assertVisible: "Providers, 0 ready"
+- takeScreenshot: /tmp/bob-shots/m-15-settings
