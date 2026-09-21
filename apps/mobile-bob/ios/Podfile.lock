@@ -3340,7 +3340,7 @@ DEPENDENCIES:
   - "EXConstants (from `../../../node_modules/.pnpm/expo-constants@55.0.14_expo@55.0.15_react-native@0.83.9_@babel+core@7.29.6_@react-nativ_758f57672d404ba769bb4dfb32df6d4f/node_modules/expo-constants/ios`)"
   - "EXJSONUtils (from `../../../node_modules/.pnpm/expo-json-utils@55.0.2/node_modules/expo-json-utils/ios`)"
   - "EXManifests (from `../../../node_modules/.pnpm/expo-manifests@55.0.16_expo@55.0.15/node_modules/expo-manifests/ios`)"
-  - "Expo (from `../../../node_modules/.pnpm/expo@55.0.15_@babel+core@7.29.6_@expo+dom-webview@55.0.5_@expo+metro-runtime@55.0.10_ex_49d20bb420098b0be32706dea1bcb8da/node_modules/expo`)"
+  - "Expo (from `../../../node_modules/.pnpm/expo@55.0.15_patch_hash=c47f1ce5f54c7806dbabe244cbf1a4988f398618defa1f6efec46716a1831ff_167183c52ea0a8ac84be0e35fe5d09b8/node_modules/expo`)"
   - "expo-dev-client (from `../../../node_modules/.pnpm/expo-dev-client@55.0.28_expo@55.0.15/node_modules/expo-dev-client/ios`)"
   - "expo-dev-launcher (from `../../../node_modules/.pnpm/expo-dev-launcher@55.0.29_expo@55.0.15/node_modules/expo-dev-launcher`)"
   - "expo-dev-menu (from `../../../node_modules/.pnpm/expo-dev-menu@55.0.24_expo@55.0.15/node_modules/expo-dev-menu`)"
@@ -3492,7 +3492,7 @@ EXTERNAL SOURCES:
   EXManifests:
     :path: "../../../node_modules/.pnpm/expo-manifests@55.0.16_expo@55.0.15/node_modules/expo-manifests/ios"
   Expo:
-    :path: "../../../node_modules/.pnpm/expo@55.0.15_@babel+core@7.29.6_@expo+dom-webview@55.0.5_@expo+metro-runtime@55.0.10_ex_49d20bb420098b0be32706dea1bcb8da/node_modules/expo"
+    :path: "../../../node_modules/.pnpm/expo@55.0.15_patch_hash=c47f1ce5f54c7806dbabe244cbf1a4988f398618defa1f6efec46716a1831ff_167183c52ea0a8ac84be0e35fe5d09b8/node_modules/expo"
   expo-dev-client:
     :path: "../../../node_modules/.pnpm/expo-dev-client@55.0.28_expo@55.0.15/node_modules/expo-dev-client/ios"
   expo-dev-launcher:
@@ -3775,7 +3775,7 @@ SPEC CHECKSUMS:
   FBLazyVector: 3bcb3055086e5d90a12f0fe1668e79f6eceabc17
   fmt: 530618a01105dae0fa3a2f27c81ae11fa8f67eac
   glog: 5683914934d5b6e4240e497e0f4a3b42d1854183
-  hermes-engine: a1fa4ad3e680cc9c58cb6719b3347a2420cf7e84
+  hermes-engine: 89a07a2154bf4625652fc204b34f511a799f8406
   libavif: 5f8e715bea24debec477006f21ef9e95432e254d
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
   libwebp: af5937a13536ef73f3784d69cc342b98961acf33
@@ -3850,14 +3850,14 @@ SPEC CHECKSUMS:
   React-utils: 29d70520468725a40da28decabd1c58dda7f6f90
   React-webperformancenativemodule: a5f9909a36ae47ea244e38efd25e479c01d39e14
   ReactAppDependencyProvider: 87593e9dfdba8dac1d7b2af1af05f0eff2a05684
-  ReactCodegen: 5765f70f4290272b171ffa27ec40b5025da3aae2
+  ReactCodegen: 7402ace089f512b383c94f9c01e38e34f646e502
   ReactCommon: 5f2db7556b60816bdc5761a359539bacd2d0250d
   RNCAsyncStorage: 29f0230e1a25f36c20b05f65e2eb8958d6526e82
   RNGestureHandler: 713ad51725fe889ff3869d68b577a450605edda2
-  RNReanimated: e3188c8225acbbbbf3391efaa584807a71168d98
+  RNReanimated: ba88953dec979b85a0dfa57112faa9fcbf077423
   RNScreens: b7479bca05aa24961dcc309aca04f25d8fddf56a
   RNSentry: 280880221b83677ba1c13bd9b9927717b884dca0
-  RNWorklets: 6a8fbc4ef83b182817989f113ff64ef279a0fc25
+  RNWorklets: 12db8b0117f27070691814ad4538fd3e684b7f4f
   SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
   SDWebImageAVIFCoder: afe194a084e851f70228e4be35ef651df0fc5c57
   SDWebImageSVGCoder: 15a300a97ec1c8ac958f009c02220ac0402e936c

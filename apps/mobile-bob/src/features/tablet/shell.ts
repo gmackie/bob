@@ -371,7 +371,15 @@ export function buildLeftRailTabBadges(
 
   return {
     conversations: 0,
-    "recent-outcomes": grouped.recentOutcomes.length,
+    // Count what the rail actually lists. Counting only session-derived
+    // outcomes showed "0" above four finished work items, because terminal
+    // work items are rows too. No display limit here: the badge is a total,
+    // not a page size.
+    "recent-outcomes": buildRecentOutcomeRailRows({
+      workItems: input.workItems,
+      sessions: input.sessions,
+      limit: Number.MAX_SAFE_INTEGER,
+    }).length,
     "priority-queue": buildPriorityQueueItems(input.workItems).length,
     "recent-sessions": grouped.recentPlanning.length,
     projects: input.projects.length,

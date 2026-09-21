@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "~/lib/colors";
 
 import type { MobileTab } from "./mobile-tabs";
-import { MOBILE_TABS, resolveTabForPath } from "./mobile-tabs";
+import { MOBILE_TABS, resolveTabForPath, shouldNavigateToTab } from "./mobile-tabs";
 
 /**
  * The phone's tab bar. Reads the tab model, so the layout cannot list a tab the
@@ -23,7 +23,7 @@ export function MobileTabBar({ onMore }: { onMore: () => void }) {
       onMore();
       return;
     }
-    if (active === tab.key) return;
+    if (!shouldNavigateToTab({ tab: tab.key, href: tab.href, pathname })) return;
     // A tab is a place, not a step: replace rather than push so Back does not
     // walk through every tab ever tapped.
     router.replace(tab.href);

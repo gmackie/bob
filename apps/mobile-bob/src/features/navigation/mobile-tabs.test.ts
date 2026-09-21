@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { MOBILE_NAV_DESTINATIONS } from "./mobile-nav";
-import { MOBILE_TABS, MORE_DESTINATIONS, resolveTabForPath, tabHref } from "./mobile-tabs";
+import {
+  MOBILE_TABS,
+  MORE_DESTINATIONS,
+  resolveTabForPath,
+  shouldNavigateToTab,
+  tabHref,
+} from "./mobile-tabs";
 
 // The phone had a menu sheet as its only navigation. A tab bar is the iOS
 // pattern for "four or five places I go constantly"; everything else lives
@@ -73,5 +79,33 @@ describe("tabHref", () => {
   it("returns the tab's own route", () => {
     expect(tabHref("nodes")).toBe("/nodes");
     expect(tabHref("more")).toBe("/more");
+  });
+});
+
+describe("shouldNavigateToTab", () => {
+  it("returns to the tab root from a screen that tab owns", () => {
+    // Opening a work item from Home lights the Tasks tab. Tapping it used to
+    // do nothing, so the detail screen had no exit but the back gesture.
+    expect(
+      shouldNavigateToTab({ tab: "tasks", href: "/tasks", pathname: "/work-items/abc" }),
+    ).toBe(true);
+    expect(
+      shouldNavigateToTab({ tab: "tasks", href: "/tasks", pathname: "/tasks/queue" }),
+    ).toBe(true);
+  });
+
+  it("stays put when already standing on the tab root", () => {
+    expect(
+      shouldNavigateToTab({ tab: "tasks", href: "/tasks", pathname: "/tasks" }),
+    ).toBe(false);
+    expect(
+      shouldNavigateToTab({ tab: "home", href: "/home", pathname: "/home?from=x" }),
+    ).toBe(false);
+  });
+
+  it("never navigates for More, which opens the sheet instead", () => {
+    expect(
+      shouldNavigateToTab({ tab: "more", href: "/more", pathname: "/settings" }),
+    ).toBe(false);
   });
 });

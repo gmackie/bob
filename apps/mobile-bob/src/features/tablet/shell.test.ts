@@ -438,11 +438,30 @@ describe("tablet shell model", () => {
       }),
     ).toEqual({
       conversations: 0,
-      "recent-outcomes": 1,
+      // Terminal and in-review work items are rail rows too, so the badge
+      // counts them: it read "0" over a list of four finished items when it
+      // counted only session-derived outcomes.
+      "recent-outcomes": 3,
       "priority-queue": 1,
       "recent-sessions": 1,
       projects: 2,
     });
+  });
+
+  it("keeps the Recent Outcomes badge equal to the rows the rail renders", () => {
+    const workItems = [
+      { id: "done", identifier: "BOB-1", title: "Completed", kind: "task" as const, status: "completed" },
+      { id: "review", identifier: "BOB-4", title: "Ready for review", kind: "task" as const, status: "in_review" },
+    ];
+    const badge = buildLeftRailTabBadges({ sessions, workItems, projects: [] })[
+      "recent-outcomes"
+    ];
+    const rows = buildRecentOutcomeRailRows({
+      sessions,
+      workItems,
+      limit: Number.MAX_SAFE_INTEGER,
+    });
+    expect(badge).toBe(rows.length);
   });
 
   it("counts session-only execution outcomes in the Recent Outcomes badge", () => {
