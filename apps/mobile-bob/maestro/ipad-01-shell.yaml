@@ -1,0 +1,21 @@
+appId: com.gmacko.bob.dev
+name: iPad tablet shell shows the dashboard and reaches every destination
+---
+- runFlow: 00-dismiss-logbox.yaml
+
+# The dashboard summarises the same seeded workspace the phone shows.
+- assertVisible: "Tasks"
+- assertVisible: "OPERATIONS"
+- assertVisible: "10 work items"
+- assertVisible: "Open Needs Attention table"
+- assertVisible: "Open Review table"
+- assertVisible: "Open BOB-9 Nodes page shows account cooldowns"
+- takeScreenshot: /tmp/bob-shots/ipad-10-dashboard
+
+# Provider capacity is the tablet's other half of the operations picture.
+- assertVisible: ".*Claude. Provider allowance.*"
+- assertVisible: ".*Cursor. Included usage.*"
+
+# The sidebar is the tablet's navigation.
+- tapOn: "Open navigation menu"
+- takeScreenshot: /tmp/bob-shots/ipad-11-sidebar

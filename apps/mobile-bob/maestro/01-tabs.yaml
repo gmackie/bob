@@ -1,0 +1,51 @@
+appId: com.gmacko.bob.dev
+name: Phone tab bar reaches every primary destination
+---
+- launchApp:
+    clearState: false
+- runFlow: 00-dismiss-logbox.yaml
+
+# Home triage groups the seeded work into its lanes.
+- assertVisible: "Home"
+- assertVisible: "Needs you"
+- assertVisible: "Running now"
+- assertVisible: "Up next"
+- assertVisible: "Proxy accounts stop serving after a cooldown, BOB-1, Blocked"
+- takeScreenshot: /tmp/bob-shots/m-01-home
+
+- tapOn:
+    id: "mobile-tab-tasks"
+- assertVisible: "Open priority queue"
+- assertVisible: "Open recent outcomes"
+- takeScreenshot: /tmp/bob-shots/m-02-tasks
+
+- tapOn:
+    id: "mobile-tab-chat"
+- assertVisible: "Start a new thought"
+- takeScreenshot: /tmp/bob-shots/m-03-chat
+
+- tapOn:
+    id: "mobile-tab-nodes"
+- assertVisible: "Reconnecting to the gateway…"
+- takeScreenshot: /tmp/bob-shots/m-04-nodes
+
+# More is the overflow: it must offer what the tab bar does not, and nothing
+# the tab bar already shows.
+- tapOn:
+    id: "mobile-tab-more"
+- assertVisible: "Go to"
+- assertVisible: "Planning"
+- assertVisible: "Pull requests"
+- assertVisible: "Notifications"
+- assertVisible: "Settings"
+- assertNotVisible: "What needs you right now"
+- assertNotVisible: "Queue and outcomes"
+- takeScreenshot: /tmp/bob-shots/m-05-more-sheet
+
+- tapOn: "Close"
+- assertNotVisible: "Go to"
+
+- tapOn:
+    id: "mobile-tab-home"
+- assertVisible: "Needs you"
+- takeScreenshot: /tmp/bob-shots/m-06-back-home
