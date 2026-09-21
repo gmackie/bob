@@ -1,6 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AgentCredentials } from "./agent-credentials";
+
+// The credit latch is a shared file; on the production runner it can hold a
+// real "rate limited" outcome that would leak into these assertions.
+let latchDir: string;
+beforeEach(() => {
+  latchDir = mkdtempSync(join(tmpdir(), "ooda-proxy-creds-"));
+  process.env.BOB_CREDIT_STATE_PATH = join(latchDir, "credit-state.json");
+});
+afterEach(() => {
+  delete process.env.BOB_CREDIT_STATE_PATH;
+  rmSync(latchDir, { recursive: true, force: true });
+});
 
 // On the production runner the host credential probe reported Grok "missing"
 // and sat in a failed unit while the proxy behind it held a working account.
