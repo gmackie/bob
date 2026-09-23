@@ -354,3 +354,6 @@ export async function markRunCompletedAfterMerge(input: MarkRunCompletedAfterMer
     body: input.summary,
   });
 }
+
+// Opt-in replay of a persisted terminal run; task execution is never repeated.
+export { reconcileRunFoundationCompletion } from "./foundationFulfillmentService.js";
