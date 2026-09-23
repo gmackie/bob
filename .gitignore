@@ -38,3 +38,6 @@ packages/research-backend/.venv/
 
 # Private latency/observability evidence
 **/.fg/observability/
+
+# Preserved CI reports (uploaded as workflow artifacts)
+/ci-report/
