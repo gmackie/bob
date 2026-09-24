@@ -320,6 +320,33 @@ export default Sentry.withSentry(
             }
           }
 
+          // The session reaper reaches a work item through its session, so it
+          // cannot see an item claimed but never dispatched, or one whose runs
+          // all ended without moving it. 454 production items sat "In Progress"
+          // that way with zero live runs, the oldest for a month. Same gate and
+          // same best-effort contract as the reaper above.
+          if (String(runtimeEnv.BOB_ORPHAN_RECONCILE_ENABLED ?? "true") !== "false") {
+            try {
+              const { reconcileOrphanedClaims } = await import(
+                "@bob/api/handlers/reconcileOrphanedClaims"
+              );
+              const swept = await reconcileOrphanedClaims({
+                idleMs: runtimeEnv.BOB_ORPHAN_RECONCILE_IDLE_MS
+                  ? Number(runtimeEnv.BOB_ORPHAN_RECONCILE_IDLE_MS)
+                  : undefined,
+              });
+              if (swept.released > 0) {
+                console.log(
+                  `[orphan-reconcile] released=${swept.released} items=${swept.items
+                    .map((i) => i.id.slice(0, 8))
+                    .join(",")}`,
+                );
+              }
+            } catch (err) {
+              console.error("[orphan-reconcile] sweep failed:", err);
+            }
+          }
+
           const { autoDrainBacklog } = await import(
             "@bob/api/handlers/autoDrain"
           );

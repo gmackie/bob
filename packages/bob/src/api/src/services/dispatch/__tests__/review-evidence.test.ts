@@ -12,9 +12,8 @@ describe("resolveCompletionOutcome", () => {
     });
 
     expect(outcome.advance).toBe(false);
-    expect(outcome).toMatchObject({
-      reason: expect.stringMatching(/without attaching/i),
-    });
+    if (outcome.advance) throw new Error("expected the run not to advance");
+    expect(outcome.reason).toMatch(/without attaching/i);
   });
 
   it("advances on any evidence a person can act on", () => {
