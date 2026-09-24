@@ -9,12 +9,14 @@ import { and, desc, eq, inArray, sql } from "@bob/db";
 import type { Db } from "@bob/db/client";
 import {
   chatConversations,
+  comments,
   dispatchBatches,
   dispatchItems,
   planDraftDependencies,
   planDrafts,
   pullRequests,
   taskRuns,
+  workItemArtifacts,
   workItems,
   workspaceMembers,
 } from "@bob/db/schema";
@@ -22,6 +24,7 @@ import {
 import { createTrackedExecution } from "../services/dispatch/trackedExecution";
 import { suggestAgent } from "../services/dispatch/agentHeuristics";
 import { buildExecutionPlanningTask } from "../services/dispatch/executionPlanningTask";
+import { resolveCompletionOutcome } from "../services/dispatch/review-evidence";
 
 import type { HandlerContext } from "./context.js";
 
@@ -94,6 +97,59 @@ async function updatePlanningTaskStatus(
     console.error(
       `[dispatch] Failed to update planning task ${taskId}: ${message}`,
     );
+  }
+}
+
+/**
+ * Advance a completed item to review only when the run left something behind.
+ * Counting is cheap and happens once per completion, off the request path.
+ */
+async function advanceIfReviewable(
+  database: Db,
+  taskId: string,
+  taskRunId: string | null,
+): Promise<void> {
+  try {
+    const [artifacts, commentRows, prs] = await Promise.all([
+      database
+        .select({ n: sql<number>`count(*)::int` })
+        .from(workItemArtifacts)
+        .where(eq(workItemArtifacts.workItemId, taskId)),
+      database
+        .select({ n: sql<number>`count(*)::int` })
+        .from(comments)
+        .where(eq(comments.workItemId, taskId)),
+      // The PR hangs off the run, not the other way round.
+      taskRunId
+        ? database
+            .select({ n: sql<number>`count(*)::int` })
+            .from(taskRuns)
+            .where(
+              and(
+                eq(taskRuns.id, taskRunId),
+                sql`${taskRuns.pullRequestId} is not null`,
+              ),
+            )
+        : Promise.resolve([{ n: 0 }]),
+    ]);
+
+    const outcome = resolveCompletionOutcome({
+      artifactCount: artifacts[0]?.n ?? 0,
+      commentCount: commentRows[0]?.n ?? 0,
+      hasPullRequest: (prs[0]?.n ?? 0) > 0,
+    });
+
+    if (!outcome.advance) {
+      console.warn(
+        `[dispatch] not advancing ${taskId} to review: ${outcome.reason}`,
+      );
+      return;
+    }
+
+    await updatePlanningTaskStatus(database, taskId, outcome.status);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[dispatch] review-evidence check failed for ${taskId}: ${message}`);
   }
 }
 
@@ -640,8 +696,11 @@ export async function dispatchCheckProgress(
           .where(eq(dispatchItems.id, item.id));
         newCompleted++;
 
-        // Update planning API status to "in_review"
-        void updatePlanningTaskStatus(ctx.db, item.planningTaskId, "in_review");
+        // "Review ready" must mean a person can do something. A run that
+        // exits having attached nothing leaves the item where it is; the
+        // stale-claim reaper moves it on. Advancing on exit alone is what
+        // produced 3,116 items asking for a review that did not exist.
+        void advanceIfReviewable(ctx.db, item.planningTaskId, item.taskRunId);
 
         // Auto-trigger code reviewer if PR exists on the task run
         void triggerCodeReview(ctx.db, item, batch.userId).catch((err) =>
