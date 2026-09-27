@@ -36,7 +36,10 @@ export GITHUB_RUN_NUMBER='<visible-run-number>'
 export CI_SOURCE_RESULT='<success|failure|cancelled|skipped>'
 export CI_RESEARCH_RESULT='<success|failure|cancelled|skipped>'
 export CI_REPORT_BRANCH='<original-branch>'
-# Load FG_CI_TOKEN from the approved secret store without printing it.
+# Load the deploy token into FG_CI_TOKEN without printing it. In CI this comes
+# from the FORGEGRAPH_TOKEN repo Actions secret, which `forge ci provision`
+# mints and refreshes; deploy tokens expire, so never hand-set a second copy.
+# The endpoint accepts any deploy-scoped fg_* token.
 node scripts/ci-report.mjs send /path/to/downloaded/report.json
 ```
 

@@ -340,7 +340,15 @@ jobs:
           path: ci-report
       - name: Publish preserved result
         env:
-          FG_CI_TOKEN: ${{ secrets.FG_CI_TOKEN }}
+          # Sourced from FORGEGRAPH_TOKEN, not FG_CI_TOKEN. Both are repo
+          # Actions secrets and both are deploy-scoped, but only
+          # FORGEGRAPH_TOKEN is minted and refreshed by `forge ci provision`;
+          # FG_CI_TOKEN was set once by hand and nothing renews it. Deploy
+          # tokens carry an expiry (ForgeGraph's verifyBearerToken checks
+          # expiresAt), so the hand-set copy went stale and the run went red
+          # on `ForgeGraph CI report rejected: HTTP 401` while every real job
+          # passed. One credential, provisioned and consumed.
+          FG_CI_TOKEN: ${{ secrets.FORGEGRAPH_TOKEN }}
         run: node scripts/ci-report.mjs send ci-report/report.json
 
   # Continuous deploy: ship the web app to bob.blder.bot after CI passes on master.
