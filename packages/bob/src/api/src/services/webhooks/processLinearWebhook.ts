@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "@bob/db";
+import { and, eq, inArray, notInArray, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import type {
   projects} from "@bob/db/schema";
@@ -15,6 +15,11 @@ import {
   markDeliveryProcessed,
 } from "./processWebhook";
 import { ensureLinearProject } from "../linear/ensureLinearProject";
+import {
+  CLOSED_STATUSES,
+  appendRecurrence,
+  resolveRecurrence,
+} from "../integrations/title-recurrence";
 import { traceWebhook } from "@bob/telemetry";
 
 const LINEAR_BOB_ACTOR = "bob-automation";
@@ -157,6 +162,12 @@ async function findOrCreateWorkItem(
 
   if (existing) return existing;
 
+  // The upstream job mints a NEW issue id for the same title every week, so the
+  // lookup above never matches and the board collected one copy per week. Fold
+  // a recurrence into the open item instead, keeping its lineage.
+  const reused = await reuseOpenRecurrence(payload, projectId, workspaceId);
+  if (reused) return reused;
+
   const [created] = await db
     .insert(workItems)
     .values({
@@ -177,6 +188,75 @@ async function findOrCreateWorkItem(
   }
 
   return created;
+}
+
+/**
+ * Fold a recurring upstream issue into the open work item that already asks
+ * for it, or return null when there is nothing to fold into.
+ *
+ * The SQL narrows on case-insensitive, trimmed title equality, which is
+ * index-friendly and catches the byte-identical titles seen in production;
+ * `resolveRecurrence` is the authority and re-checks with full normalisation.
+ * A title differing only by internal whitespace is therefore not merged, which
+ * is the safe direction: a visible duplicate beats losing a real request.
+ */
+async function reuseOpenRecurrence(
+  payload: LinearIssuePayload,
+  projectId: string,
+  workspaceId: string,
+): Promise<typeof workItems.$inferSelect | null> {
+  const candidates = await db
+    .select({
+      id: workItems.id,
+      title: workItems.title,
+      status: workItems.status,
+    })
+    .from(workItems)
+    .where(
+      and(
+        eq(workItems.workspaceId, workspaceId),
+        eq(workItems.projectId, projectId),
+        notInArray(workItems.status, [...CLOSED_STATUSES]),
+        sql`lower(btrim(${workItems.title})) = lower(btrim(${payload.data.title}))`,
+      ),
+    )
+    .limit(50);
+
+  const outcome = resolveRecurrence({
+    incoming: {
+      title: payload.data.title,
+      provider: "linear",
+      externalId: payload.data.id,
+      // Declared non-optional; resolveRecurrence normalises a missing value.
+      externalUrl: payload.url,
+    },
+    candidates,
+  });
+  if (outcome.create) return null;
+
+  const [current] = await db
+    .select({ sourceMetadata: workItems.sourceMetadata })
+    .from(workItems)
+    .where(eq(workItems.id, outcome.reuseWorkItemId))
+    .limit(1);
+
+  const [updated] = await db
+    .update(workItems)
+    .set({
+      sourceMetadata: appendRecurrence(
+        current?.sourceMetadata,
+        outcome.recurrence,
+      ),
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(workItems.id, outcome.reuseWorkItemId))
+    .returning();
+
+  console.log(
+    `[linear-webhook] Issue ${payload.data.identifier} recurs an open work item ` +
+      `(${outcome.reuseWorkItemId}); recorded its lineage instead of duplicating it`,
+  );
+  return updated ?? null;
 }
 
 async function handleIssueCreate(payload: LinearIssuePayload): Promise<void> {
