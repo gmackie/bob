@@ -238,6 +238,11 @@ describe("tablet shell model", () => {
       leftTab: "recent-outcomes",
       target: { type: "run", runId: "run-9" },
     });
+    expect(getShellStateForPath("/today")).toEqual({
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "today" },
+    });
     // The phone's sessions list is the tablet's Recent Outcomes rail.
     expect(getShellStateForPath("/sessions")).toEqual({
       mode: "tasks",

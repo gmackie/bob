@@ -36,6 +36,8 @@ export type TabletShellTarget =
   // A run record with no session to open: the sweep-ended and reconciled
   // runs that used to link to a route that did not exist.
   | { type: "run"; runId: string }
+  // The day's plan, progress and review.
+  | { type: "today" }
   | { type: "planning-session"; sessionId: string }
   | { type: "project"; projectId: string }
   | { type: "provider"; provider: ProviderKey }
@@ -338,6 +340,14 @@ export function getShellStateForPath(
     };
   }
 
+  if (path === "/today") {
+    return {
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "today" },
+    };
+  }
+
   // The phone's sessions list; on the tablet the sidebar's Recent Outcomes
   // rail is that list, so land on the tasks dashboard beside it.
   if (path === "/sessions") {
@@ -491,6 +501,7 @@ export function getShellModeForTarget(
     case "work-item":
     case "execution-session":
     case "run":
+    case "today":
     case "provider":
     case "task-lane":
       return "tasks";
@@ -548,6 +559,7 @@ export function isNativeTabletShellTarget(target: TabletShellTarget): boolean {
     case "work-item":
     case "execution-session":
     case "run":
+    case "today":
     case "planning-session":
     case "project":
     case "provider":

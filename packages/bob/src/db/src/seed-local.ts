@@ -14,6 +14,7 @@ import {
   tenants,
   user,
   workItems,
+  workspaceMembers,
   workspaces,
 } from "./schema";
 
@@ -62,6 +63,13 @@ async function main() {
       defaultAgentType: "claude",
       lastHeartbeat: iso(1),
     })
+    .onConflictDoNothing();
+
+  // The mobile app lists workspaces through workspace_members, not ownership;
+  // without this row every screen that needs a workspace stayed empty.
+  await db
+    .insert(workspaceMembers)
+    .values({ workspaceId: WORKSPACE_ID, userId: USER_ID, role: "owner" })
     .onConflictDoNothing();
 
   await db

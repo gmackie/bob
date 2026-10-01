@@ -18,6 +18,7 @@ export interface MobileNavDestination {
 
 export const MOBILE_NAV_DESTINATIONS: readonly MobileNavDestination[] = [
   { href: "/home", label: "Home", description: "What needs you right now" },
+  { href: "/today", label: "Today", description: "The day's plan, progress and review" },
   { href: "/chat", label: "Chat", description: "Talk to the agent" },
   { href: "/tasks", label: "Tasks", description: "Queue and outcomes" },
   {

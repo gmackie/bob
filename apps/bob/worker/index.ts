@@ -57,6 +57,11 @@ interface Env {
   HYPERDRIVE: { connectionString: string };
   GATEWAY_URL?: string;
   NUDGE_SHARED_SECRET?: string;
+  BOB_DAILY_PLAN_ENABLED?: string;
+  BOB_DAILY_PLAN_HOUR_UTC?: string;
+  BOB_DAILY_REVIEW_HOUR_UTC?: string;
+  BOB_BIZPULSE_API_URL?: string;
+  BOB_BIZPULSE_API_KEY?: string;
   SKILLFLEET_NOTIFICATION_SECRET?: string;
   SKILLFLEET_ORIGIN_URL?: string;
   SKILLFLEET_HERMES_READ_SECRET?: string;
@@ -534,6 +539,36 @@ export default Sentry.withSentry(
             }
           } catch (error) {
             console.error("[daily-digest] failed:", error);
+          }
+        }
+
+        // 2c. Daily plan (morning) and daily review (evening). Intake from
+        // BizPulse runs inside the plan step when BOB_BIZPULSE_API_URL and
+        // BOB_BIZPULSE_API_KEY are set. Once-per-day is enforced by the
+        // daily_plans unique (workspace, date) row, not by the clock.
+        if (String(runtimeEnv.BOB_DAILY_PLAN_ENABLED ?? "true") !== "false") {
+          try {
+            const { runDailyPlanCron, runDailyReviewCron } = await import(
+              "@bob/api/handlers/dailyPlan"
+            );
+            const bizpulseUrl = runtimeEnv.BOB_BIZPULSE_API_URL;
+            const bizpulseKey = runtimeEnv.BOB_BIZPULSE_API_KEY;
+            const planned = await runDailyPlanCron({
+              hourUtc: Number(runtimeEnv.BOB_DAILY_PLAN_HOUR_UTC ?? 6),
+              dailyCap,
+              bizpulse: bizpulseUrl && bizpulseKey ? { apiUrl: bizpulseUrl, apiKey: bizpulseKey } : null,
+            });
+            if (planned.ran && planned.workspaces?.length) {
+              console.log(`[daily-plan] date=${planned.date} planned=${JSON.stringify(planned.workspaces)}`);
+            }
+            const reviewed = await runDailyReviewCron({
+              hourUtc: Number(runtimeEnv.BOB_DAILY_REVIEW_HOUR_UTC ?? 21),
+            });
+            if (reviewed.ran && reviewed.workspaces?.length) {
+              console.log(`[daily-review] date=${reviewed.date} closed=${reviewed.workspaces.length}`);
+            }
+          } catch (error) {
+            console.error("[daily-plan] failed:", error);
           }
         }
 

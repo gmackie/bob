@@ -55,6 +55,13 @@
     // the pipe instead of going dark until midnight. Flip to "false" for the
     // old first-come-first-served cap.
     "BOB_AUTO_DRAIN_PACING_ENABLED": "true",
+    // The daily loop: a plan built each morning (UTC hour) for approval, a
+    // review closing it each evening. BizPulse intake needs the secret
+    // BOB_BIZPULSE_API_KEY (wrangler secret put) alongside this URL.
+    "BOB_DAILY_PLAN_ENABLED": "true",
+    "BOB_DAILY_PLAN_HOUR_UTC": "12",
+    "BOB_DAILY_REVIEW_HOUR_UTC": "23",
+    "BOB_BIZPULSE_API_URL": "https://bizpulse.cc",
     // Dispatch rotation. claude restored 2026-08-23 after its weekly limit
     // reset. Review/repair stay on codex so a second provider carries that
     // load (and the reviewer is never the author's own model).

@@ -93,6 +93,16 @@ export default function HomeScreen() {
                 top of Home, with the counts that decide whether to bother. */}
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Open today's plan"
+              testID="home-open-today"
+              onPress={() => router.push("/today")}
+              className="mt-3 flex-row items-center justify-between active:opacity-70"
+            >
+              <Text className="text-foreground text-sm font-semibold">Today</Text>
+              <Text className="text-muted text-xs">Plan, progress, review ›</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
               accessibilityLabel="Open sessions"
               testID="home-open-sessions"
               onPress={() => router.push("/sessions")}

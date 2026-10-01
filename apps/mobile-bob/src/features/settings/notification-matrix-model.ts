@@ -27,6 +27,8 @@ import type {
 const ROW_ORDER: NotificationType[] = [
   "work_item_needs_input",
   "work_item_review_ready",
+  "daily_plan_ready",
+  "daily_review_ready",
   "proxy_unreachable",
   "provider_no_ready_accounts",
   "work_item_assigned",
@@ -39,6 +41,8 @@ const ROW_ORDER: NotificationType[] = [
 const ROW_LABELS: Record<NotificationType, string> = {
   work_item_needs_input: "Needs input",
   work_item_review_ready: "Review ready",
+  daily_plan_ready: "Daily plan ready",
+  daily_review_ready: "Daily review ready",
   proxy_unreachable: "Proxy unreachable",
   provider_no_ready_accounts: "No ready account",
   work_item_assigned: "Assigned to me",
@@ -51,6 +55,8 @@ const ROW_LABELS: Record<NotificationType, string> = {
 const ROW_HINTS: Record<NotificationType, string> = {
   work_item_needs_input: "An agent is blocked waiting on you",
   work_item_review_ready: "Work is ready for your review",
+  daily_plan_ready: "Today's plan is waiting for your approval",
+  daily_review_ready: "The day's review is ready to read",
   proxy_unreachable: "The inference proxy cannot be reached; no run can be served",
   provider_no_ready_accounts: "A provider has no ready account on the proxy",
   work_item_assigned: "A work item was assigned to you",

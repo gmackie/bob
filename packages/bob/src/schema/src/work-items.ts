@@ -124,6 +124,10 @@ export const workItemNotificationType = [
   // a provider with no ready account on it. Added by migration 0033.
   "proxy_unreachable",
   "provider_no_ready_accounts",
+  // The daily loop: the morning plan is ready to approve, the evening review
+  // is ready to read. Added by migration 0034.
+  "daily_plan_ready",
+  "daily_review_ready",
 ] as const;
 export type WorkItemNotificationType =
   (typeof workItemNotificationType)[number];
@@ -1129,4 +1133,93 @@ export const workItemSnapshotsRelations = relations(
       references: [workItems.id],
     }),
   }),
+);
+
+// --- Daily plans ------------------------------------------------------------
+
+export const dailyPlanStatus = ["draft", "approved", "closed"] as const;
+export type DailyPlanStatus = (typeof dailyPlanStatus)[number];
+
+/** One line of the day's plan: a work item and why it is on the list. */
+export interface DailyPlanItem {
+  workItemId: string;
+  title: string;
+  identifier: string | null;
+  projectId: string | null;
+  projectName: string | null;
+  /** Why this item made the plan, in a person's words. */
+  objective: string;
+  /** Where it came from: the queue, the BizPulse intake, or carried over. */
+  source: "queue" | "bizpulse" | "carryover";
+  /** Status when the plan was built; the live status is joined at read time. */
+  statusAtPlan: string;
+  order: number;
+}
+
+/** What the morning intake did, so the plan can say where its work came from. */
+export interface DailyPlanIntake {
+  provider: string;
+  pulled: number;
+  created: number;
+  reused: number;
+  skipped: number;
+  error: string | null;
+}
+
+/** The evening review: what happened to each planned item, and the sessions to read. */
+export interface DailyPlanReviewItem {
+  workItemId: string;
+  title: string;
+  identifier: string | null;
+  outcome: "done" | "in_review" | "running" | "blocked" | "failed" | "not_started" | "other";
+  status: string;
+  sessionIds: string[];
+}
+
+export interface DailyPlanReview {
+  items: DailyPlanReviewItem[];
+  counts: Record<DailyPlanReviewItem["outcome"], number>;
+  /** Sessions that ran today for work outside the plan. */
+  unplannedSessionIds: string[];
+  sessionsCompleted: number;
+  sessionsFailed: number;
+  sessionsBlocked: number;
+  generatedAt: string;
+}
+
+/**
+ * One plan per workspace per day: what Bob intends to do, approved by a
+ * person, closed with what actually happened. The morning cron writes a
+ * draft; approval orders the dispatch queue to match; the evening cron
+ * closes it with a review. Nothing here is derivable from work items alone,
+ * because the plan is a decision made at a point in time and the review is
+ * the record of how it went.
+ */
+export const dailyPlans = pgTable(
+  "daily_plans",
+  (t) => ({
+    id: t.uuid().notNull().primaryKey().defaultRandom(),
+    workspaceId: t.uuid().notNull(),
+    /** UTC calendar day, "YYYY-MM-DD". */
+    planDate: t.varchar({ length: 10 }).notNull(),
+    status: t.varchar({ length: 16 }).notNull().default("draft"),
+    /** Plain-language summary of the day, markdown. */
+    summary: t.text().notNull().default(""),
+    items: t.jsonb().$type<DailyPlanItem[]>().notNull().default([]),
+    intake: t.jsonb().$type<DailyPlanIntake[]>().notNull().default([]),
+    review: t.jsonb().$type<DailyPlanReview | null>(),
+    reviewSummary: t.text(),
+    /** The dispatch cap the plan was sized against. */
+    capacity: t.integer().notNull().default(0),
+    createdAt: t.timestamp({ mode: "string", withTimezone: true }).defaultNow().notNull(),
+    approvedAt: t.timestamp({ mode: "string", withTimezone: true }),
+    approvedByUserId: t.text(),
+    closedAt: t.timestamp({ mode: "string", withTimezone: true }),
+    updatedAt: t
+      .timestamp({ mode: "string", withTimezone: true })
+      .$onUpdateFn(() => sql`now()`),
+  }),
+  (table) => [
+    uniqueIndex("daily_plans_workspace_date_uidx").on(table.workspaceId, table.planDate),
+  ],
 );

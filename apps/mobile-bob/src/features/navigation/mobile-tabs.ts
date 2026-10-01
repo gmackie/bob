@@ -46,6 +46,7 @@ export const MORE_DESTINATIONS: readonly MobileNavDestination[] = MOBILE_NAV_DES
  */
 const ROUTE_OWNERS: readonly [prefix: string, tab: MobileTabKey][] = [
   ["/home", "home"],
+  ["/today", "home"],
   ["/tasks", "tasks"],
   ["/work-items", "tasks"],
   ["/sessions", "tasks"],

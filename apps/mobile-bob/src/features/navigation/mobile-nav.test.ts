@@ -25,6 +25,7 @@ describe("MOBILE_NAV_DESTINATIONS", () => {
     const hrefs = MOBILE_NAV_DESTINATIONS.map((d) => d.href);
     for (const href of [
       "/home",
+      "/today",
       "/chat",
       "/tasks",
       "/sessions",

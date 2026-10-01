@@ -46,6 +46,7 @@ describe("MORE_DESTINATIONS", () => {
 describe("resolveTabForPath", () => {
   it("lights the tab that owns the current route", () => {
     expect(resolveTabForPath("/home")).toBe("home");
+    expect(resolveTabForPath("/today")).toBe("home");
     expect(resolveTabForPath("/tasks/queue")).toBe("tasks");
     expect(resolveTabForPath("/chat")).toBe("chat");
     expect(resolveTabForPath("/nodes")).toBe("nodes");
