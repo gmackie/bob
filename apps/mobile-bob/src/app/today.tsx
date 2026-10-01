@@ -1,4 +1,3 @@
-import type { Href } from "expo-router";
 import { Redirect, router, Stack } from "expo-router";
 
 import { getSessionHref } from "~/features/planning/navigation";
@@ -31,7 +30,7 @@ export default function TodayScreen() {
         onGenerate={plan.generate}
         onApprove={() => plan.approve()}
         onClose={plan.close}
-        onOpenWorkItem={(href) => router.push(href as Href)}
+        onOpenWorkItem={(href) => router.push(href)}
         onOpenSession={(sessionId) =>
           router.push(getSessionHref(sessionId, selectedWorkspaceId))
         }
