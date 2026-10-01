@@ -27,6 +27,7 @@ describe("MOBILE_NAV_DESTINATIONS", () => {
       "/home",
       "/chat",
       "/tasks",
+      "/sessions",
       "/planning",
       "/pull-requests",
       "/nodes",

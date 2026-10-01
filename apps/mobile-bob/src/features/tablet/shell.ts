@@ -9,6 +9,7 @@ import {
   getRecentOutcomeRowModel,
 } from "./dashboard";
 import { buildPriorityQueueItems } from "./queue";
+import { timestampToMillis } from "~/lib/timestamps";
 
 export type TabletShellMode = "ooda" | "tasks" | "planning";
 export type TabletShellStatusFilter =
@@ -32,6 +33,9 @@ export type TabletShellTarget =
   | { type: "projects-dashboard" }
   | { type: "work-item"; workItemId: string; view?: MobileWorkItemEntryView }
   | { type: "execution-session"; sessionId: string }
+  // A run record with no session to open: the sweep-ended and reconciled
+  // runs that used to link to a route that did not exist.
+  | { type: "run"; runId: string }
   | { type: "planning-session"; sessionId: string }
   | { type: "project"; projectId: string }
   | { type: "provider"; provider: ProviderKey }
@@ -258,6 +262,7 @@ export function getShellStateForPath(
   const workItemView = normalizeWorkItemRouteView(readParam(params, "view"));
   const sessionId = readParam(params, "sessionId") ?? pathSegment(path, 1);
   const projectId = readParam(params, "projectId") ?? pathSegment(path, 1);
+  const runId = readParam(params, "runId") ?? pathSegment(path, 1);
 
   if (path === "/settings" || path.startsWith("/settings/")) {
     return {
@@ -321,6 +326,24 @@ export function getShellStateForPath(
       mode: "tasks",
       leftTab: "recent-outcomes",
       target: { type: "execution-session", sessionId },
+    };
+  }
+
+  // The phone's sessions list; on the tablet the sidebar's Recent Outcomes
+  // rail is that list, so land on the tasks dashboard beside it.
+  if (path === "/sessions") {
+    return {
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "tasks-dashboard" },
+    };
+  }
+
+  if (path.startsWith("/runs/") && runId) {
+    return {
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "run", runId },
     };
   }
 
@@ -449,6 +472,7 @@ export function getShellModeForTarget(
     case "tasks-dashboard":
     case "work-item":
     case "execution-session":
+    case "run":
     case "provider":
     case "task-lane":
       return "tasks";
@@ -505,6 +529,7 @@ export function isNativeTabletShellTarget(target: TabletShellTarget): boolean {
     case "projects-dashboard":
     case "work-item":
     case "execution-session":
+    case "run":
     case "planning-session":
     case "project":
     case "provider":
@@ -857,8 +882,8 @@ function formatShellStatusLabel(status: string): string {
 }
 
 function formatLastUpdatedLabel(value: string, now: Date): string {
-  const timestamp = new Date(value).getTime();
-  if (!Number.isFinite(timestamp)) return "No activity";
+  const timestamp = timestampToMillis(value);
+  if (timestamp === null) return "No activity";
 
   const diffMs = Math.max(0, now.getTime() - timestamp);
   const minutes = Math.floor(diffMs / 60_000);
@@ -872,9 +897,7 @@ function formatLastUpdatedLabel(value: string, now: Date): string {
 }
 
 function timestampValue(value: string | Date | null | undefined): number {
-  if (!value) return 0;
-  const timestamp = value instanceof Date ? value.getTime() : Date.parse(value);
-  return Number.isFinite(timestamp) ? timestamp : 0;
+  return timestampToMillis(value) ?? 0;
 }
 
 function formatDateValue(value: string | Date | null | undefined): string {

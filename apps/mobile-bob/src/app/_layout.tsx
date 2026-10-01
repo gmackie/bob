@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Modal, Platform, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { Stack, useLocalSearchParams, usePathname, useRouter } from "expo-router";
+import type { Href } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,7 +9,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { queryClient } from "~/utils/api";
 import { Providers } from "../providers";
 import { TabletSidebar } from "~/components/tablet/TabletSidebar";
-import { AgentThreadView } from "~/components/tablet/AgentThreadView";
+import { SessionWorkstation } from "~/components/tablet/SessionWorkstation";
+import { RunRecordView } from "~/features/runs/RunRecordView";
 import { WorkItemPane } from "~/components/tablet/WorkItemPane";
 import { PlanningPane } from "~/components/tablet/PlanningPane";
 import { InspectorPanel } from "~/components/tablet/InspectorPanel";
@@ -103,7 +105,9 @@ const PHONE_SCREEN_TITLES: readonly (readonly [string, string])[] = [
   ["pull-requests", "Pull Requests"],
   ["nodes", "Nodes"],
   ["notifications", "Inbox"],
+  ["sessions/index", "Sessions"],
   ["sessions/[sessionId]", "Session"],
+  ["runs/[runId]", "Run"],
   ["work-items/[workItemId]", "Work Item"],
   ["work-items/[workItemId]/workspace", "Workspace"],
   ["settings/index", "Settings"],
@@ -191,6 +195,7 @@ function MainPane({
   onSelectProject,
   selectedWorkItemView,
   onOpenSession,
+  onOpenRun,
   onOpenPlanningSession,
   onOpenPlanningSummaryTarget,
   onOpenPlanningNavigationAction,
@@ -207,6 +212,7 @@ function MainPane({
   onSelectProject: (projectId: string) => void;
   selectedWorkItemView: MobileWorkItemEntryView;
   onOpenSession: (sessionId: string) => void;
+  onOpenRun: (href: string) => void;
   onOpenPlanningSession: (sessionId: string) => void;
   onOpenPlanningSummaryTarget: (target: TabletPlanningSummaryTarget) => void;
   onOpenPlanningNavigationAction: (action: TabletPlanningDashboardNavigationAction) => void;
@@ -238,11 +244,26 @@ function MainPane({
 
   if (target.type === "execution-session") {
     return (
-      <AgentThreadView
+      <SessionWorkstation
         sessionId={target.sessionId}
+        sessions={gateway.sessions}
         events={gateway.selectedSessionEvents}
         onSendInput={gateway.sendInput}
         onStopSession={gateway.stopSession}
+        onApprove={gateway.approve}
+        onReportRunView={gateway.reportRunView}
+        onOpenWorkItem={(workItemId) => onOpenWorkItem(workItemId, "outcome")}
+        onOpenInspector={onOpenInspector}
+      />
+    );
+  }
+
+  if (target.type === "run") {
+    return (
+      <RunRecordView
+        runId={target.runId}
+        onOpenSession={onOpenSession}
+        onOpenWorkItem={(workItemId) => onOpenWorkItem(workItemId, "outcome")}
       />
     );
   }
@@ -253,6 +274,7 @@ function MainPane({
         workItemId={target.workItemId}
         entryView={selectedWorkItemView}
         onOpenSession={onOpenSession}
+        onOpenRun={onOpenRun}
         onOpenInspector={onOpenInspector}
       />
     );
@@ -528,6 +550,21 @@ function TabletLayout() {
     router.replace(getTabletSessionHref(sessionId, selectedWorkspaceId));
   }, [gateway, router, selectedWorkspaceId]);
 
+  // A run row without a session: the href is the phone's `/runs/<id>`, and
+  // the shell's path mapping turns it into the run target.
+  const handleOpenRun = useCallback((href: string) => {
+    clearDetailState();
+    const runId = /^\/runs\/([^?]+)/.exec(href)?.[1];
+    if (runId) {
+      setShell({
+        mode: "tasks",
+        leftTab: "recent-outcomes",
+        target: { type: "run", runId: decodeURIComponent(runId) },
+      });
+    }
+    router.replace(href as Href);
+  }, [clearDetailState, router]);
+
   const handleOpenPlanningSession = useCallback((sessionId: string) => {
     gateway.selectWorkItem(null);
     setShell({
@@ -721,6 +758,7 @@ function TabletLayout() {
               onSelectProject={handleSelectProject}
               selectedWorkItemView={selectedWorkItemView}
               onOpenSession={handleOpenSession}
+              onOpenRun={handleOpenRun}
               onOpenPlanningSession={handleOpenPlanningSession}
               onOpenPlanningSummaryTarget={handleOpenPlanningSummaryTarget}
               onOpenPlanningNavigationAction={handleOpenPlanningNavigationAction}

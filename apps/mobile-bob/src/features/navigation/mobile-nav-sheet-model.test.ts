@@ -21,6 +21,7 @@ describe("More sheet destinations", () => {
 
   it("keeps everything that has no tab of its own", () => {
     expect([...sheetHrefs]).toEqual([
+      "/sessions",
       "/planning",
       "/pull-requests",
       "/notifications",

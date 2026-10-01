@@ -8,7 +8,6 @@ import * as WebBrowser from "expo-web-browser";
 
 import type { MarkdownBlock } from "./markdown-model";
 import type { MarkdownTheme } from "./markdown-theme";
-import { CodeViewer } from "~/components/tablet/CodeViewer";
 import { colors } from "~/lib/colors";
 import { normalizeLinkUrl, splitMarkdownBlocks } from "./markdown-model";
 import { createMarkdownTheme } from "./markdown-theme";
@@ -69,7 +68,35 @@ function FenceBlock({ node, theme }: { node: ASTNode; theme: MarkdownTheme }) {
         marginBottom: theme.fence.marginBottom,
       }}
     >
-      <CodeViewer content={content} filePath={`snippet.${lang}`} />
+      {/* CodeViewer is built for a full pane: flex-1 with nested ScrollViews.
+          Inside a markdown flow it has no height to fill and collapses to its
+          header, which is what an empty band under "Requesting approval to
+          run:" was. A fence is a few lines to read, so lay them out inline. */}
+      <View
+        className="flex-row items-center px-3 py-1.5"
+        style={{
+          borderBottomWidth: 1,
+          borderBottomColor: colors.border,
+          backgroundColor: colors.card,
+        }}
+      >
+        <Text className="text-accent font-mono text-xs" numberOfLines={1}>
+          {lang}
+        </Text>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8 }}
+      >
+        <Text
+          selectable
+          className="text-foreground font-mono text-xs"
+          style={{ lineHeight: 18 }}
+        >
+          {content}
+        </Text>
+      </ScrollView>
       <Pressable
         onPress={handleCopy}
         accessibilityRole="button"

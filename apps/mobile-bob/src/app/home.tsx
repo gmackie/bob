@@ -1,11 +1,12 @@
 import { useMemo } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { Stack, router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 
 import { Badge, Card, EmptyState, ListRow, Screen } from "~/components/ui";
 import { buildHomeTriage } from "~/features/home/home-model";
 import type { HomeTone } from "~/features/home/home-model";
+import { buildSessionList } from "~/features/sessions/session-list-model";
 import { buildNodeLights } from "~/features/nodes/node-lights-model";
 import { useGateway } from "~/hooks/use-gateway";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
@@ -57,6 +58,15 @@ export default function HomeScreen() {
 
   const activeRunCount = sessions.filter((s) => s.status === "running").length;
   const lights = buildNodeLights(hostSnapshot, { activeRunCount });
+  const sessionList = useMemo(() => buildSessionList(sessions), [sessions]);
+  const sessionsLabel = sessionList.isEmpty
+    ? "No sessions yet"
+    : [
+        sessionList.needsYouCount > 0 ? `${sessionList.needsYouCount} need you` : null,
+        `${sessionList.runningCount} running`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
 
   return (
     <>
@@ -79,6 +89,22 @@ export default function HomeScreen() {
               </Text>
             </View>
             <Text className="text-muted mt-1 text-xs">{lights.activityLabel}</Text>
+            {/* Sessions are the thing a person checks in on; one tap from the
+                top of Home, with the counts that decide whether to bother. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open sessions"
+              testID="home-open-sessions"
+              onPress={() => router.push("/sessions")}
+              className="mt-3 flex-row items-center justify-between active:opacity-70"
+            >
+              <Text className="text-foreground text-sm font-semibold">Sessions</Text>
+              <Text
+                className={`text-xs ${sessionList.needsYouCount > 0 ? "text-warning" : "text-muted"}`}
+              >
+                {sessionsLabel} ›
+              </Text>
+            </Pressable>
           </Card>
 
           {workItemsQuery.isLoading ? (

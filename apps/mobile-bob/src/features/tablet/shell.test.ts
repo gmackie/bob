@@ -191,6 +191,23 @@ describe("tablet shell model", () => {
       leftTab: "recent-outcomes",
       target: { type: "execution-session", sessionId: "session-1" },
     });
+    // Runs without a session open a run record, in the same lane as outcomes.
+    expect(getShellStateForPath("/runs/run-9", { runId: "run-9" })).toEqual({
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "run", runId: "run-9" },
+    });
+    expect(getShellStateForPath("/runs/run-9")).toEqual({
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "run", runId: "run-9" },
+    });
+    // The phone's sessions list is the tablet's Recent Outcomes rail.
+    expect(getShellStateForPath("/sessions")).toEqual({
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "tasks-dashboard" },
+    });
     expect(getShellStateForPath("/planning/sessions/plan-1", { sessionId: "plan-1" })).toEqual({
       mode: "planning",
       leftTab: "recent-sessions",

@@ -57,6 +57,8 @@ describe("resolveTabForPath", () => {
     expect(resolveTabForPath("/work-items/wi_1/workspace")).toBe("tasks");
     // Sessions and providers are reached from Nodes/Tasks; keep Tasks lit.
     expect(resolveTabForPath("/sessions/s_1")).toBe("tasks");
+    expect(resolveTabForPath("/sessions")).toBe("tasks");
+    expect(resolveTabForPath("/runs/r_1")).toBe("tasks");
   });
 
   it("lights More for everything behind it", () => {
