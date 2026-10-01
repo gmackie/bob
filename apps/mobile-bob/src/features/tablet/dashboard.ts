@@ -1,4 +1,5 @@
 import type { TabletQueueItem } from "./queue";
+import { timestampToMillis } from "~/lib/timestamps";
 import { appendWorkspaceParam } from "../planning/navigation";
 import { buildExecutionQueue, formatStatusLabel } from "./queue";
 
@@ -546,7 +547,7 @@ function formatRelativeActivityLabel(
 
 function timestampValue(value: string | Date | null | undefined): number {
   if (!value) return Number.NaN;
-  return value instanceof Date ? value.getTime() : Date.parse(value);
+  return timestampToMillis(value) ?? Number.NaN;
 }
 
 function buildProviderCard(
@@ -1207,7 +1208,7 @@ export function getTaskLaneWorkItemTarget(
 function completionTime(item: TabletDashboardWorkItem): number {
   const value = item.completedAt ?? item.updatedAt;
   if (!value) return 0;
-  const time = value instanceof Date ? value.getTime() : Date.parse(value);
+  const time = timestampToMillis(value) ?? Number.NaN;
   return Number.isNaN(time) ? 0 : time;
 }
 
@@ -1238,7 +1239,7 @@ function formatLastUpdatedLabel(
   now: Date,
 ): string {
   if (!value) return "No activity";
-  const timestamp = value instanceof Date ? value.getTime() : Date.parse(value);
+  const timestamp = timestampToMillis(value) ?? Number.NaN;
   if (!Number.isFinite(timestamp)) return "No activity";
 
   const diffMs = Math.max(0, now.getTime() - timestamp);

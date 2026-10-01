@@ -1,6 +1,7 @@
 import type { Href } from "expo-router";
 
 import type { TabletQueueAgentStatus, TabletQueueItem } from "./queue";
+import { timestampToMillis } from "~/lib/timestamps";
 import { extractSessionEventText } from "../chat/session-event-text";
 import { appendWorkspaceParam, getSessionHref } from "../planning/navigation";
 import { formatStatusLabel } from "./queue";
@@ -547,7 +548,7 @@ function mobileRunTime(run: MobileWorkItemOutcomeRun): number {
   const value =
     run.completedAt ?? run.updatedAt ?? run.startedAt ?? run.createdAt;
   if (!value) return 0;
-  const time = value instanceof Date ? value.getTime() : Date.parse(value);
+  const time = timestampToMillis(value) ?? Number.NaN;
   return Number.isNaN(time) ? 0 : time;
 }
 

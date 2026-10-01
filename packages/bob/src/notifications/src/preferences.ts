@@ -55,6 +55,10 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationDefaults = {
   // blocked agent does.
   proxy_unreachable: { push: true, email: false, in_app: true },
   provider_no_ready_accounts: { push: true, email: false, in_app: true },
+  // The daily loop: a plan waits on approval (you are the blocker), and the
+  // review is the one thing worth reading at the end of the day.
+  daily_plan_ready: { push: true, email: false, in_app: true },
+  daily_review_ready: { push: true, email: false, in_app: true },
 };
 
 /** Sparse per-type overrides; absent entries fall back to the defaults. */

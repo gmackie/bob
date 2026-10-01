@@ -1,7 +1,7 @@
 import { Text, View } from "react-native";
 
+import type { CheckEventLike, CheckRow, CheckTone } from "./live-checks-model";
 import { foldCheckEvents } from "./live-checks-model";
-import type { CheckEventLike, CheckTone } from "./live-checks-model";
 
 /**
  * The lights, for one run.
@@ -19,8 +19,13 @@ const DOT: Record<CheckTone, string> = {
   grey: "bg-neutral-400",
 };
 
-export function LiveChecksCard({ events }: { events: readonly CheckEventLike[] }) {
-  const rows = foldCheckEvents(events);
+type LiveChecksCardProps =
+  | { events: readonly CheckEventLike[]; rows?: undefined }
+  /** Already-folded rows, when a summary model has done the folding. */
+  | { rows: readonly CheckRow[]; events?: undefined };
+
+export function LiveChecksCard(props: LiveChecksCardProps) {
+  const rows = props.rows ?? foldCheckEvents(props.events);
 
   // Before the first check arrives there is nothing honest to show — an empty
   // card would imply the run has no checks rather than that none have reported.
@@ -40,7 +45,9 @@ export function LiveChecksCard({ events }: { events: readonly CheckEventLike[] }
           {row.countsLabel ? (
             <Text
               className={`text-xs ${
-                row.tone === "red" ? "text-red-700 dark:text-red-400" : "text-muted"
+                row.tone === "red"
+                  ? "text-red-700 dark:text-red-400"
+                  : "text-muted"
               }`}
             >
               {row.countsLabel}

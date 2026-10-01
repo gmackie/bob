@@ -34,6 +34,7 @@ import {
   AgentSessionResultSchema,
   AgentEndSessionResultSchema,
 } from "../schemas/planning-core.js";
+import { DailyPlanRecordSchema } from "../schemas/daily-plan.js";
 import {
   PlanningSessionTypeEnum,
   PlanSessionRecordSchema,
@@ -823,6 +824,65 @@ export const PlanningCheckpointBranchFromRpc = Rpc.make(
   },
 );
 
+// ---------------------------------------------------------------------------
+// planning.dailyPlan.* — the daily loop: plan in the morning, approve, review
+// at night. One plan per workspace per UTC day.
+// ---------------------------------------------------------------------------
+
+/** Today's plan (or a given date). Null when nothing has been planned yet. */
+export const PlanningDailyPlanGetRpc = Rpc.make("planning.dailyPlan.get", {
+  payload: Schema.Struct({
+    workspaceId: Schema.String,
+    /** "YYYY-MM-DD" UTC; defaults to today. */
+    planDate: Schema.optional(Schema.String),
+  }),
+  success: Schema.NullOr(DailyPlanRecordSchema),
+  error: BobNotFoundError,
+});
+
+export const PlanningDailyPlanListRpc = Rpc.make("planning.dailyPlan.list", {
+  payload: Schema.Struct({
+    workspaceId: Schema.String,
+    limit: Schema.optional(Schema.Number),
+  }),
+  success: Schema.Array(DailyPlanRecordSchema),
+  error: BobNotFoundError,
+});
+
+/**
+ * Build (or rebuild, while still a draft) today's plan now rather than
+ * waiting for the morning cron. Runs the intake first.
+ */
+export const PlanningDailyPlanGenerateRpc = Rpc.make("planning.dailyPlan.generate", {
+  payload: Schema.Struct({
+    workspaceId: Schema.String,
+    planDate: Schema.optional(Schema.String),
+  }),
+  success: DailyPlanRecordSchema,
+  error: Schema.Union([BobNotFoundError, BobConflictError]),
+});
+
+/**
+ * Approve the plan. Optionally reorder first: `workItemIds` is the full
+ * desired order. Approval writes that order into the dispatch queue so the
+ * autonomous loop works the day in the order a person chose.
+ */
+export const PlanningDailyPlanApproveRpc = Rpc.make("planning.dailyPlan.approve", {
+  payload: Schema.Struct({
+    planId: Schema.String,
+    workItemIds: Schema.optional(Schema.Array(Schema.String)),
+  }),
+  success: DailyPlanRecordSchema,
+  error: Schema.Union([BobNotFoundError, BobConflictError]),
+});
+
+/** Close the plan with a review of what happened, now rather than at the evening cron. */
+export const PlanningDailyPlanCloseRpc = Rpc.make("planning.dailyPlan.close", {
+  payload: Schema.Struct({ planId: Schema.String }),
+  success: DailyPlanRecordSchema,
+  error: BobNotFoundError,
+});
+
 export const PlanningRpc = RpcGroup.make(
   // Core planning (Task 4)
   PlanningListWorkspacesRpc,
@@ -896,6 +956,12 @@ export const PlanningRpc = RpcGroup.make(
   PlanningSnapshotCreateRpc,
   PlanningSnapshotListRpc,
   PlanningSnapshotGetRpc,
+  // Daily plan procedures
+  PlanningDailyPlanGetRpc,
+  PlanningDailyPlanListRpc,
+  PlanningDailyPlanGenerateRpc,
+  PlanningDailyPlanApproveRpc,
+  PlanningDailyPlanCloseRpc,
   // Checkpoint procedures (Task 7)
   PlanningCheckpointCreateRpc,
   PlanningCheckpointListRpc,

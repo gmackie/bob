@@ -120,6 +120,7 @@ export function getSessionHref(sessionId: string, workspaceId?: string | null) {
 const NOTIFICATION_STATIC_ROUTES = [
   "/",
   "/home",
+  "/today",
   "/chat",
   "/planning",
   "/tasks",

@@ -46,6 +46,7 @@ describe("MORE_DESTINATIONS", () => {
 describe("resolveTabForPath", () => {
   it("lights the tab that owns the current route", () => {
     expect(resolveTabForPath("/home")).toBe("home");
+    expect(resolveTabForPath("/today")).toBe("home");
     expect(resolveTabForPath("/tasks/queue")).toBe("tasks");
     expect(resolveTabForPath("/chat")).toBe("chat");
     expect(resolveTabForPath("/nodes")).toBe("nodes");
@@ -57,6 +58,8 @@ describe("resolveTabForPath", () => {
     expect(resolveTabForPath("/work-items/wi_1/workspace")).toBe("tasks");
     // Sessions and providers are reached from Nodes/Tasks; keep Tasks lit.
     expect(resolveTabForPath("/sessions/s_1")).toBe("tasks");
+    expect(resolveTabForPath("/sessions")).toBe("tasks");
+    expect(resolveTabForPath("/runs/r_1")).toBe("tasks");
   });
 
   it("lights More for everything behind it", () => {

@@ -323,8 +323,10 @@ export function TasksDashboard({
   onOpenTaskTab,
   onOpenMode,
   onOpenSettings,
+  onOpenToday,
 }: {
   sessions: GatewaySession[];
+  onOpenToday?: () => void;
   onOpenProvider?: (provider: ProviderKey) => void;
   onOpenLane?: (lane: TaskLaneKey) => void;
   onOpenWorkItem?: (workItemId: string, view?: MobileWorkItemEntryView) => void;
@@ -395,6 +397,22 @@ export function TasksDashboard({
       className="flex-1"
       contentContainerStyle={{ padding: 24, paddingBottom: 48 }}
     >
+      {onOpenToday ? (
+        <Pressable
+          testID="open-today"
+          accessibilityRole="button"
+          accessibilityLabel="Open today's plan"
+          onPress={onOpenToday}
+          className="mb-4 flex-row items-center justify-between rounded-lg border px-4 py-3 active:opacity-70"
+          style={{ borderColor: colors.border, backgroundColor: colors.card }}
+        >
+          <View>
+            <Text className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Today</Text>
+            <Text className="mt-0.5 text-sm font-semibold text-foreground">The day's plan, progress and review</Text>
+          </View>
+          <Text className="text-sm font-semibold text-primary">Open ›</Text>
+        </Pressable>
+      ) : null}
       {modeActions.length > 0 ? (
         <View className="mb-4 flex-row gap-2">
           {modeActions.map((action) => (

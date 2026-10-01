@@ -3,6 +3,7 @@ import type { Href } from "expo-router";
 import type { ProviderKey, TaskLaneKey } from "./dashboard";
 import type { TabletQueueItem } from "./queue";
 import type { MobileWorkItemEntryView } from "./work-item-entry";
+import { timestampToMillis } from "~/lib/timestamps";
 import { appendWorkspaceParam } from "../planning/navigation";
 import {
   buildRecentOutcomeWorkItems,
@@ -32,6 +33,11 @@ export type TabletShellTarget =
   | { type: "projects-dashboard" }
   | { type: "work-item"; workItemId: string; view?: MobileWorkItemEntryView }
   | { type: "execution-session"; sessionId: string }
+  // A run record with no session to open: the sweep-ended and reconciled
+  // runs that used to link to a route that did not exist.
+  | { type: "run"; runId: string }
+  // The day's plan, progress and review.
+  | { type: "today" }
   | { type: "planning-session"; sessionId: string }
   | { type: "project"; projectId: string }
   | { type: "provider"; provider: ProviderKey }
@@ -258,6 +264,7 @@ export function getShellStateForPath(
   const workItemView = normalizeWorkItemRouteView(readParam(params, "view"));
   const sessionId = readParam(params, "sessionId") ?? pathSegment(path, 1);
   const projectId = readParam(params, "projectId") ?? pathSegment(path, 1);
+  const runId = readParam(params, "runId") ?? pathSegment(path, 1);
 
   if (path === "/settings" || path.startsWith("/settings/")) {
     return {
@@ -316,11 +323,55 @@ export function getShellStateForPath(
     };
   }
 
-  if (path.startsWith("/sessions/") && sessionId) {
+  // On the tablet the route files never mount, and with a sessions index
+  // route beside the dynamic one expo-router reports the pathname as
+  // "/sessions" and carries the id in params. Either shape is a session.
+  const routeSessionId =
+    path === "/sessions"
+      ? readParam(params, "sessionId")
+      : path.startsWith("/sessions/")
+        ? sessionId
+        : undefined;
+  if (routeSessionId) {
     return {
       mode: "tasks",
       leftTab: "recent-outcomes",
-      target: { type: "execution-session", sessionId },
+      target: { type: "execution-session", sessionId: routeSessionId },
+    };
+  }
+
+  if (path === "/today") {
+    return {
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "today" },
+    };
+  }
+
+  // The phone's sessions list; on the tablet the sidebar's Recent Outcomes
+  // rail is that list, so land on the tasks dashboard beside it.
+  if (path === "/sessions") {
+    return {
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "tasks-dashboard" },
+    };
+  }
+
+  const paramRunId = readParam(params, "runId");
+  if (path === "/runs" && paramRunId) {
+    return {
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "run", runId: paramRunId },
+    };
+  }
+
+  if (path.startsWith("/runs/") && runId) {
+    return {
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "run", runId },
     };
   }
 
@@ -449,6 +500,8 @@ export function getShellModeForTarget(
     case "tasks-dashboard":
     case "work-item":
     case "execution-session":
+    case "run":
+    case "today":
     case "provider":
     case "task-lane":
       return "tasks";
@@ -505,6 +558,8 @@ export function isNativeTabletShellTarget(target: TabletShellTarget): boolean {
     case "projects-dashboard":
     case "work-item":
     case "execution-session":
+    case "run":
+    case "today":
     case "planning-session":
     case "project":
     case "provider":
@@ -857,8 +912,8 @@ function formatShellStatusLabel(status: string): string {
 }
 
 function formatLastUpdatedLabel(value: string, now: Date): string {
-  const timestamp = new Date(value).getTime();
-  if (!Number.isFinite(timestamp)) return "No activity";
+  const timestamp = timestampToMillis(value);
+  if (timestamp === null) return "No activity";
 
   const diffMs = Math.max(0, now.getTime() - timestamp);
   const minutes = Math.floor(diffMs / 60_000);
@@ -872,9 +927,7 @@ function formatLastUpdatedLabel(value: string, now: Date): string {
 }
 
 function timestampValue(value: string | Date | null | undefined): number {
-  if (!value) return 0;
-  const timestamp = value instanceof Date ? value.getTime() : Date.parse(value);
-  return Number.isFinite(timestamp) ? timestamp : 0;
+  return timestampToMillis(value) ?? 0;
 }
 
 function formatDateValue(value: string | Date | null | undefined): string {

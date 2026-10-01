@@ -1,22 +1,65 @@
-import { useRef, useEffect, useMemo, useState } from "react";
-import { Text, View, ScrollView, Pressable, TextInput, KeyboardAvoidingView, Platform } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
 import type { ServerEvent } from "@bob/ws";
+
 import { extractSessionEventText } from "~/features/chat/session-event-text";
 import { colors } from "~/lib/colors";
 import { hapticMedium, hapticSuccess } from "~/lib/haptics";
-import { LiveChecksCard } from "~/features/runs/LiveChecksCard";
+
+/**
+ * The full event stream of one session, with an input bar.
+ *
+ * This is the "read everything" view. The summary (SessionSummaryView) is the
+ * "what happened" view; approvals live there, driven by the gateway's
+ * permission_request/permission_resolved lifecycle events. An earlier version
+ * of this component also guessed at approvals from unmatched tool_call events
+ * and answered them by sending a raw "y"/"n" as input — which flagged every
+ * in-flight tool as "awaiting approval" and could feed stray keystrokes to a
+ * running agent. That path is gone.
+ */
+
+function nonEmpty(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed !== undefined && trimmed.length > 0 ? trimmed : null;
+}
 
 function formatEventType(eventType: string): string {
   switch (eventType) {
-    case "output_chunk": return "Output";
-    case "message_final": return "Message";
-    case "tool_call": return "Tool Call";
-    case "tool_result": return "Tool Result";
-    case "state": return "State";
-    case "error": return "Error";
-    case "input": return "Input";
-    default: return eventType;
+    case "output_chunk":
+      return "Output";
+    case "message_final":
+      return "Message";
+    case "tool_call":
+      return "Tool Call";
+    case "tool_result":
+      return "Tool Result";
+    case "state":
+      return "State";
+    case "error":
+      return "Error";
+    case "input":
+      return "Input";
+    case "thought":
+      return "Thinking";
+    case "check":
+      return "Check";
+    case "status_change":
+      return "Status";
+    case "permission_request":
+      return "Approval";
+    case "permission_resolved":
+      return "Approval";
+    default:
+      return eventType;
   }
 }
 
@@ -25,19 +68,35 @@ function EventRow({ event }: { event: ServerEvent }) {
   let content = extractSessionEventText(event.eventType, payload);
 
   switch (event.eventType) {
-    case "output_chunk":
-      break;
-    case "message_final":
-      break;
-    case "tool_call":
-      break;
     case "tool_result":
       content = content.slice(0, 200);
       break;
+    case "status_change":
+      content = typeof payload.status === "string" ? payload.status : content;
+      break;
+    case "permission_request":
+      content =
+        typeof payload.toolName === "string"
+          ? `Requested ${payload.toolName}`
+          : "Requested";
+      break;
+    case "permission_resolved":
+      content =
+        typeof payload.decision === "string" ? payload.decision : "Resolved";
+      break;
+    case "check": {
+      // Structured check progress has no prose field; say which phase and
+      // where it stands rather than leaving the row blank.
+      const phase = typeof payload.phase === "string" ? payload.phase : "check";
+      const status = typeof payload.status === "string" ? payload.status : "";
+      content = status ? `${phase}: ${status}` : phase;
+      break;
+    }
+    case "output_chunk":
+    case "message_final":
+    case "tool_call":
     case "state":
-      break;
     case "error":
-      break;
     case "input":
       break;
     default:
@@ -69,19 +128,12 @@ function EventRow({ event }: { event: ServerEvent }) {
           >
             {formatEventType(event.eventType)}
           </Text>
-          <Text className="ml-2 text-xs text-muted2">
-            #{event.seq}
-          </Text>
+          <Text className="text-muted2 ml-2 text-xs">#{event.seq}</Text>
         </View>
-        <Text className="text-xs text-muted2">
-          {event.direction}
-        </Text>
+        <Text className="text-muted2 text-xs">{event.direction}</Text>
       </View>
       {content ? (
-        <Text
-          className="text-sm text-foreground"
-          numberOfLines={5}
-        >
+        <Text className="text-foreground text-sm" numberOfLines={5}>
           {content}
         </Text>
       ) : null}
@@ -100,7 +152,10 @@ function ActionButton({
 }) {
   return (
     <Pressable
-      onPress={() => { hapticMedium(); onPress(); }}
+      onPress={() => {
+        hapticMedium();
+        onPress();
+      }}
       accessibilityRole="button"
       accessibilityLabel={label}
       className="mr-2 rounded-md px-4 py-2 active:opacity-70"
@@ -117,41 +172,17 @@ function ActionButton({
   );
 }
 
-/**
- * Detect if the agent is waiting for tool approval.
- * A tool_call without a subsequent tool_result means it's pending.
- */
-function usePendingToolCall(events: ServerEvent[]): ServerEvent | null {
-  return useMemo(() => {
-    const toolCalls = new Map<string, ServerEvent>();
-
-    for (const event of events) {
-      if (event.eventType === "tool_call" && event.payload.toolCallId) {
-        toolCalls.set(event.payload.toolCallId as string, event);
-      }
-      if (event.eventType === "tool_result" && event.payload.toolCallId) {
-        toolCalls.delete(event.payload.toolCallId as string);
-      }
-      // Session ended — no pending tool calls
-      if (event.eventType === "state") {
-        const status = event.payload.status as string;
-        if (status === "stopped" || status === "error") {
-          toolCalls.clear();
-        }
-      }
-    }
-
-    // Return the most recent pending tool call
-    const pending = Array.from(toolCalls.values());
-    return pending.at(-1) ?? null;
-  }, [events]);
-}
-
 interface AgentThreadViewProps {
   sessionId: string | null;
   events: ServerEvent[];
   onSendInput: (sessionId: string, data: string) => void;
   onStopSession: (sessionId: string) => void;
+  /** Human title for the header; falls back to a short id. */
+  title?: string | null;
+  /** Hide the header when the surrounding screen already draws one. */
+  showHeader?: boolean;
+  /** Hide the Stop control once a session has ended. */
+  canStop?: boolean;
 }
 
 export function AgentThreadView({
@@ -159,10 +190,12 @@ export function AgentThreadView({
   events,
   onSendInput,
   onStopSession,
+  title,
+  showHeader = true,
+  canStop = true,
 }: AgentThreadViewProps) {
   const scrollRef = useRef<ScrollView>(null);
   const [inputText, setInputText] = useState("");
-  const pendingToolCall = usePendingToolCall(events);
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
@@ -174,15 +207,21 @@ export function AgentThreadView({
         className="flex-1 items-center justify-center"
         style={{ backgroundColor: colors.background }}
       >
-        <Text className="text-lg text-muted">
-          Select an agent session
-        </Text>
-        <Text className="mt-1 text-sm text-muted2">
+        <Text className="text-muted text-lg">Select an agent session</Text>
+        <Text className="text-muted2 mt-1 text-sm">
           Tap a session in the sidebar to view its event stream
         </Text>
       </View>
     );
   }
+
+  const submit = () => {
+    const trimmed = inputText.trim();
+    if (!trimmed) return;
+    hapticSuccess();
+    onSendInput(sessionId, trimmed);
+    setInputText("");
+  };
 
   return (
     <KeyboardAvoidingView
@@ -190,67 +229,46 @@ export function AgentThreadView({
       style={{ backgroundColor: colors.background }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* Check lights, pinned above the transcript rather than scrolling away
-          inside it. During a working session this is the state a person keeps
-          glancing at; burying it in the thread means hunting for it. */}
-      <View className="px-4 pt-2">
-        <LiveChecksCard events={events} />
-      </View>
-
-      {/* Header */}
-      <View
-        className="flex-row items-center justify-between px-4 py-2"
-        style={{
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
-        }}
-      >
-        <Text className="text-sm font-medium text-foreground">
-          {sessionId.slice(0, 8)}...
-        </Text>
-        <ActionButton label="Stop" color={colors.danger} onPress={() => onStopSession(sessionId)} />
-      </View>
-
-      {/* Event stream */}
-      <ScrollView ref={scrollRef} className="flex-1">
-        {events.length === 0 ? (
-          <View className="items-center justify-center py-12">
-            <Text className="text-sm text-muted">
-              Waiting for events...
-            </Text>
-          </View>
-        ) : (
-          events.map((event, i) => <EventRow key={`${event.seq}-${i}`} event={event} />)
-        )}
-      </ScrollView>
-
-      {/* Approval bar — shown when a tool call is pending */}
-      {pendingToolCall && (
+      {showHeader ? (
         <View
-          className="px-4 py-3"
+          className="flex-row items-center justify-between px-4 py-2"
           style={{
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-            backgroundColor: colors.card,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
           }}
         >
-          <Text className="mb-2 text-xs text-muted">
-            Awaiting approval: {pendingToolCall.payload.name as string}
+          <Text
+            className="text-foreground min-w-0 flex-1 pr-3 text-sm font-medium"
+            numberOfLines={1}
+          >
+            {nonEmpty(title) ?? `${sessionId.slice(0, 8)}…`}
           </Text>
-          <View className="flex-row">
+          {canStop ? (
             <ActionButton
-              label="Approve"
-              color={colors.success}
-              onPress={() => onSendInput(sessionId, "y")}
-            />
-            <ActionButton
-              label="Reject"
+              label="Stop"
               color={colors.danger}
-              onPress={() => onSendInput(sessionId, "n")}
+              onPress={() => onStopSession(sessionId)}
             />
-          </View>
+          ) : null}
         </View>
-      )}
+      ) : null}
+
+      {/* Event stream */}
+      <ScrollView
+        ref={scrollRef}
+        className="flex-1"
+        testID="agent-thread-events"
+      >
+        {events.length === 0 ? (
+          <View className="items-center justify-center py-12">
+            <Text className="text-muted text-sm">Waiting for events...</Text>
+          </View>
+        ) : (
+          events.map((event, i) => (
+            <EventRow key={`${event.seq}-${i}`} event={event} />
+          ))
+        )}
+      </ScrollView>
 
       {/* Input bar */}
       <View
@@ -274,22 +292,11 @@ export function AgentThreadView({
           accessibilityHint="Type a message to send to the agent"
           value={inputText}
           onChangeText={setInputText}
-          onSubmitEditing={() => {
-            if (inputText.trim()) {
-              onSendInput(sessionId, inputText.trim());
-              setInputText("");
-            }
-          }}
+          onSubmitEditing={submit}
           returnKeyType="send"
         />
         <Pressable
-          onPress={() => {
-            if (inputText.trim()) {
-              hapticSuccess();
-              onSendInput(sessionId, inputText.trim());
-              setInputText("");
-            }
-          }}
+          onPress={submit}
           accessibilityRole="button"
           accessibilityLabel="Send message"
           className="rounded-md px-4 py-2 active:opacity-70"
@@ -299,7 +306,7 @@ export function AgentThreadView({
             justifyContent: "center",
           }}
         >
-          <Text className="text-sm font-medium text-primary-foreground">
+          <Text className="text-primary-foreground text-sm font-medium">
             Send
           </Text>
         </Pressable>
