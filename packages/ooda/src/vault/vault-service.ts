@@ -5,7 +5,14 @@ import { stat } from "node:fs/promises";
 import { listFiles, readFile } from "./reader";
 import { writeFile } from "./writer";
 import { commitAndPush, pull, isLocked } from "./git";
+import { LocalGitStorage } from "./local-git-storage";
 import type { VaultConfig, VaultFile } from "./types";
+import type { PublicationRecord } from "./versioned-storage";
+
+export interface PromoteResult {
+  filePath: string;
+  publication: PublicationRecord;
+}
 
 export class VaultService {
   constructor(private config: VaultConfig) {}
@@ -20,33 +27,47 @@ export class VaultService {
     return readFile(this.config.path, filePath);
   }
 
-  /** Write a file to the vault and commit the change. */
+  /**
+   * Write a file to the vault, commit, and publish. The returned record says
+   * whether the change is durably published or only saved locally.
+   */
   async write(
     filePath: string,
     content: string,
     frontmatter?: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<PublicationRecord> {
     await writeFile(this.config.path, filePath, content, frontmatter);
-    await commitAndPush(this.config.path, `vault: update ${filePath}`);
+    return commitAndPush(this.config.path, `vault: update ${filePath}`);
   }
 
   /**
    * Promote a note from a thread into the vault.
-   * Writes to `notes/{threadId}/{noteId}.md`, commits, and returns the path.
+   * Writes to `notes/{threadId}/{noteId}.md`, commits, publishes, and
+   * returns the path together with the publication record.
    */
   async promote(
     threadId: string,
     noteId: string,
     content: string,
     frontmatter?: Record<string, unknown>,
-  ): Promise<string> {
+  ): Promise<PromoteResult> {
     const filePath = `notes/${threadId}/${noteId}.md`;
     await writeFile(this.config.path, filePath, content, frontmatter);
-    await commitAndPush(
+    const publication = await commitAndPush(
       this.config.path,
       `promote: ${noteId} from thread ${threadId}`,
     );
-    return filePath;
+    return { filePath, publication };
+  }
+
+  /** Re-attempt publications that never reached the remote. */
+  async replayPending(): Promise<PublicationRecord[]> {
+    return new LocalGitStorage(this.config.path).replayPending();
+  }
+
+  /** Publications that are not yet durably published. */
+  async listUnpublished(): Promise<PublicationRecord[]> {
+    return new LocalGitStorage(this.config.path).listUnpublished();
   }
 
   /** Pull latest changes from origin. */

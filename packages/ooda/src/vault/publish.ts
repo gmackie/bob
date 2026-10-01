@@ -1,5 +1,6 @@
 import { writeFile } from "./writer";
 import { commitAndPush } from "./git";
+import type { PublicationRecord } from "./versioned-storage";
 
 export interface PublishOptions {
   title: string;
@@ -7,6 +8,12 @@ export interface PublishOptions {
   site: "gmacko" | "grahammackie" | "gmac";
   tags?: string[];
   date?: string; // ISO date, defaults to today
+}
+
+export interface PublishedDraft {
+  /** Relative file path written, e.g. `_drafts/my-post.md`. */
+  filePath: string;
+  publication: PublicationRecord;
 }
 
 /**
@@ -24,14 +31,15 @@ export function slugify(title: string): string {
 
 /**
  * Write a Jekyll draft with front matter into {websitePath}/_drafts/,
- * commit, and push.
+ * commit, and publish.
  *
- * @returns The relative file path written (e.g. `_drafts/my-post.md`)
+ * @returns The relative file path written and the publication record, which
+ * states whether the draft reached the remote or is only saved locally.
  */
 export async function publishDraft(
   websitePath: string,
   opts: PublishOptions,
-): Promise<string> {
+): Promise<PublishedDraft> {
   const slug = slugify(opts.title);
   if (slug.length === 0) {
     throw new Error("Title produces an empty slug");
@@ -52,7 +60,10 @@ export async function publishDraft(
   }
 
   await writeFile(websitePath, filePath, opts.content, frontmatter);
-  await commitAndPush(websitePath, `draft: ${opts.title} (${opts.site})`);
+  const publication = await commitAndPush(
+    websitePath,
+    `draft: ${opts.title} (${opts.site})`,
+  );
 
-  return filePath;
+  return { filePath, publication };
 }

@@ -116,12 +116,34 @@ describe("git operations", () => {
         "utf-8",
       );
 
-      await commitAndPush(repos.clonePath, "add test file");
+      const record = await commitAndPush(repos.clonePath, "add test file");
 
       // Verify the commit exists in the bare repo
       const bareGit = simpleGit(repos.barePath);
       const log = await bareGit.log();
       expect(log.latest?.message).toBe("add test file");
+
+      // And that the caller was told so explicitly
+      expect(record.state).toBe("published");
+      expect(record.receipt?.newHead).toBe(log.latest?.hash);
+      expect(record.intent.ref).toBe(`refs/heads/${repos.branch}`);
+    });
+
+    it("returns a pending record instead of throwing when the remote is unreachable", async () => {
+      await writeFile(join(repos.clonePath, "offline.md"), "# Offline\n", "utf-8");
+      await simpleGit(repos.clonePath).remote([
+        "set-url",
+        "origin",
+        join(repos.barePath, "..", "missing.git"),
+      ]);
+
+      const record = await commitAndPush(repos.clonePath, "offline commit");
+
+      expect(record.state).toBe("pending");
+      expect(record.lastError).toMatch(/unreachable/);
+      // The commit itself was saved locally.
+      const log = await simpleGit(repos.clonePath).log();
+      expect(log.latest?.message).toBe("offline commit");
     });
 
     it("throws when index.lock exists", async () => {

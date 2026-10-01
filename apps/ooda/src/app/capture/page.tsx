@@ -8,6 +8,29 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { VoiceCaptureButton } from "./voice-capture-button";
 
+/**
+ * "Saved locally" and "published" are distinct facts. The vault write
+ * commits to the local clone first and then publishes; when the remote is
+ * unreachable or has moved, the note is safe on disk but not yet durable
+ * remotely, and the user must be told so rather than shown a generic success.
+ */
+function describeSave(data: unknown): string {
+  const state = (data as { publication?: { state?: string } } | undefined)
+    ?.publication?.state;
+  switch (state) {
+    case "published":
+      return "Saved and published to vault";
+    case "pending":
+      return "Saved locally; not yet published (remote unreachable)";
+    case "conflict":
+      return "Saved locally; not published (vault moved, sync needed)";
+    case "indeterminate":
+      return "Saved locally; publication unconfirmed";
+    default:
+      return "Saved to vault";
+  }
+}
+
 export default function CapturePage() {
   const [note, setNote] = useState("");
   const [importJson, setImportJson] = useState("");
@@ -129,7 +152,7 @@ export default function CapturePage() {
                 {noteMutation.isPending
                   ? "Saving..."
                   : noteMutation.isSuccess
-                    ? "Saved to vault"
+                    ? describeSave(noteMutation.data)
                     : noteMutation.isError
                       ? `Error: ${noteMutation.error.message}`
                       : ""}

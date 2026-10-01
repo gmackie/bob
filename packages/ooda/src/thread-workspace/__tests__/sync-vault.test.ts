@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
@@ -9,6 +9,8 @@ import {
   pushVault,
   pullVault,
   hasConflicts,
+  listUnpublishedVaultPublications,
+  replayVaultPublications,
 } from "../sync-vault";
 
 describe("syncVault", () => {
@@ -50,11 +52,49 @@ describe("syncVault", () => {
       stdio: "pipe",
     });
 
-    await pushVault(local);
+    const pushed = await pushVault(local);
 
     const bareLog = execSync("git log --oneline", { cwd: bare }).toString();
     expect(bareLog).toContain("test");
+    expect(pushed.head.state).toBe("published");
+    expect(pushed.replayed).toEqual([]);
   }, 15_000);
+
+  it("pushVault reports pending instead of silent success when offline, then replays", async () => {
+    const bare = mkdtempSync(join(tmpdir(), "ooda-bare-"));
+    const local = mkdtempSync(join(tmpdir(), "ooda-local-"));
+    tempDirs.push(bare, local);
+
+    execSync("git init --bare --initial-branch=main", { cwd: bare, stdio: "pipe" });
+    await initVaultRepo(local, bare);
+
+    writeFileSync(join(local, "offline.txt"), "draft");
+    execSync("git add -A", { cwd: local, stdio: "pipe" });
+    execSync('git -c user.name="T" -c user.email="t@t" commit -m "offline edit"', {
+      cwd: local,
+      stdio: "pipe",
+    });
+
+    // Simulate the remote going away.
+    const parked = `${bare}-parked`;
+    renameSync(bare, parked);
+    tempDirs.push(parked);
+
+    const offline = await pushVault(local);
+    expect(offline.head.state).toBe("pending");
+    expect((await listUnpublishedVaultPublications(local)).map((r) => r.state)).toEqual([
+      "pending",
+    ]);
+
+    // Remote comes back: replay lands the earlier intent with its original lease.
+    renameSync(parked, bare);
+    const replayed = await replayVaultPublications(local);
+    expect(replayed.map((r) => r.state)).toEqual(["published"]);
+    expect(execSync("git log --oneline", { cwd: bare }).toString()).toContain(
+      "offline edit",
+    );
+    expect(await listUnpublishedVaultPublications(local)).toEqual([]);
+  }, 20_000);
 
   it("pullVault pulls changes and detects conflicts", async () => {
     const bare = mkdtempSync(join(tmpdir(), "ooda-bare-"));
