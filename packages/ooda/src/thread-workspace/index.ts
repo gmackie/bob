@@ -19,6 +19,8 @@ export { scanThreads, type ScannedThread } from "./scan-threads";
 export {
   initVaultRepo,
   pushVault,
+  replayVaultPublications,
+  listUnpublishedVaultPublications,
   pullVault,
   hasConflicts,
   getConflictedThreads,
@@ -26,6 +28,7 @@ export {
   commitMerge,
   abortMerge,
   type PullResult,
+  type VaultPushResult,
 } from "./sync-vault";
 
 export {

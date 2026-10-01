@@ -54,7 +54,7 @@ describe("publishDraft", () => {
   });
 
   it("writes file to _drafts/ with correct slug", async () => {
-    const filePath = await publishDraft(websitePath, {
+    const { filePath } = await publishDraft(websitePath, {
       title: "My First Post",
       content: "Hello world",
       site: "gmacko",
@@ -68,7 +68,7 @@ describe("publishDraft", () => {
   });
 
   it("generates correct Jekyll front matter", async () => {
-    const filePath = await publishDraft(websitePath, {
+    const { filePath } = await publishDraft(websitePath, {
       title: "Test Post",
       content: "Body content here",
       site: "grahammackie",
@@ -88,7 +88,7 @@ describe("publishDraft", () => {
   });
 
   it("omits tags from front matter when not provided", async () => {
-    const filePath = await publishDraft(websitePath, {
+    const { filePath } = await publishDraft(websitePath, {
       title: "No Tags",
       content: "content",
       site: "gmac",
@@ -101,7 +101,7 @@ describe("publishDraft", () => {
   });
 
   it("defaults date to today when not provided", async () => {
-    const filePath = await publishDraft(websitePath, {
+    const { filePath } = await publishDraft(websitePath, {
       title: "Date Default",
       content: "content",
       site: "gmacko",

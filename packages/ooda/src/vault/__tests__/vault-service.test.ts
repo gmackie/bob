@@ -118,7 +118,11 @@ describe("VaultService", () => {
 
   describe("write", () => {
     it("writes a file and commits", async () => {
-      await env.service.write("daily/2026-04-15.md", "# Today\nDid stuff.\n");
+      const publication = await env.service.write(
+        "daily/2026-04-15.md",
+        "# Today\nDid stuff.\n",
+      );
+      expect(publication.state).toBe("published");
 
       // File should exist on disk
       const fullPath = join(env.clonePath, "daily/2026-04-15.md");
@@ -145,7 +149,7 @@ describe("VaultService", () => {
 
   describe("promote", () => {
     it("writes to notes/{threadId}/{noteId}.md and returns the path", async () => {
-      const path = await env.service.promote(
+      const { filePath: path, publication } = await env.service.promote(
         "thread-abc",
         "obs-001",
         "Observation content here.",
@@ -153,6 +157,7 @@ describe("VaultService", () => {
       );
 
       expect(path).toBe("notes/thread-abc/obs-001.md");
+      expect(publication.state).toBe("published");
 
       const fullPath = join(env.clonePath, path);
       expect(existsSync(fullPath)).toBe(true);
