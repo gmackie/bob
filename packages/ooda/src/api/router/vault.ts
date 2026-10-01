@@ -84,8 +84,8 @@ export const vaultRouter = {
     .mutation(async ({ input }) => {
       const vaultPath = getVaultPath(input.vaultKind);
       await writeFile(vaultPath, input.filePath, input.content, input.frontmatter);
-      await commitAndPush(vaultPath, `write: ${input.filePath}`);
-      return { success: true };
+      const publication = await commitAndPush(vaultPath, `write: ${input.filePath}`);
+      return { success: true, publication };
     }),
 
   promote: authedProcedure
@@ -104,11 +104,11 @@ export const vaultRouter = {
       const vaultPath = getVaultPath(input.vaultKind);
       const filePath = `notes/${input.threadId}/${input.noteId}.md`;
       await writeFile(vaultPath, filePath, input.content, input.frontmatter);
-      await commitAndPush(
+      const publication = await commitAndPush(
         vaultPath,
         `promote: ${input.noteId} from thread ${input.threadId}`,
       );
-      return { success: true };
+      return { success: true, publication };
     }),
 
   sync: authedProcedure
