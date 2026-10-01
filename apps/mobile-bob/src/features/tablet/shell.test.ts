@@ -1,31 +1,31 @@
 import { describe, expect, it } from "vitest";
 
+import type { TabletShellSession } from "./shell";
 import { assertDefined } from "~/lib/assert";
 import {
-  getDefaultShellTarget,
-  getLeftRailTabs,
-  getShellHeaderStatusLabel,
-  getShellModeItems,
-  getRightRailTitle,
-  getShellGlobalActions,
-  getShellHeaderTitle,
-  getShellModeForTarget,
-  getShellSelectionIntent,
-  getShellStateForPath,
-  getPlanningPaneSession,
-  buildRecentOutcomeRailRows,
-  getRecentOutcomeTarget,
-  getExecutionSessionShellState,
-  isNativeTabletShellTarget,
   buildLeftRailTabBadges,
+  buildRecentOutcomeRailRows,
   buildShellSessionRows,
   buildTabletShellSessionsFromAgentRuns,
+  getDefaultShellTarget,
+  getExecutionSessionShellState,
+  getLeftRailTabs,
+  getPlanningPaneSession,
+  getRecentOutcomeTarget,
+  getRightRailTitle,
+  getShellGlobalActions,
+  getShellHeaderStatusLabel,
+  getShellHeaderTitle,
+  getShellModeForTarget,
+  getShellModeItems,
+  getShellSelectionIntent,
+  getShellStateForPath,
   groupShellSessions,
+  isNativeTabletShellTarget,
   matchesShellSessionStatusFilter,
   selectLeftRailTarget,
   switchShellMode,
 } from "./shell";
-import type { TabletShellSession } from "./shell";
 
 const sessions: TabletShellSession[] = [
   {
@@ -100,20 +100,26 @@ describe("tablet shell model", () => {
     });
     expect(getDefaultShellTarget("ooda")).toEqual({ type: "ooda-chat" });
     expect(getDefaultShellTarget("tasks")).toEqual({ type: "tasks-dashboard" });
-    expect(getDefaultShellTarget("planning")).toEqual({ type: "planning-dashboard" });
+    expect(getDefaultShellTarget("planning")).toEqual({
+      type: "planning-dashboard",
+    });
   });
 
   it("keeps the selected workspace visible in the shell header status", () => {
-    expect(getShellHeaderStatusLabel({
-      workspaceName: "Acme Ops",
-      connectionState: "connected",
-      sessionCount: 3,
-    })).toBe("Acme Ops · 3 sessions");
-    expect(getShellHeaderStatusLabel({
-      workspaceName: null,
-      connectionState: "reconnecting",
-      sessionCount: 0,
-    })).toBe("Workspace · reconnecting");
+    expect(
+      getShellHeaderStatusLabel({
+        workspaceName: "Acme Ops",
+        connectionState: "connected",
+        sessionCount: 3,
+      }),
+    ).toBe("Acme Ops · 3 sessions");
+    expect(
+      getShellHeaderStatusLabel({
+        workspaceName: null,
+        connectionState: "reconnecting",
+        sessionCount: 0,
+      }),
+    ).toBe("Workspace · reconnecting");
   });
 
   it("keeps the top-left shell header limited to the OODA, Planning, and Tasks mode switch", () => {
@@ -166,7 +172,9 @@ describe("tablet shell model", () => {
       leftTab: "priority-queue",
       target: { type: "tasks-dashboard" },
     });
-    expect(getShellStateForPath("/providers/codex", { provider: "codex" })).toEqual({
+    expect(
+      getShellStateForPath("/providers/codex", { provider: "codex" }),
+    ).toEqual({
       mode: "tasks",
       leftTab: "recent-outcomes",
       target: { type: "provider", provider: "codex" },
@@ -176,17 +184,29 @@ describe("tablet shell model", () => {
       leftTab: "priority-queue",
       target: { type: "task-lane", lane: "review" },
     });
-    expect(getShellStateForPath("/work-items/work-1", { workItemId: "work-1", view: "outcome" })).toEqual({
+    expect(
+      getShellStateForPath("/work-items/work-1", {
+        workItemId: "work-1",
+        view: "outcome",
+      }),
+    ).toEqual({
       mode: "tasks",
       leftTab: "recent-outcomes",
       target: { type: "work-item", workItemId: "work-1", view: "outcome" },
     });
-    expect(getShellStateForPath("/work-items/work-2", { workItemId: "work-2", view: "queue" })).toEqual({
+    expect(
+      getShellStateForPath("/work-items/work-2", {
+        workItemId: "work-2",
+        view: "queue",
+      }),
+    ).toEqual({
       mode: "tasks",
       leftTab: "priority-queue",
       target: { type: "work-item", workItemId: "work-2", view: "queue" },
     });
-    expect(getShellStateForPath("/sessions/session-1", { sessionId: "session-1" })).toEqual({
+    expect(
+      getShellStateForPath("/sessions/session-1", { sessionId: "session-1" }),
+    ).toEqual({
       mode: "tasks",
       leftTab: "recent-outcomes",
       target: { type: "execution-session", sessionId: "session-1" },
@@ -202,18 +222,40 @@ describe("tablet shell model", () => {
       leftTab: "recent-outcomes",
       target: { type: "run", runId: "run-9" },
     });
+    // The tablet never mounts the route files, and with sessions/index.tsx
+    // beside sessions/[sessionId].tsx expo-router reports "/sessions" with
+    // the id in params. That shape opened the dashboard instead of the
+    // session, so a session tapped in the rail went nowhere.
+    expect(
+      getShellStateForPath("/sessions", { sessionId: "session-1" }),
+    ).toEqual({
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "execution-session", sessionId: "session-1" },
+    });
+    expect(getShellStateForPath("/runs", { runId: "run-9" })).toEqual({
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "run", runId: "run-9" },
+    });
     // The phone's sessions list is the tablet's Recent Outcomes rail.
     expect(getShellStateForPath("/sessions")).toEqual({
       mode: "tasks",
       leftTab: "recent-outcomes",
       target: { type: "tasks-dashboard" },
     });
-    expect(getShellStateForPath("/planning/sessions/plan-1", { sessionId: "plan-1" })).toEqual({
+    expect(
+      getShellStateForPath("/planning/sessions/plan-1", {
+        sessionId: "plan-1",
+      }),
+    ).toEqual({
       mode: "planning",
       leftTab: "recent-sessions",
       target: { type: "planning-session", sessionId: "plan-1" },
     });
-    expect(getShellStateForPath("/projects/project-1", { projectId: "project-1" })).toEqual({
+    expect(
+      getShellStateForPath("/projects/project-1", { projectId: "project-1" }),
+    ).toEqual({
       mode: "planning",
       leftTab: "projects",
       target: { type: "project", projectId: "project-1" },
@@ -227,11 +269,21 @@ describe("tablet shell model", () => {
 
   it("derives mode from selected targets", () => {
     expect(getShellModeForTarget({ type: "ooda-chat" })).toBe("ooda");
-    expect(getShellModeForTarget({ type: "work-item", workItemId: "W1" })).toBe("tasks");
-    expect(getShellModeForTarget({ type: "execution-session", sessionId: "S1" })).toBe("tasks");
-    expect(getShellModeForTarget({ type: "planning-session", sessionId: "S2" })).toBe("planning");
-    expect(getShellModeForTarget({ type: "project", projectId: "P1" })).toBe("planning");
-    expect(getShellModeForTarget({ type: "settings" }, "planning")).toBe("planning");
+    expect(getShellModeForTarget({ type: "work-item", workItemId: "W1" })).toBe(
+      "tasks",
+    );
+    expect(
+      getShellModeForTarget({ type: "execution-session", sessionId: "S1" }),
+    ).toBe("tasks");
+    expect(
+      getShellModeForTarget({ type: "planning-session", sessionId: "S2" }),
+    ).toBe("planning");
+    expect(getShellModeForTarget({ type: "project", projectId: "P1" })).toBe(
+      "planning",
+    );
+    expect(getShellModeForTarget({ type: "settings" }, "planning")).toBe(
+      "planning",
+    );
     expect(getShellModeForTarget({ type: "settings" }, "tasks")).toBe("tasks");
   });
 
@@ -244,51 +296,61 @@ describe("tablet shell model", () => {
   });
 
   it("derives selected detail state from the active shell target", () => {
-    expect(getShellSelectionIntent({
-      mode: "tasks",
-      leftTab: "recent-outcomes",
-      target: { type: "work-item", workItemId: "work-1" },
-    })).toEqual({
+    expect(
+      getShellSelectionIntent({
+        mode: "tasks",
+        leftTab: "recent-outcomes",
+        target: { type: "work-item", workItemId: "work-1" },
+      }),
+    ).toEqual({
       selectedWorkItemId: "work-1",
       selectedSessionId: null,
       planningSessionId: null,
       workItemView: "outcome",
     });
-    expect(getShellSelectionIntent({
-      mode: "tasks",
-      leftTab: "recent-outcomes",
-      target: { type: "execution-session", sessionId: "run-1" },
-    })).toEqual({
+    expect(
+      getShellSelectionIntent({
+        mode: "tasks",
+        leftTab: "recent-outcomes",
+        target: { type: "execution-session", sessionId: "run-1" },
+      }),
+    ).toEqual({
       selectedWorkItemId: null,
       selectedSessionId: "run-1",
       planningSessionId: null,
       workItemView: "planning",
     });
-    expect(getShellSelectionIntent({
-      mode: "planning",
-      leftTab: "recent-sessions",
-      target: { type: "planning-session", sessionId: "plan-1" },
-    })).toEqual({
+    expect(
+      getShellSelectionIntent({
+        mode: "planning",
+        leftTab: "recent-sessions",
+        target: { type: "planning-session", sessionId: "plan-1" },
+      }),
+    ).toEqual({
       selectedWorkItemId: null,
       selectedSessionId: null,
       planningSessionId: "plan-1",
       workItemView: "planning",
     });
-    expect(getShellSelectionIntent({
-      mode: "tasks",
-      leftTab: "priority-queue",
-      target: { type: "tasks-dashboard" },
-    })).toEqual({
+    expect(
+      getShellSelectionIntent({
+        mode: "tasks",
+        leftTab: "priority-queue",
+        target: { type: "tasks-dashboard" },
+      }),
+    ).toEqual({
       selectedWorkItemId: null,
       selectedSessionId: null,
       planningSessionId: null,
       workItemView: "planning",
     });
-    expect(getShellSelectionIntent({
-      mode: "planning",
-      leftTab: "projects",
-      target: { type: "project", projectId: "project-1" },
-    })).toEqual({
+    expect(
+      getShellSelectionIntent({
+        mode: "planning",
+        leftTab: "projects",
+        target: { type: "project", projectId: "project-1" },
+      }),
+    ).toEqual({
       selectedWorkItemId: null,
       selectedSessionId: null,
       planningSessionId: null,
@@ -297,10 +359,10 @@ describe("tablet shell model", () => {
   });
 
   it("restores planning-forward work item details from route state", () => {
-    const state = getShellStateForPath(
-      "/work-items/issue-1",
-      { workItemId: "issue-1", view: "planning" },
-    );
+    const state = getShellStateForPath("/work-items/issue-1", {
+      workItemId: "issue-1",
+      view: "planning",
+    });
 
     expect(state).toEqual({
       mode: "tasks",
@@ -314,8 +376,12 @@ describe("tablet shell model", () => {
   });
 
   it("keeps project navigation as native tablet shell targets", () => {
-    expect(isNativeTabletShellTarget({ type: "projects-dashboard" })).toBe(true);
-    expect(isNativeTabletShellTarget({ type: "project", projectId: "P1" })).toBe(true);
+    expect(isNativeTabletShellTarget({ type: "projects-dashboard" })).toBe(
+      true,
+    );
+    expect(
+      isNativeTabletShellTarget({ type: "project", projectId: "P1" }),
+    ).toBe(true);
   });
 
   it("routes linked recent outcomes to session-forward work item details", () => {
@@ -393,10 +459,18 @@ describe("tablet shell model", () => {
   it("puts only current execution sessions in the tasks live rail", () => {
     const grouped = groupShellSessions(sessions);
 
-    expect(grouped.tasksActive.map((session) => session.sessionId)).toEqual(["run-1"]);
-    expect(grouped.recentOutcomes.map((session) => session.sessionId)).toEqual(["run-2"]);
-    expect(grouped.planningActive.map((session) => session.sessionId)).toEqual(["plan-1"]);
-    expect(grouped.recentPlanning.map((session) => session.sessionId)).toEqual(["plan-2"]);
+    expect(grouped.tasksActive.map((session) => session.sessionId)).toEqual([
+      "run-1",
+    ]);
+    expect(grouped.recentOutcomes.map((session) => session.sessionId)).toEqual([
+      "run-2",
+    ]);
+    expect(grouped.planningActive.map((session) => session.sessionId)).toEqual([
+      "plan-1",
+    ]);
+    expect(grouped.recentPlanning.map((session) => session.sessionId)).toEqual([
+      "plan-2",
+    ]);
   });
 
   it("treats hyphenated awaiting-input planning sessions as active live work", () => {
@@ -467,8 +541,20 @@ describe("tablet shell model", () => {
 
   it("keeps the Recent Outcomes badge equal to the rows the rail renders", () => {
     const workItems = [
-      { id: "done", identifier: "BOB-1", title: "Completed", kind: "task" as const, status: "completed" },
-      { id: "review", identifier: "BOB-4", title: "Ready for review", kind: "task" as const, status: "in_review" },
+      {
+        id: "done",
+        identifier: "BOB-1",
+        title: "Completed",
+        kind: "task" as const,
+        status: "completed",
+      },
+      {
+        id: "review",
+        identifier: "BOB-4",
+        title: "Ready for review",
+        kind: "task" as const,
+        status: "in_review",
+      },
     ];
     const badge = buildLeftRailTabBadges({ sessions, workItems, projects: [] })[
       "recent-outcomes"
@@ -536,12 +622,18 @@ describe("tablet shell model", () => {
     });
 
     expect(rows.map((row) => [row.id, row.target])).toEqual([
-      ["session:session-only", { type: "execution-session", sessionId: "session-only" }],
+      [
+        "session:session-only",
+        { type: "execution-session", sessionId: "session-only" },
+      ],
       ["work-item:done-work", { type: "work-item", workItemId: "done-work" }],
     ]);
     expect(rows.map((row) => [row.id, row.href])).toEqual([
       ["session:session-only", "/sessions/session-only?workspace=workspace-1"],
-      ["work-item:done-work", "/work-items/done-work?view=outcome&workspace=workspace-1"],
+      [
+        "work-item:done-work",
+        "/work-items/done-work?view=outcome&workspace=workspace-1",
+      ],
     ]);
     expect(rows[0]).toMatchObject({
       title: "Session only run",
@@ -686,9 +778,13 @@ describe("tablet shell model", () => {
   });
 
   it("matches recent outcome filters against completed, cancelled, failed, and interrupted statuses", () => {
-    expect(matchesShellSessionStatusFilter("completed", "completed")).toBe(true);
+    expect(matchesShellSessionStatusFilter("completed", "completed")).toBe(
+      true,
+    );
     expect(matchesShellSessionStatusFilter("done", "completed")).toBe(true);
-    expect(matchesShellSessionStatusFilter("cancelled", "completed")).toBe(true);
+    expect(matchesShellSessionStatusFilter("cancelled", "completed")).toBe(
+      true,
+    );
     expect(matchesShellSessionStatusFilter("stopped", "completed")).toBe(true);
     expect(matchesShellSessionStatusFilter("idle", "completed")).toBe(true);
 
@@ -697,7 +793,9 @@ describe("tablet shell model", () => {
     expect(matchesShellSessionStatusFilter("interrupted", "failed")).toBe(true);
 
     expect(matchesShellSessionStatusFilter("running", "running")).toBe(true);
-    expect(matchesShellSessionStatusFilter("provisioning", "running")).toBe(true);
+    expect(matchesShellSessionStatusFilter("provisioning", "running")).toBe(
+      true,
+    );
     expect(matchesShellSessionStatusFilter("pending", "running")).toBe(true);
     expect(matchesShellSessionStatusFilter("queued", "running")).toBe(true);
     expect(matchesShellSessionStatusFilter("completed", "failed")).toBe(false);

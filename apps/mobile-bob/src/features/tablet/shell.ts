@@ -3,13 +3,13 @@ import type { Href } from "expo-router";
 import type { ProviderKey, TaskLaneKey } from "./dashboard";
 import type { TabletQueueItem } from "./queue";
 import type { MobileWorkItemEntryView } from "./work-item-entry";
+import { timestampToMillis } from "~/lib/timestamps";
 import { appendWorkspaceParam } from "../planning/navigation";
 import {
   buildRecentOutcomeWorkItems,
   getRecentOutcomeRowModel,
 } from "./dashboard";
 import { buildPriorityQueueItems } from "./queue";
-import { timestampToMillis } from "~/lib/timestamps";
 
 export type TabletShellMode = "ooda" | "tasks" | "planning";
 export type TabletShellStatusFilter =
@@ -321,11 +321,20 @@ export function getShellStateForPath(
     };
   }
 
-  if (path.startsWith("/sessions/") && sessionId) {
+  // On the tablet the route files never mount, and with a sessions index
+  // route beside the dynamic one expo-router reports the pathname as
+  // "/sessions" and carries the id in params. Either shape is a session.
+  const routeSessionId =
+    path === "/sessions"
+      ? readParam(params, "sessionId")
+      : path.startsWith("/sessions/")
+        ? sessionId
+        : undefined;
+  if (routeSessionId) {
     return {
       mode: "tasks",
       leftTab: "recent-outcomes",
-      target: { type: "execution-session", sessionId },
+      target: { type: "execution-session", sessionId: routeSessionId },
     };
   }
 
@@ -336,6 +345,15 @@ export function getShellStateForPath(
       mode: "tasks",
       leftTab: "recent-outcomes",
       target: { type: "tasks-dashboard" },
+    };
+  }
+
+  const paramRunId = readParam(params, "runId");
+  if (path === "/runs" && paramRunId) {
+    return {
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "run", runId: paramRunId },
     };
   }
 
