@@ -83,8 +83,9 @@ jobs:
     # test/emulate-setup.ts / emulate.config.yaml for how it's now served.
     runs-on: ubuntu-latest
     # Run 1166 spent 20 minutes on passing serial checks and lost reporting.
-    # Keep concurrency bounded, but budget 30 minutes from measured duration.
-    timeout-minutes: 30
+    # Keep concurrency bounded, but budget 45 minutes: run 1215 (2026-10-01) ran
+    # the full 30 on a loaded runner and timed out after all packages had passed.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
