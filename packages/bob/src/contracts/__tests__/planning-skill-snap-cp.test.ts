@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { PlanningRpc } from "../groups/planning.js";
 
 describe("PlanningRpc — 7B-4C Task 7 (planning.skill.* + snapshot.* + checkpoint.*)", () => {
-  it("has 68 procedures after adding Linear sync coverage", () => {
-    expect(PlanningRpc.requests.size).toBe(68);
+  it("has 73 procedures after adding daily-loop coverage", () => {
+    // 68 after Linear sync coverage; #215 added the five daily-loop
+    // procedures planning.dailyPlan.{get,list,generate,approve,close}.
+    expect(PlanningRpc.requests.size).toBe(73);
   });
 
   const skillProcedures = [
