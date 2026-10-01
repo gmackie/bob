@@ -1,4 +1,3 @@
-import type { Href } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Modal,
@@ -659,7 +658,7 @@ function TabletLayout() {
         setSelectedWorkItemView(view ?? "queue");
         gateway.selectWorkItem(decodeURIComponent(workItemId));
       }
-      router.replace(href as Href);
+      router.replace(href);
     },
     [clearDetailState, gateway, router],
   );

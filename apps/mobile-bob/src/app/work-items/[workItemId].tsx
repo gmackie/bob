@@ -8,7 +8,6 @@ import {
   View,
 } from "react-native";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
-import type { Href } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { MobileWorkItemEntryValidationState } from "~/features/tablet/work-item-entry";
@@ -425,7 +424,7 @@ export default function WorkItemDetailScreen() {
             onOpenSession={(sessionId) =>
               router.push(getSessionHref(sessionId, workItem.workspaceId))
             }
-            onOpenRun={(href) => router.push(href as Href)}
+            onOpenRun={(href) => router.push(href)}
           />
         ) : null}
 
