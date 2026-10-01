@@ -83,8 +83,13 @@ jobs:
     # test/emulate-setup.ts / emulate.config.yaml for how it's now served.
     runs-on: ubuntu-latest
     # Run 1166 spent 20 minutes on passing serial checks and lost reporting.
-    # Keep concurrency bounded, but budget 30 minutes from measured duration.
-    timeout-minutes: 30
+    # Keep concurrency bounded, but budget from measured duration: 25 minutes
+    # on an idle runner (run 1205), while runs 1215/1217/1218 on 2026-10-01
+    # were killed at 30 minutes still inside the test phase with every suite
+    # green, because the shared Forgejo host was carrying ~1.6 cores of
+    # SigNoz ClickHouse plus a second CI job. 60 minutes leaves headroom for
+    # that contention without hiding a genuine hang for long.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
