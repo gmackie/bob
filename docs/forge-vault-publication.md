@@ -31,3 +31,11 @@ write and replay were exercised; normal Bob application route integration,
 actual process-kill recovery and real-source migration remain separate gates.
 Earlier direct-pilot evidence describes the source hashes from Bob PR #224;
 new HTTP evidence describes the later pilot source.
+
+When an injected provider is not `local-git`, `VaultService.sync()` fails with
+`UnsupportedCapability` before invoking local Git pull. Provider-aware remote
+materialization/synchronization must be implemented explicitly; it must not
+silently read from a previously configured local origin. Write and replay behavior
+are unchanged by this guard. Its regression reproduced the old local-pull fallback
+before the fix. Earlier live evidence refers to the exact service source hashes
+before this later sync-only guard.

@@ -183,6 +183,7 @@ it("wires VaultService writes through the opted-in publication port", async () =
     expect(await readFile(join(dir, "notes/test.md"), "utf8")).toBe("body");
     expect(commits).toBe(1);
     expect(writes).toBe(1);
+    await expect(service.sync()).rejects.toMatchObject({code: "UnsupportedCapability"});
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

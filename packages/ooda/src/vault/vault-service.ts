@@ -7,7 +7,7 @@ import { writeFile } from "./writer";
 import { commitAndPush, pull, isLocked } from "./git";
 import { LocalGitStorage } from "./local-git-storage";
 import type { VaultConfig, VaultFile } from "./types";
-import type { PublicationRecord } from "./versioned-storage";
+import { VersionedStorageError, type PublicationRecord } from "./versioned-storage";
 
 export interface PromoteResult {
   filePath: string;
@@ -61,7 +61,7 @@ export class VaultService {
     return { filePath, publication };
   }
 
-  /** Re-attempt publications that never reached the remote. */
+  /** Reconcile non-final publications using the selected provider replay policy. */
   async replayPending(): Promise<PublicationRecord[]> {
     return (this.publication ?? new LocalGitStorage(this.config.path)).replayPending();
   }
@@ -73,6 +73,9 @@ export class VaultService {
 
   /** Pull latest changes from origin. */
   async sync(): Promise<{ filesChanged: number; conflicts: boolean }> {
+    if (this.publication && this.publication.capabilities().provider !== "local-git") {
+      throw new VersionedStorageError("UnsupportedCapability", "Selected vault publication provider does not support local Git synchronization");
+    }
     return pull(this.config.path);
   }
 
