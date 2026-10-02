@@ -42,17 +42,27 @@ export async function initVaultRepo(
   }
 }
 
-export async function pushVault(vaultPath: string): Promise<void> {
+export interface PushResult {
+  status: "published" | "pending";
+  revision: string;
+}
+
+export async function pushVault(vaultPath: string): Promise<PushResult> {
   const git = simpleGit(vaultPath);
+  const revision = (await git.revparse(["HEAD"])).trim();
   try {
     await ensureIdentity(git);
     await git.push("origin");
+    return {status:"published",revision};
   } catch {
-    // Silent failure when offline -- local is authoritative
+    // Transport errors can occur after remote acceptance. Preserve local work,
+    // but never imply that it is remotely durable or safe to replay blindly.
+    return {status:"pending",revision};
   }
 }
 
 export interface PullResult {
+  status: "synced" | "conflicted" | "unavailable";
   filesChanged: number;
   conflicts: boolean;
   conflictFiles: string[];
@@ -82,6 +92,7 @@ export async function pullVault(vaultPath: string): Promise<PullResult> {
     }
 
     return {
+      status: conflicts ? "conflicted" : "synced",
       filesChanged: pullSummary.summary.changes,
       conflicts,
       conflictFiles,
@@ -102,9 +113,9 @@ export async function pullVault(vaultPath: string): Promise<PullResult> {
         "utf-8",
       );
 
-      return { filesChanged: 0, conflicts: true, conflictFiles };
+      return { status: "conflicted", filesChanged: 0, conflicts: true, conflictFiles };
     }
-    return { filesChanged: 0, conflicts: false, conflictFiles: [] };
+    return { status: "unavailable", filesChanged: 0, conflicts: false, conflictFiles: [] };
   }
 }
 

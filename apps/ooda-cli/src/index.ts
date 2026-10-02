@@ -183,13 +183,22 @@ async function main() {
       const result = await pullVault(storageRoot);
       console.log(`  ${result.filesChanged} files changed`);
 
-      if (result.conflicts) {
+      if (result.status === "unavailable") {
+        console.error("  Remote sync unavailable. Local changes are retained.");
+        process.exitCode = 1;
+      } else if (result.conflicts) {
+        process.exitCode = 1;
         console.log(`  Conflicts in: ${result.conflictFiles.join(", ")}`);
         console.log("  Resolve conflicts, then run: ooda sync");
       } else {
         console.log("Pushing to remote...");
-        await pushVault(storageRoot);
-        console.log("  Synced.");
+        const pushed = await pushVault(storageRoot);
+        if (pushed.status === "published") {
+          console.log("  Synced.");
+        } else {
+          console.error(`  Publication pending for ${pushed.revision}. Local changes are retained.`);
+          process.exitCode = 1;
+        }
       }
       break;
     }

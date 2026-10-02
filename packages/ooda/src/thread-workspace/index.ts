@@ -26,6 +26,7 @@ export {
   commitMerge,
   abortMerge,
   type PullResult,
+  type PushResult,
 } from "./sync-vault";
 
 export {

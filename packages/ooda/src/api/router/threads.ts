@@ -83,7 +83,7 @@ export const threadsRouter = {
 
     const pullResult = await pullVault(storageRoot);
 
-    if (!pullResult.conflicts) {
+    if (pullResult.status === "synced") {
       const threads = scanThreads(storageRoot);
       for (const t of threads) {
         await ctx.db

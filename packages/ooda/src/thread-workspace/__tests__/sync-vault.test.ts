@@ -50,10 +50,23 @@ describe("syncVault", () => {
       stdio: "pipe",
     });
 
-    await pushVault(local);
+    expect(await pushVault(local)).toMatchObject({status:"published"});
 
     const bareLog = execSync("git log --oneline", { cwd: bare }).toString();
     expect(bareLog).toContain("test");
+  }, 15_000);
+
+  it("reports an unavailable remote without claiming publication or losing the local commit", async () => {
+    const bare = mkdtempSync(join(tmpdir(), "ooda-offline-bare-"));
+    const local = mkdtempSync(join(tmpdir(), "ooda-offline-local-"));
+    tempDirs.push(bare, local);
+    execSync("git init --bare --initial-branch=main", { cwd: bare, stdio: "pipe" });
+    await initVaultRepo(local, bare);
+    const before = execSync("git rev-parse HEAD", {cwd:local}).toString().trim();
+    rmSync(bare,{recursive:true,force:true});
+    expect(await pushVault(local)).toEqual({status:"pending",revision:before});
+    expect(execSync("git rev-parse HEAD",{cwd:local}).toString().trim()).toBe(before);
+    expect(await pullVault(local)).toMatchObject({status:"unavailable",conflicts:false});
   }, 15_000);
 
   it("pullVault pulls changes and detects conflicts", async () => {
@@ -87,11 +100,7 @@ describe("syncVault", () => {
     });
     await pushVault(clone1);
 
-    // pushVault swallows push errors (offline-tolerant by design), which
-    // would otherwise turn a real push failure into a confusing downstream
-    // "expected conflicts to be true" failure below. Assert the push
-    // actually landed before proceeding, so a real failure here fails loud
-    // and points straight at the cause.
+    // Verify the fixture reached the remote before testing the conflict.
     const bareLogAfterC1Edit = execSync("git log --oneline", { cwd: bare }).toString();
     expect(bareLogAfterC1Edit).toContain("c1 edit");
 
