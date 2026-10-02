@@ -2,13 +2,14 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
-import { register } from "tsx/esm/api";
+import {randomBytes} from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
-register();
+if(process.env.FORGE_PILOT_BUNDLED !== "true"){const {register}=await import("tsx/esm/api");register();}
+const {startVaultPilotHost}=await import("./forge-vault-http-host.ts");
 const { ForgePublicationStorage } = await import(
   "../src/vault/forge-publication-storage.ts"
 );
@@ -69,7 +70,7 @@ const git = (cwd, args) =>
     env,
     stdio: ["pipe", "pipe", "pipe"],
   }).trim();
-let db;
+let db, httpHost;
 try {
   git(directory, ["init", "--bare", "remote.git"]);
   git(directory, ["init", "--bare", "prepared.git"]);
@@ -231,20 +232,23 @@ try {
     }
     return git(remote, ["show", oid + ":" + path]);
   };
-  const first = await service().write("notes/pilot.md", "first body");
+  if(process.env.FORGE_VAULT_HTTP === "true") httpHost=await startVaultPilotHost(service,randomBytes(32).toString('hex'));
+  const write=(path,content)=>httpHost?httpHost.call({action:'write',path,content}):service().write(path,content);
+  const replay=()=>httpHost?httpHost.call({action:'replay'}):service().replayPending();
+  const first = await write("notes/pilot.md", "first body");
   assert.equal(first.state, "published");
   assert.equal(
     verifyContent(first.intent.revision.objectId, "notes/pilot.md"),
     "first body",
   );
   const before = writes;
-  assert.deepEqual(await service().replayPending(), []);
+  assert.deepEqual(await replay(), []);
   assert.equal(writes, before);
   loseAck = true;
-  const uncertain = await service().write("notes/pilot.md", "second body");
+  const uncertain = await write("notes/pilot.md", "second body");
   assert.equal(uncertain.state, "indeterminate");
   const after = writes;
-  const recovered = await service().replayPending();
+  const recovered = await replay();
   assert.equal(recovered[0].state, "indeterminate");
   assert.equal(writes, after);
   assert.equal(
@@ -274,6 +278,7 @@ try {
       "recovery never repeats Git publication",
       "revoked authorization rejects receipt replay",
     ],
+    transport: httpHost ? "isolated loopback HTTP fixture" : "direct service composition",
     gitDispatches: writes,
     cleanup: "temporary fixture removed by finally",
   };
@@ -289,6 +294,7 @@ try {
     }),
   );
 } finally {
+  await httpHost?.close();
   db?.close();
   await rm(directory, { recursive: true, force: true });
 }
