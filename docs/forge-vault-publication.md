@@ -39,3 +39,12 @@ silently read from a previously configured local origin. Write and replay behavi
 are unchanged by this guard. Its regression reproduced the old local-pull fallback
 before the fix. Earlier live evidence refers to the exact service source hashes
 before this later sync-only guard.
+
+Thread-note promotion accepts a trusted second argument
+`{ publication: selectedStorage }`. In this mode `promoteNote` returns a
+`publication` record alongside the note/provenance paths and never falls through
+to local Git push. Hosts must pass their selected port and inspect that record's
+state before completing a task. The default path remains compatible with existing
+callers; provider selection is not enabled globally. A real-Git regression verifies
+note and provenance are committed together and an indeterminate provider result
+remains indeterminate.
