@@ -44,3 +44,6 @@ export type { PublishOptions, PublishedDraft } from "./publish";
 export { publishDraft, slugify } from "./publish";
 export type { Draft, DraftMetadata, NewDraftMetadata } from "./drafts";
 export { writeDraft, listDrafts } from "./drafts";
+
+export { ForgePublicationStorage } from "./forge-publication-storage";
+export type { ForgeVaultBinding, ForgeVaultClient, ForgeVaultPublication } from "./forge-publication-storage";

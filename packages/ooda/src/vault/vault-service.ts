@@ -15,7 +15,7 @@ export interface PromoteResult {
 }
 
 export class VaultService {
-  constructor(private config: VaultConfig) {}
+  constructor(private config: VaultConfig, private publication?: import("./git").CommitAndPushOptions["storage"]) {}
 
   /** List .md files in the vault, optionally filtered by glob. */
   async list(glob?: string): Promise<string[]> {
@@ -37,7 +37,7 @@ export class VaultService {
     frontmatter?: Record<string, unknown>,
   ): Promise<PublicationRecord> {
     await writeFile(this.config.path, filePath, content, frontmatter);
-    return commitAndPush(this.config.path, `vault: update ${filePath}`);
+    return commitAndPush(this.config.path, `vault: update ${filePath}`, this.publication ? {storage:this.publication} : {});
   }
 
   /**
@@ -56,18 +56,19 @@ export class VaultService {
     const publication = await commitAndPush(
       this.config.path,
       `promote: ${noteId} from thread ${threadId}`,
+      this.publication ? {storage:this.publication} : {},
     );
     return { filePath, publication };
   }
 
   /** Re-attempt publications that never reached the remote. */
   async replayPending(): Promise<PublicationRecord[]> {
-    return new LocalGitStorage(this.config.path).replayPending();
+    return (this.publication ?? new LocalGitStorage(this.config.path)).replayPending();
   }
 
   /** Publications that are not yet durably published. */
   async listUnpublished(): Promise<PublicationRecord[]> {
-    return new LocalGitStorage(this.config.path).listUnpublished();
+    return (this.publication ?? new LocalGitStorage(this.config.path)).listUnpublished();
   }
 
   /** Pull latest changes from origin. */
