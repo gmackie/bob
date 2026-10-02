@@ -96,6 +96,18 @@ describe("syncVault", () => {
     expect(await listUnpublishedVaultPublications(local)).toEqual([]);
   }, 20_000);
 
+  it("reports an unavailable pull without claiming synchronization", async () => {
+    const bare = mkdtempSync(join(tmpdir(), "ooda-offline-bare-"));
+    const local = mkdtempSync(join(tmpdir(), "ooda-offline-local-"));
+    tempDirs.push(bare, local);
+    execSync("git init --bare --initial-branch=main", { cwd: bare, stdio: "pipe" });
+    await initVaultRepo(local, bare);
+    const before = execSync("git rev-parse HEAD", {cwd:local}).toString().trim();
+    rmSync(bare,{recursive:true,force:true});
+    expect(await pullVault(local)).toMatchObject({status:"unavailable",conflicts:false});
+    expect(execSync("git rev-parse HEAD",{cwd:local}).toString().trim()).toBe(before);
+  }, 15_000);
+
   it("pullVault pulls changes and detects conflicts", async () => {
     const bare = mkdtempSync(join(tmpdir(), "ooda-bare-"));
     const clone1 = mkdtempSync(join(tmpdir(), "ooda-c1-"));

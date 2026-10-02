@@ -183,7 +183,11 @@ async function main() {
       const result = await pullVault(storageRoot);
       console.log(`  ${result.filesChanged} files changed`);
 
-      if (result.conflicts) {
+      if (result.status === "unavailable") {
+        console.error("  Remote sync unavailable. Local changes are retained.");
+        process.exitCode = 1;
+      } else if (result.conflicts) {
+        process.exitCode = 1;
         console.log(`  Conflicts in: ${result.conflictFiles.join(", ")}`);
         console.log("  Resolve conflicts, then run: ooda sync");
       } else {
