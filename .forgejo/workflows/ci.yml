@@ -12,7 +12,7 @@ env:
 jobs:
   research-backend:
     name: Research backend
-    runs-on: ubuntu-latest
+    runs-on: hetzner-ci
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -81,7 +81,7 @@ jobs:
     # a live Postgres at postgres://postgres:postgres@localhost:5432/test --
     # see those packages' test files for the hardcoded connection string, and
     # test/emulate-setup.ts / emulate.config.yaml for how it's now served.
-    runs-on: ubuntu-latest
+    runs-on: hetzner-ci
     # Run 1166 spent 20 minutes on passing serial checks and lost reporting.
     # Keep concurrency bounded, but budget 45 minutes: run 1215 (2026-10-01) ran
     # the full 30 on a loaded runner and timed out after all packages had passed.
