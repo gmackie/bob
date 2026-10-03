@@ -177,6 +177,12 @@ module.exports = ({ config }) => {
       },
     },
     android: {
+      // EAS provides google-services.json as the GOOGLE_SERVICES_JSON file env
+      // var; FCM registration needs it in the build. Local runs without it are
+      // unchanged.
+      ...(process.env.GOOGLE_SERVICES_JSON
+        ? { googleServicesFile: process.env.GOOGLE_SERVICES_JSON }
+        : {}),
       package: getBundleId(),
       adaptiveIcon: {
         foregroundImage:
