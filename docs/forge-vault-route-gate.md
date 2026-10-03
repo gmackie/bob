@@ -61,3 +61,44 @@ The regressions reproduced the external-alias read/write failures before the
 fix. Validation after the fix: 96 vault/router tests passed and OODA typecheck
 passed. Normal-route live deployment and external payload disposition remain
 open; no source vault or production configuration was changed.
+
+## Persistent admissions and runner completion (2026-10-03)
+
+Node hosts may inject `PersistentVaultGate` into `VaultRouteHost`. Its SQLite
+file must be an absolute path on a persistent local volume shared by every
+cooperating host, outside the vault and its Git exports. Operations claim the
+generation atomically before touching files and release it after service
+completion. Competing processes fail closed. Closure persists across restart;
+a closed, drained generation can advance once to a previously unused identity.
+There is no lease expiry or automatic orphan takeover. A killed holder blocks
+new operations and generation advancement, even after its provider receipt has
+been recovered. Independent hosts and legacy Git clients need separate fencing.
+
+The runner accepts a trusted `RunnerVaultPublication` binding using that same
+gate and provider. Both manual promotions and Bob outcome callbacks use it.
+Only a published receipt permits completion. A promotion error or uncertain
+publication closes the generation before releasing admission, preventing the
+polling loop from creating duplicate notes. Reconciliation must retain the
+original note, provenance and receipt; do not reissue the original promotion.
+The default runner path remains unchanged until a host supplies the binding.
+
+The process-kill regression terminates a child after a controlled provider has
+recorded dispatch. Its prepared application intent survives; restart uses
+recovery only, keeps an observed head indeterminate, accepts an explicit receipt,
+and does not clear the orphan admission. This verifies process loss, not host
+power loss or distributed failover.
+
+`docs/evidence/forge-vault-routes-live-2026-10-03.json` records eight passing
+checks on the existing runner in an isolated Node container using live Artifacts
+and D1. The HTTP fixture calls actual vault procedures with a trusted fixture
+actor. Anonymous requests and writes after durable closure are rejected.
+Production session authentication, route activation and legacy-writer shutdown
+are not established by this fixture. All disposable cloud resources were deleted.
+
+Offline orphan recovery requires stopping every process with workspace access,
+retaining files and journals, reconciling original operations against provider
+receipts, and preparing a fresh exclusively owned workspace/control database.
+Never delete an admission from a database still used by any process or revive
+the old generation. An unresolved provider request remains unresolved after its
+originating process is gone. Validation: 248 runner tests, 100 vault/router tests
+(99 in the full run plus the process-kill regression), and both typechecks.
