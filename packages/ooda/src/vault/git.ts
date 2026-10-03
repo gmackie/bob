@@ -65,6 +65,8 @@ export async function hasConflicts(vaultPath: string): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 export interface CommitAndPushOptions {
+  /** Explicit server-owned composition; never chosen by request input. */
+  storage?: import("./versioned-storage").VersionedStoragePort & Pick<LocalGitStorage, "currentRef" | "lastObservedRemoteHead">;
   /** Stable id for retrying the same publication. Generated when omitted. */
   operationId?: string;
 }
@@ -91,7 +93,7 @@ export async function commitAndPush(
       );
     }
 
-    const storage = new LocalGitStorage(vaultPath);
+    const storage = options.storage ?? new LocalGitStorage(vaultPath);
     const committed = await storage.commitWorkingTree(message);
     const revision = committed ?? (await storage.resolve({ ref: "HEAD" }));
     const ref = await storage.currentRef();

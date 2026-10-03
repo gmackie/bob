@@ -159,3 +159,31 @@ describe("writeFileOnce", () => {
     ).rejects.toThrow("Path traversal detected");
   });
 });
+
+it("rejects writes through an external directory alias and into Git metadata", async () => {
+  const { mkdtemp, symlink, mkdir, readFile, rm } = await import(
+    "node:fs/promises"
+  );
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = await mkdtemp(join(tmpdir(), "vault-boundary-"));
+  try {
+    const vault = join(root, "vault"),
+      outside = join(root, "outside");
+    await mkdir(vault);
+    await mkdir(outside);
+    await symlink(outside, join(vault, "alias"));
+    await expect(
+      writeFile(vault, "alias/escaped.md", "secret"),
+    ).rejects.toThrow();
+    await expect(readFile(join(outside, "escaped.md"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(writeFile(vault, ".git/config", "changed")).rejects.toThrow();
+    await expect(readFile(join(vault, ".git/config"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

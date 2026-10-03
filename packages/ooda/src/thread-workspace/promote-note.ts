@@ -2,6 +2,8 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { commitAndPush, type CommitAndPushOptions } from "../vault/git";
+import type { PublicationRecord } from "../vault/versioned-storage";
 
 import {
   generateArtifactId,
@@ -37,10 +39,13 @@ export interface PromoteNoteResult {
   artifactId: string;
   notePath: string;
   provenancePath: string;
+  /** Present for an explicitly selected publication provider; inspect state. */
+  publication?: PublicationRecord;
 }
 
 export async function promoteNote(
   input: PromoteNoteInput,
+  options: { publication?: CommitAndPushOptions["storage"] } = {},
 ): Promise<PromoteNoteResult> {
   const artifactId = generateArtifactId(input.content);
   const noteId = `note_${randomUUID().slice(0, 8)}`;
@@ -83,6 +88,12 @@ ${input.content}
   mkdirSync(dirname(provenancePath), { recursive: true });
   writeFileSync(provenancePath, JSON.stringify(provRecord, null, 2));
 
+  let publication: PublicationRecord | undefined;
+  if (options.publication) {
+    // Both files are prepared together. Unknown provider outcomes remain visible
+    // to completion reconciliation; never fall through to local Git push.
+    publication = await commitAndPush(input.storageRoot, `Promote: ${input.title}`, {storage: options.publication});
+  } else {
   // Atomic git commit: both note and provenance together
   execFileSync("git", ["add", "-A"], { cwd: input.storageRoot, stdio: "pipe" });
   execFileSync(
@@ -106,6 +117,8 @@ ${input.content}
     });
   } catch {
     // offline — will sync on next push
+  }
+
   }
 
   // Fire-and-forget extraction via research-backend sidecar
@@ -134,5 +147,6 @@ ${input.content}
     artifactId,
     notePath,
     provenancePath,
+    ...(publication ? {publication} : {}),
   };
 }
