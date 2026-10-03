@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { pickAcrossProjects } from "../autoDrain-pick";
 
@@ -43,4 +43,20 @@ describe("pickAcrossProjects", () => {
     // First pick from bucket "none", second from "A" (round-robin)
     expect(picked.map((p) => p.projectId)).toEqual([null, "A"]);
   });
+});
+
+// Even if an old imported reporting card is manually promoted to Todo, the
+// dispatch selector must not turn it into agent work.
+it("excludes digest reporting cards from dispatch", () => {
+  const rows = [
+    { id: "legacy", projectId: "A", title: "📊 Bob daily digest" },
+    {
+      id: "renamed",
+      projectId: "A",
+      title: "History",
+      description: "[bob-digest-report]",
+    },
+    { id: "task", projectId: "B", title: "Fix the bug" },
+  ];
+  expect(pickAcrossProjects(rows, 3).map((r) => r.id)).toEqual(["task"]);
 });

@@ -1,3 +1,4 @@
+import { PINNED_TITLE, REPORT_MARKER } from "../services/digest/destination.js";
 /**
  * Linear setup handler functions — list and connect Linear projects to Bob
  * projects.
@@ -229,6 +230,7 @@ export async function syncLinearProjects(
       if (issuesConn.pageInfo.hasNextPage) issuesTruncated = true;
 
       for (const issue of issuesConn.nodes) {
+        if (issue.title === PINNED_TITLE || issue.description?.includes(REPORT_MARKER)) continue;
         const state = await issue.state;
         const stateType = state?.type ?? "backlog";
 
