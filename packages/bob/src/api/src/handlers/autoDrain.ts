@@ -1,3 +1,4 @@
+import { PINNED_TITLE, REPORT_MARKER } from "../services/digest/destination.js";
 // Autonomous backlog driver.
 //
 // The batch-dispatch queue-drain engine (dispatchCheckProgress) only advances
@@ -188,6 +189,8 @@ export async function autoDrainBacklog(
     where: and(
       inArray(workItems.status, DISPATCHABLE_STATUSES),
       eq(workItems.kind, "task"),
+      sql`${workItems.title} <> ${PINNED_TITLE}`,
+      sql`coalesce(${workItems.description}, '') not like ${`%${REPORT_MARKER}%`}`,
     ),
     orderBy: [
       sql`case when ${workItems.status} = 'ready' then 0 else 1 end`,
