@@ -7,7 +7,7 @@ import { writeFile } from "./writer";
 import { commitAndPush, pull, isLocked } from "./git";
 import { LocalGitStorage } from "./local-git-storage";
 import type { VaultConfig, VaultFile } from "./types";
-import type { PublicationRecord } from "./versioned-storage";
+import { VersionedStorageError, type PublicationRecord } from "./versioned-storage";
 
 export interface PromoteResult {
   filePath: string;
@@ -15,7 +15,7 @@ export interface PromoteResult {
 }
 
 export class VaultService {
-  constructor(private config: VaultConfig) {}
+  constructor(private config: VaultConfig, private publication?: import("./git").CommitAndPushOptions["storage"]) {}
 
   /** List .md files in the vault, optionally filtered by glob. */
   async list(glob?: string): Promise<string[]> {
@@ -37,7 +37,7 @@ export class VaultService {
     frontmatter?: Record<string, unknown>,
   ): Promise<PublicationRecord> {
     await writeFile(this.config.path, filePath, content, frontmatter);
-    return commitAndPush(this.config.path, `vault: update ${filePath}`);
+    return commitAndPush(this.config.path, `vault: update ${filePath}`, this.publication ? {storage:this.publication} : {});
   }
 
   /**
@@ -56,22 +56,26 @@ export class VaultService {
     const publication = await commitAndPush(
       this.config.path,
       `promote: ${noteId} from thread ${threadId}`,
+      this.publication ? {storage:this.publication} : {},
     );
     return { filePath, publication };
   }
 
-  /** Re-attempt publications that never reached the remote. */
+  /** Reconcile non-final publications using the selected provider replay policy. */
   async replayPending(): Promise<PublicationRecord[]> {
-    return new LocalGitStorage(this.config.path).replayPending();
+    return (this.publication ?? new LocalGitStorage(this.config.path)).replayPending();
   }
 
   /** Publications that are not yet durably published. */
   async listUnpublished(): Promise<PublicationRecord[]> {
-    return new LocalGitStorage(this.config.path).listUnpublished();
+    return (this.publication ?? new LocalGitStorage(this.config.path)).listUnpublished();
   }
 
   /** Pull latest changes from origin. */
   async sync(): Promise<{ filesChanged: number; conflicts: boolean }> {
+    if (this.publication && this.publication.capabilities().provider !== "local-git") {
+      throw new VersionedStorageError("UnsupportedCapability", "Selected vault publication provider does not support local Git synchronization");
+    }
     return pull(this.config.path);
   }
 

@@ -7,12 +7,16 @@ import type { AuthInstance } from "@gmacko/core/auth";
 import { validateApiKey } from "@gmacko/core/auth/validate-api-key";
 import { db } from "@gmacko/ooda/db/client";
 
+import type { VaultRouteHost } from "../vault/vault-route-host";
+
 import type { OodaRolloutCapabilityV1 } from "../contracts/v1";
 import { resolveOodaRolloutPolicy } from "../kernel/rollout-policy";
 
 export const createTRPCContext = async (opts: {
   headers: Headers;
   auth?: AuthInstance;
+  /** Trusted, process-shared host; never construct from request input. */
+  vaultHost?: VaultRouteHost;
   // On the CF Workers edge, callers inject the per-request Hyperdrive client
   // (apps/ooda-edge's lazy proxy) — the module-level `db` binds its
   // prepared-statement config at import time, before the edge sets its
@@ -20,7 +24,9 @@ export const createTRPCContext = async (opts: {
   // module `db` for the Node runtime.
   db?: typeof db;
 }) => {
-  return { db: opts.db ?? db, headers: opts.headers, auth: opts.auth };
+  return { db: opts.db ?? db, headers: opts.headers, auth: opts.auth,
+    ...(opts.vaultHost ? { vaultHost: opts.vaultHost } : {}),
+  };
 };
 
 export const t = initTRPC

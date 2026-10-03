@@ -103,6 +103,7 @@ export async function listUnpublishedVaultPublications(
 }
 
 export interface PullResult {
+  status: "synced" | "conflicted" | "unavailable";
   filesChanged: number;
   conflicts: boolean;
   conflictFiles: string[];
@@ -132,6 +133,7 @@ export async function pullVault(vaultPath: string): Promise<PullResult> {
     }
 
     return {
+      status: conflicts ? "conflicted" : "synced",
       filesChanged: pullSummary.summary.changes,
       conflicts,
       conflictFiles,
@@ -152,9 +154,9 @@ export async function pullVault(vaultPath: string): Promise<PullResult> {
         "utf-8",
       );
 
-      return { filesChanged: 0, conflicts: true, conflictFiles };
+      return { status: "conflicted", filesChanged: 0, conflicts: true, conflictFiles };
     }
-    return { filesChanged: 0, conflicts: false, conflictFiles: [] };
+    return { status: "unavailable", filesChanged: 0, conflicts: false, conflictFiles: [] };
   }
 }
 

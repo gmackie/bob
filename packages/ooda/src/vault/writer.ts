@@ -7,7 +7,8 @@ import {
   rename,
   rm,
 } from "node:fs/promises";
-import { dirname, join, normalize, resolve } from "node:path";
+import { dirname } from "node:path";
+import { resolveVaultPath } from "./path-boundary";
 
 import matter from "gray-matter";
 
@@ -18,27 +19,20 @@ export class VaultWriterError extends Error {
   }
 }
 
-/**
- * Validate that filePath does not escape vaultPath via traversal.
- * Rejects paths containing ".." or that resolve outside the vault root.
- */
-function validatePath(vaultPath: string, filePath: string): string {
-  if (filePath.includes("..")) {
+async function validatePath(
+  vaultPath: string,
+  filePath: string,
+): Promise<string> {
+  try {
+    return await resolveVaultPath(vaultPath, filePath, {
+      allowMissing: true,
+      preserveLeaf: true,
+    });
+  } catch (error) {
     throw new VaultWriterError(
-      `Path traversal detected: "${filePath}" contains ".."`,
+      error instanceof Error ? error.message : "Invalid vault path",
     );
   }
-
-  const resolved = resolve(vaultPath, filePath);
-  const normalizedVault = normalize(vaultPath);
-
-  if (!resolved.startsWith(normalizedVault + "/") && resolved !== normalizedVault) {
-    throw new VaultWriterError(
-      `Path "${filePath}" resolves outside vault root "${vaultPath}"`,
-    );
-  }
-
-  return resolved;
 }
 
 /**
@@ -52,20 +46,22 @@ export async function writeFile(
   content: string,
   frontmatter?: Record<string, unknown>,
 ): Promise<void> {
-  const fullPath = validatePath(vaultPath, filePath);
-  const tmpPath = fullPath + ".tmp";
+  const fullPath = await validatePath(vaultPath, filePath);
+  const tmpPath = `${fullPath}.tmp-${process.pid}-${randomUUID()}`;
 
   const output =
-    frontmatter != null
-      ? matter.stringify(content, frontmatter)
-      : content;
+    frontmatter != null ? matter.stringify(content, frontmatter) : content;
 
   // Ensure parent directories exist
   await mkdir(dirname(fullPath), { recursive: true });
 
   // Atomic write: write to tmp, then rename
-  await fsWriteFile(tmpPath, output, "utf-8");
-  await rename(tmpPath, fullPath);
+  try {
+    await fsWriteFile(tmpPath, output, { encoding: "utf-8", flag: "wx" });
+    await rename(tmpPath, fullPath);
+  } finally {
+    await rm(tmpPath, { force: true });
+  }
 }
 
 /**
@@ -75,10 +71,9 @@ export async function deleteFile(
   vaultPath: string,
   filePath: string,
 ): Promise<void> {
-  const fullPath = validatePath(vaultPath, filePath);
+  const fullPath = await validatePath(vaultPath, filePath);
   await rm(fullPath, { force: true });
 }
-
 
 /**
  * Create a generated file without ever overwriting human edits.
@@ -88,7 +83,7 @@ export async function writeFileOnce(
   filePath: string,
   content: string,
 ): Promise<"created" | "unchanged"> {
-  const fullPath = validatePath(vaultPath, filePath);
+  const fullPath = await validatePath(vaultPath, filePath);
   const tmpPath = `${fullPath}.tmp-${process.pid}-${randomUUID()}`;
 
   await mkdir(dirname(fullPath), { recursive: true });
