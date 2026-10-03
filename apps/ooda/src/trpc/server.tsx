@@ -8,6 +8,7 @@ import type { AppRouter } from "@gmacko/ooda/api";
 import { appRouter, createTRPCContext } from "@gmacko/ooda/api";
 import { initAuth } from "@gmacko/core/auth";
 import { db } from "@gmacko/ooda/db/client";
+import { getConfiguredNodeVault } from "@gmacko/ooda/vault/node-host";
 
 import { createQueryClient } from "./query-client";
 
@@ -32,6 +33,7 @@ const createContext = cache(async () => {
   return createTRPCContext({
     headers: heads,
     auth,
+    vaultHost: (await getConfiguredNodeVault())?.routeHost,
   });
 });
 

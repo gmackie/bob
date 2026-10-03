@@ -12,10 +12,18 @@ import { VersionedStorageError } from "./versioned-storage";
 export class PersistentVaultGate {
   private readonly db: DatabaseSync;
 
-  constructor(path: string, readonly generation: string) {
+  constructor(path: string, readonly generation: string, initialize = true) {
     if (!isAbsolute(path)) throw new Error("Persistent gate requires an absolute database path");
     if (!generation.trim()) throw new Error("Vault generation is required");
     this.db = new DatabaseSync(path);
+    if (!initialize) {
+      try {
+        const row = this.db.prepare("SELECT generation FROM vault_gate WHERE singleton=1").get();
+        if (row?.generation !== generation) throw new Error("Vault control generation mismatch");
+        this.db.exec("PRAGMA busy_timeout=5000; PRAGMA synchronous=FULL;");
+        return;
+      } catch (error) { this.db.close(); throw error; }
+    }
     this.db.exec(`PRAGMA busy_timeout=5000; PRAGMA synchronous=FULL;
       CREATE TABLE IF NOT EXISTS vault_gate (
         singleton INTEGER PRIMARY KEY CHECK(singleton=1),

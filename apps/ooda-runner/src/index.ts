@@ -2,10 +2,16 @@ import { initTelemetry, shutdownTelemetry } from "@gmacko/core/telemetry/node";
 import { startInferenceServer } from "./inference-server";
 import { loadConfig } from "./config";
 import { RunnerServer } from "./runner-server";
+import { getConfiguredNodeVault } from "@gmacko/ooda/vault/node-host";
+import { realpath } from "node:fs/promises";
 
 initTelemetry({ serviceName: "ooda-runner" });
 const config = loadConfig();
-const server = new RunnerServer(config);
+const vault = await getConfiguredNodeVault();
+if (vault && await realpath(config.storageRoot) !== vault.config.vaultPath) {
+  throw new Error("Runner storage root must match its configured Forge vault");
+}
+const server = new RunnerServer(config, vault ? { storage: vault.publication, admission: vault.admission } : undefined);
 let inference: ReturnType<typeof startInferenceServer> | undefined;
 let stopping = false;
 async function stop(exitCode: number) {
@@ -14,7 +20,8 @@ async function stop(exitCode: number) {
   inference?.close();
   inference?.closeAllConnections();
   try {
-    await server.stop();
+    try { await server.stop(); }
+    finally { await vault?.close(); }
   } catch (error) {
     console.error("[runner] shutdown failed:", error);
     exitCode = 1;
