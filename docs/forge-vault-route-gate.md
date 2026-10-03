@@ -40,3 +40,24 @@ integration surface.
 
 Validation: 90 tests passed across the vault suite and both vault router suites;
 `pnpm --filter @gmacko/ooda typecheck` passed (Node 24.14.0).
+
+## Filesystem boundary qualification
+
+Vault file helpers now resolve each existing path component under the canonical
+vault root. External or dangling aliases and `.git` paths (including aliases to
+Git metadata) are rejected for reads and mutations. Internal directory aliases
+remain usable; replacing or deleting a final file alias preserves the prior
+entry-level semantics rather than modifying its target. Listings exclude Git
+metadata and do not follow symlink directory trees.
+
+Atomic writes use a random exclusive temporary file instead of the predictable
+`<path>.tmp` name. A preexisting symlink at that old name cannot redirect a write.
+These checks assume the host owns the directory tree and excludes concurrent
+untrusted filesystem changes. They do not provide kernel-level protection
+against a malicious process swapping directories between validation and use;
+that is another reason to fence legacy writers before enabling the host.
+
+The regressions reproduced the external-alias read/write failures before the
+fix. Validation after the fix: 96 vault/router tests passed and OODA typecheck
+passed. Normal-route live deployment and external payload disposition remain
+open; no source vault or production configuration was changed.
