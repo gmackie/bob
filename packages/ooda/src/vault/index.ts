@@ -47,3 +47,6 @@ export { writeDraft, listDrafts } from "./drafts";
 
 export { ForgePublicationStorage } from "./forge-publication-storage";
 export type { ForgeVaultBinding, ForgeVaultClient, ForgeVaultPublication } from "./forge-publication-storage";
+
+export { VaultRouteHost } from "./vault-route-host";
+export type { VaultRouteBinding } from "./vault-route-host";
