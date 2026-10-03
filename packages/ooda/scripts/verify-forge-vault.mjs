@@ -18,6 +18,7 @@ const { PublicationJournal } = await import(
 );
 const { LocalGitStorage } = await import("../src/vault/local-git-storage.ts");
 const { VaultService } = await import("../src/vault/vault-service.ts");
+const { PersistentVaultGate } = await import("../src/vault/persistent-vault-gate.ts");
 const live =
   process.env.FORGE_VAULT_LIVE_CONFIG === "stdin"
     ? JSON.parse(readFileSync(0, "utf8"))
@@ -232,7 +233,14 @@ try {
     }
     return git(remote, ["show", oid + ":" + path]);
   };
-  if(process.env.FORGE_VAULT_HTTP === "true") httpHost=await startVaultPilotHost(service,randomBytes(32).toString('hex'));
+  if(process.env.FORGE_VAULT_HTTP === "true") {
+    const gate=new PersistentVaultGate(join(directory,'admissions.sqlite'),'one');
+    httpHost=await startVaultPilotHost(service,randomBytes(32).toString('hex'),gate);
+    const close=httpHost.close;
+    httpHost.close=async()=>{try{await close();}finally{gate.dispose();}};
+    const denied=await fetch(httpHost.url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'write',path:'denied.md',content:'denied'})});
+    assert.equal(denied.status,401);
+  }
   const write=(path,content)=>httpHost?httpHost.call({action:'write',path,content}):service().write(path,content);
   const replay=()=>httpHost?httpHost.call({action:'replay'}):service().replayPending();
   const first = await write("notes/pilot.md", "first body");
@@ -241,6 +249,7 @@ try {
     verifyContent(first.intent.revision.objectId, "notes/pilot.md"),
     "first body",
   );
+  if(httpHost) assert.equal((await httpHost.call({action:'read',path:'notes/pilot.md'})).content,'first body');
   const before = writes;
   assert.deepEqual(await replay(), []);
   assert.equal(writes, before);
@@ -265,6 +274,11 @@ try {
     }),
     { code: "NotAuthorized" },
   );
+  if(httpHost){
+    await httpHost.drain();
+    await assert.rejects(write('notes/closed.md','must not write'));
+    assert.equal(writes,after);
+  }
   const evidence = {
     at: new Date().toISOString(),
     scope: live
@@ -277,8 +291,9 @@ try {
       "lost acknowledgement stays indeterminate despite desired-head observation",
       "recovery never repeats Git publication",
       "revoked authorization rejects receipt replay",
+      ...(httpHost ? ['unauthenticated HTTP write rejected','actual vault router write and read verified','persistent host closure rejects later route writes'] : []),
     ],
-    transport: httpHost ? "isolated loopback HTTP fixture" : "direct service composition",
+    transport: httpHost ? "actual vault procedures behind isolated loopback HTTP with fixture bearer identity and persistent admissions" : "direct service composition",
     gitDispatches: writes,
     cleanup: "temporary fixture removed by finally",
   };

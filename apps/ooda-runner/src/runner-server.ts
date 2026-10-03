@@ -12,7 +12,7 @@ import { GrokAdapter } from "@gmacko/ooda/agent-adapters";
 import { BuddyMcpServer } from "@gmacko/ooda/agent-adapters";
 import type { AgentAdapter, PromptImage } from "@gmacko/ooda/agent-adapters";
 import { generateRunnerToken } from "./auth/auth";
-import { promoteNote } from "@gmacko/ooda/thread-workspace";
+import { promoteRunnerNote, type RunnerVaultPublication } from "./vault-promotion";
 import { resolveThreadPath } from "@gmacko/ooda/thread-model";
 import { buildOutcomeNote } from "./ooda-callback.js";
 import {
@@ -244,7 +244,7 @@ export class RunnerServer {
   private integrationDeliveryWorker: IntegrationDeliveryWorker | null = null;
   private externalStatusWorker: ExternalStatusWorker | null = null;
 
-  constructor(private config: RunnerConfig) {
+  constructor(private config: RunnerConfig, private readonly vaultPublication?: RunnerVaultPublication) {
     this.sessions = new SessionManager();
     this.trpc = createRunnerTRPCClient(config.serverUrl);
     // Buddy-tool wiring: research surface the tool handlers call, plus a
@@ -299,7 +299,7 @@ export class RunnerServer {
               sessionId: outcome.sessionId,
               projectId: correlation.threadId ?? null,
               operation: () =>
-                promoteNote({
+                promoteRunnerNote({
                   storageRoot: this.config.storageRoot,
                   threadDir,
                   sessionId: outcome.sessionId,
@@ -314,7 +314,7 @@ export class RunnerServer {
                     queryOrInputRef: `bobRun:${outcome.sessionId}`,
                     canonicalSourceRef: outcome.pullRequestUrl ?? undefined,
                   },
-                }),
+                }, this.vaultPublication),
             });
           },
         },
@@ -907,7 +907,7 @@ export class RunnerServer {
       sessionId: params.sessionId,
       projectId: params.threadId ?? params.threadSlug ?? null,
       operation: () =>
-        promoteNote({
+        promoteRunnerNote({
           storageRoot: this.config.storageRoot,
           threadDir,
           sessionId: params.sessionId,
@@ -921,7 +921,7 @@ export class RunnerServer {
             sourceType: "agent",
             queryOrInputRef: `session:${params.sessionId}`,
           },
-        }),
+        }, this.vaultPublication),
     });
 
     // Push a promotion_available event so the UI knows

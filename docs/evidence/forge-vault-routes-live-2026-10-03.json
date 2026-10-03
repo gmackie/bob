@@ -1,0 +1,83 @@
+{
+  "at": "2026-10-03T14:48:12Z",
+  "scope": "Actual Bob vault composed with Forge publisher, Cloudflare Artifacts and live D1 journal",
+  "status": "passed",
+  "checks": [
+    "exact vault content published",
+    "reconstructed service does not resend terminal work",
+    "lost acknowledgement stays indeterminate despite desired-head observation",
+    "recovery never repeats Git publication",
+    "revoked authorization rejects receipt replay",
+    "unauthenticated HTTP write rejected",
+    "actual vault router write and read verified",
+    "persistent host closure rejects later route writes"
+  ],
+  "transport": "actual vault procedures behind isolated loopback HTTP with fixture bearer identity and persistent admissions",
+  "gitDispatches": 2,
+  "cleanup": {
+    "remainingResources": [],
+    "errors": []
+  },
+  "tests": [
+    {
+      "name": "exact vault content published",
+      "status": "passed"
+    },
+    {
+      "name": "reconstructed service does not resend terminal work",
+      "status": "passed"
+    },
+    {
+      "name": "lost acknowledgement stays indeterminate despite desired-head observation",
+      "status": "passed"
+    },
+    {
+      "name": "recovery never repeats Git publication",
+      "status": "passed"
+    },
+    {
+      "name": "revoked authorization rejects receipt replay",
+      "status": "passed"
+    },
+    {
+      "name": "unauthenticated HTTP write rejected",
+      "status": "passed"
+    },
+    {
+      "name": "actual vault router write and read verified",
+      "status": "passed"
+    },
+    {
+      "name": "persistent host closure rejects later route writes",
+      "status": "passed"
+    }
+  ],
+  "bobSourceSha256": {
+    "packages/ooda/scripts/forge-vault-http-host.ts": "de5484fece85ec87c938b9eadedcf5de7e4ed517ea105c834dc08054b6eaf3c4",
+    "packages/ooda/scripts/build-forge-vault-pilot.mjs": "c5c569804459a3e2419371ebd0862362998ab3bd5226bfa45d1f07e16522e8c3",
+    "packages/ooda/scripts/verify-forge-vault.mjs": "adeebd96aceb3c42d16250769b22ab9674fc6acea3ee89767a2e652206e2a87a",
+    "packages/ooda/src/vault/forge-publication-storage.ts": "8e33b3c5bf89e07409668d38883abb588833def9b17623f71ff742b3493c86f1",
+    "packages/ooda/src/vault/vault-service.ts": "4b6449490a354e0143499d3fa5dfeca09f5612f3e7572e16d5eeb4372878e920",
+    "packages/ooda/src/vault/git.ts": "56f70ba74e708a0e4d3705bf0829d73744bacb108edbf23e66c57ef38d5cd8fd"
+  },
+  "pilotHost": "isolated existing runner host, Node 24 container, loopback HTTP",
+  "pilotBundleSha256": "4fa8631b60c5e8b3f6c29498c6a59c3347ae9464b2b1f43dd53f5909a5a52c78",
+  "sourceSha256": {
+    "packages/runtime/src/artifact-publication.ts": "ce5135cebd1893b1d2dbf34ef5ee61e10f720f2129e2a266eb0dcff947df0b8a",
+    "packages/runtime/src/adapters/artifact-publication-git.ts": "a43629153c42df92339ba4055d367b02cc59bf6ca726af1202c828b321a64684",
+    "packages/runtime/src/adapters/artifact-publication-sql.ts": "477e8f152f9523d3e137addbe620a2796c4659e1a6df07d314106b4fa4e66e16"
+  },
+  "nodeVersion": "v24.14.0",
+  "gitVersion": "git version 2.51.1",
+  "limitations": [
+    "Isolated runner container using actual vault procedures with fixture bearer identity; does not qualify production session authentication or configure production routing.",
+    "Persistent gate uses a shared local SQLite file; legacy writers and other machines require separate fencing.",
+    "Live run covers lost acknowledgement; process-kill recovery is separately tested with a controlled provider."
+  ],
+  "qualificationSourceSha256": {
+    "packages/ooda/src/api/router/vault.ts": "cbcf2f2c526c56a5bccffe42f9a38996e9823b9e500e30fc0d13f9d3f5946580",
+    "packages/ooda/src/vault/vault-route-host.ts": "68e2a6bf0ef59236bc6c1512f720e44121cc519a9039536024481b4b6fb74660",
+    "packages/ooda/src/vault/persistent-vault-gate.ts": "039528b7c90f22594702958d81d49493951df726430eeb8a1291cee13527fa38"
+  },
+  "qualificationSourceNote": "The live bundle digest identifies the deployed artifact. Persistent gate absolute-path validation was added after deployment and is covered by local checks."
+}
