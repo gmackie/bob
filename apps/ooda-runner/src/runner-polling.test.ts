@@ -123,3 +123,32 @@ it("processes promotion requests from completed sessions and writes a durable no
     "Completed output retained",
   );
 });
+
+it("waits for an active poll before completing shutdown", async () => {
+  root = mkdtempSync(join(tmpdir(), "runner-drain-"));
+  let finish!: (rows: unknown[]) => void;
+  api.runner.listSessionsByRunner.query.mockImplementationOnce(
+    () => new Promise((resolve) => { finish = resolve; }),
+  );
+  server = new RunnerServer(RunnerConfigSchema.parse({
+    storageRoot: root,
+    agentJobScratchRoot: join(root, "scratch"),
+    hostTurnEnabled: false,
+  }));
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  await server.start();
+  await vi.advanceTimersByTimeAsync(2000);
+  let stopped = false;
+  const stopping = server.stop().then(() => { stopped = true; });
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(stopped).toBe(false);
+  } finally {
+    finish([]);
+    await stopping;
+    server = undefined;
+  }
+  expect(stopped).toBe(true);
+  await vi.advanceTimersByTimeAsync(6000);
+  expect(api.runner.listSessionsByRunner.query).toHaveBeenCalledTimes(1);
+});

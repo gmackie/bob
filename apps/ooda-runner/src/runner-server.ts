@@ -229,7 +229,7 @@ export class RunnerServer {
   private trpc: RunnerTRPCClient;
   private runnerId: string | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  private pollInFlight = false;
+  private pollInFlight: Promise<void> | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private reapTimer: ReturnType<typeof setInterval> | null = null;
   private activeSessions = new Set<string>();
@@ -376,8 +376,7 @@ export class RunnerServer {
     // Keep terminal sessions in that traversal: users can promote their output.
     this.pollTimer = setInterval(() => {
       if (this.pollInFlight) return;
-      this.pollInFlight = true;
-      void (async () => {
+      this.pollInFlight = (async () => {
         try {
           await this.pollForSessions();
           await this.agentJobWorker?.poll();
@@ -387,7 +386,7 @@ export class RunnerServer {
         } catch (error) {
           console.warn("[runner] poll failed:", error);
         } finally {
-          this.pollInFlight = false;
+          this.pollInFlight = null;
         }
       })();
     }, POLL_INTERVAL_MS);
@@ -975,6 +974,9 @@ export class RunnerServer {
       clearInterval(this.reapTimer);
       this.reapTimer = null;
     }
+    // Clearing the timer prevents new polls, but an active poll can still
+    // publish notes or claim work. Drain it before stopping its workers.
+    await this.pollInFlight;
     if (this.bobGateway) {
       this.bobGateway.stop();
     }
