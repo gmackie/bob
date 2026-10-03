@@ -102,3 +102,42 @@ Never delete an admission from a database still used by any process or revive
 the old generation. An unresolved provider request remains unresolved after its
 originating process is gone. Validation: 248 runner tests, 100 vault/router tests
 (99 in the full run plus the process-kill regression), and both typechecks.
+
+## Node startup configuration
+
+The Node web app now obtains the configured host for tRPC, REST and server-side
+calls. The runner loads the same configuration before starting and rejects a
+storage-root mismatch. Set `OODA_FORGE_VAULT_CONFIG` to an absolute operator-owned
+JSON file. Absence preserves the existing disabled behavior; an empty path,
+invalid file or failed initialization is an error, never a legacy fallback.
+The first initialization result, including failure, is pinned for the process.
+
+The strict version-1 configuration has `tenant`, `actor`, `artifact`, `generation`,
+`repositoryId`, `kind` (`personal` or `research`), `vaultPath`, `gatePath`,
+`journalPath`, and `clientModule`. Paths must be absolute and already exist.
+The gate is an existing initialized SQLite database for that exact generation;
+startup cannot silently recreate missing state. The journal is an external
+persistent directory. Config, gate, client module and journal must be outside
+the published vault; executable/configuration files cannot live in the journal.
+
+`clientModule` is a trusted deployed ESM module exporting
+`async createVaultClient(config): ForgeVaultClient`. It receives frozen canonical
+paths and identity. It owns authorization and credential resolution and must
+transfer prepared objects before publication. Build/deploy this module separately;
+never derive its path or credentials from an HTTP request. Configuration is not
+proof that an arbitrary client implementation is qualified.
+
+The runner closes and drains the configured generation during shutdown even if
+its own stop routine fails. Since closure is durable, ordinary restart does not
+reopen it: the operator must complete reconciliation and advance to a new
+non-reused generation. Independent machines need separate writer fencing.
+The Cloudflare edge app deliberately excludes filesystem vault routes and is
+not switched to this Node-only module. Enabling production still requires a
+Node route destination and a qualified deployed client module.
+
+Startup validation: 103 vault/router tests passed, including loss of control
+state, identity mismatch, authorization before file writes and failure caching.
+OODA, runner and Node-web typechecks passed. The full Node-web build is not yet
+qualified: the default Turbopack path fails existing shared-auth `.js` source
+resolution, and the configured webpack path stopped on local ENOSPC while
+writing output. These are retained limitations, not passing build evidence.
