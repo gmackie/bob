@@ -150,3 +150,25 @@ Live topology inspection found that the OODA runner points at the edge service
 and stores threads in `/home/bob/.ooda/threads`, separately from the personal
 Obsidian vault. Do not change that root merely to activate a personal vault.
 The startup root-match guard intentionally rejects such a mixed configuration.
+
+## Production client module
+
+`packages/ooda/deploy/forge-vault-client.mjs` is the deployed `clientModule`.
+Bundle it against a built Forge runtime with
+`node packages/ooda/scripts/build-forge-vault-client.mjs <forge-root> <out.mjs>`;
+the bundle embeds no settings or credentials and records its digest in
+`<out.mjs>.manifest.json`. Test the bundle with
+`FORGE_VAULT_CLIENT_BUNDLE=<out.mjs> node --test packages/ooda/deploy/forge-vault-client.test.mjs`.
+
+The bundle reads a strict `client.json` beside itself: Cloudflare account,
+Artifacts namespace and repository, HTTPS Artifacts remote, `credentialPath`,
+`preparedPath` (bare repository publication pushes from), `journalDatabase`
+(local SQLite Forge publication journal) and the commit identity. Startup fails
+closed unless the configured `repositoryId` equals the live repository id.
+The credential is a Cloudflare API token scoped to Artifacts only; it is read
+on every mint, so rotation needs no restart. Git uses 15-minute write tokens and
+never reads global Git configuration or hooks.
+
+The Node web host does not close its generation on shutdown, so ordinary
+restarts keep accepting writes; the runner does close on shutdown and must not
+be given the personal-vault configuration.
