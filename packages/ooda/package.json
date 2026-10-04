@@ -17,6 +17,7 @@
     "./domain-packs": "./src/domain-packs/index.ts",
     "./vault": "./src/vault/index.ts",
     "./vault/node-host": "./src/vault/node-host.ts",
+    "./vault/origin-assertion": "./src/vault/origin-assertion.ts",
     "./buddy-tools": "./src/buddy-tools/index.ts",
     "./agent-adapters": "./src/agent-adapters/index.ts",
     "./db": "./src/db/index.ts",

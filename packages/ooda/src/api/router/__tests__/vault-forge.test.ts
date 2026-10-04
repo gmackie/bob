@@ -126,3 +126,14 @@ it("routes deletes and moves through the Forge service as published commits", as
     .rejects.toMatchObject({ code: "FORBIDDEN" });
   expect(await readFile(join(f.dir, "keep.md"), "utf8")).toContain("keep");
 });
+
+it("honours an asserted vault actor only for vault procedures", async () => {
+  const f = await fixture();
+  const asserted = (actor: string) => createCaller({
+    headers: new Headers(), db: {} as never, vaultHost: f.host, vaultActor: actor,
+    auth: { api: { getSession: async () => null } } as unknown as AuthInstance,
+  });
+  expect((await asserted("alice").vault.write({ vaultKind: "personal", filePath: "a.md", content: "x" })).publication.state).toBe("published");
+  await expect(asserted("mallory").vault.write({ vaultKind: "personal", filePath: "m.md", content: "x" }))
+    .rejects.toMatchObject({ code: "FORBIDDEN" });
+});
