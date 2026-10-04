@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   writeFile as fsWriteFile,
   link,
+  lstat,
   mkdir,
   readFile,
   rename,
@@ -62,6 +63,37 @@ export async function writeFile(
   } finally {
     await rm(tmpPath, { force: true });
   }
+}
+
+/** Resolve a path that must currently be a regular file (not a link or directory). */
+async function existingFile(vaultPath: string, filePath: string): Promise<string> {
+  const fullPath = await validatePath(vaultPath, filePath);
+  const info = await lstat(fullPath).catch(() => null);
+  if (!info?.isFile()) throw new VaultWriterError(`Not a vault file: ${filePath}`);
+  return fullPath;
+}
+
+/** Delete an existing regular file; a missing path is an error, not a no-op. */
+export async function removeFile(vaultPath: string, filePath: string): Promise<void> {
+  await rm(await existingFile(vaultPath, filePath));
+}
+
+/** Move a regular file without ever replacing an existing destination. */
+export async function moveFile(vaultPath: string, from: string, to: string): Promise<void> {
+  const source = await existingFile(vaultPath, from);
+  const target = await validatePath(vaultPath, to);
+  if (source === target) throw new VaultWriterError("Move source and destination are the same");
+  await mkdir(dirname(target), { recursive: true });
+  try {
+    // link() fails with EEXIST instead of clobbering, unlike rename().
+    await link(source, target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new VaultWriterError(`Destination already exists: ${to}`);
+    }
+    throw error;
+  }
+  await rm(source);
 }
 
 /**

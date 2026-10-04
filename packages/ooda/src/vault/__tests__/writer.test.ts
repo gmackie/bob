@@ -1,8 +1,10 @@
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,7 +12,7 @@ import { join } from "node:path";
 import matter from "gray-matter";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { deleteFile, writeFile, writeFileOnce } from "../writer";
+import { deleteFile, moveFile, removeFile, writeFile, writeFileOnce } from "../writer";
 
 describe("writeFile", () => {
   let vaultPath: string;
@@ -186,4 +188,32 @@ it("rejects writes through an external directory alias and into Git metadata", a
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+describe("removeFile / moveFile", () => {
+  let vaultPath: string;
+  beforeEach(() => { vaultPath = mkdtempSync(join(tmpdir(), "ooda-vault-move-")); });
+  afterEach(() => { rmSync(vaultPath, { recursive: true, force: true }); });
+
+  it("removes only existing regular files", async () => {
+    await writeFile(vaultPath, "x.md", "x");
+    await removeFile(vaultPath, "x.md");
+    expect(existsSync(join(vaultPath, "x.md"))).toBe(false);
+    await expect(removeFile(vaultPath, "x.md")).rejects.toThrow("Not a vault file");
+    mkdirSync(join(vaultPath, "folder"));
+    await expect(removeFile(vaultPath, "folder")).rejects.toThrow("Not a vault file");
+  });
+
+  it("moves without clobbering and refuses symlinks", async () => {
+    await writeFile(vaultPath, "a.md", "a");
+    await writeFile(vaultPath, "b.md", "b");
+    await expect(moveFile(vaultPath, "a.md", "b.md")).rejects.toThrow("already exists");
+    expect(readFileSync(join(vaultPath, "b.md"), "utf8")).toBe("b");
+    await moveFile(vaultPath, "a.md", "sub/c.md");
+    expect(readFileSync(join(vaultPath, "sub/c.md"), "utf8")).toBe("a");
+    expect(existsSync(join(vaultPath, "a.md"))).toBe(false);
+    symlinkSync("b.md", join(vaultPath, "link.md"));
+    await expect(moveFile(vaultPath, "link.md", "moved.md")).rejects.toThrow("Not a vault file");
+    await expect(moveFile(vaultPath, "b.md", "../out.md")).rejects.toThrow();
+  });
 });

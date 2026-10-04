@@ -14,7 +14,8 @@ import {
 
 import { authedProcedure } from "../trpc";
 import type { VaultRouteHost } from "../../vault/vault-route-host";
-import type { VaultService } from "../../vault/vault-service";
+import { VaultService } from "../../vault/vault-service";
+import { VaultWriterError } from "../../vault/writer";
 import { VersionedStorageError } from "../../vault/versioned-storage";
 
 async function executeHosted<T>(
@@ -38,6 +39,24 @@ async function executeHosted<T>(
 }
 
 const vaultKindSchema = z.enum(["personal", "research"]);
+
+/** Delete/move: hosted Forge service when configured, else the local vault. */
+async function fileChange(
+  host: VaultRouteHost | undefined,
+  actor: string,
+  kind: "personal" | "research",
+  operation: (service: VaultService) => Promise<unknown>,
+) {
+  try {
+    const publication = host
+      ? await executeHosted(host, actor, kind, operation)
+      : await operation(new VaultService({ path: getVaultPath(kind), name: kind, kind }));
+    return { success: true, publication };
+  } catch (error) {
+    if (error instanceof VaultWriterError) throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+    throw error;
+  }
+}
 
 const ENV_VARS: Record<z.infer<typeof vaultKindSchema>, string> = {
   personal: "PERSONAL_VAULT_PATH",
@@ -116,6 +135,20 @@ export const vaultRouter = {
       const publication = await commitAndPush(vaultPath, `write: ${input.filePath}`);
       return { success: true, publication };
     }),
+
+  delete: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/vault/delete", tags: ["vault"], protect: true } })
+    .input(z.object({ vaultKind: vaultKindSchema, filePath: z.string() }))
+    .output(z.any())
+    .mutation(({ input, ctx }) => fileChange(ctx.vaultHost, ctx.userId, input.vaultKind,
+      (service) => service.remove(input.filePath))),
+
+  move: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/vault/move", tags: ["vault"], protect: true } })
+    .input(z.object({ vaultKind: vaultKindSchema, from: z.string(), to: z.string() }))
+    .output(z.any())
+    .mutation(({ input, ctx }) => fileChange(ctx.vaultHost, ctx.userId, input.vaultKind,
+      (service) => service.move(input.from, input.to))),
 
   promote: authedProcedure
     .meta({ openapi: { method: "POST", path: "/api/vault/promote", tags: ["vault"], protect: true } })

@@ -105,3 +105,24 @@ it("closes admissions immediately and drains a publication before generation rep
   await expect(f.api.promote({ vaultKind: "personal", threadId: "t", noteId: "stale", content: "late" })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
   expect(f.dispatch).toHaveBeenCalledTimes(1);
 });
+
+it("routes deletes and moves through the Forge service as published commits", async () => {
+  const f = await fixture();
+  await f.api.write({ vaultKind: "personal", filePath: "a.md", content: "alpha" });
+  await f.api.write({ vaultKind: "personal", filePath: "keep.md", content: "keep" });
+  const moved = await f.api.move({ vaultKind: "personal", from: "a.md", to: "dir/b.md" });
+  expect(moved.publication.state).toBe("published");
+  expect(await readFile(join(f.dir, "dir/b.md"), "utf8")).toContain("alpha");
+  await expect(readFile(join(f.dir, "a.md"), "utf8")).rejects.toThrow();
+  await expect(f.api.move({ vaultKind: "personal", from: "dir/b.md", to: "keep.md" }))
+    .rejects.toMatchObject({ code: "BAD_REQUEST" });
+  expect(await readFile(join(f.dir, "keep.md"), "utf8")).toContain("keep");
+  const removed = await f.api.delete({ vaultKind: "personal", filePath: "dir/b.md" });
+  expect(removed.publication.state).toBe("published");
+  await expect(f.api.delete({ vaultKind: "personal", filePath: "dir/b.md" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  await expect(f.api.delete({ vaultKind: "personal", filePath: "../escape.md" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  expect(f.dispatch).toHaveBeenCalledTimes(4);
+  await expect(caller(f.host, "mallory").delete({ vaultKind: "personal", filePath: "keep.md" }))
+    .rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(await readFile(join(f.dir, "keep.md"), "utf8")).toContain("keep");
+});
