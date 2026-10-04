@@ -191,8 +191,18 @@ be given the personal-vault configuration.
 - Tailnet access: nginx `bob-vault-tailnet` on :3180 (ufw blocks it publicly;
   nginx allows only 100.64.0.0/10) proxies only `vault.(list|read|write|health|
   delete|move)`. Callers still need a Bob API key for the configured actor.
-- `claude.gmac.io` is only the Hermes origin for `bob.blder.bot`; every other
-  path returns 404 so the loopback vault host is never public.
+- `claude.gmac.io` serves `/hermes/*` (Hermes origin for `bob.blder.bot`) and
+  `/vault-origin/api/trpc/vault.*` (single or batched vault procedures only,
+  cookies dropped); every other path returns 404.
+- App access (Bob #235): the OODA edge (`ooda.gmac.io` / `ooda.blder.bot`)
+  forwards vault-only tRPC batches to `VAULT_ORIGIN_URL`
+  (`https://claude.gmac.io/vault-origin`). A session becomes an
+  `x-bob-vault-assertion` HMAC (`vault/origin-assertion.ts`, secret
+  `VAULT_ORIGIN_SECRET` in the edge worker and `/etc/bob-vault/ooda-web.env`)
+  over actor, time (±60 s), method, path+query and body digest; API-key callers
+  keep their header and are validated by the origin. The Node host honours an
+  assertion only for `vault.*` procedures, and the route host still requires the
+  configured actor.
 - Writers: Bob callers use the vault procedures with a Bob API key that resolves
   to the configured actor (dedicated keys: `vault-submit-mac`,
   `hermes-vault-writer`). Hermes' checkout is a mirror of Artifacts `main`;
