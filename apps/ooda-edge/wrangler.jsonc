@@ -45,6 +45,8 @@
     "FORGEGRAPH_API_URL": "https://forgegraf.com",
     "FORGEGRAPH_CONTEXT_APPS": "ooda,bob,bizpulse,kanbanger",
     "RESEARCH_API_URL": "https://research.gmac.io",
+    // Node vault host origin for vault-only tRPC batches (Bob #235); secret VAULT_ORIGIN_SECRET.
+    "VAULT_ORIGIN_URL": "https://claude.gmac.io/vault-origin",
     "ELEVENLABS_TTS_MODEL": "eleven_flash_v2_5",
     "ELEVENLABS_TTS_OUTPUT_FORMAT": "mp3_44100_128",
   },

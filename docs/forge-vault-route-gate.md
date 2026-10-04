@@ -150,3 +150,68 @@ Live topology inspection found that the OODA runner points at the edge service
 and stores threads in `/home/bob/.ooda/threads`, separately from the personal
 Obsidian vault. Do not change that root merely to activate a personal vault.
 The startup root-match guard intentionally rejects such a mixed configuration.
+
+## Production client module
+
+`packages/ooda/deploy/forge-vault-client.mjs` is the deployed `clientModule`.
+Bundle it against a built Forge runtime with
+`node packages/ooda/scripts/build-forge-vault-client.mjs <forge-root> <out.mjs>`;
+the bundle embeds no settings or credentials and records its digest in
+`<out.mjs>.manifest.json`. Test the bundle with
+`FORGE_VAULT_CLIENT_BUNDLE=<out.mjs> node --test packages/ooda/deploy/forge-vault-client.test.mjs`.
+
+The bundle reads a strict `client.json` beside itself: Cloudflare account,
+Artifacts namespace and repository, HTTPS Artifacts remote, one credential
+source (`credentialPath`, or `brokerUrl` + `brokerSecretPath`),
+`preparedPath` (bare repository publication pushes from), `journalDatabase`
+(local SQLite Forge publication journal) and the commit identity. Startup fails
+closed unless the configured `repositoryId` equals the live repository id.
+The credential is either a Cloudflare API token scoped to Artifacts only, or
+the secret for `deploy/vault-token-broker.mjs`: a Worker bound to one Artifacts
+namespace and fixed to one repository that issues 15-minute write tokens to the
+write secret and 1-hour read tokens to the read secret. Secrets are read on every
+mint, so rotation needs no restart. Git uses 15-minute write tokens and
+never reads global Git configuration or hooks.
+
+The Node web host does not close its generation on shutdown, so ordinary
+restarts keep accepting writes; the runner does close on shutdown and must not
+be given the personal-vault configuration.
+
+## Production topology (2026-10-04)
+
+- Repository: Artifacts `bob/obsidian-vault` (id `ozhgiqkp8t2o9rar`), imported
+  from the reconciled 219-commit history; `main` started at `79754159`.
+- Token broker: Worker `bob-vault-token-broker` (workers.dev), write secret at
+  `/etc/bob-vault/broker-write-secret` on hetzner-bob, read secret on the Mac.
+- Vault host: `bob-vault-host.service` on hetzner-bob runs the OODA Node web
+  build on **127.0.0.1:3100 only**, with
+  `OODA_FORGE_VAULT_CONFIG=/etc/bob-vault/node-vault.json`, vault checkout
+  `/var/lib/bob-vault/vault`, generation `prod-20261004-1`. (It replaced the
+  abandoned `bob-nextjs.service`, now disabled.)
+- Tailnet access: nginx `bob-vault-tailnet` on :3180 (ufw blocks it publicly;
+  nginx allows only 100.64.0.0/10) proxies only `vault.(list|read|write|health|
+  delete|move)`. Callers still need a Bob API key for the configured actor.
+- `claude.gmac.io` serves `/hermes/*` (Hermes origin for `bob.blder.bot`) and
+  `/vault-origin/api/trpc/vault.*` (single or batched vault procedures only,
+  cookies dropped); every other path returns 404.
+- App access (Bob #235): the OODA edge (`ooda.gmac.io` / `ooda.blder.bot`)
+  forwards vault-only tRPC batches to `VAULT_ORIGIN_URL`
+  (`https://claude.gmac.io/vault-origin`). A session becomes an
+  `x-bob-vault-assertion` HMAC (`vault/origin-assertion.ts`, secret
+  `VAULT_ORIGIN_SECRET` in the edge worker and `/etc/bob-vault/ooda-web.env`)
+  over actor, time (±60 s), method, path+query and body digest; API-key callers
+  keep their header and are validated by the origin. The Node host honours an
+  assertion only for `vault.*` procedures, and the route host still requires the
+  configured actor.
+- Writers: Bob callers use the vault procedures with a Bob API key that resolves
+  to the configured actor (dedicated keys: `vault-submit-mac`,
+  `hermes-vault-writer`). Hermes' checkout is a mirror of Artifacts `main`;
+  `hermes-vault-sync.timer` only fast-forwards it (drop-in `10-forge-mirror.conf`)
+  and Hermes publishes with `hermes-vault submit --reset` (cron prompts and the
+  `obsidian-daily-briefings` skill were updated). Legacy checkouts (`~/obsidian`,
+  `/opt/obsidian`, `hermes-workspace/obsidian.legacy-20261004`) are retained
+  unmodified as rollback sources.
+- Mac: read-only mirror `~/obsidian-vault` fast-forwarded every 5 minutes by
+  launchd (`deploy/mac/bob-vault-sync`); edits go in a worktree and are submitted
+  with `deploy/mac/bob-vault-submit` over the tailnet using the Mac's own key
+  (adds, edits, deletions and renames; binary files are skipped).

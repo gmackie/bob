@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { stat } from "node:fs/promises";
 
 import { listFiles, readFile } from "./reader";
-import { writeFile } from "./writer";
+import { moveFile, removeFile, writeFile } from "./writer";
 import { commitAndPush, pull, isLocked } from "./git";
 import { LocalGitStorage } from "./local-git-storage";
 import type { VaultConfig, VaultFile } from "./types";
@@ -38,6 +38,18 @@ export class VaultService {
   ): Promise<PublicationRecord> {
     await writeFile(this.config.path, filePath, content, frontmatter);
     return commitAndPush(this.config.path, `vault: update ${filePath}`, this.publication ? {storage:this.publication} : {});
+  }
+
+  /** Delete an existing file, commit, and publish. */
+  async remove(filePath: string): Promise<PublicationRecord> {
+    await removeFile(this.config.path, filePath);
+    return commitAndPush(this.config.path, `vault: delete ${filePath}`, this.publication ? {storage:this.publication} : {});
+  }
+
+  /** Rename a file (never over an existing one) as one published commit. */
+  async move(from: string, to: string): Promise<PublicationRecord> {
+    await moveFile(this.config.path, from, to);
+    return commitAndPush(this.config.path, `vault: move ${from} -> ${to}`, this.publication ? {storage:this.publication} : {});
   }
 
   /**
