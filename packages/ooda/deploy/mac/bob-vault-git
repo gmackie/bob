@@ -1,7 +1,8 @@
 #!/bin/sh
 # git wrapper for the read-only Bob vault mirror: mints a 1h read token from the
-# vault token broker (secret in ~/.config/bob-vault/broker-read-secret).
+# vault token broker (secret: $BOB_VAULT_READ_SECRET_FILE, default
+# ~/.config/bob-vault/broker-read-secret).
 set -eu
-SECRET=$(cat "$HOME/.config/bob-vault/broker-read-secret")
+SECRET=$(cat "${BOB_VAULT_READ_SECRET_FILE:-$HOME/.config/bob-vault/broker-read-secret}")
 TOKEN=$(curl -fsS -X POST -H "Authorization: Bearer $SECRET" https://bob-vault-token-broker.gmac.workers.dev/token | python3 -c 'import json,sys;print(json.load(sys.stdin)["plaintext"])')
 exec env GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader GIT_CONFIG_VALUE_0="Authorization: Bearer $TOKEN" git "$@"

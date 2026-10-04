@@ -183,16 +183,25 @@ be given the personal-vault configuration.
   from the reconciled 219-commit history; `main` started at `79754159`.
 - Token broker: Worker `bob-vault-token-broker` (workers.dev), write secret at
   `/etc/bob-vault/broker-write-secret` on hetzner-bob, read secret on the Mac.
-- Vault host: `bob-nextjs.service` on hetzner-bob, repurposed by the drop-in
-  `10-ooda-web-vault.conf` to run the OODA Node web build on **127.0.0.1:3100
-  only**, with `OODA_FORGE_VAULT_CONFIG=/etc/bob-vault/node-vault.json`, vault
-  checkout `/var/lib/bob-vault/vault`, generation `prod-20261004-1`.
+- Vault host: `bob-vault-host.service` on hetzner-bob runs the OODA Node web
+  build on **127.0.0.1:3100 only**, with
+  `OODA_FORGE_VAULT_CONFIG=/etc/bob-vault/node-vault.json`, vault checkout
+  `/var/lib/bob-vault/vault`, generation `prod-20261004-1`. (It replaced the
+  abandoned `bob-nextjs.service`, now disabled.)
+- Tailnet access: nginx `bob-vault-tailnet` on :3180 (ufw blocks it publicly;
+  nginx allows only 100.64.0.0/10) proxies only `vault.(list|read|write|health|
+  delete|move)`. Callers still need a Bob API key for the configured actor.
 - `claude.gmac.io` is only the Hermes origin for `bob.blder.bot`; every other
   path returns 404 so the loopback vault host is never public.
-- Writers: Bob callers use the vault tRPC/REST procedures on loopback with a Bob
-  API key that resolves to the configured actor. `hermes-vault-sync.timer` is
-  disabled. Legacy checkouts (`~/obsidian`, `/opt/obsidian`, Hermes) are retained
+- Writers: Bob callers use the vault procedures with a Bob API key that resolves
+  to the configured actor (dedicated keys: `vault-submit-mac`,
+  `hermes-vault-writer`). Hermes' checkout is a mirror of Artifacts `main`;
+  `hermes-vault-sync.timer` only fast-forwards it (drop-in `10-forge-mirror.conf`)
+  and Hermes publishes with `hermes-vault submit --reset` (cron prompts and the
+  `obsidian-daily-briefings` skill were updated). Legacy checkouts (`~/obsidian`,
+  `/opt/obsidian`, `hermes-workspace/obsidian.legacy-20261004`) are retained
   unmodified as rollback sources.
 - Mac: read-only mirror `~/obsidian-vault` fast-forwarded every 5 minutes by
   launchd (`deploy/mac/bob-vault-sync`); edits go in a worktree and are submitted
-  with `deploy/mac/bob-vault-submit` (deletions and renames unsupported).
+  with `deploy/mac/bob-vault-submit` over the tailnet using the Mac's own key
+  (adds, edits, deletions and renames; binary files are skipped).
