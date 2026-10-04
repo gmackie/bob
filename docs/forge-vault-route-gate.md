@@ -161,14 +161,38 @@ the bundle embeds no settings or credentials and records its digest in
 `FORGE_VAULT_CLIENT_BUNDLE=<out.mjs> node --test packages/ooda/deploy/forge-vault-client.test.mjs`.
 
 The bundle reads a strict `client.json` beside itself: Cloudflare account,
-Artifacts namespace and repository, HTTPS Artifacts remote, `credentialPath`,
+Artifacts namespace and repository, HTTPS Artifacts remote, one credential
+source (`credentialPath`, or `brokerUrl` + `brokerSecretPath`),
 `preparedPath` (bare repository publication pushes from), `journalDatabase`
 (local SQLite Forge publication journal) and the commit identity. Startup fails
 closed unless the configured `repositoryId` equals the live repository id.
-The credential is a Cloudflare API token scoped to Artifacts only; it is read
-on every mint, so rotation needs no restart. Git uses 15-minute write tokens and
+The credential is either a Cloudflare API token scoped to Artifacts only, or
+the secret for `deploy/vault-token-broker.mjs`: a Worker bound to one Artifacts
+namespace and fixed to one repository that issues 15-minute write tokens to the
+write secret and 1-hour read tokens to the read secret. Secrets are read on every
+mint, so rotation needs no restart. Git uses 15-minute write tokens and
 never reads global Git configuration or hooks.
 
 The Node web host does not close its generation on shutdown, so ordinary
 restarts keep accepting writes; the runner does close on shutdown and must not
 be given the personal-vault configuration.
+
+## Production topology (2026-10-04)
+
+- Repository: Artifacts `bob/obsidian-vault` (id `ozhgiqkp8t2o9rar`), imported
+  from the reconciled 219-commit history; `main` started at `79754159`.
+- Token broker: Worker `bob-vault-token-broker` (workers.dev), write secret at
+  `/etc/bob-vault/broker-write-secret` on hetzner-bob, read secret on the Mac.
+- Vault host: `bob-nextjs.service` on hetzner-bob, repurposed by the drop-in
+  `10-ooda-web-vault.conf` to run the OODA Node web build on **127.0.0.1:3100
+  only**, with `OODA_FORGE_VAULT_CONFIG=/etc/bob-vault/node-vault.json`, vault
+  checkout `/var/lib/bob-vault/vault`, generation `prod-20261004-1`.
+- `claude.gmac.io` is only the Hermes origin for `bob.blder.bot`; every other
+  path returns 404 so the loopback vault host is never public.
+- Writers: Bob callers use the vault tRPC/REST procedures on loopback with a Bob
+  API key that resolves to the configured actor. `hermes-vault-sync.timer` is
+  disabled. Legacy checkouts (`~/obsidian`, `/opt/obsidian`, Hermes) are retained
+  unmodified as rollback sources.
+- Mac: read-only mirror `~/obsidian-vault` fast-forwarded every 5 minutes by
+  launchd (`deploy/mac/bob-vault-sync`); edits go in a worktree and are submitted
+  with `deploy/mac/bob-vault-submit` (deletions and renames unsupported).

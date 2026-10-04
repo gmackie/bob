@@ -1,0 +1,20 @@
+#!/bin/sh
+# Submit edited/added files from a vault edit worktree through Bob's gated
+# vault host (published to Cloudflare Artifacts). Usage, inside the worktree:
+#   bob-vault-submit [file ...]   (default: files changed vs origin/main)
+# Deletions and renames are not supported by the vault API and are reported.
+set -eu
+ROOT=$(git rev-parse --show-toplevel)
+cd "$ROOT"
+if [ "$#" -gt 0 ]; then FILES=$(printf '%s\n' "$@"); else
+  FILES=$( { git diff --name-only --diff-filter=AM origin/main; git ls-files --others --exclude-standard; } | sort -u)
+  DELETED=$(git diff --name-only --diff-filter=DR origin/main)
+  [ -n "$DELETED" ] && { echo "Not submitted (deletions/renames unsupported):"; echo "$DELETED"; }
+fi
+[ -n "$FILES" ] || { echo "Nothing to submit"; exit 0; }
+echo "$FILES" | while IFS= read -r f; do
+  [ -f "$f" ] || { echo "skip (not a file): $f"; continue; }
+  python3 -c 'import json,sys;print(json.dumps({"json":{"vaultKind":"personal","filePath":sys.argv[1],"content":open(sys.argv[1],encoding="utf-8").read()}}))' "$f" |
+    ssh -o BatchMode=yes root@hetzner-bob 'KEY=$(grep -E "^BOB_API_KEY=" /home/bob/dev/gmacko-bob/.env.ooda-runner | tail -1 | cut -d= -f2- | tr -d "\"'"'"'"); curl -s -H "authorization: Bearer $KEY" -H "content-type: application/json" -X POST --data-binary @- http://127.0.0.1:3100/api/trpc/vault.write' |
+    python3 -c 'import json,sys;d=json.load(sys.stdin);r=d.get("result",{}).get("data",{}).get("json");print(("published " if r and r["publication"]["state"]=="published" else "NOT PUBLISHED ")+sys.argv[1]+("" if r else " "+json.dumps(d)[:300]))' "$f"
+done

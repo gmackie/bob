@@ -17,17 +17,24 @@ const run = promisify(execFile);
 const API = "https://api.cloudflare.com/client/v4/accounts/";
 const TOKEN_TTL_SECONDS = 900;
 const TOKEN_REFRESH_MARGIN_MS = 120_000;
-const settingKeys = ["version", "account", "namespace", "repo", "remote", "credentialPath",
+const commonKeys = ["version", "account", "namespace", "repo", "remote",
   "preparedPath", "journalDatabase", "authorName", "authorEmail"];
+// Exactly one credential source: an Artifacts-only API token (REST), or the
+// single-repository token broker Worker (deploy/vault-token-broker.mjs).
+const credentialKeys = [["credentialPath"], ["brokerUrl", "brokerSecretPath"]];
 
 export async function loadClientSettings(path) {
   const settings = JSON.parse(await readFile(path, "utf8"));
-  const keys = Object.keys(settings).sort();
-  if (settings.version !== 1 || keys.join() !== [...settingKeys].sort().join()) {
-    throw new Error("Vault client settings are invalid");
-  }
-  for (const key of ["credentialPath", "preparedPath", "journalDatabase"]) {
+  const keys = Object.keys(settings).sort().join();
+  const source = credentialKeys.find((extra) => keys === [...commonKeys, ...extra].sort().join());
+  if (settings.version !== 1 || !source) throw new Error("Vault client settings are invalid");
+  for (const key of ["preparedPath", "journalDatabase", ...source.filter((k) => k.endsWith("Path"))]) {
     if (!isAbsolute(settings[key])) throw new Error("Vault client paths must be absolute");
+  }
+  if (settings.brokerUrl !== undefined) {
+    const broker = new URL(settings.brokerUrl);
+    if (broker.protocol !== "https:" || broker.pathname !== "/" || broker.username || broker.password ||
+        broker.search || broker.hash) throw new Error("Vault client broker is invalid");
   }
   const remote = new URL(settings.remote);
   if (remote.protocol !== "https:" || !remote.hostname.endsWith(".artifacts.cloudflare.net") ||
@@ -53,6 +60,36 @@ function gitEnvironment(settings, token) {
 }
 
 export function createTokenSource(settings, fetchImpl = fetch, now = Date.now) {
+  return settings.brokerUrl ? brokerTokenSource(settings, fetchImpl, now) : restTokenSource(settings, fetchImpl, now);
+}
+
+function brokerTokenSource(settings, fetchImpl, now) {
+  let cached;
+  async function call(path, method) {
+    const secret = (await readFile(settings.brokerSecretPath, "utf8")).trim();
+    const response = await fetchImpl(new URL(path, settings.brokerUrl), {
+      method, headers: { authorization: "Bearer " + secret }, redirect: "error",
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) throw new Error("Vault token broker HTTP " + response.status);
+    return response.json();
+  }
+  return {
+    repository: () => call("/repo", "GET"),
+    async token() {
+      if (cached && cached.expires - now() > TOKEN_REFRESH_MARGIN_MS) return cached.value;
+      const issued = now();
+      const result = await call("/token", "POST");
+      if (result?.scope !== "write" || typeof result.plaintext !== "string" || !result.plaintext) {
+        throw new Error("Vault token broker returned no write token");
+      }
+      cached = { value: result.plaintext, expires: issued + Math.min(result.ttl ?? TOKEN_TTL_SECONDS, TOKEN_TTL_SECONDS) * 1000 };
+      return cached.value;
+    },
+  };
+}
+
+function restTokenSource(settings, fetchImpl, now) {
   let cached;
   async function api(path, body) {
     const credential = (await readFile(settings.credentialPath, "utf8")).trim();

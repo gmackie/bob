@@ -70,3 +70,33 @@ test("sqlite executor batch is atomic", async () => {
   await sql.batch([{ sql: "INSERT INTO t (id) VALUES (?)", params: [2] }]);
   assert.deepEqual((await sql.first({ sql: "SELECT id FROM t", params: [] })).id, 2);
 });
+
+test("broker settings require https root URL and exclude a direct credential", async () => {
+  const { credentialPath, ...common } = settings;
+  const broker = { ...common, brokerUrl: "https://broker.example.workers.dev", brokerSecretPath: join(dir, "broker-secret") };
+  await assert.doesNotReject(client.loadClientSettings(await write("broker.json", broker)));
+  await assert.rejects(client.loadClientSettings(await write("both.json", { ...broker, credentialPath })), /invalid/);
+  await assert.rejects(client.loadClientSettings(await write("http.json", { ...broker, brokerUrl: "http://broker.example" })), /broker/);
+  await assert.rejects(client.loadClientSettings(await write("path.json", { ...broker, brokerUrl: "https://broker.example/x" })), /broker/);
+});
+
+test("broker token source sends the secret, caches, and rejects read-scoped tokens", async () => {
+  const { credentialPath, ...common } = settings;
+  const broker = { ...common, brokerUrl: "https://broker.example.workers.dev", brokerSecretPath: join(dir, "broker-secret") };
+  await writeFile(broker.brokerSecretPath, "broker-secret\n");
+  const calls = [];
+  let scope = "write";
+  const fetchImpl = async (url, init) => {
+    calls.push({ url: String(url), method: init.method, auth: init.headers.authorization });
+    if (String(url).endsWith("/repo")) return Response.json({ id: "repo-id" });
+    return Response.json({ plaintext: "tok-" + calls.length, scope, ttl: 900 });
+  };
+  let now = 0;
+  const tokens = client.createTokenSource(broker, fetchImpl, () => now);
+  assert.deepEqual(await tokens.repository(), { id: "repo-id" });
+  assert.equal(await tokens.token(), "tok-2");
+  assert.equal(await tokens.token(), "tok-2");
+  assert.deepEqual(calls[1], { url: "https://broker.example.workers.dev/token", method: "POST", auth: "Bearer broker-secret" });
+  scope = "read"; now = 10_000_000;
+  await assert.rejects(tokens.token(), /no write token/);
+});
