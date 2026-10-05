@@ -26,7 +26,7 @@
 
 import { and, desc, eq, inArray, notLike, sql } from "@bob/db";
 import { db } from "@bob/db/client";
-import { chatConversations, pullRequests, taskRuns, workItems } from "@bob/db/schema";
+import { chatConversations, chatMessages, pullRequests, taskRuns, workItems } from "@bob/db/schema";
 import {
   
   dispatchRepairSession,
@@ -40,6 +40,14 @@ import {
   getConnection,
 } from "../services/git/providerConnectionService";
 import { mirrorWorkItemEvent } from "../services/tracker/trackerMirror.js";
+import type { ReviewContext } from "../services/tracker/trackerMirror.js";
+import { readChangesRequested } from "../services/tracker/changesRequested.js";
+import type { ChangesRequestedMeta } from "../services/tracker/changesRequested.js";
+import {
+  commitUrlFor,
+  deriveSummary,
+  deriveTestPlan,
+} from "../services/tracker/kanbangerDelivery.js";
 import { pickHealthyAgent } from "../services/automation/pickHealthyAgent.js";
 
 // task_run statuses that mean a session is still in flight for a PR — for a
@@ -416,9 +424,16 @@ export async function autoReviewAndMerge(
         continue;
       }
 
-      // First time we see this PR open: tell the tracker (card → In Review,
-      // comment with the PR link). Idempotent via a marker on the work item.
-      await announcePrOpenedOnce(pr);
+      // First time we see this PR open: tell the tracker it is ready for
+      // review (Kanbanger: a delivery report with summary + test plan; Linear:
+      // card → In Review). Idempotent via a marker on the work item. Also
+      // surfaces a reviewer's pending "Request changes" for this PR, and
+      // re-reports readiness once a repair has pushed the fix.
+      const humanChanges = await announceReadyForReview(pr, {
+        title: remote.title,
+        body: remote.body,
+        headSha: remote.headSha ?? null,
+      });
 
       const headSha = remote.headSha;
       if (!headSha) {
@@ -448,28 +463,32 @@ export async function autoReviewAndMerge(
       // state) when repair is disabled or not possible. Guards: one repair in
       // flight at a time, one attempt per head SHA, a per-PR attempt cap, and a
       // per-run budget.
+      // A human's Kanbanger "Request changes" passes `humanRequest`: it is new
+      // information, so an earlier no-op repair at this head must not suppress
+      // it. Returns whether a repair session was dispatched.
       const tryRepair = async (
         reason: RepairReason,
         blockedNote: string,
-      ): Promise<void> => {
+        opts: { requestedChangesBody?: string | null; humanRequest?: boolean } = {},
+      ): Promise<boolean> => {
         const repositoryId = pr.repositoryId;
         const headBranch = pr.headBranch;
         if (!cfg.repairEnabled || !repositoryId || !headBranch) {
           result.items.push({ pr: label, action: "reviewed", reason: blockedNote });
-          return;
+          return false;
         }
         const rs = await getRepairState(pr.id, headSha);
         if (rs.active) {
           result.items.push({ pr: label, action: "reviewed", reason: "repair in flight" });
-          return;
+          return false;
         }
-        if (rs.doneAtHead) {
+        if (rs.doneAtHead && !opts.humanRequest) {
           result.items.push({
             pr: label,
             action: "reviewed",
             reason: `${blockedNote} (repair made no fix at this head)`,
           });
-          return;
+          return false;
         }
         if (rs.attempts >= repairAttemptCap) {
           result.items.push({
@@ -477,7 +496,7 @@ export async function autoReviewAndMerge(
             action: "reviewed",
             reason: `${blockedNote} (repair cap ${repairAttemptCap} reached)`,
           });
-          return;
+          return false;
         }
         if (repairsSpent >= repairBudget) {
           result.items.push({
@@ -485,7 +504,7 @@ export async function autoReviewAndMerge(
             action: "skipped",
             reason: "repair budget exhausted (deferred)",
           });
-          return;
+          return false;
         }
         const dispatched = await dispatchRepairSession(
           pr.userId,
@@ -501,6 +520,7 @@ export async function autoReviewAndMerge(
             title: remote.title,
             body: remote.body,
             reason,
+            requestedChangesBody: opts.requestedChangesBody ?? null,
           },
           repairPick.agent,
         );
@@ -511,7 +531,7 @@ export async function autoReviewAndMerge(
             action: "skipped",
             reason: "repo has no runner checkout/workspace for repair",
           });
-          return;
+          return false;
         }
         repairsSpent++;
         result.repaired++;
@@ -520,7 +540,29 @@ export async function autoReviewAndMerge(
           action: "repaired",
           reason: `repair dispatched (${reason})`,
         });
+        return true;
       };
+
+      // The human reviewer requested changes in Kanbanger: this PR must not
+      // merge until they are addressed. Dispatch one repair on its branch with
+      // the reviewer's note; announceReadyForReview re-reports readiness once
+      // the repair has pushed a new head.
+      if (humanChanges) {
+        if (!humanChanges.repairHeadSha) {
+          const dispatched = await tryRepair("changes-requested", "human requested changes", {
+            requestedChangesBody: humanChanges.note,
+            humanRequest: true,
+          });
+          if (dispatched) await markHumanRepairDispatched(pr, headSha);
+        } else {
+          result.items.push({
+            pr: label,
+            action: "reviewed",
+            reason: "human requested changes — waiting for the repair to push",
+          });
+        }
+        continue;
+      }
 
       // Review once per head SHA. If a verdict already exists at this commit,
       // use it for the merge gate below. Otherwise the review is done by a Bob
@@ -716,7 +758,51 @@ export async function settleWorkItemForPr(
   }
 }
 
-async function announcePrOpenedOnce(pr: PrRow): Promise<void> {
+/** The agent's closing message in a session — its own account of what changed. */
+async function lastAssistantMessage(sessionId: string | null): Promise<string | null> {
+  if (!sessionId) return null;
+  const row = await db.query.chatMessages.findFirst({
+    where: and(eq(chatMessages.conversationId, sessionId), eq(chatMessages.role, "assistant")),
+    columns: { content: true },
+    orderBy: [desc(chatMessages.createdAt)],
+  });
+  const text = row?.content.trim();
+  if (!text) return null;
+  return text;
+}
+
+/** The newest repair session on a PR (the one that addressed requested changes). */
+async function latestRepairSessionId(pullRequestId: string): Promise<string | null> {
+  const run = await db.query.taskRuns.findFirst({
+    where: and(eq(taskRuns.pullRequestId, pullRequestId), eq(taskRuns.runPhase, "repair")),
+    columns: { sessionId: true },
+    orderBy: [desc(taskRuns.createdAt)],
+  });
+  return run?.sessionId ?? null;
+}
+
+interface RemotePrView {
+  title: string;
+  body: string | null;
+  headSha: string | null;
+}
+
+async function buildReviewContext(
+  pr: PrRow,
+  remote: RemotePrView,
+  issueDescription: string | null,
+  summarySessionId: string | null,
+): Promise<ReviewContext> {
+  const agentSummary = await lastAssistantMessage(summarySessionId).catch(() => null);
+  return {
+    summary: deriveSummary({ agentSummary, prTitle: remote.title, prBody: remote.body, prUrl: pr.url }),
+    testPlan: deriveTestPlan({ agentSummary, prBody: remote.body, issueDescription, prUrl: pr.url }),
+    commitUrl: commitUrlFor(pr.url, remote.headSha),
+    previewUrl: null,
+  };
+}
+
+async function markHumanRepairDispatched(pr: PrRow, headSha: string): Promise<void> {
   try {
     const workItemId = await workItemIdForPr(pr);
     if (!workItemId) return;
@@ -724,16 +810,70 @@ async function announcePrOpenedOnce(pr: PrRow): Promise<void> {
       where: eq(workItems.id, workItemId),
       columns: { sourceMetadata: true },
     });
-    const meta = item?.sourceMetadata ?? {};
-    const announced = Array.isArray(meta.announcedPrs) ? (meta.announcedPrs as string[]) : [];
-    if (announced.includes(pr.url)) return;
-    // Mark first so a tracker hiccup can't cause a comment storm.
+    const meta = { ...item?.sourceMetadata } as Record<string, unknown>;
+    const cr = readChangesRequested(meta);
+    if (!cr) return;
     await db
       .update(workItems)
-      .set({ sourceMetadata: { ...meta, announcedPrs: [...announced, pr.url] } })
+      .set({ sourceMetadata: { ...meta, changesRequested: { ...cr, repairHeadSha: headSha } } })
       .where(eq(workItems.id, workItemId));
-    await mirrorWorkItemEvent(db, workItemId, { kind: "pr_opened", prUrl: pr.url });
   } catch (err) {
-    console.error(`[auto-merge] pr_opened announce failed for ${pr.url}:`, err);
+    console.error(`[auto-merge] could not record the human-requested repair for ${pr.url}:`, err);
+  }
+}
+
+/**
+ * Tell the tracker a PR is ready for review — once per PR, and once more per
+ * revision after a reviewer's "Request changes" has been repaired and pushed.
+ * Returns the reviewer's still-pending change request for THIS PR (the caller
+ * must not merge it), or null.
+ */
+async function announceReadyForReview(
+  pr: PrRow,
+  remote: RemotePrView,
+): Promise<ChangesRequestedMeta | null> {
+  try {
+    const workItemId = await workItemIdForPr(pr);
+    if (!workItemId) return null;
+    const item = await db.query.workItems.findFirst({
+      where: eq(workItems.id, workItemId),
+      columns: { sourceMetadata: true, description: true, externalProvider: true },
+    });
+    const meta = { ...item?.sourceMetadata } as Record<string, unknown>;
+    const pending = readChangesRequested(meta);
+    const announced = Array.isArray(meta.announcedPrs) ? (meta.announcedPrs as string[]) : [];
+    const imported = item?.externalProvider === "linear";
+
+    if (!announced.includes(pr.url)) {
+      // Mark first so a tracker hiccup can't cause a comment storm. A brand-new
+      // PR from a re-run (the no-open-PR route) is the answer to the request.
+      const next: Record<string, unknown> = { ...meta, announcedPrs: [...announced, pr.url] };
+      if (pending?.prUrl === null) delete next.changesRequested;
+      await db.update(workItems).set({ sourceMetadata: next }).where(eq(workItems.id, workItemId));
+      const review = imported
+        ? await buildReviewContext(pr, remote, item.description, pr.sessionId)
+        : undefined;
+      await mirrorWorkItemEvent(db, workItemId, { kind: "pr_opened", prUrl: pr.url, review });
+      return pending?.prUrl === pr.url ? pending : null;
+    }
+
+    if (pending?.prUrl !== pr.url) return null;
+    const fixPushed =
+      pending.repairHeadSha && remote.headSha && remote.headSha !== pending.repairHeadSha;
+    if (!fixPushed || (await hasLiveRun(pr.id, "repair"))) return pending;
+
+    const { changesRequested: _done, ...rest } = meta;
+    await db.update(workItems).set({ sourceMetadata: rest }).where(eq(workItems.id, workItemId));
+    const review = await buildReviewContext(
+      pr,
+      remote,
+      item?.description ?? null,
+      await latestRepairSessionId(pr.id),
+    );
+    await mirrorWorkItemEvent(db, workItemId, { kind: "review_ready", prUrl: pr.url, review });
+    return null;
+  } catch (err) {
+    console.error(`[auto-merge] ready-for-review announce failed for ${pr.url}:`, err);
+    return null;
   }
 }

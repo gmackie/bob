@@ -15,6 +15,7 @@ import {
   markDeliveryProcessed,
 } from "./processWebhook";
 import { ensureLinearProject } from "../linear/ensureLinearProject";
+import { applyChangesRequested } from "../tracker/changesRequested";
 import { traceWebhook } from "@bob/telemetry";
 
 const LINEAR_BOB_ACTOR = "bob-automation";
@@ -345,7 +346,13 @@ async function handleIssueUpdate(payload: LinearIssuePayload): Promise<void> {
     updates.description = payload.data.description;
   }
   if (payload.updatedFrom?.stateId !== undefined) {
-    updates.status = mapLinearStatusToBob(payload.data.state.type);
+    const status = mapLinearStatusToBob(payload.data.state.type);
+    // An item Bob has handed over for review moves back to "started" when the
+    // reviewer requests changes. Mapping that to in_progress here would strand
+    // it with no session behind it; the `Changes requested:` comment that
+    // accompanies the move is what resumes the work (handleCommentCreate).
+    const reviewBounce = existing.status === "in_review" && status === "in_progress";
+    if (!reviewBounce) updates.status = status;
   }
 
   if (Object.keys(updates).length > 0) {
@@ -353,6 +360,40 @@ async function handleIssueUpdate(payload: LinearIssuePayload): Promise<void> {
       .update(workItems)
       .set(updates)
       .where(eq(workItems.id, existing.id));
+  }
+}
+
+interface LinearCommentPayload {
+  action: "create" | "update" | "remove";
+  type: "Comment";
+  // Optional: an unchecked cast of raw webhook JSON (see LinearIssuePayload).
+  data?: {
+    id: string;
+    body: string;
+    issueId?: string;
+    issue?: { id: string; identifier?: string } | null;
+  };
+}
+
+/**
+ * Kanbanger's "Request changes" adds a comment starting `Changes requested:`.
+ * Route it to the work item so Bob resumes with the reviewer's note. Every
+ * other comment is ignored here, as before.
+ */
+async function handleCommentCreate(payload: LinearCommentPayload): Promise<void> {
+  const data = payload.data;
+  if (!data?.id || typeof data.body !== "string") return;
+  const keys = [data.issueId, data.issue?.id, data.issue?.identifier].filter(
+    (v): v is string => typeof v === "string" && v.length > 0,
+  );
+  const result = await applyChangesRequested(db, {
+    issueKeys: keys,
+    commentId: data.id,
+    body: data.body,
+    source: "webhook",
+  });
+  if (result.applied) {
+    console.log(`[linear-webhook] changes requested on ${keys[0]} → ${result.route}`);
   }
 }
 
@@ -384,7 +425,14 @@ export async function processLinearWebhook(
       // shape, so this is a real runtime filter (non-Issue payloads exist,
       // e.g. Comment/Project webhooks) rather than a statically-impossible
       // comparison against a cast-in literal type.
-      if ((payload as { type?: unknown }).type !== "Issue") {
+      const type = (payload as { type?: unknown }).type;
+      if (type === "Comment") {
+        const comment = payload as unknown as LinearCommentPayload;
+        if (comment.action === "create") await handleCommentCreate(comment);
+        await markDeliveryProcessed(deliveryId);
+        return;
+      }
+      if (type !== "Issue") {
         await markDeliveryProcessed(deliveryId);
         return;
       }

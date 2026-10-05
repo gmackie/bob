@@ -434,6 +434,41 @@ describe("LinearPlanningProvider", () => {
     });
   });
 
+  describe("Kanbanger completion", () => {
+    const kanbanger = () =>
+      new LinearPlanningProvider(
+        mockDb as unknown as Db,
+        "lc_test_key",
+        "team-1",
+        "project-1",
+        "https://tasks.gmac.io",
+        "https://tasks.gmac.io/graphql",
+      );
+
+    it("never forces Done via issueUpdate — completion comes from Kanbanger gates", async () => {
+      mockCreateComment.mockResolvedValue({ id: "comment-1" });
+
+      await kanbanger().completeTask("issue-1", "run-1", { outcome: "success", summary: "Merged." });
+      await kanbanger().setStatus("issue-1", "run-1", "completed");
+
+      expect(mockTeam).not.toHaveBeenCalled();
+      expect(mockUpdateIssue).not.toHaveBeenCalled();
+      expect(mockCreateComment).toHaveBeenCalledTimes(1);
+    });
+
+    it("still moves real Linear issues to Done", async () => {
+      mockTeam.mockResolvedValue({
+        states: vi.fn().mockResolvedValue({ nodes: [{ id: "state-done", name: "Done" }] }),
+      });
+      mockUpdateIssue.mockResolvedValue({ success: true });
+      mockCreateComment.mockResolvedValue({ id: "comment-1" });
+
+      await provider.completeTask("issue-1", "run-1", { outcome: "success", summary: "Merged." });
+
+      expect(mockUpdateIssue).toHaveBeenCalledWith("issue-1", { stateId: "state-done" });
+    });
+  });
+
   describe("comment formatting", () => {
     it("includes bot prefix and taskRunId footer", async () => {
       mockCreateComment.mockResolvedValue({ id: "comment-1" });
