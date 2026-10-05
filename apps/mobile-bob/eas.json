@@ -88,6 +88,23 @@
       },
       "channel": "production",
       "distribution": "store"
+    },
+    "review-simulator": {
+      "extends": "base",
+      "distribution": "internal",
+      "env": {
+        "APP_ENV": "production",
+        "APP_VARIANT": "production",
+        "API_URL": "https://bob.blder.bot",
+        "AUTH_URL": "https://bob.blder.bot",
+        "GATEWAY_PUBLIC_URL": "wss://ws.blder.bot",
+        "OODA_API_URL": "https://ooda.blder.bot"
+      },
+      "ios": {
+        "simulator": true,
+        "buildConfiguration": "Release-production"
+      },
+      "channel": "review-simulator"
     }
   },
   "submit": {

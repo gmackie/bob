@@ -20,7 +20,12 @@
 appId: com.gmacko.bob
 ---
 # tf:step "Launch the app and skip onboarding — you land on 'Welcome to Bob'." capture=screenshot
-- launchApp
+# Maestro's bare launchApp pre-grants every iOS permission (camera, microphone,
+# speech, notifications), which hides the prompts this flow exists to show.
+# Leave them unset so iOS raises each prompt on first use.
+- launchApp:
+    permissions:
+      all: unset
 - extendedWaitUntil:
     visible: "Skip|Welcome to Bob"
     timeout: 60000
