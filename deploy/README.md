@@ -34,6 +34,23 @@ CI (`.forgejo/workflows/ci.yml`) runs step 2 automatically on `master` after
 tests pass. The `predeploy` hook is skipped in CI because it needs Tailscale to
 reach production Postgres.
 
+The ForgeGraph `production-cf` target performs the guarded migration as the
+final build step on the Tailscale-connected deployment node, before the normal
+Wrangler upload. `python3 ../../scripts/migrate-production.py` obtains Bob's
+production direct URL from the node's scoped agent secret broker and passes it
+only to the migration subprocess. Credentials are never stored in the checkout.
+A broker, database, schema, ledger, or migration failure stops the build and
+therefore prevents worker upload.
+
+The production guard requires database/role `bob`, all 43 historical source
+migration hashes through `0035`, and the reviewed identity schema. Only
+`0036_canonical_auth_foreign_keys.sql` may be newly applied; adding another
+migration requires reviewing the guard's roster. It takes the ordinary migration
+advisory lock, preserves identity rows and foreign-key behavior, and rolls back
+if canonical identity coverage is incomplete. The existing code-only Forgejo
+job does not apply schema migrations; use the guarded ForgeGraph target for
+schema releases.
+
 Required repo secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
 
 The Hermes console proxy additionally requires the Worker secret
