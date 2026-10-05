@@ -41,6 +41,11 @@ appId: com.gmacko.bob
     visible:
       id: "qr-pairing-user-code"
     timeout: 30000
+# The code box renders a "····-····" placeholder until /qr-pairing/request-code
+# answers; wait for the real XXXX-XXXX code so the capture shows it.
+- extendedWaitUntil:
+    visible: "[A-Z0-9]{4}-[A-Z0-9]{4}"
+    timeout: 30000
 - assertVisible: "Enter code on Bob web"
 # tf:step "In a browser, sign in to https://bob.blder.bot with the demo account, open Settings -> Link a Device, and enter the code. The phone signs in automatically." capture=none
 - assertVisible: "Waiting for approval — this signs you in automatically."
