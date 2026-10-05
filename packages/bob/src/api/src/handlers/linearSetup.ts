@@ -24,6 +24,10 @@ import {
 import { agentOverrideFromLabels } from "../services/linear/agentLabel.js";
 import { queueOrderForPriority } from "../services/linear/priority.js";
 import { reconcileImportedStatus } from "../services/linear/reconcileStatus.js";
+import {
+  applyChangesRequested,
+  findChangesRequestComment,
+} from "../services/tracker/changesRequested.js";
 
 import type { HandlerContext } from "./context.js";
 
@@ -284,6 +288,36 @@ export async function syncLinearProjects(
           if (Object.keys(patch).length) {
             await ctx.db.update(workItems).set(patch).where(eq(workItems.id, existing.id));
             issuesUpdated++;
+          }
+
+          // Backstop for a missed Comment webhook: Bob handed this over for
+          // review, but the tracker moved it back to a non-review "started"
+          // state — the reviewer requested changes. Find their note and resume.
+          if (
+            existing.status === "in_review" &&
+            stateType === "started" &&
+            !/review/i.test(state?.name ?? "")
+          ) {
+            try {
+              const comments = await issue.comments({ first: 25 });
+              const lastReady = (existing.sourceMetadata as Record<string, unknown> | null)
+                ?.lastReviewRequestAt;
+              const request = findChangesRequestComment(
+                comments.nodes.map((c) => ({ id: c.id, body: c.body, createdAt: c.createdAt })),
+                typeof lastReady === "string" ? lastReady : null,
+              );
+              if (request) {
+                const applied = await applyChangesRequested(ctx.db, {
+                  issueKeys: [issue.id, issue.identifier],
+                  commentId: request.id,
+                  body: request.body,
+                  source: "sync",
+                });
+                if (applied.applied) issuesUpdated++;
+              }
+            } catch (err) {
+              console.warn(`[linear-sync] change-request check failed for ${issue.identifier}:`, err);
+            }
           }
           continue;
         }

@@ -22,6 +22,10 @@ import {
 import { formatWorkItemIdentifier } from "./workItems";
 import { pickAcrossProjects } from "./autoDrain-pick";
 import { mirrorWorkItemEvent } from "../services/tracker/trackerMirror.js";
+import {
+  changesRequestedPrompt,
+  readChangesRequested,
+} from "../services/tracker/changesRequested.js";
 import type { AgentHealthVerdict } from "../services/automation/agentHealthRouter.js";
 import { assessAgentHealth, chooseAgent } from "../services/automation/agentHealthRouter.js";
 import { paceDailyBudget } from "../services/health/pacing.js";
@@ -266,6 +270,14 @@ export async function autoDrainBacklog(
           id: wi.id,
         });
 
+      // A reviewer requested changes in Kanbanger and there was no open PR to
+      // repair: re-run the task with their note as part of its input.
+      const changes = readChangesRequested(wi.sourceMetadata);
+      const description =
+        changes?.prUrl === null
+          ? [wi.description?.trim(), changesRequestedPrompt(changes.note)].filter(Boolean).join("\n\n")
+          : wi.description;
+
       // Prefer a per-item agent override, else health-gated rotation.
       const agentType =
         wi.agentTypeOverride ??
@@ -277,7 +289,7 @@ export async function autoDrainBacklog(
           id: wi.id,
           identifier,
           title: wi.title,
-          description: wi.description,
+          description,
           workspaceId: wi.workspaceId ?? "",
           projectId: wi.projectId ?? "",
           assigneeId: null,
@@ -287,6 +299,18 @@ export async function autoDrainBacklog(
         { agentType },
       );
       dispatchedItems.push({ id: wi.id, identifier, agentType });
+      if (changes?.prUrl === null) {
+        await db
+          .update(workItems)
+          .set({
+            sourceMetadata: {
+              ...wi.sourceMetadata,
+              changesRequested: { ...changes, dispatchedAt: new Date().toISOString() },
+            },
+          })
+          .where(eq(workItems.id, wi.id))
+          .catch(() => undefined);
+      }
       // Mirror the claim to the tracker (Kanbanger card → In Progress +
       // comment). Best-effort; the mirror never blocks dispatch.
       await mirrorWorkItemEvent(db, wi.id, { kind: "claimed", agentType }).catch(

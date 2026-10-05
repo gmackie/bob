@@ -2,7 +2,7 @@ import type { LinearClient } from "@linear/sdk";
 import { createTracedLinearClient } from "./tracedLinearClient.js";
 import { eq } from "@bob/db";
 import type { Db } from "@bob/db/client";
-import { taskRuns, workItemArtifacts } from "@bob/db/schema";
+import { taskRuns, workItemArtifacts, workItems } from "@bob/db/schema";
 
 import type {
   ArtifactPayload,
@@ -19,6 +19,12 @@ import type {
 } from "./planningProvider.js";
 import { PlanningProviderError } from "./planningProvider.js";
 import { rewriteLinearWebUrl } from "./linearUrls.js";
+import {
+  buildReviewRequest,
+  deriveTestPlan,
+  isKanbangerIntegration,
+  postDeliveryReport,
+} from "../tracker/kanbangerDelivery.js";
 
 /**
  * Structural shape of a Linear issue as read by mapIssueToProviderTask.
@@ -45,6 +51,13 @@ interface LinearIssueLike {
 
 export class LinearPlanningProvider implements PlanningProvider {
   private client: LinearClient;
+  private readonly delivery: { apiUrl: string | null; apiKey: string };
+  /**
+   * True when this integration drives Kanbanger rather than Linear. Kanbanger
+   * owns its review and done states (progress gates): Bob reports readiness
+   * through the delivery API and never forces `completed` via issueUpdate.
+   */
+  private readonly kanbanger: boolean;
 
   constructor(
     private db: Db,
@@ -56,6 +69,8 @@ export class LinearPlanningProvider implements PlanningProvider {
   ) {
     // NULL apiUrl keeps the SDK default (api.linear.app); set it to drive a
     // Linear-API-compatible instance (e.g. Kanbanger) with the same SDK.
+    this.kanbanger = isKanbangerIntegration(linearApiUrl);
+    this.delivery = { apiUrl: linearApiUrl ?? null, apiKey };
     this.client = createTracedLinearClient({
       apiKey,
       ...(linearApiUrl ? { apiUrl: linearApiUrl } : {}),
@@ -190,6 +205,13 @@ export class LinearPlanningProvider implements PlanningProvider {
         await this.postComment(externalId, taskRunId, label, `Task is now ${status}.`);
         return;
       }
+      // Done on Kanbanger comes from its gates and merges, not from Bob.
+      if (status === "completed" && this.kanbanger) return;
+      // Kanbanger's review state is gated: ask for it, don't force it.
+      if (status === "review_ready" && this.kanbanger) {
+        const reported = await this.reportReadyToKanbanger(externalId, taskRunId, "Bob reports this ready for review.");
+        if (reported !== "unavailable") return;
+      }
 
       const stateId = await this.resolveLinearState(status);
       if (stateId) {
@@ -220,6 +242,19 @@ export class LinearPlanningProvider implements PlanningProvider {
 
   async markReviewReady(externalId: string, taskRunId: string, summary: string): Promise<void> {
     await this.lifecycleWithFallback(externalId, taskRunId, "markReviewReady", async () => {
+      if (this.kanbanger) {
+        const reported = await this.reportReadyToKanbanger(externalId, taskRunId, summary);
+        if (reported === "reported") return;
+        if (reported === "gate_blocked") {
+          await this.postComment(
+            externalId,
+            taskRunId,
+            "Not ready for review yet",
+            "Kanbanger's progress gates for this issue are not met, so Bob has not marked it ready. It stays in progress.",
+          );
+          return;
+        }
+      }
       const stateId = await this.resolveLinearState("review_ready");
       if (stateId) {
         await this.client.updateIssue(externalId, { stateId });
@@ -230,7 +265,9 @@ export class LinearPlanningProvider implements PlanningProvider {
 
   async completeTask(externalId: string, taskRunId: string, outcome: CompletionPayload): Promise<void> {
     await this.lifecycleWithFallback(externalId, taskRunId, "completeTask", async () => {
-      if (outcome.outcome === "success") {
+      // Kanbanger: completion follows its gates and the merge, never a forced
+      // `completed` state from Bob.
+      if (outcome.outcome === "success" && !this.kanbanger) {
         const stateId = await this.resolveLinearState("completed");
         if (stateId) {
           await this.client.updateIssue(externalId, { stateId });
@@ -289,6 +326,58 @@ export class LinearPlanningProvider implements PlanningProvider {
   private async postComment(externalId: string, taskRunId: string, title: string, body: string): Promise<void> {
     const formatted = `**🤖 Bob — ${title}**\n${body}\n\n---\n*Automated by Bob execution run \`${taskRunId}\`*`;
     await this.client.createComment({ issueId: externalId, body: formatted });
+  }
+
+  /**
+   * Kanbanger delivery report for the session-scoped path. Returns
+   * "unavailable" (404 / network / not resolvable) so the caller falls back to
+   * the previous GraphQL review-state move.
+   */
+  private async reportReadyToKanbanger(
+    externalId: string,
+    taskRunId: string,
+    summary: string,
+  ): Promise<"reported" | "gate_blocked" | "unavailable"> {
+    let workspaceId: string;
+    let workItemId: string;
+    try {
+      workspaceId = (await this.client.organization).id;
+      workItemId = await this.findWorkItemIdFromTaskRun(taskRunId);
+    } catch {
+      return "unavailable";
+    }
+    const item = await this.db.query.workItems.findFirst({
+      where: eq(workItems.id, workItemId),
+      columns: { description: true, sourceMetadata: true },
+    });
+    const meta = { ...item?.sourceMetadata } as Record<string, unknown>;
+    const revision = (typeof meta.reviewRevision === "number" ? meta.reviewRevision : 0) + 1;
+    const result = await postDeliveryReport(
+      this.delivery,
+      workspaceId,
+      buildReviewRequest({
+        externalIssueId: externalId,
+        workItemId,
+        revision,
+        summary,
+        testPlan: deriveTestPlan({ agentSummary: summary, issueDescription: item?.description ?? null }),
+      }),
+    );
+    if (result.ok) {
+      await this.db
+        .update(workItems)
+        .set({
+          sourceMetadata: { ...meta, reviewRevision: revision, lastReviewRequestAt: new Date().toISOString() },
+        })
+        .where(eq(workItems.id, workItemId));
+      return "reported";
+    }
+    if (result.kind === "gate_blocked") {
+      console.warn(`[LinearProvider] ${externalId} not ready: Kanbanger progress gates blocked it (${result.reason})`);
+      return "gate_blocked";
+    }
+    console.warn(`[LinearProvider] Kanbanger delivery unavailable for ${externalId} (${result.kind}); falling back`);
+    return "unavailable";
   }
 
   private async resolveLinearState(status: TaskStatus): Promise<string | null> {
