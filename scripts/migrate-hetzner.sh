@@ -12,7 +12,9 @@ set -euo pipefail
 #   2. `forge db url --app <APP>`            (authoritative, current credential)
 #   3. `forge secret get DATABASE_URL_LOCAL` (stored Tailscale-direct secret)
 #
-# The migration runner (packages/bob/src/db/src/migrate.ts) is forward-only,
+# Production uses production-migrate.ts to verify database identity, the
+# historical ledger and reviewed schema coverage before applying pending SQL.
+# The underlying runner (packages/bob/src/db/src/migrate.ts) is forward-only,
 # idempotent, and advisory-locked, so re-running against an up-to-date DB is a
 # safe no-op ("No pending migrations").
 
@@ -36,4 +38,8 @@ if [ -z "$DB_URL" ]; then
 fi
 
 cd "$REPO_ROOT"
-DATABASE_URL="$DB_URL" pnpm -F @bob/db migrate
+if [ "$STAGE" = "production" ]; then
+  DATABASE_URL="$DB_URL" pnpm -F @bob/db migrate:production
+else
+  DATABASE_URL="$DB_URL" pnpm -F @bob/db migrate
+fi
