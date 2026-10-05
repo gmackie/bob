@@ -1,5 +1,8 @@
 import { useCallback, useState } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import { Platform, Pressable, Text, TextInput, View, Alert } from "react-native";
+
+import { z } from "zod";
+import { getAuthBaseUrl } from "~/config/env";
 
 import { Button, Card, Screen } from "~/components/ui";
 import { ONBOARDING_SLIDES } from "~/features/planning/onboarding-copy";
@@ -80,7 +83,10 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   );
 }
 
+const reviewerTokenSchema = z.object({ token: z.string().min(1) });
+
 export function SignInScreen() {
+  const [reviewerEmail, setReviewerEmail] = useState("");
   const [signingIn, setSigningIn] = useState<string | null>(null);
   const [scannerVisible, setScannerVisible] = useState(false);
   const { refetch } = authClient.useSession();
@@ -96,14 +102,32 @@ export function SignInScreen() {
           provider,
           callbackURL: getMobileOAuthCallbackPath(),
         });
-      } catch (error: unknown) {
-        console.error("Sign in error:", error);
+      } catch {
+        Alert.alert("Sign-in failed", "Could not complete sign-in. Please try again.");
       } finally {
         setSigningIn(null);
       }
     },
     [signingIn],
   );
+
+  const handleReviewerSignIn = async () => {
+    if (signingIn) return;
+    setSigningIn("reviewer");
+    try {
+      const response = await fetch(`${getAuthBaseUrl()}/api/auth/dev/sign-in/magic-link`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: reviewerEmail.trim().toLowerCase() }),
+      });
+      if (!response.ok) throw new Error("Use the reserved reviewer email supplied with your review instructions.");
+      const { token } = reviewerTokenSchema.parse(await response.json());
+      const result = await authClient.magicLink.verify({ query: { token } });
+      if (result.error) throw new Error(result.error.message ?? "Reviewer sign-in failed.");
+      refetch();
+    } catch (error) {
+      Alert.alert("Sign-in failed", error instanceof Error ? error.message : "Please try again.");
+    } finally { setSigningIn(null); }
+  };
 
   const handleQrClaimed = useCallback(() => {
     setScannerVisible(false);
@@ -185,6 +209,10 @@ export function SignInScreen() {
       </View>
 
       <View className="mt-auto gap-3">
+        <TextInput testID="reviewer-sign-in-email" accessibilityLabel="Reviewer email" placeholder="Reviewer email" autoCapitalize="none" autoCorrect={false} keyboardType="email-address" value={reviewerEmail} onChangeText={setReviewerEmail} className="text-foreground border-border rounded-lg border px-3 py-3" />
+        <Button testID="reviewer-sign-in-submit" onPress={handleReviewerSignIn} disabled={signingIn !== null || !reviewerEmail.trim()} variant="secondary">
+          {signingIn === "reviewer" ? "Signing in..." : "Reviewer Sign In"}
+        </Button>
         {Platform.OS === "ios" ? (
           <Button
             onPress={() => handleSignIn("apple")}

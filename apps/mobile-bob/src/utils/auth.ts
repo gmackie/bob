@@ -1,6 +1,7 @@
 import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 import { expoClient } from "@better-auth/expo/client";
+import { magicLinkClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
 import { getAuthBaseUrl } from "~/config/env";
@@ -14,6 +15,7 @@ import { getMobileAuthScheme } from "./oauth";
 const realAuthClient = createAuthClient({
   baseURL: getAuthBaseUrl(),
   plugins: [
+    magicLinkClient(),
     expoClient({
       scheme: getMobileAuthScheme(Constants.expoConfig?.scheme),
       storagePrefix: "bob",

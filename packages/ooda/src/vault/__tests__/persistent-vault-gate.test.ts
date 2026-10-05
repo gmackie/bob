@@ -44,7 +44,10 @@ it("excludes competing hosts and durably drains before switching generations", a
   const next = open("two"); expect(await next.execute(async () => "new")).toBe("new");
   await next.closeAndDrain();
   expect(() => next.advance("one")).toThrow("cannot be reused");
-});
+  // This integration case performs real SQLite FULL-synchronous commits.
+  // Shared CI storage took 5.0–5.8s; its assertions specify durability and
+  // authorization, not a five-second latency contract.
+}, 20_000);
 
 it("releases failed operations without leaving a false orphan", async () => {
   const { open } = await fixture(); const gate = open();

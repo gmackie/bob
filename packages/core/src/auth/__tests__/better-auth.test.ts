@@ -87,6 +87,31 @@ describe("initAuth tenant bootstrap", () => {
     await runMigrations(pglite);
   });
 
+  it("consumes a reserved reviewer link once and bootstraps its workspace", async () => {
+    const auth = initAuth({
+      ...baseOpts(), db, schema, pluralizeTables: true,
+    });
+    const post = (email: string) => auth.handler(new Request(
+      "http://localhost:3000/api/auth/dev/sign-in/magic-link",
+      { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, name: "Reviewer" }) },
+    ));
+    expect((await post("ordinary@example.test")).status).toBe(403);
+    const minted = await post("reviewer+test@demo.preflight.app");
+    expect(minted.status).toBe(200);
+    const link = await minted.json();
+    const verified = await auth.handler(new Request(link.url));
+    expect(verified.status).toBe(302);
+    expect(verified.headers.get("set-cookie")).toContain("session_token");
+    const tenantRows = await db.select().from(tenants);
+    const memberRows = await db.select().from(tenantMembers);
+    expect(tenantRows).toHaveLength(1);
+    expect(memberRows).toHaveLength(1);
+    expect(memberRows[0]?.role).toBe("owner");
+    const replay = await auth.handler(new Request(link.url));
+    expect(replay.headers.get("set-cookie") ?? "").not.toContain("session_token");
+  });
+
   it("creates a personal tenant + tenant_members row when a user signs up", async () => {
     const auth = initAuth({
       db,
@@ -117,4 +142,9 @@ describe("initAuth tenant bootstrap", () => {
     expect(memberRows[0]?.tenantId).toBe(tenantRows[0]?.id);
     expect(memberRows[0]?.userId).toBe(userRows[0]?.id);
   });
+});
+
+ it("mounts magic-link verification for the reserved reviewer bypass", () => {
+  const auth = initAuth(baseOpts());
+  expect(auth.options.plugins?.map((plugin) => plugin.id)).toContain("magic-link");
 });
