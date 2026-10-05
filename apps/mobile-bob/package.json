@@ -68,7 +68,8 @@
     "react-native-screens": "~4.24.0",
     "react-native-worklets": "~0.8.1",
     "superjson": "2.2.3",
-    "uuid": "^11.1.1"
+    "uuid": "^11.1.1",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@babel/plugin-transform-react-jsx": "^7.29.7",

@@ -15,6 +15,7 @@ import { expo } from "@better-auth/expo";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { sso } from "better-auth/plugins/sso";
+import { magicLink } from "better-auth/plugins";
 import { createAuthEndpoint } from "better-auth/api";
 import { Layer, ServiceMap } from "effect";import { z } from "zod/v4";
 
@@ -255,6 +256,12 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
     user: { deleteUser: { enabled: true } },
     plugins: [
       devMagicLinkBypass(true),
+      magicLink({
+        disableSignUp: false,
+        sendMagicLink: async () => {
+          throw new Error("Email delivery is not configured. Use the reserved reviewer sign-in address or OAuth.");
+        },
+      }),
       expo(),
       // QR device pairing: web session mints a one-time code, mobile scans
       // and claims it for a real session. See ./qr-pairing.ts.
