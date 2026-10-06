@@ -26,6 +26,14 @@ import { DispatchControl } from "./dispatch-control.js";
 import { resolveProxyRoute } from "@bob/execution/providers";
 import { ProxyControl } from "./proxy-control";
 import { releaseBranchFromStaleWorktrees } from "./worktree-prepare.js";
+import {
+  commitTrailer,
+  commitTrailerInstruction,
+  pullRequestBody,
+  pullRequestTitle,
+  rangeReferencesIssue,
+  trackerIdentifierForSession,
+} from "./tracker-naming.js";
 import { EventBuffer } from "./event-buffer";
 import {
   adoptSupervisedRun,
@@ -1385,6 +1393,9 @@ export class BobGatewayConnector {
       return null;
     }
 
+    const identifier = trackerIdentifierForSession(session);
+    if (identifier) await this.ensureCommitTrailer(worktree, identifier);
+
     await this.git(worktree.path, ["push", "-u", "origin", worktree.branch, "--force"]);
 
     const remote = (
@@ -1395,32 +1406,70 @@ export class BobGatewayConnector {
       remote,
       worktree.branch,
       worktree.baseBranch,
-      session.title ?? worktree.branch,
-      session.description ?? "Automated by Bob agent.",
+      pullRequestTitle(session, worktree.branch),
+      pullRequestBody(session, session.description ?? "Automated by Bob agent."),
+      // The shared Forgejo token may open PRs only for tracker work: it is what
+      // gets an imported issue its PR from an SSH checkout, while internal
+      // items keep their push-only behaviour on those repos unchanged.
+      identifier ? process.env.BOB_FORGEJO_TOKEN : undefined,
     );
+  }
+
+  /**
+   * Backstop for the commit trailer the prompt asks for: if no commit in the
+   * pushed range mentions the issue, amend `Refs: GMA-612` onto the head so
+   * Kanbanger can link the push. Only the unpushed head is rewritten, hooks
+   * are skipped (the agent's commit already passed them), and any failure
+   * leaves the branch exactly as the agent made it.
+   */
+  private async ensureCommitTrailer(worktree: WorktreeContext, identifier: string): Promise<void> {
+    try {
+      const log = await this.git(worktree.path, [
+        "log",
+        "--format=%B",
+        `origin/${worktree.baseBranch}..HEAD`,
+      ]);
+      if (rangeReferencesIssue(log, identifier)) return;
+      await this.git(worktree.path, [
+        "commit",
+        "--amend",
+        "--no-edit",
+        "--no-verify",
+        "--trailer",
+        commitTrailer(identifier),
+      ]);
+    } catch (err) {
+      console.warn(
+        `[bob-gw] could not add the ${identifier} trailer on ${worktree.branch}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
   }
 
   /**
    * Open a PR for the pushed branch, host-aware:
    * - github.com → `gh pr create` (the runner host is authenticated)
    * - Forgejo/Gitea over HTTPS with a token in the remote URL → REST API
-   * - otherwise (e.g. SSH gitea without a token) → push-only, PR opened manually
+   * - Forgejo/Gitea without one, when the caller passes `fallbackToken`
+   *   (tracker work only: BOB_FORGEJO_TOKEN) → REST API
+   * - otherwise (e.g. SSH gitea without a token) → push-only, PR opened manually;
+   *   for tracker work the Worker's reconcileTrackerPullRequests opens it later
    */
   private async createPullRequest(
     worktreePath: string,
     remoteUrl: string,
     head: string,
     base: string,
-    title: string,
+    prTitle: string,
     body: string,
+    fallbackToken?: string,
   ): Promise<string | null> {
     const parsed = this.parseRemote(remoteUrl);
     if (!parsed) {
       console.warn(`[bob-gw] could not parse remote for PR`);
       return null;
     }
-    const { host, owner, repo, token } = parsed;
-    const prTitle = `[Bob] ${title}`;
+    const { host, owner, repo } = parsed;
+    const token = parsed.token ?? (host !== "github.com" ? fallbackToken : undefined);
 
     if (host === "github.com") {
       try {
@@ -1748,6 +1797,8 @@ export class BobGatewayConnector {
     }
     if (session.description) parts.push(`\nDescription:\n${session.description}`);
     if (session.branch) parts.push(`\nWork on branch: ${session.branch}`);
+    const trailer = commitTrailerInstruction(session);
+    if (trailer) parts.push(trailer);
     parts.push(
       "\nVerification: run ./.bob/bin/bob-check after each meaningful change and before finishing. " +
         "It auto-detects this repo's typecheck/lint/test/e2e/build (package.json scripts, justfile, Makefile, forge-ci.toml) " +

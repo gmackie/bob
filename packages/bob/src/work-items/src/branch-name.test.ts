@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { generateBranchName, slugify } from "./branch-name";
+import {
+  generateBranchName,
+  generateTrackerBranchName,
+  isTrackerIdentifier,
+  slugify,
+  trackerIdentifierOf,
+} from "./branch-name";
 
 // Golden reference for the historical taskExecutor slug rules. apps/bob-execution
 // taskExecutor now imports generateBranchName from this package (single source of
@@ -58,5 +64,51 @@ describe("generateBranchName", () => {
         refBranch(identifier, title),
       );
     }
+  });
+});
+
+describe("tracker identifiers", () => {
+  it("accepts exactly what Kanbanger's [A-Z]{2,10}-\\d+ extractor finds", () => {
+    expect(isTrackerIdentifier("GMA-612")).toBe(true);
+    expect(isTrackerIdentifier("gma-612")).toBe(false);
+    expect(isTrackerIdentifier("1df6e8a9-d380-4fb9-8929-ee8700d2c0b4")).toBe(false);
+    expect(isTrackerIdentifier("81431962")).toBe(false);
+    expect(isTrackerIdentifier(null)).toBe(false);
+  });
+
+  it("prefers the recorded identifier, then an identifier-keyed external id, then the URL", () => {
+    expect(
+      trackerIdentifierOf({
+        externalProvider: "linear",
+        externalId: "cb43f3bb-295f-42ca-9a95-a8ba4076e084",
+        externalUrl: "https://tasks.gmac.io/gmacko/issue/GMA-714",
+        sourceMetadata: { trackerIdentifier: "GMA-700" },
+      }),
+    ).toBe("GMA-700");
+    expect(trackerIdentifierOf({ externalProvider: "linear", externalId: "GMA-5" })).toBe("GMA-5");
+    expect(
+      trackerIdentifierOf({
+        externalProvider: "linear",
+        externalId: "cb43f3bb-295f-42ca-9a95-a8ba4076e084",
+        externalUrl: "https://tasks.gmac.io/gmacko/issue/GMA-714",
+        sourceMetadata: {},
+      }),
+    ).toBe("GMA-714");
+  });
+
+  it("is null for internal items and for imports with no recoverable identifier", () => {
+    expect(trackerIdentifierOf({ externalProvider: null, externalId: "GMA-5" })).toBeNull();
+    expect(
+      trackerIdentifierOf({ externalProvider: "linear", externalId: "1df6e8a9-d380-4fb9-8929-ee8700d2c0b4" }),
+    ).toBeNull();
+  });
+
+  it("builds bob/GMA-612-<slug>, keeping the identifier upper-case for Kanbanger's matcher", () => {
+    expect(generateTrackerBranchName("GMA-612", "Fix the login redirect!")).toBe(
+      "bob/GMA-612-fix-the-login-redirect",
+    );
+    expect(generateTrackerBranchName("GMA-612", "!!!")).toBe("bob/GMA-612");
+    // The identifier survives verbatim, so Kanbanger finds it in the head ref.
+    expect(/[A-Z]{2,10}-\d+/.exec(generateTrackerBranchName("GMA-612", "x"))?.[0]).toBe("GMA-612");
   });
 });

@@ -781,7 +781,7 @@ async function latestRepairSessionId(pullRequestId: string): Promise<string | nu
   return run?.sessionId ?? null;
 }
 
-interface RemotePrView {
+export interface RemotePrView {
   title: string;
   body: string | null;
   headSha: string | null;
@@ -827,8 +827,13 @@ async function markHumanRepairDispatched(pr: PrRow, headSha: string): Promise<vo
  * revision after a reviewer's "Request changes" has been repaired and pushed.
  * Returns the reviewer's still-pending change request for THIS PR (the caller
  * must not merge it), or null.
+ *
+ * Also called by reconcileTrackerPullRequests the moment it records a PR for
+ * a finished tracker run, so the ready report does not wait for (or depend
+ * on) this loop's scan. The `announcedPrs` marker is written before the
+ * report, so whichever caller gets there first reports and the other no-ops.
  */
-async function announceReadyForReview(
+export async function announceReadyForReview(
   pr: PrRow,
   remote: RemotePrView,
 ): Promise<ChangesRequestedMeta | null> {

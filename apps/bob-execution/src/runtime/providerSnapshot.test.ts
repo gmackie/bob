@@ -35,6 +35,7 @@ vi.mock("@bob/db/schema", () => ({
     apiKey: "workspaceIntegrations.apiKey",
     linearTeamId: "workspaceIntegrations.linearTeamId",
     linearWebBaseUrl: "workspaceIntegrations.linearWebBaseUrl",
+    linearApiUrl: "workspaceIntegrations.linearApiUrl",
   },
 }));
 
@@ -108,5 +109,37 @@ describe("snapshotTaskFromProvider", () => {
     expect(result.snapshot?.externalProvider).toBe("linear");
     expect(result.snapshot?.externalId).toBe("issue-1");
     expect(result.snapshot?.linearWebBaseUrl).toBe("https://tasks.gmac.io");
+  });
+
+  it("never sends a Kanbanger (Linear-compatible) key to api.linear.app and keeps the caller's details", async () => {
+    selectRows.push(
+      [{ planningProvider: "linear", linearProjectId: "project-1" }],
+      [
+        {
+          apiKey: "lin_api_kanbanger",
+          linearTeamId: null,
+          linearWebBaseUrl: null,
+          linearApiUrl: "https://tasks.gmac.io/graphql",
+        },
+      ],
+    );
+
+    const result = await snapshotTaskFromProvider({
+      id: "work-item-1",
+      externalId: "cb43f3bb-295f-42ca-9a95-a8ba4076e084",
+      externalProvider: "linear",
+      identifier: "GMA-612",
+      title: "Fix it",
+      description: "with the reviewer's note",
+      workspaceId: "workspace-1",
+      projectId: "project-1",
+      assigneeId: null,
+      labels: [],
+      priority: 0,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.provider).toBe("linear");
+    expect(result.snapshot).toBeNull();
   });
 });

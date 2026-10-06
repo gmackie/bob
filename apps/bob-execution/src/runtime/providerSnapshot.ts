@@ -55,6 +55,16 @@ function rewriteLinearWebUrl(
   }
 }
 
+/** True when the integration talks to Linear itself (no custom API URL). */
+export function isLinearCloud(apiUrl: string | null | undefined): boolean {
+  if (!apiUrl?.trim()) return true;
+  try {
+    return new URL(apiUrl).hostname === "api.linear.app";
+  } catch {
+    return false;
+  }
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -166,6 +176,7 @@ async function snapshotFromLinear(task: PlanningTask): Promise<ProviderResolutio
         apiKey: workspaceIntegrations.apiKey,
         linearTeamId: workspaceIntegrations.linearTeamId,
         linearWebBaseUrl: workspaceIntegrations.linearWebBaseUrl,
+        linearApiUrl: workspaceIntegrations.linearApiUrl,
       })
       .from(workspaceIntegrations)
       .where(
@@ -182,6 +193,20 @@ async function snapshotFromLinear(task: PlanningTask): Promise<ProviderResolutio
         provider: "linear",
         snapshot: null,
         error: "Linear integration not configured or API key missing",
+      };
+    }
+
+    // A Linear-compatible tracker (Kanbanger: `linearApiUrl` points at its
+    // own /graphql) is not snapshotted. fetchLinearIssue only speaks to
+    // api.linear.app, so this used to send the Kanbanger key to Linear and
+    // always fail; and a successful snapshot would overwrite the description
+    // auto-drain assembled (the reviewer's "Request changes" note rides in
+    // it). The caller-supplied details are the source of truth here.
+    if (!isLinearCloud(integration.linearApiUrl)) {
+      return {
+        provider: "linear",
+        snapshot: null,
+        error: "snapshot skipped for a Linear-compatible tracker (caller-supplied task details are used)",
       };
     }
 
