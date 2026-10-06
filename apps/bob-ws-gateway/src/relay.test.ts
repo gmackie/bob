@@ -156,6 +156,53 @@ describe("Relay", () => {
     });
   });
 
+  describe("pending delivery retry", () => {
+    it("sends only one offer when enrichment overlaps another poll", async () => {
+      const ws = new FakeWs();
+      const conn = { ws, kind: "daemon", userId: "user-1", workspaceId: "ws-1" };
+      const poll = relay as unknown as { deliverPendingSessionsToDaemon(conn: unknown): Promise<void> };
+      vi.mocked(db.query.chatConversations.findMany).mockResolvedValue([
+        { id: "overlap", status: "pending", agentType: "codex", sessionType: "execution", workItemId: "item-1" },
+      ] as never);
+      vi.mocked(db.query.workItems.findFirst).mockResolvedValue({ description: "Owned" } as never);
+      try {
+        await Promise.all([poll.deliverPendingSessionsToDaemon(conn), poll.deliverPendingSessionsToDaemon(conn)]);
+        expect(ws.sentOfType("session_available")).toHaveLength(1);
+      } finally {
+        vi.mocked(db.query.chatConversations.findMany).mockResolvedValue([]);
+        vi.mocked(db.query.workItems.findFirst).mockReset();
+      }
+    });
+
+    it("re-offers an unclaimed session after capacity clears without reconnecting", async () => {
+      const ws = new FakeWs();
+      const conn = { ws, kind: "daemon", userId: "user-1", workspaceId: "ws-1" };
+      const poll = relay as unknown as { deliverPendingSessionsToDaemon(conn: unknown): Promise<void> };
+      const pending = { id: "capacity-wait", status: "pending", agentType: "codex", sessionType: "execution" };
+      vi.mocked(db.query.chatConversations.findMany).mockResolvedValue([pending] as never);
+      const now = vi.spyOn(Date, "now").mockReturnValue(100_000);
+      try {
+        await poll.deliverPendingSessionsToDaemon(conn);
+        expect(ws.sentOfType("session_available")).toHaveLength(1);
+        // A busy runner does not claim: the DB row remains pending.
+        now.mockReturnValue(115_000);
+        await poll.deliverPendingSessionsToDaemon(conn);
+        expect(ws.sentOfType("session_available")).toHaveLength(1);
+        now.mockReturnValue(130_000);
+        await poll.deliverPendingSessionsToDaemon(conn);
+        expect(ws.sentOfType("session_available")).toHaveLength(2);
+        // Claiming removes the row from the pending query.
+        vi.mocked(db.query.chatConversations.findMany).mockResolvedValue([]);
+        now.mockReturnValue(160_000);
+        await poll.deliverPendingSessionsToDaemon(conn);
+        expect(ws.sentOfType("session_available")).toHaveLength(2);
+      } finally {
+        now.mockRestore();
+        vi.mocked(db.query.chatConversations.findMany).mockResolvedValue([]);
+      }
+    });
+  });
+
   describe("pending execution ownership", () => {
     it.each(["ws-1", "foreign", null])("only delivers context to its bound workspace: %s", async (workspaceId) => {
       const ws = new FakeWs();
@@ -168,7 +215,7 @@ describe("Relay", () => {
         const params = new PgDialect().sqlToQuery(where).params;
         return Promise.resolve(params.includes("ws-1") ? { description: "Owned context" } : undefined) as never;
       });
-      const conn = { ws, kind: "daemon", userId: "user-1", workspaceId, deliveredSessions: new Set<string>() };
+      const conn = { ws, kind: "daemon", userId: "user-1", workspaceId, deliveredSessions: new Map<string, number>() };
       const poll = relay as unknown as { deliverPendingSessionsToDaemon(conn: unknown): Promise<void> };
       await poll.deliverPendingSessionsToDaemon(conn);
       const messages = ws.sentOfType("session_available");
