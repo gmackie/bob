@@ -46,7 +46,7 @@ export interface DeliveryReport {
   status: string;
   subject: string;
   externalId: string;
-  title?: string;
+  title: string;
   summary?: string;
   url?: string;
   producer: "bob";
@@ -226,6 +226,7 @@ export function buildPrFact(
   return {
     ...issueReference(externalIssueId),
     kind: "pr",
+    title: status === "merged" ? "Pull request merged" : "Pull request opened",
     status,
     subject: prUrl,
     externalId: prUrl,
