@@ -166,6 +166,16 @@ export interface GitProviderClient {
     number: number,
   ) => Promise<PullRequestReview[]>;
 
+  /**
+   * The newest PR (any state) whose head is `head`, or null. Lets a caller
+   * that knows only the pushed branch find the PR a runner opened for it.
+   */
+  findPullRequestByHead?: (
+    owner: string,
+    repo: string,
+    head: string,
+  ) => Promise<GitPullRequest | null>;
+
   /** Submit a review verdict on a PR. */
   createPullRequestReview?: (
     owner: string,

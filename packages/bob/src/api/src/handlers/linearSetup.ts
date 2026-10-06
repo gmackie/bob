@@ -336,9 +336,13 @@ export async function syncLinearProjects(
           externalId: issue.id,
           externalProvider: "linear",
           externalUrl: issue.url,
-          ...(labelOverride
-            ? { agentTypeOverride: labelOverride, sourceMetadata: { agentOverrideSource: "label" } }
-            : {}),
+          // Keyed by the issue UUID; the human identifier (GMA-612) is what
+          // Bob's branch names, PR titles and commit trailers carry.
+          sourceMetadata: {
+            trackerIdentifier: issue.identifier,
+            ...(labelOverride ? { agentOverrideSource: "label" } : {}),
+          },
+          ...(labelOverride ? { agentTypeOverride: labelOverride } : {}),
         });
         issuesImported++;
       }

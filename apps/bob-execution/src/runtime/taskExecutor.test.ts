@@ -40,6 +40,7 @@ vi.mock("@bob/db/schema", () => ({
 }));
 
 import {
+  branchForTask,
   buildExecutionPersonaMetadata,
   buildIssueContextUpdateMessage,
   forwardIssueContextUpdate,
@@ -156,5 +157,27 @@ describe("execution task runtime helpers", () => {
     expect(source).toContain('selectedAgent === "smol-agent"');
     expect(source).toContain("buildSmolAgentLaunchEnv");
     expect(source).toContain("env: launchEnv");
+  });
+});
+
+describe("branchForTask", () => {
+  it("names a Kanbanger-imported task's branch after its identifier so the tracker links it", () => {
+    expect(
+      branchForTask({ identifier: "GMA-612", title: "Fix the login redirect", externalProvider: "linear" }),
+    ).toBe("bob/GMA-612-fix-the-login-redirect");
+  });
+
+  it("keeps bob/<identifier>/<slug> for internal tasks, including KEY-N identifiers", () => {
+    expect(branchForTask({ identifier: "81431962", title: "Tune pose", externalProvider: null })).toBe(
+      "bob/81431962/tune-pose",
+    );
+    expect(branchForTask({ identifier: "BOB-27", title: "Tune pose" })).toBe("bob/BOB-27/tune-pose");
+  });
+
+  it("keeps the historical shape for an imported task with no recoverable identifier", () => {
+    const uuid = "1df6e8a9-d380-4fb9-8929-ee8700d2c0b4";
+    expect(branchForTask({ identifier: uuid, title: "Smoke", externalProvider: "linear" })).toBe(
+      `bob/${uuid}/smoke`,
+    );
   });
 });

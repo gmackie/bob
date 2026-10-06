@@ -18,6 +18,7 @@ import {
   taskRuns,
   workItems,
 } from "@bob/db/schema";
+import { trackerIdentifierOf } from "@bob/work-items/branch-name";
 
 import { formatWorkItemIdentifier } from "./workItems";
 import { pickAcrossProjects } from "./autoDrain-pick";
@@ -262,7 +263,14 @@ export async function autoDrainBacklog(
             columns: { key: true },
           })
         : null;
+      // A Kanbanger-imported item runs under its human identifier (GMA-612):
+      // it names the branch (bob/GMA-612-<slug>), the session/PR title and
+      // the commit trailer, which is how Kanbanger and ForgeGraph tie the
+      // PR, CI and deploy back to the issue. The issue UUID in external_id
+      // used to be the identifier, so none of that evidence ever linked.
+      const trackerIdentifier = trackerIdentifierOf(wi);
       const identifier =
+        trackerIdentifier ??
         wi.externalId ??
         formatWorkItemIdentifier({
           projectKey: project?.key ?? null,
@@ -295,6 +303,9 @@ export async function autoDrainBacklog(
           assigneeId: null,
           labels: [],
           priority: 0,
+          externalId: wi.externalId,
+          externalProvider: wi.externalProvider,
+          ...(wi.externalUrl ? { url: wi.externalUrl } : {}),
         },
         { agentType },
       );

@@ -186,6 +186,20 @@ export function createGiteaClient(
       return mapPullRequest(pr, instanceUrl);
     },
 
+    async findPullRequestByHead(
+      owner: string,
+      repo: string,
+      head: string,
+    ): Promise<GitPullRequest | null> {
+      // Forgejo has no head filter on the list endpoint; the newest 50 by
+      // update time is ample for a branch Bob pushed in the last few days.
+      const prs = await request<GiteaPR[]>(
+        `/repos/${owner}/${repo}/pulls?state=all&sort=recentupdate&limit=50`,
+      );
+      const match = prs.find((pr) => pr.head.ref === head);
+      return match ? mapPullRequest(match, instanceUrl) : null;
+    },
+
     async updatePullRequest(
       input: UpdatePullRequestInput,
     ): Promise<GitPullRequest> {

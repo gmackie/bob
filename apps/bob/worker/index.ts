@@ -445,6 +445,39 @@ export default Sentry.withSentry(
           }
         }
 
+        // 1c. Tracker PR reconciliation: a finished run on a Kanbanger-imported
+        // item must end in a recorded PR and a ready-for-review report. The
+        // runner cannot open PRs from SSH remotes and the gateway drops PRs
+        // that complete after a reap, so neither path is reliable on its own.
+        // Runs before auto-merge so a PR recorded here is reviewed this tick.
+        // Default on; BOB_TRACKER_PR_RECONCILE_ENABLED=false turns it off.
+        if (
+          String(runtimeEnv.BOB_TRACKER_PR_RECONCILE_ENABLED ?? "true") !== "false"
+        ) {
+          try {
+            const { db } = await import("@bob/db/client");
+            const { reconcileTrackerPullRequests } = await import(
+              "@bob/api/handlers/reconcileTrackerPullRequests"
+            );
+            const r = await reconcileTrackerPullRequests(db, {
+              forgejoToken: runtimeEnv.BOB_FORGEJO_TOKEN as string | undefined,
+              forgejoInstanceUrl:
+                (runtimeEnv.BOB_FORGEJO_INSTANCE_URL as string | undefined) ??
+                "https://git.forgegraf.com",
+            });
+            if (r.items.length) {
+              console.log(
+                `[tracker-pr] scanned=${r.scanned} recorded=${r.recorded} opened=${r.opened} announced=${r.announced} items=` +
+                  r.items
+                    .map((i) => `${i.identifier ?? i.run}:${i.outcome}${i.detail ? `(${i.detail})` : ""}`)
+                    .join(", "),
+              );
+            }
+          } catch (error) {
+            console.error("[tracker-pr] failed:", error);
+          }
+        }
+
         // 2. Review + auto-merge the PRs those tasks produced.
         if (autoMergeOn) {
           const { autoReviewAndMerge } = await import(

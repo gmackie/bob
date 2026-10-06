@@ -170,6 +170,9 @@ async function findOrCreateWorkItem(
       status: mapLinearStatusToBob(payload.data.state.type),
       externalId: payload.data.id,
       externalProvider: "linear",
+      // The row is keyed by the issue UUID; keep the human identifier so
+      // branch names, PR titles and commit trailers can carry it.
+      sourceMetadata: { trackerIdentifier: payload.data.identifier },
     })
     .returning();
 
@@ -273,6 +276,9 @@ async function handleIssueCreate(payload: LinearIssuePayload): Promise<void> {
         assigneeId: null,
         labels: (payload.data.labels ?? []).map((l) => l.name),
         priority: payload.data.priority,
+        // Marks the run as tracker work: bob/GMA-612-<slug> branch naming.
+        externalId: payload.data.id,
+        externalProvider: "linear",
       },
       { agentType: "opencode" },
     );
