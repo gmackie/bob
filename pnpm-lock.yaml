@@ -874,6 +874,9 @@ importers:
       '@bob/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/bob-typescript
+      '@sentry/cli':
+        specifier: 3.4.0
+        version: 3.4.0
       '@tailwindcss/postcss':
         specifier: 'catalog:'
         version: 4.1.18
