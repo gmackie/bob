@@ -98,6 +98,7 @@ const BLOCKED_ABANDON_MS = 24 * 60 * 60_000;
 // query per connected daemon). This is the reliable dispatch path — the CF
 // Worker cannot reach /internal/nudge over HTTP post-supersession.
 const PENDING_DELIVERY_INTERVAL_MS = 15_000;
+const PENDING_OFFER_RETRY_MS = 30_000;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (s: unknown): s is string => typeof s === "string" && UUID_RE.test(s);
@@ -117,10 +118,9 @@ interface Connection {
   workspaceSubscriptionVersion: number;
   workspaceScopeId?: string;
   workspaceStatusFilter?: SessionStatus[];
-  // Daemon only: sessionIds already delivered via session_available on this
-  // connection, so the periodic pending-delivery tick doesn't re-send (and
-  // trigger a double-claim) for a session already handed over.
-  deliveredSessions?: Set<string>;
+  // An offer is not a claim: a busy daemon leaves it pending. Rate-limit
+  // retries while allowing delivery again once capacity becomes available.
+  deliveredSessions?: Map<string, number>;
   hostSnapshot?: HostSnapshotWire;
 }
 
@@ -1126,14 +1126,14 @@ export class Relay {
    * reach the gateway's /internal/nudge over HTTP (ws.blder.bot serves only the
    * WS upgrade; a Worker-side nudge silently no-ops). Without a live nudge, a
    * session created while the daemon is already connected would otherwise sit
-   * pending until the next reconnect. Per-connection dedup via
-   * `deliveredSessions` avoids re-sending (and double-claiming) a session
-   * already handed over; a claimed session leaves `status='pending'` so it also
-   * naturally drops out of the query.
+   * pending until the next reconnect. Unclaimed offers retry after a short
+   * cooldown because runners may decline at capacity. Claimed sessions leave
+   * `status='pending'` and naturally drop out of the query; runners deduplicate
+   * offers against their active executions.
    */
   private async deliverPendingSessionsToDaemon(conn: Connection): Promise<void> {
     if (conn.kind !== "daemon" || !conn.userId || !conn.workspaceId) return;
-    if (!conn.deliveredSessions) conn.deliveredSessions = new Set<string>();
+    if (!conn.deliveredSessions) conn.deliveredSessions = new Map<string, number>();
 
     const pending = await db.query.chatConversations.findMany({
       where: and(
@@ -1141,8 +1141,13 @@ export class Relay {
         eq(chatConversations.userId, conn.userId),
       ),
     });
+    const pendingIds = new Set(pending.map((session) => session.id));
+    for (const id of conn.deliveredSessions.keys()) {
+      if (!pendingIds.has(id)) conn.deliveredSessions.delete(id);
+    }
     for (const session of pending) {
-      if (conn.deliveredSessions.has(session.id)) continue;
+      const lastOffer = conn.deliveredSessions.get(session.id);
+      if (lastOffer !== undefined && Date.now() - lastOffer < PENDING_OFFER_RETRY_MS) continue;
       // Don't re-offer work this host has already proven it can't spawn; leave
       // it pending for a daemon that can (see spawnFailureAgent).
       if (this.hostCannotRun(conn, session.agentType)) continue;
@@ -1173,10 +1178,11 @@ export class Relay {
 
       const personaMetadata = (session as any).personaMetadata as Record<string, unknown> | null;
 
-      // Mark delivered BEFORE send so a send that races the next tick is not
-      // double-emitted; a genuinely undelivered session (socket dead) will be
-      // re-picked on the daemon's next connect via the same method.
-      conn.deliveredSessions.add(session.id);
+      // Enrichment awaits can overlap another poll. Recheck and reserve the
+      // cooldown synchronously before sending so overlapping ticks emit once.
+      const latestOffer = conn.deliveredSessions.get(session.id);
+      if (latestOffer !== undefined && Date.now() - latestOffer < PENDING_OFFER_RETRY_MS) continue;
+      conn.deliveredSessions.set(session.id, Date.now());
       this.send(conn, {
         type: "session_available",
         sessionId: session.id,

@@ -47,3 +47,24 @@ it.each(["worktree", "missing-directory"])("retains an automatic failed run and 
   expect(connector.activeSessions.size).toBe(0);
   expect(connector.runWithCli).not.toHaveBeenCalled();
 });
+
+
+it("claims a capacity retry once and ignores offers while execution is preparing", async () => {
+  const connector = Object.create(BobGatewayConnector.prototype) as Record<string, any>;
+  const startRun = vi.fn(() => new Promise(() => {}));
+  Object.assign(connector, {
+    config: { maxConcurrent: 1 }, activeSessions: new Map([["other-session", { supervised: true }]]),
+    canRunAgent: () => true, sendDurable: vi.fn(), sendStatus: vi.fn(),
+    bobReporter: { startRun },
+  });
+  const session = { type: "session_available", sessionId: "retry-1", agentType: "codex" };
+  await connector.handleSessionAvailable(session);
+  expect(startRun).not.toHaveBeenCalled();
+  expect(connector.sendDurable).not.toHaveBeenCalled();
+  connector.activeSessions.delete("other-session");
+  connector.config.maxConcurrent = 4;
+  void connector.handleSessionAvailable(session);
+  void connector.handleSessionAvailable(session);
+  expect(startRun).toHaveBeenCalledTimes(1);
+  expect(connector.sendDurable).toHaveBeenCalledTimes(1);
+});
