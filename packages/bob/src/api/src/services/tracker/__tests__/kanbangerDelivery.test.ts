@@ -101,6 +101,20 @@ describe("postDeliveryReport", () => {
 });
 
 describe("report payloads", () => {
+  it.each(["opened", "merged"] as const)("PR %s reports satisfy Kanbanger's required title", async (status) => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation((_url, init) => {
+      const body: unknown = JSON.parse(typeof init?.body === "string" ? init.body : "null");
+      const valid = body !== null && typeof body === "object" && "title" in body
+        && typeof body.title === "string" && body.title.length > 0;
+      return Promise.resolve(valid
+        ? json(201, { issueId: ISSUE })
+        : new Response(null, { status: 400 }));
+    });
+    expect(await postDeliveryReport(CONFIG, WORKSPACE, buildPrFact(ISSUE, "https://h/o/r/pulls/3", status)))
+      .toEqual({ ok: true, issueId: ISSUE });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it("review_request carries the documented shape", () => {
     expect(review()).toEqual({
       issueId: ISSUE,
