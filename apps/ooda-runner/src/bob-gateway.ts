@@ -962,6 +962,8 @@ export class BobGatewayConnector {
   }
 
   private async executeSessionAvailable(session: ServerSessionAvailable): Promise<void> {
+    // Ignore retried offers while this session is already executing.
+    if (this.activeSessions.has(session.sessionId)) return;
     if (this.activeSessions.size >= this.config.maxConcurrent) {
       console.log(`[bob-gw] At capacity (${this.config.maxConcurrent}), skipping ${session.sessionId}`);
       return;
