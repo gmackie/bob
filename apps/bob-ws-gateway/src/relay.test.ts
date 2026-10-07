@@ -73,6 +73,15 @@ vi.mock("@bob/db/client", () => {
   return { db: dbObj };
 });
 
+vi.mock("./commit-planning-issues.js", () => ({
+  commitSessionPlanningIssues: vi.fn(async () => ({
+    committed: 0,
+    workspaceId: null,
+    tasks: [],
+    retry: false,
+  })),
+}));
+
 import { db } from "@bob/db/client";
 import { Relay } from "./relay.js";
 

@@ -573,6 +573,12 @@ export const planDrafts = pgTable(
     priority: t.varchar({ length: 20 }).notNull().default("no_priority"),
     sortOrder: t.integer().notNull().default(0),
     status: t.varchar({ length: 20 }).notNull().default("draft"),
+    // Provider issue created from this draft. For a Linear-compatible board
+    // such as Kanbanger this is the issue id, not the local work item id.
+    planningTaskId: t.text("kanbanger_issue_id"),
+    planningTaskIdentifier: t.text("kanbanger_issue_identifier"),
+    // Local work item Bob runs. Same as planningTaskId for the internal provider.
+    workItemId: t.uuid("work_item_id"),
     // status: "draft" | "committed" | "discarded"
     // Per-draft gate (definition-of-done) + acceptance criteria the planner
     // agent may author; carried into planTaskItems.gate/acceptanceCriteria when

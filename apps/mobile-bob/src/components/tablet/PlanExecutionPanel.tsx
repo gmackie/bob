@@ -10,6 +10,7 @@ import {
   findBatchForPlanningSession,
   parseBatchList,
   parseCommitPlanResult,
+  parseCommittedPlanTasks,
   parseDispatchBatch,
   parsePlanningDrafts,
   shouldPollBatchProgress,
@@ -74,6 +75,7 @@ export function PlanExecutionPanel({
   );
 
   const drafts = parsePlanningDrafts(sessionQuery.data);
+  const readyTasks = parseCommittedPlanTasks(sessionQuery.data);
   const batch = batchId
     ? parseDispatchBatch(batchQuery.data, sessions, sessionId)
     : null;
@@ -101,6 +103,7 @@ export function PlanExecutionPanel({
         : null,
     actionError,
     drafts,
+    readyTasks,
     batch,
     isCreating: createTasks.isPending || createBatch.isPending,
     isRunning: runBatch.isPending,
@@ -126,12 +129,17 @@ export function PlanExecutionPanel({
       const committed = parseCommitPlanResult(
         await createTasks.mutateAsync({ sessionId }),
       );
-      if (!committed || committed.tasks.length === 0) {
+      const refreshed = await sessionQuery.refetch();
+      const stored = parseCommittedPlanTasks(refreshed.data);
+      const tasks = new Map(
+        [...stored, ...(committed?.tasks ?? [])].map((task) => [task.draftId, task]),
+      );
+      if (tasks.size === 0) {
         setActionError("No tasks were created. Keep planning until Bob drafts some.");
         return;
       }
       const created = await createBatch.mutateAsync(
-        buildCreateBatchInput(sessionId, committed.tasks),
+        buildCreateBatchInput(sessionId, [...tasks.values()]),
       );
       const createdBatch = parseDispatchBatch(created, sessions, sessionId);
       if (!createdBatch) {
@@ -147,11 +155,25 @@ export function PlanExecutionPanel({
   };
 
   const handleRun = async () => {
-    if (!batchId) return;
     setActionError(null);
     try {
-      await runBatch.mutateAsync({ batchId });
-      refreshProgress({ batchId });
+      let activeBatchId = batchId;
+      if (!activeBatchId) {
+        if (readyTasks.length === 0) return;
+        const created = await createBatch.mutateAsync(
+          buildCreateBatchInput(sessionId, readyTasks),
+        );
+        const createdBatch = parseDispatchBatch(created, sessions, sessionId);
+        if (!createdBatch) {
+          setActionError("The tasks were created, but the run could not be prepared.");
+          await refreshPlan();
+          return;
+        }
+        activeBatchId = createdBatch.id;
+        setCreatedBatchId(activeBatchId);
+      }
+      await runBatch.mutateAsync({ batchId: activeBatchId });
+      refreshProgress({ batchId: activeBatchId });
       await refreshPlan();
     } catch (caught) {
       setActionError(errorMessage(caught, "Bob could not start the run."));

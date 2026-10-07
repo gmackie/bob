@@ -8,6 +8,7 @@ import {
   getPlanPanelMode,
   parseBatchList,
   parseCommitPlanResult,
+  parseCommittedPlanTasks,
   parseDispatchBatch,
   parsePlanningDrafts,
   resolveWatchSessionId,
@@ -154,6 +155,52 @@ describe("mobile plan execution", () => {
         sessions: [{ sessionId: "plan-1", workItemId: "work-1" }],
       }),
     ).toBeNull();
+  });
+
+  it("shows filed issues as ready to run", () => {
+    const detail = {
+      drafts: [
+        {
+          id: "draft-1",
+          title: "Add the task panel",
+          status: "committed",
+          planningTaskId: "issue-1",
+          planningTaskIdentifier: "BOB-12",
+          workItemId: "work-1",
+        },
+        {
+          id: "draft-2",
+          title: "Still a draft",
+          status: "draft",
+          planningTaskIdentifier: "BOB-13",
+        },
+      ],
+    };
+
+    expect(parseCommittedPlanTasks(detail)).toEqual([
+      {
+        draftId: "draft-1",
+        taskId: "work-1",
+        identifier: "BOB-12",
+        title: "Add the task panel",
+      },
+    ]);
+    expect(
+      buildPlanExecutionView({
+        isLoading: false,
+        loadError: null,
+        actionError: null,
+        drafts: [],
+        readyTasks: parseCommittedPlanTasks(detail),
+        batch: null,
+        isCreating: false,
+        isRunning: false,
+      }),
+    ).toMatchObject({
+      phase: "ready",
+      detail: "1 task ready",
+      primaryAction: { key: "run", label: "Run in Bob", disabled: false },
+    });
   });
 
   it("offers create, then run, and stays quiet when there is nothing to do", () => {

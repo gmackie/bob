@@ -166,6 +166,7 @@ async function snapshotFromLinear(task: PlanningTask): Promise<ProviderResolutio
         apiKey: workspaceIntegrations.apiKey,
         linearTeamId: workspaceIntegrations.linearTeamId,
         linearWebBaseUrl: workspaceIntegrations.linearWebBaseUrl,
+        linearApiUrl: workspaceIntegrations.linearApiUrl,
       })
       .from(workspaceIntegrations)
       .where(
@@ -187,7 +188,11 @@ async function snapshotFromLinear(task: PlanningTask): Promise<ProviderResolutio
 
     // Fetch the issue from Linear using their GraphQL API
     const linearIssueId = task.externalId ?? task.id;
-    const issue = await fetchLinearIssue(integration.apiKey, linearIssueId);
+    const issue = await fetchLinearIssue(
+      integration.apiKey,
+      linearIssueId,
+      integration.linearApiUrl,
+    );
 
     if (!issue) {
       return {
@@ -238,9 +243,16 @@ interface LinearIssueResponse {
   labels: { nodes: { name: string }[] };
 }
 
+function boardGraphqlEndpoint(apiUrl?: string | null): string {
+  const trimmed = apiUrl?.trim();
+  if (!trimmed) return "https://api.linear.app/graphql";
+  return trimmed;
+}
+
 async function fetchLinearIssue(
   apiKey: string,
   issueId: string,
+  apiUrl?: string | null,
 ): Promise<LinearIssueResponse | null> {
   const query = `
     query IssueSnapshot($id: String!) {
@@ -257,7 +269,7 @@ async function fetchLinearIssue(
     }
   `;
 
-  const response = await fetch("https://api.linear.app/graphql", {
+  const response = await fetch(boardGraphqlEndpoint(apiUrl), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -46,6 +46,7 @@ import {
   reconciledRunStatus,
 } from "./reconcile-runs.js";
 import { syncSessionPlanningDrafts } from "./planning-drafts-db.js";
+import { commitSessionPlanningIssues } from "./commit-planning-issues.js";
 
 const REPLAY_LIMIT = 500;
 
@@ -1995,18 +1996,39 @@ export class Relay {
 
   private async ingestPlanningDrafts(event: ClientSessionEvent): Promise<void> {
     if (event.eventType !== "planning_drafts") return;
+    // Drafts and their board issues are written before the ack. A crash leaves
+    // the frame unacked. The issue id makes the retry skip createIssue.
     const result = await syncSessionPlanningDrafts(event.sessionId, event.payload);
-    if (!result.changed || !result.workspaceId) return;
-    await this.broadcastWorkspaceIdInvalidation(
-      result.workspaceId,
-      "planning_session_produced_drafts",
-      event.sessionId,
-      {
-        action: result.created > 0 ? "created" : "updated",
-        draftIds: result.draftIds,
-        projectId: result.projectId,
-      },
-    );
+    const committed = await commitSessionPlanningIssues(event.sessionId);
+    if (result.changed && result.workspaceId) {
+      await this.broadcastWorkspaceIdInvalidation(
+        result.workspaceId,
+        "planning_session_produced_drafts",
+        event.sessionId,
+        {
+          action: result.created > 0 ? "created" : "updated",
+          draftIds: result.draftIds,
+          projectId: result.projectId,
+        },
+      );
+    }
+    if (committed.committed > 0 && committed.workspaceId) {
+      await this.broadcastWorkspaceIdInvalidation(
+        committed.workspaceId,
+        "planning_session_produced_tasks",
+        event.sessionId,
+        {
+          committed: committed.committed,
+          taskIds: committed.tasks.map((task) => task.taskId),
+          draftIds: committed.tasks.map((task) => task.draftId),
+        },
+      );
+    }
+    if (committed.retry) {
+      throw new Error(
+        `Planning issues for session ${event.sessionId} will be retried`,
+      );
+    }
   }
 
   // ── Daemon session_event → persist + fan out ───────────────────────

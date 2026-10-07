@@ -109,4 +109,54 @@ describe("snapshotTaskFromProvider", () => {
     expect(result.snapshot?.externalId).toBe("issue-1");
     expect(result.snapshot?.linearWebBaseUrl).toBe("https://tasks.gmac.io");
   });
+
+  it("reads the issue from the configured board API", async () => {
+    selectRows.push(
+      [{ planningProvider: "linear", linearProjectId: "project-1" }],
+      [
+        {
+          apiKey: "lin_key",
+          linearTeamId: "team-1",
+          linearWebBaseUrl: "https://tasks.gmac.io",
+          linearApiUrl: "https://tasks.gmac.io/graphql",
+        },
+      ],
+    );
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          data: {
+            issue: {
+              id: "issue-1",
+              title: "Fix dispatch",
+              identifier: "ENG-42",
+              description: null,
+              url: "https://tasks.gmac.io/issue/ENG-42",
+              priority: 0,
+              assignee: null,
+              labels: { nodes: [] },
+            },
+          },
+        }),
+    } as unknown as Response);
+
+    await snapshotTaskFromProvider({
+      id: "work-item-1",
+      externalId: "issue-1",
+      identifier: "ENG-42",
+      title: "Old",
+      description: null,
+      workspaceId: "workspace-1",
+      projectId: "project-1",
+      assigneeId: null,
+      labels: [],
+      priority: 0,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://tasks.gmac.io/graphql",
+      expect.any(Object),
+    );
+  });
 });

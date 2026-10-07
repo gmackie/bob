@@ -1,10 +1,9 @@
 /**
  * The mobile plan → task → run loop.
  *
- * A planning session drafts tasks. Creating them writes the tasks through the
- * planning provider (the board whose rows still live in the kanbanger tables).
- * Running them opens a dispatch batch Bob executes, and each row can open the
- * live session.
+ * A planning session drafts tasks. Bob files each one as an issue on the
+ * planning board, then running them opens a dispatch batch and each row can
+ * open the live session.
  */
 
 // Full window width. The iPad shell already spends ~300pt on its sidebar once
@@ -52,6 +51,10 @@ export interface CommittedPlanTask {
   identifier: string;
 }
 
+export interface ReadyPlanTask extends CommittedPlanTask {
+  title: string;
+}
+
 export interface PlanPrimaryAction {
   key: "create" | "run" | "none";
   label: string;
@@ -59,7 +62,7 @@ export interface PlanPrimaryAction {
 }
 
 export interface PlanExecutionView {
-  phase: "loading" | "empty" | "drafts" | "batch";
+  phase: "loading" | "empty" | "drafts" | "ready" | "batch";
   title: string;
   detail: string;
   drafts: PlanDraftView[];
@@ -152,6 +155,19 @@ export function parsePlanningDrafts(value: unknown): PlanDraftView[] {
         blockedBy,
       },
     ];
+  });
+}
+
+export function parseCommittedPlanTasks(value: unknown): ReadyPlanTask[] {
+  const record = asRecord(value);
+  return asRecords(record?.drafts).flatMap((draft) => {
+    if (readString(draft.status) !== "committed") return [];
+    const draftId = readString(draft.id);
+    const title = readString(draft.title);
+    const identifier = readString(draft.planningTaskIdentifier);
+    const taskId = readString(draft.workItemId) ?? readString(draft.planningTaskId);
+    if (!draftId || !title || !identifier || !taskId) return [];
+    return [{ draftId, taskId, identifier, title }];
   });
 }
 
@@ -275,11 +291,13 @@ export function buildPlanExecutionView(input: {
   loadError: string | null;
   actionError: string | null;
   drafts: readonly PlanDraftView[];
+  readyTasks?: readonly ReadyPlanTask[];
   batch: PlanBatchView | null;
   isCreating: boolean;
   isRunning: boolean;
 }): PlanExecutionView {
   const error = input.actionError ?? input.loadError;
+  const readyTasks = input.readyTasks ?? [];
 
   if (input.batch) {
     const canRun = input.batch.status === "pending";
@@ -308,6 +326,29 @@ export function buildPlanExecutionView(input: {
       drafts: [],
       batch: null,
       primaryAction: { key: "none", label: "", disabled: true },
+      error,
+    };
+  }
+
+  if (input.drafts.length === 0 && readyTasks.length > 0) {
+    const starting = input.isRunning || input.isCreating;
+    return {
+      phase: "ready",
+      title: "Tasks",
+      detail: `${readyTasks.length} task${readyTasks.length === 1 ? "" : "s"} ready`,
+      drafts: readyTasks.map((task) => ({
+        id: task.draftId,
+        title: task.title,
+        description: null,
+        meta: task.identifier,
+        blockedBy: [],
+      })),
+      batch: null,
+      primaryAction: {
+        key: "run",
+        label: starting ? "Starting..." : "Run in Bob",
+        disabled: starting,
+      },
       error,
     };
   }
