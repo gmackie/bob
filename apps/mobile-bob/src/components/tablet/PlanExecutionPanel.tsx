@@ -3,7 +3,11 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-nati
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { GatewaySession } from "~/hooks/use-gateway";
-import type { PlanPanelMode, PlanStatusTone } from "~/features/planning/plan-execution";
+import type {
+  PlanPanelMode,
+  PlanRunWatchTarget,
+  PlanStatusTone,
+} from "~/features/planning/plan-execution";
 import {
   buildCreateBatchInput,
   buildPlanExecutionView,
@@ -40,7 +44,7 @@ export function PlanExecutionPanel({
   sessions: readonly GatewaySession[];
   presentation: PlanPanelMode;
   onToggle: () => void;
-  onOpenRun: (sessionId: string) => void;
+  onOpenRun: (run: PlanRunWatchTarget) => void;
 }) {
   const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);
@@ -344,7 +348,13 @@ export function PlanExecutionPanel({
               key={item.id}
               accessibilityRole="button"
               accessibilityLabel={`Watch ${item.title}`}
-              onPress={() => onOpenRun(watchSessionId)}
+              onPress={() =>
+                onOpenRun({
+                  sessionId: watchSessionId,
+                  title: item.title,
+                  identifier: item.identifier,
+                })
+              }
               className="rounded-lg border px-3 py-2.5 active:opacity-80"
               style={{ borderColor: colors.border, backgroundColor: colors.background }}
             >

@@ -1,18 +1,17 @@
 import { useState } from "react";
 import { View, useWindowDimensions } from "react-native";
-import { router } from "expo-router";
 import type { ServerEvent } from "@bob/ws";
 
 import {
   getPlanExecutionLayout,
   getPlanPanelMode,
 } from "~/features/planning/plan-execution";
-import { getTabletSessionHref } from "~/features/tablet/navigation";
-import { useGateway } from "~/hooks/use-gateway";
-import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
+import type { PlanRunWatchTarget } from "~/features/planning/plan-execution";
+import type { GatewaySession } from "~/hooks/use-gateway";
 import { colors } from "~/lib/colors";
 
 import { PlanExecutionPanel } from "./PlanExecutionPanel";
+import { PlanRunWatch } from "./PlanRunWatch";
 import { PlanningPane } from "./PlanningPane";
 
 export function PlanningSessionSurface({
@@ -21,24 +20,46 @@ export function PlanningSessionSurface({
   sessionType,
   workItemTitle,
   events,
+  sessions,
   onSendInput,
   onStopSession,
   onShowArtifact,
+  onWatchRun,
+  onReturnToPlan,
+  onApprove,
 }: {
   sessionId: string;
   sessionStatus: string;
   sessionType: string | null;
   workItemTitle: string;
   events: ServerEvent[];
+  sessions: readonly GatewaySession[];
   onSendInput: (sessionId: string, data: string) => void;
   onStopSession: (sessionId: string) => void;
   onShowArtifact?: (content: string) => void;
+  onWatchRun: (sessionId: string) => void;
+  onReturnToPlan: () => void;
+  onApprove: (sessionId: string, requestId: string, decision: "allow" | "deny") => void;
 }) {
   const { width } = useWindowDimensions();
   const [expanded, setExpanded] = useState(false);
-  const { sessions } = useGateway();
-  const { selectedWorkspaceId } = useSelectedWorkspace();
+  const [watchByPlan, setWatchByPlan] = useState<{
+    planId: string;
+    run: PlanRunWatchTarget;
+  } | null>(null);
   const mode = getPlanPanelMode(getPlanExecutionLayout(width), expanded);
+  const watching = watchByPlan?.planId === sessionId ? watchByPlan.run : null;
+
+  const watchRun = (run: PlanRunWatchTarget) => {
+    setWatchByPlan({ planId: sessionId, run });
+    if (watching?.sessionId === run.sessionId) return;
+    onWatchRun(run.sessionId);
+  };
+
+  const returnToPlan = () => {
+    setWatchByPlan(null);
+    onReturnToPlan();
+  };
 
   const panel = (
     <PlanExecutionPanel
@@ -46,13 +67,20 @@ export function PlanningSessionSurface({
       sessions={sessions}
       presentation={mode}
       onToggle={() => setExpanded((open) => !open)}
-      onOpenRun={(executionSessionId) => {
-        router.push(getTabletSessionHref(executionSessionId, selectedWorkspaceId));
-      }}
+      onOpenRun={watchRun}
     />
   );
 
-  const chat = (
+  const chat = watching ? (
+    <PlanRunWatch
+      run={watching}
+      events={events}
+      onBack={returnToPlan}
+      onSendInput={onSendInput}
+      onStopSession={onStopSession}
+      onApprove={(requestId, decision) => onApprove(watching.sessionId, requestId, decision)}
+    />
+  ) : (
     <PlanningPane
       sessionId={sessionId}
       sessionStatus={sessionStatus}

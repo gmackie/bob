@@ -4,6 +4,7 @@ import {
   buildCreateBatchInput,
   buildPlanExecutionView,
   findBatchForPlanningSession,
+  formatPlanWatchTitle,
   getPlanExecutionLayout,
   getPlanPanelMode,
   parseBatchList,
@@ -155,6 +156,16 @@ describe("mobile plan execution", () => {
         sessions: [{ sessionId: "plan-1", workItemId: "work-1" }],
       }),
     ).toBeNull();
+  });
+
+  it("names the run being watched from the plan", () => {
+    expect(
+      formatPlanWatchTitle({ identifier: "BOB-12", title: "Add the task panel" }),
+    ).toBe("BOB-12 · Add the task panel");
+    expect(formatPlanWatchTitle({ identifier: "", title: "Add the task panel" })).toBe(
+      "Add the task panel",
+    );
+    expect(formatPlanWatchTitle({ identifier: "  ", title: "  " })).toBe("Run");
   });
 
   it("shows filed issues as ready to run", () => {

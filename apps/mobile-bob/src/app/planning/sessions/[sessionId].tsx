@@ -31,6 +31,9 @@ export default function PlanningSessionScreen() {
     sendInput,
     stopSession,
     openPlanningSession,
+    selectSession,
+    approve,
+    reportRunView,
   } = useGateway();
 
   useEffect(() => {
@@ -90,8 +93,15 @@ export default function PlanningSessionScreen() {
         sessionType={planningSession.sessionType}
         workItemTitle={planningSession.title}
         events={selectedSessionEvents}
+        sessions={sessions}
         onSendInput={sendInput}
         onStopSession={stopSession}
+        onWatchRun={(executionSessionId) => {
+          selectSession(executionSessionId);
+          reportRunView(executionSessionId);
+        }}
+        onReturnToPlan={() => openPlanningSession(planningSession.sessionId)}
+        onApprove={approve}
       />
     </View>
   );

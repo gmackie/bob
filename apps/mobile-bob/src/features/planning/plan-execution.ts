@@ -76,6 +76,22 @@ export interface WatchableSession {
   workItemId?: string | null;
 }
 
+/** A running task the plan screen can show without leaving the task list. */
+export interface PlanRunWatchTarget {
+  sessionId: string;
+  title: string;
+  identifier: string;
+}
+
+export function formatPlanWatchTitle(
+  target: Pick<PlanRunWatchTarget, "identifier" | "title">,
+): string {
+  const identifier = target.identifier.trim();
+  const title = target.title.trim();
+  if (identifier && title) return `${identifier} · ${title}`;
+  return title || identifier || "Run";
+}
+
 const HIDDEN_PRIORITIES = new Set(["", "no_priority", "none"]);
 
 export function getPlanExecutionLayout(width: number): "split" | "stack" {

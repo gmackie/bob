@@ -229,9 +229,16 @@ function MainPane({
         sessionType={planningSession.sessionType}
         workItemTitle={planningSession.title}
         events={gateway.selectedSessionEvents}
+        sessions={gateway.sessions}
         onSendInput={gateway.sendInput}
         onStopSession={gateway.stopSession}
         onShowArtifact={onShowArtifact}
+        onWatchRun={(executionSessionId) => {
+          gateway.selectSession(executionSessionId);
+          gateway.reportRunView(executionSessionId);
+        }}
+        onReturnToPlan={() => gateway.openPlanningSession(planningSession.sessionId)}
+        onApprove={gateway.approve}
       />
     );
   }
