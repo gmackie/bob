@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
-import { PlanningPane } from "~/components/tablet/PlanningPane";
+import { PlanningSessionSurface } from "~/components/tablet/PlanningSessionSurface";
 import { Screen } from "~/components/ui";
 import {
   getMobileDetailBackAction,
@@ -84,7 +84,7 @@ export default function PlanningSessionScreen() {
           <Text className="text-sm font-semibold text-foreground">{backAction.label}</Text>
         </Pressable>
       </View>
-      <PlanningPane
+      <PlanningSessionSurface
         sessionId={planningSession.sessionId}
         sessionStatus={planningSession.status}
         sessionType={planningSession.sessionType}

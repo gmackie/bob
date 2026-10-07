@@ -10,7 +10,7 @@ import { Providers } from "../providers";
 import { TabletSidebar } from "~/components/tablet/TabletSidebar";
 import { AgentThreadView } from "~/components/tablet/AgentThreadView";
 import { WorkItemPane } from "~/components/tablet/WorkItemPane";
-import { PlanningPane } from "~/components/tablet/PlanningPane";
+import { PlanningSessionSurface } from "~/components/tablet/PlanningSessionSurface";
 import { InspectorPanel } from "~/components/tablet/InspectorPanel";
 import { TasksDashboard } from "~/components/tablet/TasksDashboard";
 import { TabletPlanningDashboard } from "~/components/tablet/TabletPlanningDashboard";
@@ -223,7 +223,7 @@ function MainPane({
     const planningSession = getPlanningPaneSession(gateway.sessions, target.sessionId);
 
     return (
-      <PlanningPane
+      <PlanningSessionSurface
         sessionId={planningSession.sessionId}
         sessionStatus={planningSession.status}
         sessionType={planningSession.sessionType}
