@@ -90,6 +90,9 @@ export class GrokAdapter implements AgentAdapter {
     if ((opts.permissionMode ?? "prompt") === "skip")
       args.push("--always-approve");
     if (opts.model) args.push("--model", opts.model);
+    // Absent means the CLI default, which is high effort and spends minutes
+    // thinking on a short writing answer.
+    if (opts.reasoningEffort) args.push("--reasoning-effort", opts.reasoningEffort);
     args.push("stdio");
 
     const command: AdapterCommand = {

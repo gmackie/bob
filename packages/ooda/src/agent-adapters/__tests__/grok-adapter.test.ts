@@ -72,6 +72,23 @@ describe("GrokAdapter", () => {
     });
   });
 
+  it("passes reasoning effort as an agent flag before stdio", () => {
+    const adapter = new GrokAdapter();
+    const command = adapter.buildCommand({
+      prompt: "Write a chorus",
+      workspaceRoot: "/tmp/threads/api",
+      reasoningEffort: "low",
+    });
+    expect(command.args).toEqual([
+      "--cwd",
+      "/tmp/threads/api",
+      "agent",
+      "--reasoning-effort",
+      "low",
+      "stdio",
+    ]);
+  });
+
   it("uses always-approve only for explicitly sandboxed full-autonomy jobs", () => {
     const adapter = new GrokAdapter();
     const command = adapter.buildCommand({
