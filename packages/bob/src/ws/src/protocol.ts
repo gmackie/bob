@@ -21,6 +21,8 @@ export type EventDirection = "client" | "agent" | "system";
 export type SessionEventType =
   | "output_chunk"
   | "message_final"
+  // Parsed task list from a planning agent. The gateway writes plan drafts from it.
+  | "planning_drafts"
   | "input"
   | "tool_call"
   | "tool_result"

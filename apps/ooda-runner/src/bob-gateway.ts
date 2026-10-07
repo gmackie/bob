@@ -24,6 +24,10 @@ import { bobRunReporterFromEnv, type BobRunReporter } from "./bob-run-reporter";
 import { AgentCredentials } from "./agent-credentials.js";
 import { DispatchControl } from "./dispatch-control.js";
 import { resolveProxyRoute } from "@bob/execution/providers";
+import {
+  extractPlanningDrafts,
+  PLANNING_DRAFT_INSTRUCTION,
+} from "@bob/execution/planning/extractPlanDrafts";
 import { ProxyControl } from "./proxy-control";
 import { releaseBranchFromStaleWorktrees } from "./worktree-prepare.js";
 import { EventBuffer } from "./event-buffer";
@@ -1151,6 +1155,13 @@ export class BobGatewayConnector {
         return;
       }
 
+      if (session.sessionType === "planning") {
+        const tasks = extractPlanningDrafts(runOutput);
+        if (tasks.length > 0) {
+          this.sendEvent(session.sessionId, "planning_drafts", "agent", { tasks });
+        }
+      }
+
       emitCheckSummary();
 
       // Worktree path: push the branch and open a PR if commits were produced.
@@ -1772,7 +1783,7 @@ export class BobGatewayConnector {
     }
 
     if (session.sessionType === "planning") {
-      parts.push("\n\nAnalyze the codebase and create a structured plan with draft tasks.");
+      parts.push(`\n\n${PLANNING_DRAFT_INSTRUCTION}`);
     } else {
       parts.push("\n\nImplement this task. Create a commit when done.");
     }

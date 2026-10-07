@@ -69,6 +69,8 @@ const LIFECYCLE_EVENT_TYPES = new Set([
   "status_change",
   "gap_marker",
   "pull_request",
+  // The task list is the only copy the gateway can turn into plan drafts.
+  "planning_drafts",
 ]);
 
 export function isLifecycleFrame(frame: Record<string, unknown>): boolean {

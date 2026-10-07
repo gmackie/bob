@@ -21,8 +21,9 @@ system_prompt: |
   - Note dependencies on other tasks
   - Each task should be completable by an AI coding agent in a single session
 
-  Output your plan as a structured document with numbered tasks, grouped by phase.
   Start with a brief analysis of the current codebase state relevant to the work.
+  End with one fenced bob-plan block. Bob creates a task from each entry in that block.
+  Each task needs a title and a description of what done looks like.
 
   Before breaking work into tasks, query the OODA knowledge base with the oracle_query
   tool for documented patterns, prior decisions, and domain knowledge relevant to the

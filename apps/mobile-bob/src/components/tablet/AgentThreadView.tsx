@@ -21,6 +21,7 @@ function formatEventType(eventType: string): string {
 }
 
 function EventRow({ event }: { event: ServerEvent }) {
+  if (event.eventType === "planning_drafts") return null;
   const payload = event.payload;
   let content = extractSessionEventText(event.eventType, payload);
 

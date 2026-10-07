@@ -45,6 +45,7 @@ import {
   TERMINAL_SESSION_STATUSES,
   reconciledRunStatus,
 } from "./reconcile-runs.js";
+import { syncSessionPlanningDrafts } from "./planning-drafts-db.js";
 
 const REPLAY_LIMIT = 500;
 
@@ -1992,6 +1993,22 @@ export class Relay {
     return tenantId;
   }
 
+  private async ingestPlanningDrafts(event: ClientSessionEvent): Promise<void> {
+    if (event.eventType !== "planning_drafts") return;
+    const result = await syncSessionPlanningDrafts(event.sessionId, event.payload);
+    if (!result.changed || !result.workspaceId) return;
+    await this.broadcastWorkspaceIdInvalidation(
+      result.workspaceId,
+      "planning_session_produced_drafts",
+      event.sessionId,
+      {
+        action: result.created > 0 ? "created" : "updated",
+        draftIds: result.draftIds,
+        projectId: result.projectId,
+      },
+    );
+  }
+
   // ── Daemon session_event → persist + fan out ───────────────────────
 
   /**
@@ -2078,6 +2095,9 @@ export class Relay {
         );
         return;
       }
+      // Drafts are written before the ack. A crash here leaves the frame
+      // unacked, and the retry is idempotent, so the task list is not lost.
+      await this.ingestPlanningDrafts(event);
       this.send(conn, {
         type: "event_ack",
         sessionId: event.sessionId,
@@ -2124,6 +2144,7 @@ export class Relay {
       };
 
       await this.cfg.persistEvent(record);
+      await this.ingestPlanningDrafts(event);
     }
 
     // Fan out to all subscribers of this session
