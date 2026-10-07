@@ -71,3 +71,18 @@ Attach a secret to runner jobs with `prove-app --secret-ref <id>`.
   wired in `app.config.js`.
 
 Source compiles clean (`pnpm typecheck`) and tests pass (`pnpm test`, 234).
+
+## Session recovery after a backend interruption
+
+A failed session lookup shows **Reconnecting to Bob** and retries after five
+seconds, when the app returns to the foreground, or when connectivity returns.
+**Try again** also retries immediately. A confirmed missing session or an
+authorization rejection still opens sign-in; recovery does not fabricate a
+cached identity or change the session cookie.
+
+The recovery candidate has passed the mobile test suite (75 files, 551 tests),
+TypeScript checking, and lint for the changed files. Simulator verification of
+this candidate is still required. The existing simulator evidence at source
+`52c59f66ae9110f7d97def3555c429d2829b83fc` demonstrates the original failure:
+after an offline cold launch, restoring the backend leaves Welcome visible until
+another cold launch. That evidence must not be attributed to this candidate.
