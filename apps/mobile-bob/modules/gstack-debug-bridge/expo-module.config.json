@@ -1,0 +1,8 @@
+{
+  "platforms": ["apple"],
+  "apple": {
+    "modules": ["GstackDebugBridgeModule"],
+    "appDelegateSubscribers": ["GstackDebugBridgeAppDelegate"],
+    "debugOnly": true
+  }
+}

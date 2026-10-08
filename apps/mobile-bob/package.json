@@ -69,7 +69,8 @@
     "react-native-worklets": "~0.8.1",
     "superjson": "2.2.3",
     "uuid": "^11.1.1",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "gstack-debug-bridge": "file:./modules/gstack-debug-bridge"
   },
   "devDependencies": {
     "@babel/plugin-transform-react-jsx": "^7.29.7",

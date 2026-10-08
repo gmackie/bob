@@ -816,6 +816,9 @@ importers:
       expo-web-browser:
         specifier: ~55.0.12
         version: 55.0.14(expo@55.0.15)(react-native@0.83.9(@babel/core@7.29.6)(@react-native/metro-config@0.85.2(@babel/core@7.29.6))(@types/react@19.1.17)(react@19.2.8))
+      gstack-debug-bridge:
+        specifier: file:./modules/gstack-debug-bridge
+        version: file:apps/mobile-bob/modules/gstack-debug-bridge(expo@55.0.15)(react-native@0.83.9(@babel/core@7.29.6)(@react-native/metro-config@0.85.2(@babel/core@7.29.6))(@types/react@19.1.17)(react@19.2.8))(react@19.2.8)
       nativewind:
         specifier: 5.0.0-preview.3
         version: 5.0.0-preview.3(react-native-css@3.0.7(@expo/metro-config@55.0.16(expo@55.0.15)(typescript@5.9.3))(lightningcss@1.32.0)(react-native@0.83.9(@babel/core@7.29.6)(@react-native/metro-config@0.85.2(@babel/core@7.29.6))(@types/react@19.1.17)(react@19.2.8))(react@19.2.8))(tailwindcss@4.1.18)
@@ -9975,6 +9978,13 @@ packages:
   gray-matter@4.0.3:
     resolution: {integrity: sha512-5v6yZd4JK3eMI3FqqCouswVqwugaA9r4dNZB1wwcmrD02QkV5H0y7XBQW8QwQqEaZY1pM9aqORSORhJRdNK44Q==}
     engines: {node: '>=6.0'}
+
+  gstack-debug-bridge@file:apps/mobile-bob/modules/gstack-debug-bridge:
+    resolution: {directory: apps/mobile-bob/modules/gstack-debug-bridge, type: directory}
+    peerDependencies:
+      expo: '*'
+      react: 19.2.8
+      react-native: '*'
 
   h3@1.15.9:
     resolution: {integrity: sha512-H7UPnyIupUOYUQu7f2x7ABVeMyF/IbJjqn20WSXpMdnQB260luADUkSgJU7QTWLutq8h3tUayMQ1DdbSYX5LkA==}
@@ -23704,6 +23714,12 @@ snapshots:
       kind-of: 6.0.3
       section-matter: 1.0.0
       strip-bom-string: 1.0.0
+
+  gstack-debug-bridge@file:apps/mobile-bob/modules/gstack-debug-bridge(expo@55.0.15)(react-native@0.83.9(@babel/core@7.29.6)(@react-native/metro-config@0.85.2(@babel/core@7.29.6))(@types/react@19.1.17)(react@19.2.8))(react@19.2.8):
+    dependencies:
+      expo: 55.0.15(patch_hash=c47f1ce5f54c7806dbabe244cbf1a4988f398618defa1f6efec46716a1831ff0)(@babel/core@7.29.6)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.10)(expo-router@55.0.12)(react-dom@19.2.8(react@19.2.8))(react-native-worklets@0.8.1(@babel/core@7.29.6)(@react-native/metro-config@0.85.2(@babel/core@7.29.6))(react-native@0.83.9(@babel/core@7.29.6)(@react-native/metro-config@0.85.2(@babel/core@7.29.6))(@types/react@19.1.17)(react@19.2.8))(react@19.2.8))(react-native@0.83.9(@babel/core@7.29.6)(@react-native/metro-config@0.85.2(@babel/core@7.29.6))(@types/react@19.1.17)(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.106.2(esbuild@0.28.1)(lightningcss@1.32.0)))(react@19.2.8)(typescript@5.9.3)
+      react: 19.2.8
+      react-native: 0.83.9(@babel/core@7.29.6)(@react-native/metro-config@0.85.2(@babel/core@7.29.6))(@types/react@19.1.17)(react@19.2.8)
 
   h3@1.15.9:
     dependencies:
