@@ -86,3 +86,10 @@ this candidate is still required. The existing simulator evidence at source
 `52c59f66ae9110f7d97def3555c429d2829b83fc` demonstrates the original failure:
 after an offline cold launch, restoring the backend leaves Welcome visible until
 another cold launch. That evidence must not be attributed to this candidate.
+
+### Hosted simulator evidence
+
+Use Preflight with `--lane simulator --build-profile development-hosted-simulator`
+for simulator evidence against the hosted Bob, auth, OODA and gateway services.
+This profile retains development client and simulator settings. The `development`
+profile targets local services; its EAS environment overrides shell API URLs.

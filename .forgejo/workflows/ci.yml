@@ -114,7 +114,7 @@ jobs:
         run: node --test scripts/bob-build-graph.test.mjs
 
       - name: Validate native mobile OAuth URL handlers
-        run: node --test scripts/verify-mobile-native-url-schemes.test.mjs
+        run: node --test scripts/verify-mobile-native-url-schemes.test.mjs scripts/verify-hosted-simulator-profile.test.mjs
 
       - name: Validate Bob/OODA product boundary
         run: node --test scripts/verify-product-boundary.test.mjs

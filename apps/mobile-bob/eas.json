@@ -88,6 +88,15 @@
       },
       "channel": "production",
       "distribution": "store"
+    },
+    "development-hosted-simulator": {
+      "extends": "development",
+      "env": {
+        "API_URL": "https://bob.blder.bot",
+        "AUTH_URL": "https://bob.blder.bot",
+        "OODA_API_URL": "https://ooda.blder.bot",
+        "GATEWAY_PUBLIC_URL": "wss://ws.blder.bot"
+      }
     }
   },
   "submit": {
