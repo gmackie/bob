@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { Modal, Platform, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { Linking, Modal, Platform, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { Stack, useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -57,6 +57,7 @@ import {
   getExecutionSessionShellState,
   getShellSelectionIntent,
   getShellStateForPath,
+  pathFromAppUrl,
   selectLeftRailTarget,
   switchShellMode,
 } from "~/features/tablet/shell";
@@ -363,6 +364,32 @@ function TabletLayout() {
       routeParams.workItemId,
     ],
   );
+  // The tablet shell draws its own panes and does not mount the router Slot,
+  // so a bob-dev:// link never moves usePathname on its own.
+  useEffect(() => {
+    const apply = (url: string | null) => {
+      if (!url) return;
+      const next = pathFromAppUrl(url);
+      if (!next || next === pathname) return;
+      router.replace(next as "/");
+    };
+    const subscription = Linking.addEventListener("url", (event) => {
+      apply(event.url);
+    });
+    return () => subscription.remove();
+  }, [pathname, router]);
+  useEffect(() => {
+    let active = true;
+    void Linking.getInitialURL().then((url) => {
+      if (!active || !url) return;
+      const next = pathFromAppUrl(url);
+      if (!next) return;
+      router.replace(next as "/");
+    });
+    return () => {
+      active = false;
+    };
+  }, [router]);
   const { selectedWorkspaceId } = useSelectedWorkspace();
   const { width } = useWindowDimensions();
   const safeAreaInsets = useSafeAreaInsets();
@@ -651,6 +678,16 @@ function TabletLayout() {
         paddingLeft: shellPadding.left,
       }}
     >
+      {/* Keeps the router mounted so a bob-dev:// link can change the path.
+          The shell draws the panes itself. */}
+      <View
+        pointerEvents="none"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}
+      >
+        <Stack screenOptions={{ headerShown: false }} />
+      </View>
       <View className="flex-1 flex-row">
         {!collapseSidebar ? (
           <View

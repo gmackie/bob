@@ -14,6 +14,7 @@ import {
   tenants,
   user,
   workItems,
+  workspaceMembers,
   workspaces,
 } from "./schema";
 
@@ -61,6 +62,17 @@ async function main() {
       description: "Local validation workspace",
       defaultAgentType: "claude",
       lastHeartbeat: iso(1),
+    })
+    .onConflictDoNothing();
+
+  // Phone home lists workspaces through membership, not ownership.
+  await db
+    .insert(workspaceMembers)
+    .values({
+      id: "44444444-4444-4444-8444-444444444444",
+      workspaceId: WORKSPACE_ID,
+      userId: USER_ID,
+      role: "owner",
     })
     .onConflictDoNothing();
 

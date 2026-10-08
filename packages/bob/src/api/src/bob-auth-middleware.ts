@@ -1,4 +1,8 @@
 import type { TenantId, UserId } from "@gmacko/core/validators";
+import { resolveAuthBypassUserId } from "@bob/auth";
+import { eq } from "@bob/db";
+import type { Db } from "@bob/db/client";
+import { user } from "@bob/db/schema";
 import {
   API_KEY_PREFIXES,
   ApiKeys,
@@ -17,6 +21,18 @@ import { UnauthorizedError } from "@gmacko/core/rpc/errors";
 import { Effect, Layer } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 
+import { ensureUserMembershipForOwnedWorkspaces } from "./handlers/workspace";
+
+function webHeaders(
+  headers: Readonly<Record<string, string | undefined>>,
+): Headers {
+  const result = new Headers();
+  for (const [key, value] of Object.entries(headers)) {
+    if (value) result.set(key, value);
+  }
+  return result;
+}
+
 /** Bob's existing keys are user-scoped and have no api_keys.tenant_id column.
  * Validate those keys against the shared columns, then resolve membership just
  * as for a signed-in user. Session authentication retains the core middleware.
@@ -32,6 +48,51 @@ export const layerBobAuthMiddleware = Layer.effect(AuthMiddleware)(
         const request = yield* HttpServerRequest.HttpServerRequest;
         const authorization = request.headers.authorization;
         const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+        // Mobile dev sends `Authorization: Bearer bob-auth-bypass:<token>`.
+        // Core session lookup treats that string as a session token and
+        // rejects it, so the phone never receives a workspace.
+        const bypassUserId = resolveAuthBypassUserId(webHeaders(request.headers));
+        if (bypassUserId) {
+          const bobDb = db as unknown as Db;
+          const record = yield* Effect.promise(() =>
+            bobDb
+              .select({ email: user.email })
+              .from(user)
+              .where(eq(user.id, bypassUserId))
+              .limit(1)
+              .then((rows) => rows[0] ?? null),
+          );
+          if (!record) {
+            return yield* Effect.fail(
+              new UnauthorizedError({ message: "Auth bypass user was not found" }),
+            );
+          }
+          yield* Effect.promise(() =>
+            ensureUserMembershipForOwnedWorkspaces(bobDb, bypassUserId),
+          );
+          const hint = request.headers["x-tenant-id"];
+          const membership = yield* tenancy
+            .resolveForUser(
+              bypassUserId as UserId,
+              hint ? (hint as TenantId) : null,
+            )
+            .pipe(
+              Effect.catchTag("NotAMemberError", () =>
+                Effect.fail(
+                  new UnauthorizedError({
+                    message: "Not a member of the requested tenant",
+                  }),
+                ),
+              ),
+            );
+          return yield* Effect.provideService(effect, CurrentUser, {
+            userId: bypassUserId as UserId,
+            tenantId: membership.tenantId,
+            role: membership.role,
+            email: record.email,
+            gatewayToken: token,
+          });
+        }
         if (!isApiKeyLike(token, API_KEY_PREFIXES)) {
           const user = yield* resolveCurrentUser({
             headers: request.headers,

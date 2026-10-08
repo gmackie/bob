@@ -38,6 +38,7 @@ element.
 | `02-titles-and-detail.yaml` | phone | Human titles on every screen; detail opens from a list; the active tab returns to its root. |
 | `ipad-01-shell.yaml` | iPad | Dashboard operations counts and provider capacity. |
 | `ipad-02-navigation.yaml` | iPad | Navigation overlay, outcome and queue lanes, mode switching. |
+| `03-plan-create-run-watch.yaml` | phone and iPad | Create tasks, Run in Bob, then watch the run and return to the plan. Prepare it with `packages/bob/src/db/src/seed-plan-flow.ts` and `PLAN_FLOW_REPO` set to the repository Bob should run. |
 
 ## Selectors
 
