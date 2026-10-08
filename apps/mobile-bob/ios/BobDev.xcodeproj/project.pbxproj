@@ -14,6 +14,9 @@
 		9F92324077F2A5D11BEBCD8C /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 783C164A3A6974341BDAD0E4 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
+		F11748462D0722830044C1D9 /* StateAccessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748452D0722830044C1D9 /* StateAccessor.swift */; };
+		F11748472D0722830044C1D9 /* DebugBridgeCore in Frameworks */ = {isa = PBXBuildFile; productRef = F117484A2D0722830044C1D9 /* DebugBridgeCore */; };
+		F11748482D0722830044C1D9 /* DebugBridgeUI in Frameworks */ = {isa = PBXBuildFile; productRef = F117484B2D0722830044C1D9 /* DebugBridgeUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,6 +34,7 @@
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = BobDev/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* BobDev-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "BobDev-Bridging-Header.h"; path = "BobDev/BobDev-Bridging-Header.h"; sourceTree = "<group>"; };
+		F11748452D0722830044C1D9 /* StateAccessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StateAccessor.swift; path = BobDev/DebugBridgeGenerated/StateAccessor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -39,6 +43,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				350BDDD5DF8544B1B1A16DE4 /* libPods-BobDev.a in Frameworks */,
+				F11748472D0722830044C1D9 /* DebugBridgeCore in Frameworks */,
+				F11748482D0722830044C1D9 /* DebugBridgeUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -49,6 +55,7 @@
 			isa = PBXGroup;
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
+				F11748452D0722830044C1D9 /* StateAccessor.swift */,
 				F11748442D0722820044C1D9 /* BobDev-Bridging-Header.h */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
@@ -156,6 +163,10 @@
 			dependencies = (
 			);
 			name = BobDev;
+			packageProductDependencies = (
+				F117484A2D0722830044C1D9 /* DebugBridgeCore */,
+				F117484B2D0722830044C1D9 /* DebugBridgeUI */,
+			);
 			productName = BobDev;
 			productReference = 13B07F961A680F5B00A75B9A /* BobDev.app */;
 			productType = "com.apple.product-type.application";
@@ -184,6 +195,9 @@
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
+			packageReferences = (
+				F11748492D0722830044C1D9 /* XCLocalSwiftPackageReference "DebugBridge" */,
+			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -365,6 +379,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
+				F11748462D0722830044C1D9 /* StateAccessor.swift in Sources */,
 				9F92324077F2A5D11BEBCD8C /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -686,6 +701,26 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		F11748492D0722830044C1D9 /* XCLocalSwiftPackageReference "DebugBridge" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = DebugBridge;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F117484A2D0722830044C1D9 /* DebugBridgeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F11748492D0722830044C1D9 /* XCLocalSwiftPackageReference "DebugBridge" */;
+			productName = DebugBridgeCore;
+		};
+		F117484B2D0722830044C1D9 /* DebugBridgeUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F11748492D0722830044C1D9 /* XCLocalSwiftPackageReference "DebugBridge" */;
+			productName = DebugBridgeUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 83CBB9F71A601CBA00E9B192 /* Project object */;
 }

@@ -62,6 +62,27 @@ preflight setup            # guided setup for a blocked workflow
 
 Attach a secret to runner jobs with `prove-app --secret-ref <id>`.
 
+## gstack iPhone harness
+
+Debug builds embed the gstack DebugBridge (`ios/DebugBridge`, gstack 1.91.34.0).
+It listens on loopback only. Release and `Release-production` compile it out,
+so a production or TestFlight binary does not contain the bridge.
+
+Preflight's development and simulator lanes install a Debug dev client. After
+that install, drive the phone or simulator from the Mac with the gstack daemon:
+
+```bash
+GSTACK_IOS_TARGET_BUNDLE_ID=com.gmacko.bob.dev \
+  gstack-ios-qa-daemon
+```
+
+Use `com.gmacko.bob.preview` or `com.gmacko.bob` when the installed build is
+that variant, and only while the build is Debug. The daemon prints
+`READY: port=<n>`. Screenshot, elements, tap, swipe, and type go through that
+port. Bob's screens live in React Native, so the bridge has no Swift state to
+snapshot. Regenerate the package with `gstack-ios-qa-regen` after a gstack
+upgrade (`--app-source ios/BobDev --bridge-dir ios/DebugBridge` from this app).
+
 ## Verify a build
 - Install the simulator/dev build; sign in with GitHub (better-auth → `bob://`),
   confirming auth against `bob.blder.bot`.
