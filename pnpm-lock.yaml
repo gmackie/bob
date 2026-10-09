@@ -527,6 +527,9 @@ importers:
 
   apps/bob-ws-gateway:
     dependencies:
+      '@bob/api':
+        specifier: workspace:*
+        version: link:../../packages/bob/src/api
       '@bob/db':
         specifier: workspace:*
         version: link:../../packages/bob/src/db
