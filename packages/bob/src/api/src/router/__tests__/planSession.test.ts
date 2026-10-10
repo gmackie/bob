@@ -1113,6 +1113,11 @@ describe("planSession router", () => {
         userId: "user-1",
         sessionType: "planning",
       });
+      // The commit service reloads the session to resolve the provider owner.
+      dbQueryFindFirstMock.mockResolvedValueOnce({
+        userId: "user-1",
+        sessionType: "planning",
+      });
       const drafts = [
         {
           id: DRAFT_ID,

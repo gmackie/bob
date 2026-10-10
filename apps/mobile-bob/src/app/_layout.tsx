@@ -453,7 +453,7 @@ function TabletLayout() {
       if (!url) return;
       const next = pathFromAppUrl(url);
       if (!next || next === pathname) return;
-      router.replace(next as "/");
+      router.replace(next);
     };
     const subscription = Linking.addEventListener("url", (event) => {
       apply(event.url);
@@ -466,7 +466,7 @@ function TabletLayout() {
       if (!active || !url) return;
       const next = pathFromAppUrl(url);
       if (!next) return;
-      router.replace(next as "/");
+      router.replace(next);
     });
     return () => {
       active = false;
