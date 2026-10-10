@@ -9,6 +9,7 @@
     "./runtime/planningControl": "./src/runtime/planningControl.ts",
     "./runtime/taskExecutor": "./src/runtime/taskExecutor.ts",
     "./planning/smolAgentReviewProfile": "./src/planning/smolAgentReviewProfile.ts",
+    "./planning/extractPlanDrafts": "./src/planning/extract-plan-drafts.ts",
     "./providers": "./src/providers/index.ts"
   },
   "scripts": {

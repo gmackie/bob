@@ -250,6 +250,21 @@ export function getExecutionSessionShellState(
   };
 }
 
+/** Turn a bob-dev URL into an in-app path. Ignores the Expo dev-client launcher. */
+export function pathFromAppUrl(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.hostname === "expo-development-client") return null;
+  const path = parsed.pathname.replace(/^\/+/, "");
+  const combined = [parsed.hostname, path].filter(Boolean).join("/");
+  if (!combined) return null;
+  return `/${combined}`;
+}
+
 export function getShellStateForPath(
   pathname: string,
   params: TabletShellRouteParams = {},
@@ -375,12 +390,17 @@ export function getShellStateForPath(
     };
   }
 
-  if (path.startsWith("/planning/sessions/") && sessionId) {
-    return {
-      mode: "planning",
-      leftTab: "recent-sessions",
-      target: { type: "planning-session", sessionId },
-    };
+  if (path.startsWith("/planning/sessions/")) {
+    // /sessions/:id is one segment deep. A plan URL is /planning/sessions/:id,
+    // so the id is the third segment when the route params are not mounted.
+    const planningSessionId = pathSegment(path, 2) ?? readParam(params, "sessionId");
+    if (planningSessionId) {
+      return {
+        mode: "planning",
+        leftTab: "recent-sessions",
+        target: { type: "planning-session", sessionId: planningSessionId },
+      };
+    }
   }
 
   if (path.startsWith("/projects/") && projectId) {

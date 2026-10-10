@@ -110,7 +110,6 @@ describe("snapshotTaskFromProvider", () => {
     expect(result.snapshot?.externalId).toBe("issue-1");
     expect(result.snapshot?.linearWebBaseUrl).toBe("https://tasks.gmac.io");
   });
-
   it("never sends a Kanbanger (Linear-compatible) key to api.linear.app and keeps the caller's details", async () => {
     selectRows.push(
       [{ planningProvider: "linear", linearProjectId: "project-1" }],

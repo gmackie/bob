@@ -47,6 +47,9 @@ export const PlanDraftRecordSchema = Schema.Struct({
   sortOrder: Schema.Number,
   status: Schema.String,
   createdAt: Schema.String,
+  planningTaskId: Schema.optional(Schema.NullOr(Schema.String)),
+  planningTaskIdentifier: Schema.optional(Schema.NullOr(Schema.String)),
+  workItemId: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 /** Dependency record from the plan_draft_dependencies table. */

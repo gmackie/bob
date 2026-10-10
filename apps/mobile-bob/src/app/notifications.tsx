@@ -114,14 +114,17 @@ export default function NotificationsScreen() {
         ) : null}
         <Card>
           {notificationsQuery.data?.items.length ? (
-            notificationsQuery.data.items.map((item, index) => (
+            notificationsQuery.data.items.map((item, index) => {
+              const subtitle = getNotificationPreviewSubtitle({
+                body: item.body ?? null,
+                type: item.type,
+              });
+              return (
               <ListRow
                 key={item.id}
                 title={item.title}
-                subtitle={getNotificationPreviewSubtitle({
-                  body: item.body ?? null,
-                  type: item.type,
-                })}
+                subtitle={subtitle}
+                accessibilityLabel={`${item.title}, ${subtitle}`}
                 right={
                   <Text className="text-muted text-sm">
                     {item.read ? "Read" : "Mark read"}
@@ -141,7 +144,8 @@ export default function NotificationsScreen() {
                 }}
                 showDivider={index < notificationsQuery.data.items.length - 1}
               />
-            ))
+              );
+            })
           ) : (
             <Text className="text-muted text-sm">No notifications yet.</Text>
           )}

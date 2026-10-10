@@ -1,0 +1,71 @@
+appId: com.gmacko.bob.dev
+name: Create tasks, run them in Bob, and watch the run from the plan
+---
+# The planning list comes from the gateway, which is not running. The session
+# is opened by its id. The fixture is one draft titled "Cooldown remaining".
+- launchApp:
+    clearState: false
+- runFlow: 00-dismiss-logbox.yaml
+- openLink: "bob-dev://planning/sessions/55555555-5555-4555-8555-555555555551"
+
+- extendedWaitUntil:
+    visible: "Create tasks"
+    timeout: 30000
+# Phone and portrait iPad keep the list behind one bar. Its name is the
+# whole label, and Maestro matches that name in full.
+- tapOn:
+    text: "Tasks. 1 task ready. Show tasks"
+    optional: true
+- extendedWaitUntil:
+    visible: "Cooldown remaining"
+    timeout: 15000
+- takeScreenshot: ${SHOT_PREFIX}-draft
+
+- tapOn:
+    id: "plan-create-tasks"
+- extendedWaitUntil:
+    visible: "Run in Bob"
+    timeout: 30000
+- assertNotVisible: "Create tasks"
+- takeScreenshot: ${SHOT_PREFIX}-ready
+
+- tapOn:
+    id: "plan-run-tasks"
+- extendedWaitUntil:
+    visible: "Watch Cooldown remaining"
+    timeout: 30000
+- takeScreenshot: ${SHOT_PREFIX}-running
+
+- tapOn: "Watch Cooldown remaining"
+- extendedWaitUntil:
+    visible: "Running in Bob"
+    timeout: 15000
+- assertVisible:
+    id: "plan-run-watch"
+# The header is "<work item id> · Cooldown remaining".
+- assertVisible: ".*· Cooldown remaining"
+- takeScreenshot: ${SHOT_PREFIX}-watch
+
+# Leave the watch. On iPad the Expo tools button covers this control, so the
+# first tap opens that menu. Turn the tools button off, then tap the control.
+- tapOn:
+    id: "plan-back-to-plan"
+- runFlow:
+    when:
+      visible: "Tools button"
+    commands:
+      - tapOn:
+          text: "1"
+          rightOf: "Tools button"
+          below: "Fast refresh"
+      - tapOn: "Close"
+      - extendedWaitUntil:
+          notVisible: "Tools button"
+          timeout: 8000
+      - tapOn:
+          id: "plan-back-to-plan"
+- assertNotVisible: "Tools button"
+- assertNotVisible: "Running in Bob"
+- assertVisible:
+    id: "plan-tasks-panel"
+- takeScreenshot: ${SHOT_PREFIX}-back

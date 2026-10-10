@@ -14,7 +14,6 @@ import {
   planDrafts,
   planningSessionMessages,
   planTaskItems,
-  projects,
   repositories,
   runLifecycleEvents,
   user,
@@ -27,7 +26,7 @@ import {
 } from "@bob/db/schema";
 import type { WorkItemKind } from "@bob/db/schema";
 
-import { resolvePlanningProvider } from "../services/integrations/planningProvider.js";
+import { commitOpenPlanningDrafts } from "../services/integrations/commitPlanningDrafts.js";
 
 import type { HandlerContext } from "./context.js";
 import type { GateSpec } from "./advanceChecklist-core";
@@ -990,81 +989,29 @@ export async function planSessionCommitPlan(
 ) {
   await loadOwnedPlanningSession(ctx.db, ctx.userId, input.sessionId);
 
-  const drafts = await ctx.db.query.planDrafts.findMany({
-    where: and(
-      eq(planDrafts.sessionId, input.sessionId),
-      eq(planDrafts.status, "draft"),
-    ),
-    orderBy: [planDrafts.sortOrder, planDrafts.createdAt],
-  });
-
-  if (drafts.length === 0) {
-    return { committed: 0, tasks: [] };
+  const result = await commitOpenPlanningDrafts(ctx.db, input.sessionId);
+  if (result.retry) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "The board could not accept the tasks. Try again.",
+    });
   }
-
-  const createdTasks: {
-    draftId: string;
-    taskId: string;
-    identifier: string;
-    workspaceId: string;
-  }[] = [];
-
-  for (const draft of drafts) {
-    try {
-      const project = await ctx.db.query.projects.findFirst({
-        where: eq(projects.id, draft.projectId),
-      });
-
-      if (!project) {
-        console.error(`[planSession] Project not found for draft ${draft.id}`);
-        continue;
-      }
-
-      const provider = await resolvePlanningProvider(ctx.db, project, project.workspaceId);
-      const result = await provider.createTask({
-        title: draft.title,
-        description: draft.description ?? null,
-        providerProjectId: project.linearProjectId ?? project.id,
-        priority: draft.priority,
-      });
-
-      createdTasks.push({
-        draftId: draft.id,
-        taskId: result.externalId,
-        identifier: result.identifier,
-        workspaceId: project.workspaceId,
-      });
-    } catch (err) {
-      console.error(
-        `[planSession] Failed to create task for draft ${draft.id}:`,
-        err,
-      );
-    }
-  }
-
-  const [firstCreatedTask] = createdTasks;
-  if (firstCreatedTask) {
-    const committedIds = createdTasks.map((t) => t.draftId);
-    await ctx.db
-      .update(planDrafts)
-      .set({ status: "committed" })
-      .where(inArray(planDrafts.id, committedIds));
-
+  if (result.committed > 0 && result.workspaceId) {
     await notifyWorkspaceEvent({
       type: "planning_session_produced_tasks",
-      workspaceId: firstCreatedTask.workspaceId,
+      workspaceId: result.workspaceId,
       entityId: input.sessionId,
       payload: {
-        committed: createdTasks.length,
-        taskIds: createdTasks.map((task) => task.taskId),
-        draftIds: committedIds,
+        committed: result.committed,
+        taskIds: result.tasks.map((task) => task.taskId),
+        draftIds: result.tasks.map((task) => task.draftId),
       },
     });
   }
 
   return {
-    committed: createdTasks.length,
-    tasks: createdTasks.map(({ workspaceId: _workspaceId, ...task }) => task),
+    committed: result.committed,
+    tasks: result.tasks,
   };
 }
 
