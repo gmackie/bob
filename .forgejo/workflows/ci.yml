@@ -13,13 +13,26 @@ jobs:
   research-backend:
     name: Research backend
     runs-on: ubuntu-latest
+    env:
+      # Use Python from our Forgejo runner image; never fetch it from GitHub.
+      UV_PYTHON_DOWNLOADS: never
+      UV_PYTHON: python3
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - uses: https://github.com/astral-sh/setup-uv@v6
+      - name: Install pinned Python tooling
+        run: |
+          set -euo pipefail
+          python3 -c 'import sys; assert sys.version_info >= (3, 12), "Runner requires Python 3.12+"'
+          python3 -m venv "$RUNNER_TEMP/bob-ci-tools"
+          "$RUNNER_TEMP/bob-ci-tools/bin/python" -m pip install \
+            --index-url https://pypi.org/simple --only-binary=:all: \
+            --require-hashes --no-deps -r scripts/ci-python-tools.txt
+          echo "$RUNNER_TEMP/bob-ci-tools/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bob-ci-tools/bin/uv" --version
 
       - name: Install locked Python dependencies
         working-directory: packages/research-backend
