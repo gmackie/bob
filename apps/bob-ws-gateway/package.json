@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bob/api": "workspace:*",
     "@bob/db": "workspace:*",
     "@bob/notifications": "workspace:*",
     "@bob/observability": "workspace:*",

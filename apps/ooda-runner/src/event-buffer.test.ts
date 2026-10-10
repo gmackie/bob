@@ -148,6 +148,9 @@ describe("EventBuffer", () => {
     expect(
       isLifecycleFrame({ type: "session_event", eventType: "state" }),
     ).toBe(true);
+    expect(
+      isLifecycleFrame({ type: "session_event", eventType: "planning_drafts" }),
+    ).toBe(true);
     expect(isLifecycleFrame(outputFrame(S1, 1))).toBe(false);
     expect(
       isLifecycleFrame({ type: "session_event", eventType: "tool_call" }),

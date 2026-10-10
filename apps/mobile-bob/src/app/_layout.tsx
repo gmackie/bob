@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -29,7 +30,7 @@ import type {
 } from "~/features/tablet/shell";
 import type { MobileWorkItemEntryView } from "~/features/tablet/work-item-entry";
 import { InspectorPanel } from "~/components/tablet/InspectorPanel";
-import { PlanningPane } from "~/components/tablet/PlanningPane";
+import { PlanningSessionSurface } from "~/components/tablet/PlanningSessionSurface";
 import { SessionWorkstation } from "~/components/tablet/SessionWorkstation";
 import { TabletPlanningDashboard } from "~/components/tablet/TabletPlanningDashboard";
 import { TabletProjectPane } from "~/components/tablet/TabletProjectPane";
@@ -69,6 +70,7 @@ import {
   getRecentOutcomeTarget,
   getShellSelectionIntent,
   getShellStateForPath,
+  pathFromAppUrl,
   selectLeftRailTarget,
   switchShellMode,
 } from "~/features/tablet/shell";
@@ -286,15 +288,22 @@ function MainPane({
     );
 
     return (
-      <PlanningPane
+      <PlanningSessionSurface
         sessionId={planningSession.sessionId}
         sessionStatus={planningSession.status}
         sessionType={planningSession.sessionType}
         workItemTitle={planningSession.title}
         events={gateway.selectedSessionEvents}
+        sessions={gateway.sessions}
         onSendInput={gateway.sendInput}
         onStopSession={gateway.stopSession}
         onShowArtifact={onShowArtifact}
+        onWatchRun={(executionSessionId) => {
+          gateway.selectSession(executionSessionId);
+          gateway.reportRunView(executionSessionId);
+        }}
+        onReturnToPlan={() => gateway.openPlanningSession(planningSession.sessionId)}
+        onApprove={gateway.approve}
       />
     );
   }
@@ -437,6 +446,36 @@ function TabletLayout() {
       routeParams.workItemId,
     ],
   );
+  // The tablet shell draws its own panes and does not mount the router Slot,
+  // so a bob-dev:// link never moves usePathname on its own.
+  useEffect(() => {
+    const apply = (url: string | null) => {
+      if (!url) return;
+      const next = pathFromAppUrl(url);
+      if (!next || next === pathname) return;
+      // Expo generates stricter route types locally than in a clean CI checkout.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+      router.replace(next as "/");
+    };
+    const subscription = Linking.addEventListener("url", (event) => {
+      apply(event.url);
+    });
+    return () => subscription.remove();
+  }, [pathname, router]);
+  useEffect(() => {
+    let active = true;
+    void Linking.getInitialURL().then((url) => {
+      if (!active || !url) return;
+      const next = pathFromAppUrl(url);
+      if (!next) return;
+      // Expo generates stricter route types locally than in a clean CI checkout.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+      router.replace(next as "/");
+    });
+    return () => {
+      active = false;
+    };
+  }, [router]);
   const { selectedWorkspaceId } = useSelectedWorkspace();
   const { width } = useWindowDimensions();
   const safeAreaInsets = useSafeAreaInsets();
@@ -817,6 +856,21 @@ function TabletLayout() {
           paddingLeft: shellPadding.left,
         }}
       >
+        {/* Keeps the router mounted so a bob-dev:// link can change the path.
+            The shell draws the panes itself. */}
+        <View
+          pointerEvents="none"
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={{
+            position: "absolute",
+            width: 0,
+            height: 0,
+            overflow: "hidden",
+          }}
+        >
+          <Stack screenOptions={{ headerShown: false }} />
+        </View>
         <View className="flex-1 flex-row">
           {!collapseSidebar ? (
             <View

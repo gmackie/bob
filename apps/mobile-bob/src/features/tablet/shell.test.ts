@@ -21,6 +21,7 @@ import {
   getShellSelectionIntent,
   getShellStateForPath,
   groupShellSessions,
+  pathFromAppUrl,
   isNativeTabletShellTarget,
   matchesShellSessionStatusFilter,
   selectLeftRailTarget,
@@ -258,6 +259,19 @@ describe("tablet shell model", () => {
       leftTab: "recent-sessions",
       target: { type: "planning-session", sessionId: "plan-1" },
     });
+    expect(getShellStateForPath("/planning/sessions/plan-1")).toEqual({
+      mode: "planning",
+      leftTab: "recent-sessions",
+      target: { type: "planning-session", sessionId: "plan-1" },
+    });
+    expect(pathFromAppUrl("bob-dev://planning/sessions/plan-1")).toBe(
+      "/planning/sessions/plan-1",
+    );
+    expect(
+      pathFromAppUrl(
+        "bob-dev://expo-development-client/?url=http://127.0.0.1:8091",
+      ),
+    ).toBe(null);
     expect(
       getShellStateForPath("/projects/project-1", { projectId: "project-1" }),
     ).toEqual({

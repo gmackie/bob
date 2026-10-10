@@ -1,4 +1,6 @@
 node_modules/
+# A symlink named node_modules is not a directory, so the slash pattern misses it.
+node_modules
 dist/
 .next/
 .turbo/

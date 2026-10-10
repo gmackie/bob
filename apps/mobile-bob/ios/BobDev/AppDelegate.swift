@@ -1,6 +1,10 @@
 internal import Expo
 import React
 import ReactAppDependencyProvider
+#if DEBUG
+import DebugBridgeCore
+import DebugBridgeUI
+#endif
 
 @main
 class AppDelegate: ExpoAppDelegate {
@@ -26,6 +30,15 @@ class AppDelegate: ExpoAppDelegate {
       withModuleName: "main",
       in: window,
       launchOptions: launchOptions)
+#if DEBUG
+    // Loopback gstack harness for Preflight device QA. React Native owns the
+    // UI, so there is no snapshotable Swift model to register.
+    DebugBridgeUIWiring.installAll()
+    DebugBridgeManager.shared.start(appState: (), register: { (_: ()) in })
+    DebugOverlayWindow.shared.install(
+      recording: ProcessInfo.processInfo.arguments.contains("--gstack-recording")
+    )
+#endif
 #endif
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)

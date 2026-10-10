@@ -65,11 +65,15 @@ async function main() {
     })
     .onConflictDoNothing();
 
-  // The mobile app lists workspaces through workspace_members, not ownership;
-  // without this row every screen that needs a workspace stayed empty.
+  // The mobile app lists workspaces through workspace_members, not ownership.
   await db
     .insert(workspaceMembers)
-    .values({ workspaceId: WORKSPACE_ID, userId: USER_ID, role: "owner" })
+    .values({
+      id: "44444444-4444-4444-8444-444444444444",
+      workspaceId: WORKSPACE_ID,
+      userId: USER_ID,
+      role: "owner",
+    })
     .onConflictDoNothing();
 
   await db
