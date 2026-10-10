@@ -26,8 +26,13 @@ packages/research-backend/.venv/
 # specific database files and must never be committed or reused by CI.
 /data/pglite/
 
-# Preflight local build metadata
-.preflight/
+# Preflight local build metadata. The TrueFlight review workflow sources
+# (.preflight/review/*.review.yaml) stay tracked; their compiled artifacts are
+# ignored by apps/mobile-bob/.gitignore.
+**/.preflight/*
+!**/.preflight/review/
+**/.preflight/review/*
+!**/.preflight/review/*.review.yaml
 
 # check-events v2 stream + CTRF (CI + agent worktrees)
 .fg/

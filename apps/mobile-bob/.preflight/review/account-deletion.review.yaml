@@ -1,0 +1,65 @@
+# TrueFlight standard workflow: account-deletion
+# Apple requires an in-app way to delete the account (App Store Review 5.1.1(v)).
+# Running this green proves the R1 compliance gate.
+# In Bob the control lives at More -> Settings -> Account -> "Delete Account"
+# (testID=settings-delete-account, shared by the phone screen and the iPad
+# settings pane). It confirms once ("Delete account" alert, button "Delete
+# Account"), calls better-auth deleteUser, signs out, and returns to the
+# 'Welcome to Bob' sign-in screen.
+#
+# Sign-in is device pairing against Bob web (see sign-in.review.yaml).
+#
+# tf:workflow id=account-deletion title="Delete your account" account=deletable
+# tf:account role=deletable email="reviewer+delete@blder.bot" secretRef=bob/review/delete_pw permissions=full notes="A throwaway account that is safe to permanently delete during review — it is destroyed by this flow. Bob has no password login: the secret is the Google password of the demo Google account; sign in to https://bob.blder.bot with it, then Settings -> Link a Device to approve the code the phone shows."
+# TODO: confirm a disposable deletable demo account is provisioned on bob.blder.bot and its password is stored at bob/review/delete_pw (re-provision after every run — the flow destroys it)
+# tf:verify "The account is deleted and you are returned to the signed-out 'Welcome to Bob' screen."
+# tf:verify "Linking the device again with the same identity creates a fresh account rather than restoring the old workspace."
+appId: com.gmacko.bob
+---
+# tf:step "Launch the app and sign in with the disposable demo account by linking the device (Scan QR code -> enter a code on the web)." capture=screenshot
+- launchApp
+- extendedWaitUntil:
+    visible: "Skip|Welcome to Bob"
+    timeout: 60000
+- tapOn:
+    text: "Skip"
+    optional: true
+- extendedWaitUntil:
+    visible: "Welcome to Bob"
+    timeout: 30000
+# tf:step "Tap Scan QR code, then 'Can't scan? Enter a code on the web instead' — the app shows an 8-character pairing code and waits for approval." capture=screenshot
+- tapOn: "Scan QR code"
+- tapOn:
+    text: "Can't scan\\? Enter a code on the web instead|Use a code instead"
+- extendedWaitUntil:
+    visible:
+      id: "qr-pairing-user-code"
+    timeout: 30000
+- assertVisible: "Enter code on Bob web"
+# tf:step "In a browser, sign in to https://bob.blder.bot with the demo account, open Settings -> Link a Device, and enter the code. The phone signs in automatically." capture=none
+- assertVisible: "Waiting for approval — this signs you in automatically."
+- extendedWaitUntil:
+    visible:
+      id: "mobile-tab-bar"
+    timeout: 180000
+# tf:step "Tap More, then Settings, then Account." capture=screenshot
+- tapOn:
+    id: "mobile-tab-more"
+- tapOn: "Settings"
+- extendedWaitUntil:
+    visible: "Account"
+    timeout: 15000
+- tapOn: "Account"
+- assertVisible: "Manage the active session on this device."
+# tf:step "Tap Delete Account." capture=screenshot
+- tapOn:
+    id: "settings-delete-account"
+# tf:step "Confirm the irreversible deletion in the alert." capture=video
+- assertVisible: "Permanently delete your Bob account and sign out on this device?"
+- tapOn:
+    text: "Delete Account"
+    index: 1
+# tf:step "You are signed out and land back on the 'Welcome to Bob' sign-in screen." capture=screenshot
+- extendedWaitUntil:
+    visible: "Welcome to Bob"
+    timeout: 30000
