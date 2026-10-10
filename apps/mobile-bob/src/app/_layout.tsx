@@ -453,6 +453,8 @@ function TabletLayout() {
       if (!url) return;
       const next = pathFromAppUrl(url);
       if (!next || next === pathname) return;
+      // Expo generates stricter route types locally than in a clean CI checkout.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
       router.replace(next as "/");
     };
     const subscription = Linking.addEventListener("url", (event) => {
@@ -466,6 +468,8 @@ function TabletLayout() {
       if (!active || !url) return;
       const next = pathFromAppUrl(url);
       if (!next) return;
+      // Expo generates stricter route types locally than in a clean CI checkout.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
       router.replace(next as "/");
     });
     return () => {
