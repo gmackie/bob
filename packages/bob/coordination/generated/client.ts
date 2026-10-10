@@ -155,6 +155,7 @@ export const operations: Record<string, OperationSpec> = {
   "@bob/coordination/_/RecordProductionEvidence": { method: "POST", path: "/api/v1/coordination/evidence/production", kind: "function", resource: "RecordProductionEvidence" },
   "@bob/coordination/_/RecordValidationReceipt": { method: "POST", path: "/api/v1/coordination/receipts/validation", kind: "function", resource: "RecordValidationReceipt" },
   "@bob/coordination/_/RequestDeployment": { method: "POST", path: "/api/v1/coordination/deployment", kind: "function", resource: "RequestDeployment" },
+  "@bob/coordination/_/RequestExecution": { method: "POST", path: "/api/v1/coordination/execution", kind: "function", resource: "RequestExecution" },
   "@bob/coordination/_/RequestRelease": { method: "POST", path: "/api/v1/coordination/release", kind: "function", resource: "RequestRelease" },
   "@bob/coordination/_/RequestValidation": { method: "POST", path: "/api/v1/coordination/validation", kind: "function", resource: "RequestValidation" },
   "@bob/coordination/_/ResolveInput": { method: "POST", path: "/api/v1/coordination/input", kind: "function", resource: "ResolveInput" },
@@ -193,6 +194,7 @@ export interface FunctionsApi {
   recordProductionEvidence(input: RecordProductionEvidenceInput, opts?: CallOptions): Promise<RecordProductionEvidenceOutput>;
   recordValidationReceipt(input: RecordValidationReceiptInput, opts?: CallOptions): Promise<RecordValidationReceiptOutput>;
   requestDeployment(input: RequestDeploymentInput, opts?: CallOptions): Promise<RequestDeploymentOutput>;
+  requestExecution(input: RequestExecutionInput, opts?: CallOptions): Promise<RequestExecutionOutput>;
   requestRelease(input: RequestReleaseInput, opts?: CallOptions): Promise<RequestReleaseOutput>;
   requestValidation(input: RequestValidationInput, opts?: CallOptions): Promise<RequestValidationOutput>;
   resolveInput(input: ResolveInputInput, opts?: CallOptions): Promise<ResolveInputOutput>;
@@ -254,7 +256,7 @@ export interface GetCapabilitiesInput {
   contractVersion: string;
 }
 
-export type GetCapabilitiesOutput = { "contractVersion": string; "operations": Array<string>; "executionProfiles": Array<string>; "validationProfiles": Array<string>; "eventResume": boolean };
+export type GetCapabilitiesOutput = { "contractVersion": string; "operations": Array<string>; "executionProfiles": Array<string>; "validationProfiles": Array<string>; "eventResume": boolean; "durableExecutionAdmission": boolean };
 
 export interface GetItemInput {
   contractVersion: string;
@@ -352,6 +354,22 @@ export interface RequestDeploymentInput {
 }
 
 export type RequestDeploymentOutput = { "contractVersion": string; "operationId": string; "commandId": string; "state": "accepted" | "running" | "succeeded" | "failed" | "cancelled"; "resourceId": string; "resourceVersion": number; "error"?: { "code": string; "message": string; "retryable": boolean } | null };
+
+export interface RequestExecutionInput {
+  contractVersion: string;
+  requestId: string;
+  attemptId: string;
+  itemId: string;
+  planId: string;
+  planVersion: number;
+  issueSnapshotRef: string;
+  target: { "environmentId": string; "projectId": string; "repository": { "integrationId": string; "repositoryId": string } };
+  work: { "title": string; "instructions": string; "acceptanceCriteria": Array<string> };
+  workspace: { "baseRevision": string; "branch": string };
+  executionProfileId: string;
+}
+
+export type RequestExecutionOutput = { "contractVersion": string; "operationId": string; "commandId": string; "state": "accepted" | "running" | "succeeded" | "failed" | "cancelled"; "resourceId": string; "resourceVersion": number; "error"?: { "code": string; "message": string; "retryable": boolean } | null };
 
 export interface RequestReleaseInput {
   contractVersion: string;
@@ -481,6 +499,7 @@ export function createClient(options: ClientOptions): ForgeClient {
       recordProductionEvidence: (input, opts) => t.unwrap(t.call("@bob/coordination/_/RecordProductionEvidence", input, opts)),
       recordValidationReceipt: (input, opts) => t.unwrap(t.call("@bob/coordination/_/RecordValidationReceipt", input, opts)),
       requestDeployment: (input, opts) => t.unwrap(t.call("@bob/coordination/_/RequestDeployment", input, opts)),
+      requestExecution: (input, opts) => t.unwrap(t.call("@bob/coordination/_/RequestExecution", input, opts)),
       requestRelease: (input, opts) => t.unwrap(t.call("@bob/coordination/_/RequestRelease", input, opts)),
       requestValidation: (input, opts) => t.unwrap(t.call("@bob/coordination/_/RequestValidation", input, opts)),
       resolveInput: (input, opts) => t.unwrap(t.call("@bob/coordination/_/ResolveInput", input, opts)),

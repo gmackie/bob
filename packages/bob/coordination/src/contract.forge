@@ -369,6 +369,7 @@ export shape Capabilities {
   executionProfiles : list<OpaqueId> length <= 100
   validationProfiles : list<OpaqueId> length <= 100
   eventResume : boolean
+  durableExecutionAdmission : boolean
 }
 
 export function CreatePlan @http(POST, "/api/v1/coordination/plans") {
@@ -560,6 +561,21 @@ export function GetItem @http(POST, "/api/v1/coordination/items/query") {
   output ItemSnapshotResponse
   errors {
     NotFound
+    Forbidden
+  }
+}
+
+/// Bob admission stores dispatch intent; T3 SubmitExecution owns local execution.
+export function RequestExecution @http(POST, "/api/v1/coordination/execution") {
+  input SubmitExecutionRequest
+  output Operation
+  errors {
+    IdempotencyConflict
+    VersionConflict
+    InvalidTransition
+    CapacityUnavailable
+    TargetMismatch
+    CapabilityUnavailable
     Forbidden
   }
 }

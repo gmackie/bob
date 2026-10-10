@@ -65,6 +65,24 @@ CREATE TABLE forge_receipt (
   PRIMARY KEY ("tenant", "operation", "key")
 );
 
+CREATE TABLE coordination_attempt (
+  "tenant" TEXT COLLATE "C" NOT NULL,
+  "id" TEXT COLLATE "C" NOT NULL,
+  "owner" TEXT COLLATE "C" NOT NULL,
+  "plan_id" TEXT COLLATE "C" NOT NULL,
+  "item_id" TEXT COLLATE "C" NOT NULL,
+  "request_id" TEXT COLLATE "C" NOT NULL,
+  "operation_id" TEXT COLLATE "C" NOT NULL,
+  "request" TEXT COLLATE "C" NOT NULL,
+  "state" TEXT COLLATE "C" NOT NULL,
+  "admission" TEXT COLLATE "C",
+  "terminal" TEXT COLLATE "C",
+  "last_sequence" BIGINT NOT NULL,
+  "lease_owner" TEXT COLLATE "C",
+  "lease_until" BIGINT,
+  PRIMARY KEY ("tenant", "id")
+);
+
 CREATE TABLE coordination_event (
   "tenant" TEXT COLLATE "C" NOT NULL,
   "id" TEXT COLLATE "C" NOT NULL,
@@ -105,6 +123,8 @@ CREATE TABLE coordination_plan (
 );
 
 CREATE INDEX forge_outbox_pending ON forge_outbox (status, lease_until);
+CREATE UNIQUE INDEX coordination_attempt_uq_requestId ON coordination_attempt ("tenant", "request_id");
+CREATE INDEX coordination_attempt_ix_by_owner_plan_id_state ON coordination_attempt ("tenant", "owner", "plan_id", "state", "id");
 CREATE UNIQUE INDEX coordination_event_uq_sequence ON coordination_event ("tenant", "sequence");
 CREATE INDEX coordination_event_ix_by_owner_sequence ON coordination_event ("tenant", "owner", "sequence", "id");
 CREATE INDEX coordination_item_ix_by_owner_plan_id ON coordination_item ("tenant", "owner", "plan_id", "id");

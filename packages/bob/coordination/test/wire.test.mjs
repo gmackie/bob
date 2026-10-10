@@ -32,8 +32,8 @@ const sourceSnapshot = { repository, commitSha: 'a'.repeat(40), treeDigest: 'b'.
 const executionReceipt = { contractVersion: '1', eventId: 'event-1', environmentId: target.environmentId, executionId: 'execution-1', attemptId: execution.attemptId, sequence: 1, occurredAt: '2026-10-10T12:00:00Z', outcome: 'succeeded', thread, sourceSnapshot, evidenceRefs: [] };
 const production = { contractVersion: '1', commandId: 'command-2', itemId: 'item-1', stageRef: 'production', deploymentId: 'deploy-1', sourceRevision: 'a'.repeat(40), artifactDigest: 'b'.repeat(64), healthEvidenceRefs: ['health-1'], verifiedAt: '2026-10-10T12:00:00Z' };
 
-test('all twenty-two request and success schemas resolve and compile', () => {
-  assert.equal(operations.size, 22);
+test('all twenty-three request and success schemas resolve and compile', () => {
+  assert.equal(operations.size, 23);
   for (const name of operations.keys()) { validator(name); validator(name, true); }
 });
 test('realistic plan, admission, terminal receipts and production evidence', () => {

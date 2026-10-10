@@ -66,24 +66,6 @@ CREATE TABLE forge_receipt (
   PRIMARY KEY (tenant, operation, key)
 );
 
-CREATE TABLE coordination_attempt (
-  "tenant" TEXT NOT NULL,
-  "id" TEXT NOT NULL,
-  "owner" TEXT NOT NULL,
-  "plan_id" TEXT NOT NULL,
-  "item_id" TEXT NOT NULL,
-  "request_id" TEXT NOT NULL,
-  "operation_id" TEXT NOT NULL,
-  "request" TEXT NOT NULL,
-  "state" TEXT NOT NULL,
-  "admission" TEXT,
-  "terminal" TEXT,
-  "last_sequence" INTEGER NOT NULL,
-  "lease_owner" TEXT,
-  "lease_until" INTEGER,
-  PRIMARY KEY (tenant, id)
-);
-
 CREATE TABLE coordination_event (
   "tenant" TEXT NOT NULL,
   "id" TEXT NOT NULL,
@@ -124,8 +106,6 @@ CREATE TABLE coordination_plan (
 );
 
 CREATE INDEX forge_outbox_pending ON forge_outbox (status, lease_until);
-CREATE UNIQUE INDEX coordination_attempt_uq_requestId ON coordination_attempt (tenant, request_id);
-CREATE INDEX coordination_attempt_ix_by_owner_plan_id_state ON coordination_attempt (tenant, owner, plan_id, state, id);
 CREATE UNIQUE INDEX coordination_event_uq_sequence ON coordination_event (tenant, sequence);
 CREATE INDEX coordination_event_ix_by_owner_sequence ON coordination_event (tenant, owner, sequence, id);
 CREATE INDEX coordination_item_ix_by_owner_plan_id ON coordination_item (tenant, owner, plan_id, id);

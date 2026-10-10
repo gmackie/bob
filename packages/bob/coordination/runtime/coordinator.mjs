@@ -7,16 +7,18 @@ import addFormats from 'ajv-formats';
 const schema = JSON.parse(readFileSync(new URL('../generated/openapi.json', import.meta.url)));
 const ajv = new Ajv({ strict: false, allErrors: true });
 addFormats(ajv);
-const validators = new Map(Object.values(schema.paths).flatMap(Object.values).filter(op => op.operationId)
+export const outputValidators = new Map(Object.values(schema.paths).flatMap(Object.values).filter(op => op.operationId)
+  .map(op => [op.operationId.split('/').at(-1), ajv.compile(op.responses['200'].content['application/json'].schema)]));
+export const validators = new Map(Object.values(schema.paths).flatMap(Object.values).filter(op => op.operationId)
   .map(op => [op.operationId.split('/').at(-1), ajv.compile(op.requestBody.content['application/json'].schema)]));
 export const supportedOperations = Object.freeze(['CreatePlan', 'UpdatePlan', 'ControlPlan', 'GetPlan', 'GetItem', 'GetOperation', 'ReadEvents', 'GetCapabilities']);
-const canonical = value => JSON.stringify(value, (_key, entry) => entry && typeof entry === 'object' && !Array.isArray(entry)
+export const canonical = value => JSON.stringify(value, (_key, entry) => entry && typeof entry === 'object' && !Array.isArray(entry)
   ? Object.fromEntries(Object.keys(entry).sort().map(key => [key, entry[key]])) : entry);
-const digest = value => createHash('sha256').update(canonical(value)).digest('hex');
+export const digest = value => createHash('sha256').update(canonical(value)).digest('hex');
 export class CoordinationError extends Error {
   constructor(code, message, status = 409) { super(message); this.code = code; this.status = status; }
 }
-const fail = (code, message, status) => { throw new CoordinationError(code, message, status); };
+export const fail = (code, message, status) => { throw new CoordinationError(code, message, status); };
 const milestones = ['execution-succeeded', 'review-ready', 'merged', 'production-verified'];
 const completionTargets = ['execution', 'review-ready', 'merged', 'production'];
 
@@ -32,11 +34,17 @@ export class Coordinator {
     this.db.exec('PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
     const version = this.db.prepare('PRAGMA user_version').get().user_version;
     if (version === 0) this.transaction(() => {
-      if (this.db.prepare('PRAGMA user_version').get().user_version === 1) return;
+      if (this.db.prepare('PRAGMA user_version').get().user_version === 2) return;
       this.db.exec(readFileSync(new URL('../storage/generated/d1.sql', import.meta.url), 'utf8'));
-      this.db.exec('PRAGMA user_version = 1');
+      this.db.exec('PRAGMA user_version = 2');
     });
-    else if (version !== 1) { this.db.close(); fail('StorageVersion', 'Unsupported coordination database version', 500); }
+    else if (version === 1) this.transaction(() => {
+      const current = this.db.prepare('PRAGMA user_version').get().user_version;
+      if (current === 2) return;
+      this.db.exec(readFileSync(new URL('../storage/generated/0002_attempts.sql', import.meta.url), 'utf8'));
+      this.db.exec('PRAGMA user_version = 2');
+    });
+    else if (version !== 2) { this.db.close(); fail('StorageVersion', 'Unsupported coordination database version', 500); }
   }
   close() { this.db.close(); }
   transaction(fn) {
@@ -107,10 +115,13 @@ export class Coordinator {
       const collision = this.db.prepare('SELECT owner,plan_id FROM coordination_item WHERE tenant=? AND id=?').get(this.tenant, item.itemId);
       if (collision && (collision.owner !== this.owner || collision.plan_id !== planId)) fail('InvalidGraph', 'Item ID is already admitted');
       const itemState = state === 'cancelled' ? 'cancelled' : state === 'active' && !definition.dependencies.some(edge => edge.downstreamItemId === item.itemId) ? 'ready' : 'pending';
-      const snapshot = { itemId: item.itemId, planId, resourceVersion: version, state: itemState, currentAttemptId: null, execution: null, achievedMilestones: [], operationIds: [operationId], evidenceRefs: [] };
+      const previous = this.db.prepare('SELECT snapshot FROM coordination_item WHERE tenant=? AND id=?').get(this.tenant, item.itemId);
+      const old = previous ? JSON.parse(previous.snapshot) : null;
+      const resourceVersion = Math.max(version, (old?.resourceVersion ?? 0) + 1);
+      const snapshot = old?.currentAttemptId ? { ...old, resourceVersion } : { itemId: item.itemId, planId, resourceVersion, state: itemState, currentAttemptId: null, execution: null, achievedMilestones: [], operationIds: [operationId], evidenceRefs: [] };
       this.db.prepare('INSERT INTO coordination_item (tenant,id,owner,plan_id,snapshot,version) VALUES (?,?,?,?,?,?) ON CONFLICT(tenant,id) DO UPDATE SET snapshot=excluded.snapshot,version=excluded.version')
-        .run(this.tenant, item.itemId, this.owner, planId, canonical(snapshot), version);
-      this.event(item.itemId, version, operationId);
+        .run(this.tenant, item.itemId, this.owner, planId, canonical(snapshot), snapshot.resourceVersion);
+      this.event(item.itemId, snapshot.resourceVersion, operationId);
     }
   }
   call(name, input, { idempotencyKey } = {}) {
@@ -142,7 +153,10 @@ export class Coordinator {
         this.authorize(JSON.parse(row.definition), body.origin);
         if (row.version !== body.expectedVersion) fail('VersionConflict', 'Plan version changed');
         planId = row.id; definition = name === 'UpdatePlan' ? body.plan : JSON.parse(row.definition); version = row.version + 1;
+        const liveAttempts = this.db.prepare("SELECT COUNT(*) AS n FROM coordination_attempt WHERE tenant=? AND owner=? AND plan_id=? AND state != 'terminal'").get(this.tenant, this.owner, planId).n;
+        if (liveAttempts && (name === 'UpdatePlan' || body.action === 'cancel')) fail('InvalidTransition', 'Resolve executing attempts before editing or cancelling this plan');
         if (name === 'UpdatePlan') {
+          if (this.db.prepare('SELECT COUNT(*) AS n FROM coordination_attempt WHERE tenant=? AND owner=? AND plan_id=?').get(this.tenant, this.owner, planId).n) fail('InvalidTransition', 'Attempt scope is immutable; create a new plan for edits after execution admission');
           if (!['draft', 'paused'].includes(row.state)) fail('InvalidTransition', 'Pause the plan before editing');
           state = row.state;
         } else {
@@ -156,6 +170,7 @@ export class Coordinator {
         .run(this.tenant, planId, this.owner, canonical(definition), state, version);
       this.writeItems(planId, definition, state, operationId, version);
       this.event(planId, version, operationId);
+      this.afterPlanWrite(planId);
       this.fault('after-state');
       const operation = { contractVersion: '1', operationId, commandId: body.commandId, state: 'succeeded', resourceId: planId, resourceVersion: version, error: null };
       this.db.prepare('INSERT INTO coordination_operation VALUES (?,?,?,?)').run(this.tenant, operationId, this.owner, canonical(operation));
@@ -164,8 +179,9 @@ export class Coordinator {
       return operation;
     });
   }
+  afterPlanWrite(_planId) {}
   query(name, body) {
-    if (name === 'GetCapabilities') return { contractVersion: '1', operations: [...supportedOperations], executionProfiles: [], validationProfiles: [], eventResume: true };
+    if (name === 'GetCapabilities') return { contractVersion: '1', operations: [...supportedOperations], executionProfiles: [], validationProfiles: [], eventResume: true, durableExecutionAdmission: false };
     if (name === 'ReadEvents') {
       const sequence = this.parseCursor(body.cursor);
       const events = this.db.prepare('SELECT * FROM coordination_event WHERE tenant=? AND owner=? AND sequence>? ORDER BY sequence LIMIT ?').all(this.tenant, this.owner, sequence, body.limit)
@@ -179,7 +195,7 @@ export class Coordinator {
     if (name === 'GetOperation') {
       const row = this.db.prepare('SELECT receipt FROM coordination_operation WHERE tenant=? AND owner=? AND id=?').get(this.tenant, this.owner, body.resourceId);
       if (!row) fail('NotFound', 'Operation not found', 404);
-      const receipt = JSON.parse(row.receipt); this.authorize(JSON.parse(this.plan(receipt.resourceId).definition)); return receipt;
+      const receipt = JSON.parse(row.receipt); this.authorize(JSON.parse(this.plan(this.db.prepare('SELECT plan_id FROM coordination_item WHERE tenant=? AND owner=? AND id=?').get(this.tenant, this.owner, receipt.resourceId)?.plan_id ?? receipt.resourceId).definition)); return receipt;
     }
     if (name === 'GetItem') {
       const row = this.db.prepare('SELECT * FROM coordination_item WHERE tenant=? AND owner=? AND id=?').get(this.tenant, this.owner, body.resourceId);
