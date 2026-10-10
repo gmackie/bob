@@ -11,7 +11,7 @@ export const outputValidators = new Map(Object.values(schema.paths).flatMap(Obje
   .map(op => [op.operationId.split('/').at(-1), ajv.compile(op.responses['200'].content['application/json'].schema)]));
 export const validators = new Map(Object.values(schema.paths).flatMap(Object.values).filter(op => op.operationId)
   .map(op => [op.operationId.split('/').at(-1), ajv.compile(op.requestBody.content['application/json'].schema)]));
-export const supportedOperations = Object.freeze(['CreatePlan', 'UpdatePlan', 'ControlPlan', 'GetPlan', 'GetItem', 'GetOperation', 'ReadEvents', 'GetCapabilities']);
+export const supportedOperations = Object.freeze(['CreatePlan', 'UpdatePlan', 'ControlPlan', 'GetPlan', 'GetItem', 'GetOperation', 'ReadEvents', 'GetCapabilities', 'ListPlans']);
 export const canonical = value => JSON.stringify(value, (_key, entry) => entry && typeof entry === 'object' && !Array.isArray(entry)
   ? Object.fromEntries(Object.keys(entry).sort().map(key => [key, entry[key]])) : entry);
 export const digest = value => createHash('sha256').update(canonical(value)).digest('hex');
@@ -181,6 +181,14 @@ export class Coordinator {
   }
   afterPlanWrite(_planId) {}
   query(name, body) {
+    if (name === 'ListPlans') {
+      const rows = this.db.prepare('SELECT * FROM coordination_plan WHERE tenant=? AND owner=? AND id>? ORDER BY id LIMIT ?').all(this.tenant, this.owner, body.afterPlanId ?? '', body.limit + 1);
+      const plans = rows.slice(0, body.limit).map(row => {
+        const definition = JSON.parse(row.definition); this.authorize(definition);
+        return { planId: row.id, resourceVersion: row.version, state: row.state, itemCount: definition.items.length };
+      });
+      return { contractVersion: '1', plans, nextPlanId: rows.length > body.limit ? plans.at(-1).planId : null };
+    }
     if (name === 'GetCapabilities') return { contractVersion: '1', operations: [...supportedOperations], executionProfiles: [], validationProfiles: [], eventResume: true, durableExecutionAdmission: false };
     if (name === 'ReadEvents') {
       const sequence = this.parseCursor(body.cursor);

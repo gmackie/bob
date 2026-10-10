@@ -4,9 +4,9 @@ The canonical wire model is [src/contract.forge](src/contract.forge). ForgeC
 generates the OpenAPI 3.1 document, ForgeGraph contract IR and typed TypeScript
 client in `generated/`. T3 can consume these without importing Bob's runtime.
 
-This package defines the shared contract and an opt-in local plan admission
-adapter. It installs no HTTP handlers, scheduler, provider process, integration
-writes or deployments. Bob owns coordination; each T3 environment owns its
+This package defines the shared contract, local durable adapter and opt-in HTTP
+host. It enables no scheduler, provider process, integration writes or deployments
+by default. Bob owns coordination; each T3 environment owns its
 execution. Parent work: BOB-41 and T3CODE-6. Contract publication: BOB-42. Local durable admission: BOB-43. Execution recovery: BOB-44.
 
 ## Verify and generate
@@ -85,8 +85,9 @@ ForgeC-generated D1 SQL from `storage/src/model.forge`. The PostgreSQL projectio
 is generated for review only; no PostgreSQL adapter or production migration is
 enabled. Database version 2 is initialized once; the generated attempt migration upgrades
 version 1 transactionally. Unsupported versions fail.
-The local store and policy file are owned by the local operator. No network
-listener or client-supplied actor/workspace is accepted.
+The local store and policy file are owned by the local operator. The optional
+HTTP host derives actor/workspace authority from configured principals; requests
+cannot supply that authority.
 
 CreatePlan, UpdatePlan and ControlPlan commit plan/items, resource events, pending
 notifications and a scoped command receipt together under `BEGIN IMMEDIATE`.
@@ -100,7 +101,7 @@ The same adapter implements GetPlan, GetItem, GetOperation, ReadEvents and
 GetCapabilities. Snapshot watermarks are read in the same transaction as state.
 Cursors bind to the trusted workspace/actor; event pages are bounded. Pending
 notifications survive restart. The base Coordinator exposes plan admission only;
-the opt-in ExecutionCoordinator and CLI additionally support execution below.
+the opt-in ExecutionCoordinator, CLI and HTTP host additionally support execution below.
 Capabilities list only implemented operations and no execution/validation
 profiles. Bob advertises durableExecutionAdmission=false: it coordinates work
 but is not an environment admission server. Unsupported operations fail with CapabilityUnavailable.
@@ -139,7 +140,7 @@ accurate; passing local plan tests does not satisfy those later scenarios.
 ## Execution requests, worker and receipts
 
 `runtime/execution.mjs` provides ExecutionCoordinator, adding RequestExecution,
-RetryItem and RecordExecutionReceipt to the eight plan operations. RequestExecution
+RetryItem and RecordExecutionReceipt to the nine plan operations. RequestExecution
 uses the SubmitExecution input shape: callers provide stable request/attempt IDs,
 a pinned plan version, issue snapshot, explicit target, scope, base revision and
 an environment-local executionProfileId. Its Idempotency-Key equals requestId.
@@ -178,8 +179,8 @@ refuse redirects. DispatchOnce runs once, without a recurring scheduler, and
 prints a structured result (including unknown state when admission is uncertain).
 
 RecordExecutionReceipt requires a trusted `receiptEnvironmentId` in host context
-matching the receipt environment. A future network host must derive this field
-from authenticated environment identity; it must not copy it from the request.
+matching the receipt environment. The HTTP host derives this field from the
+operator-owned authenticated principal context, never from the request.
 Admission execution/thread/repository identity, dirty-tree patch evidence and
 receipt sequence are checked before recording a terminal fact. The receipt stream
 is per attempt, beginning at 1; this slice has a single terminal receipt and
@@ -195,3 +196,27 @@ remain validating. Later milestone dependencies stay pending. Pause/resume retai
 attempt outcomes and recomputes ready dependencies in the plan transaction.
 Validation, release, production reconciliation and execution cancellation remain
 unimplemented; no execution receipt closes a production issue.
+
+## Authenticated HTTP host
+
+Install the packed package with Node 24 and start `bob-coordinate-server`:
+
+```sh
+bob-coordinate-server --database ./coordination.sqlite --principals ./principals.json
+```
+
+The default listener is `127.0.0.1:4780`. Set `--host` and `--port` explicitly
+when exposing it through your environment proxy. The principals file is a private,
+operator-owned array; each entry has a unique `token` of at least 32 characters,
+a `context` with the same target/issue policy used by the CLI, and an explicit
+`operations` allowlist. Use separate viewer and environment-receipt credentials.
+Only an environment-receipt principal should have `receiptEnvironmentId` and
+`RecordExecutionReceipt` authority. Keep tokens out of command payloads.
+
+Send `Authorization: Bearer <token>` and `Content-Type: application/json`.
+Mutation `Idempotency-Key` headers must match their command/request identifiers.
+Routes and bodies come from the generated ForgeC OpenAPI document. `ListPlans`
+returns owner-scoped summaries in pages of at most 50. Bodies are bounded to
+1 MiB; unsupported operations fail explicitly. This host does not start a worker:
+run the explicit `DispatchOnce` CLI with operator-owned environment bindings to
+admit queued execution in T3.

@@ -3165,6 +3165,268 @@
       "fingerprint": "sha256:823756f19444531435a3293965b9cf3c4cf06f287da581445bd8bef485cfaa61"
     },
     {
+      "id": "bob.functions.ListPlans",
+      "serviceId": "bob",
+      "groupId": "functions",
+      "endpointId": "ListPlans",
+      "transport": {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/v1/coordination/plans/list",
+        "openApiPath": "/api/v1/coordination/plans/list"
+      },
+      "policy": {
+        "isPublic": false,
+        "authentication": {
+          "mode": "service",
+          "derived": "service",
+          "mismatch": false,
+          "schemes": [
+            "bearer"
+          ]
+        },
+        "sla": {
+          "policy": {},
+          "provenance": {}
+        },
+        "slo": {
+          "availability": 0.999,
+          "latency": {
+            "good": 0.99,
+            "withinMs": 1000
+          },
+          "windowDays": 28
+        }
+      },
+      "request": {
+        "headers": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "X-Forge-Purpose": {
+                "type": "string"
+              },
+              "Idempotency-Key": {
+                "type": "string"
+              }
+            },
+            "required": []
+          },
+          "fingerprint": "sha256:c737fc8f90f91aea8642eb049490fbfc45bb300a3e3fc8683e10b38c32ffa4e3"
+        },
+        "bodies": [
+          {
+            "contentType": "application/json",
+            "schema": {
+              "jsonSchema": {
+                "type": "object",
+                "properties": {
+                  "contractVersion": {
+                    "type": "string",
+                    "x-forge-type": "text",
+                    "pattern": "^1$"
+                  },
+                  "afterPlanId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "x-forge-type": "text",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "x-forge-type": "integer"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "contractVersion",
+                  "limit"
+                ]
+              },
+              "fingerprint": "sha256:7bb03aa71cf42298ee5930dde44bd8f45986e51d8626360f8203ba5b30346e7e"
+            }
+          }
+        ]
+      },
+      "successes": [
+        {
+          "status": 200,
+          "bodies": [
+            {
+              "contentType": "application/json",
+              "schema": {
+                "jsonSchema": {
+                  "type": "object",
+                  "properties": {
+                    "contractVersion": {
+                      "type": "string",
+                      "x-forge-type": "text",
+                      "pattern": "^1$"
+                    },
+                    "plans": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "planId": {
+                            "type": "string",
+                            "x-forge-type": "text",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "resourceVersion": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991,
+                            "x-forge-type": "integer"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "draft",
+                              "active",
+                              "paused",
+                              "cancelling",
+                              "cancelled",
+                              "completed"
+                            ],
+                            "x-forge-enum": "@bob/coordination/_/PlanState"
+                          },
+                          "itemCount": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100,
+                            "x-forge-type": "integer"
+                          }
+                        },
+                        "required": [
+                          "planId",
+                          "resourceVersion",
+                          "state",
+                          "itemCount"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "uniqueItems": false,
+                      "x-forge-collection": "list",
+                      "maxItems": 50
+                    },
+                    "nextPlanId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "x-forge-type": "text",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "required": [
+                    "contractVersion",
+                    "plans"
+                  ],
+                  "additionalProperties": false
+                },
+                "fingerprint": "sha256:9105cee902bc9fd18b513911eddbab66bbda93d85ef1e14ad582fdb849d0c279"
+              }
+            }
+          ]
+        }
+      ],
+      "errors": [
+        {
+          "status": 401,
+          "bodies": [
+            {
+              "contentType": "application/problem+json",
+              "schema": {
+                "id": "Problem",
+                "jsonSchema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "fingerprint": "sha256:0b571d24869f949504b858404a8efc80cb2cfe2be71562b1c0dba56d1f11bbee"
+              }
+            }
+          ]
+        },
+        {
+          "status": 403,
+          "bodies": [
+            {
+              "contentType": "application/problem+json",
+              "schema": {
+                "id": "Problem",
+                "jsonSchema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "fingerprint": "sha256:0b571d24869f949504b858404a8efc80cb2cfe2be71562b1c0dba56d1f11bbee"
+              }
+            }
+          ]
+        },
+        {
+          "status": 409,
+          "bodies": [
+            {
+              "contentType": "application/problem+json",
+              "schema": {
+                "id": "Problem",
+                "jsonSchema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "fingerprint": "sha256:0b571d24869f949504b858404a8efc80cb2cfe2be71562b1c0dba56d1f11bbee"
+              }
+            }
+          ]
+        },
+        {
+          "status": 412,
+          "bodies": [
+            {
+              "contentType": "application/problem+json",
+              "schema": {
+                "id": "Problem",
+                "jsonSchema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "fingerprint": "sha256:0b571d24869f949504b858404a8efc80cb2cfe2be71562b1c0dba56d1f11bbee"
+              }
+            }
+          ]
+        },
+        {
+          "status": 422,
+          "bodies": [
+            {
+              "contentType": "application/problem+json",
+              "schema": {
+                "id": "Problem",
+                "jsonSchema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "fingerprint": "sha256:0b571d24869f949504b858404a8efc80cb2cfe2be71562b1c0dba56d1f11bbee"
+              }
+            }
+          ]
+        }
+      ],
+      "middleware": [
+        {
+          "key": "@forgegraph/runtime/AuthHost",
+          "security": true,
+          "schemes": [
+            "bearer"
+          ]
+        }
+      ],
+      "fingerprint": "sha256:368f6afbb373a38ad3fc6129591154ea375f6dfceb71f8a3cb29b609fab081c3"
+    },
+    {
       "id": "bob.functions.ReadEvents",
       "serviceId": "bob",
       "groupId": "functions",
@@ -8119,7 +8381,7 @@
       "bearerFormat": "JWT"
     }
   },
-  "fingerprint": "sha256:f99baf0136b50400c6523cda099796c15b44c23cd9f2c1a8d35798bf2448050e",
+  "fingerprint": "sha256:a13923ee42b687ff051f65cab19c918d69dc6071bbc494b484080ab14f555361",
   "generator": {
     "name": "forgec",
     "version": "0.5.0"

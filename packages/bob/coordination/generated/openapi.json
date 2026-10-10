@@ -2772,6 +2772,210 @@
         }
       }
     },
+    "/api/v1/coordination/plans/list": {
+      "post": {
+        "operationId": "@bob/coordination/_/ListPlans",
+        "tags": [
+          "functions"
+        ],
+        "x-forge-kind": "function",
+        "parameters": [
+          {
+            "name": "X-Forge-Purpose",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Purpose surface for this invocation (edition 2027; exactly one)"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Replay returns the stored result; reuse with a different body is 409 IdempotencyMismatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "contractVersion": {
+                    "type": "string",
+                    "x-forge-type": "text",
+                    "pattern": "^1$"
+                  },
+                  "afterPlanId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "x-forge-type": "text",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "x-forge-type": "integer"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "contractVersion",
+                  "limit"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contractVersion": {
+                      "type": "string",
+                      "x-forge-type": "text",
+                      "pattern": "^1$"
+                    },
+                    "plans": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "planId": {
+                            "type": "string",
+                            "x-forge-type": "text",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "resourceVersion": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991,
+                            "x-forge-type": "integer"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "draft",
+                              "active",
+                              "paused",
+                              "cancelling",
+                              "cancelled",
+                              "completed"
+                            ],
+                            "x-forge-enum": "@bob/coordination/_/PlanState"
+                          },
+                          "itemCount": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100,
+                            "x-forge-type": "integer"
+                          }
+                        },
+                        "required": [
+                          "planId",
+                          "resourceVersion",
+                          "state",
+                          "itemCount"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "uniqueItems": false,
+                      "x-forge-collection": "list",
+                      "maxItems": 50
+                    },
+                    "nextPlanId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "x-forge-type": "text",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "required": [
+                    "contractVersion",
+                    "plans"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "NotPermitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "VersionConflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ValidationFailed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Domain errors: @bob/coordination/_/ListPlans.Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "x-forge-slo": {
+          "availability": "99.9%",
+          "latencyGood": "99%",
+          "latencyWithinMs": 1000,
+          "window": "28d",
+          "class": "function"
+        }
+      }
+    },
     "/api/v1/coordination/events/query": {
       "post": {
         "operationId": "@bob/coordination/_/ReadEvents",
