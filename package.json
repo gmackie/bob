@@ -19,7 +19,8 @@
     "dev:ooda-runner": "turbo watch dev --filter=@gmacko/ooda-runner",
     "dev:research": "cd packages/research-backend && uv run uvicorn research_backend.main:app --reload --port 8000",
     "generate:openapi": "tsx scripts/generate-openapi.ts",
-    "generate:openapi:bob": "tsx scripts/generate-bob-openapi.ts"
+    "generate:openapi:bob": "tsx scripts/generate-bob-openapi.ts",
+    "verify:coordination": "npm --prefix packages/bob/coordination run verify"
   },
   "pnpm": {
     "overrides": {
