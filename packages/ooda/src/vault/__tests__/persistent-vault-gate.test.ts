@@ -53,7 +53,10 @@ it("releases failed operations without leaving a false orphan", async () => {
   const { open } = await fixture(); const gate = open();
   await expect(gate.execute(async () => { throw Error("failure"); })).rejects.toThrow("failure");
   expect(await open().execute(async () => "next")).toBe("next");
-});
+  // This failure/reacquisition path also performs FULL-synchronous commits.
+  // Run 1315 exceeded 5s on shared storage; retain the durability assertions
+  // with the same bounded allowance as the competing-host integration case.
+}, 20_000);
 
 it("keeps a killed process admission blocked across restart and refuses generation advance", async () => {
   const { path, open } = await fixture(); open();
