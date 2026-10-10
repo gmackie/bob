@@ -285,6 +285,10 @@ export class RunnerServer {
           workspaceId: config.bobWorkspaceId,
           devDir: config.bobDevDir,
           maxConcurrent: config.bobMaxConcurrent,
+          ...(config.t3codeServerUrl ? { t3: {
+            serverUrl: config.t3codeServerUrl, authToken: config.t3codeAuthToken!,
+            modelInstanceId: config.t3codeModelInstanceId, model: config.t3codeModel,
+          } } : {}),
           // Phase 5 M2: write an OODA-dispatched run's outcome back into its
           // originating thread as a provenance-stamped note. Only fires for
           // sessions carrying an ooda correlation (dark until M1 is enabled).

@@ -1,4 +1,6 @@
+import { createRequire } from "node:module";
 import { withTraceSpan } from "@gmacko/core/telemetry/deep";
+import type { T3Config } from "./t3-client";
 import { readDispatchTrace } from "./trace-dispatch";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -92,6 +94,7 @@ export interface BobGatewayConfig {
   workspaceId: string;
   devDir: string;
   maxConcurrent: number;
+  t3?: T3Config;
   /**
    * Phase 5 M2 read-back. Called when an OODA-dispatched run finishes so the
    * runner (which owns the thread workspaces on disk) can write the outcome
@@ -528,6 +531,10 @@ export class BobGatewayConnector {
           pending.clear();
           continue;
         }
+        if (line.includes('"type":"control_resolved"')) {
+          try { pending.delete((JSON.parse(line) as { request_id: string }).request_id); } catch { /* incomplete event */ }
+          continue;
+        }
         if (!line.includes('"type":"control_request"')) continue;
         try {
           const parsed = JSON.parse(line) as {
@@ -688,7 +695,9 @@ export class BobGatewayConnector {
             );
             return true;
           },
-          kill: () => proc.kill("SIGTERM"),
+          kill: () => adoption.meta.runtime === "t3"
+            ? writeStdin(JSON.stringify({ type: "stop" }) + "\n")
+            : void proc.kill("SIGTERM"),
           respondPermission: (requestId, behavior, message) =>
             pump.respond(requestId, behavior, message, writeStdin),
         });
@@ -949,6 +958,7 @@ export class BobGatewayConnector {
   private readonly agentRunnable = new Map<string, boolean>();
 
   private canRunAgent(agentType: string): boolean {
+    if (this.config.t3) return true;
     const cached = this.agentRunnable.get(agentType);
     if (cached !== undefined) return cached;
 
@@ -1150,7 +1160,9 @@ export class BobGatewayConnector {
     };
     try {
       await withTraceSpan("session.execute", async () => {
-        if (adapter) {
+        if (this.config.t3) {
+          await this.runWithT3(session, workDir, prompt, collect, worktree);
+        } else if (adapter) {
           await this.runWithAdapter(session, adapter, workDir, prompt, collect, worktree);
         } else {
           await this.runWithCli(session, workDir, prompt, collect);
@@ -1234,7 +1246,10 @@ export class BobGatewayConnector {
       void this.reportOodaOutcome(session, "failed");
     } finally {
       watchHandle?.stop();
-      if (worktree) await this.removeWorktree(worktree).catch(() => {});
+      // A lost supervisor socket does not mean the remote T3 run has stopped.
+      if (worktree && !this.supervisedRunStillLive(this.superviseDir(session.sessionId))) {
+        await this.removeWorktree(worktree).catch(() => {});
+      }
       this.activeSessions.delete(session.sessionId);
       this.sessionHandles.delete(session.sessionId);
       this.stopRequested.delete(session.sessionId);
@@ -1643,6 +1658,58 @@ export class BobGatewayConnector {
         toolName: event.permission?.toolName,
       });
     }
+  }
+
+  private runWithT3(
+    session: ServerSessionAvailable,
+    workDir: string,
+    prompt: string,
+    onChunk: (text: string) => void,
+    worktree: WorktreeContext | null,
+  ): Promise<void> {
+    if (session.personaConfig?.allowedTools?.length) {
+      throw new Error("T3 handoff cannot enforce this persona's tool allowlist");
+    }
+    const sessionId = session.sessionId;
+    const proc = spawnSupervised(this.superviseDir(sessionId), {
+      sessionId, session: session as unknown as Record<string, unknown>,
+      worktree, startedAt: new Date().toISOString(), runtime: "t3",
+    }, process.execPath, ["--import", createRequire(import.meta.url).resolve("tsx"), fileURLToPath(new URL("./t3-bridge.ts", import.meta.url))], {
+      cwd: workDir,
+      env: { ...process.env,
+        BOB_T3_CONFIG: JSON.stringify(this.config.t3),
+        BOB_T3_TASK: JSON.stringify({
+          sessionId,
+          providerInstanceId: this.config.t3?.modelInstanceId ?? ({ claude: "claudeAgent", codex: "codex", grok: "grok" } as Record<string,string>)[session.agentType || "claude"],
+          model: session.personaConfig?.model,
+          title: session.title || session.identifier || "Bob task",
+          repoPath: worktree?.repoPath ?? workDir, worktreePath: workDir,
+          branch: worktree?.branch ?? session.branch,
+          prompt: [this.buildSystemPrompt(session), prompt].filter(Boolean).join("\n\n"),
+          runtimeMode: this.permissionModeFor(session) === "skip" ? "full-access" : "approval-required",
+        }),
+      },
+    });
+    this.supervisedSessions.add(sessionId);
+    const pump = this.makeAdoptionPump(sessionId);
+    const write = (text: string) => void proc.stdin!.write(text);
+    this.sessionHandles.set(sessionId, {
+      write: text => { write(JSON.stringify({ type: "user", message: { content: text } }) + "\n"); return true; },
+      // Keep the bridge alive until T3 acknowledges the interruption.
+      kill: () => write(JSON.stringify({ type: "stop" }) + "\n"),
+      respondPermission: (id, behavior, message) => pump.respond(id, behavior, message, write),
+    });
+    return new Promise((resolve, reject) => {
+      for (const stream of ["stdout", "stderr"] as const) {
+        proc[stream]!.on("data", (data: Buffer) => {
+          const text = data.toString();
+          onChunk(text);
+          pump.feed(text, stream, false);
+        });
+      }
+      proc.on("error", reject);
+      proc.on("close", code => code === 0 ? resolve() : reject(new Error(`T3 bridge exited with code ${code}`)));
+    });
   }
 
   private async runWithAdapter(
