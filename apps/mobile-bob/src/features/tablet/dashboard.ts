@@ -580,7 +580,8 @@ function buildProviderCard(
     activeCount,
     queuedOrStartingCount:
       startingCount + (provider === "codex" ? queuedCount : 0),
-    limitLabel: snapshot ? "Capacity connected" : "Capacity not connected",
+    // Run summaries are historical usage evidence, not a live connection probe.
+    limitLabel: snapshot ? "Recorded usage" : "Usage unavailable",
     statusLabel: hasFailure ? "Recent failure" : "Normal",
     tone: hasFailure ? "danger" : activeCount > 0 ? "success" : "default",
     usageLimits,

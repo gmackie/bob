@@ -397,6 +397,29 @@ export function TasksDashboard({
       className="flex-1"
       contentContainerStyle={{ padding: 24, paddingBottom: 48 }}
     >
+      {workItemsQuery.isError || agentRunsQuery.isError ? (
+        <View accessibilityRole="alert" className="mb-4 gap-2 rounded-lg border border-danger p-4">
+          <Text className="font-semibold text-danger">Dashboard could not refresh</Text>
+          <Text className="text-sm text-muted">
+            {workItemsQuery.isError && agentRunsQuery.isError
+              ? "Tasks and run history are unavailable. Any previously loaded data may be out of date."
+              : workItemsQuery.isError
+                ? "Tasks are unavailable. Any previously loaded tasks may be out of date."
+                : "Run history and provider usage are unavailable. Any previously loaded runs may be out of date."}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry dashboard refresh"
+            onPress={() => {
+              void workItemsQuery.refetch();
+              void agentRunsQuery.refetch();
+            }}
+            className="self-start rounded-md bg-secondary px-3 py-2"
+          >
+            <Text className="font-semibold text-foreground">Try again</Text>
+          </Pressable>
+        </View>
+      ) : null}
       {onOpenToday ? (
         <Pressable
           testID="open-today"
