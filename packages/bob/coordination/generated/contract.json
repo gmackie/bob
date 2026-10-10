@@ -1870,6 +1870,9 @@
                     },
                     "eventResume": {
                       "type": "boolean"
+                    },
+                    "durableExecutionAdmission": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -1877,11 +1880,12 @@
                     "operations",
                     "executionProfiles",
                     "validationProfiles",
-                    "eventResume"
+                    "eventResume",
+                    "durableExecutionAdmission"
                   ],
                   "additionalProperties": false
                 },
-                "fingerprint": "sha256:bf5094f22a6fa8e28fdf73fd23b021666df018499a6d00c124c3356881dfd154"
+                "fingerprint": "sha256:da4e22115428e9d03fd4debb7bc9013ecc0d20fef09e855684bbe030e900ac07"
               }
             }
           ]
@@ -1958,7 +1962,7 @@
           ]
         }
       ],
-      "fingerprint": "sha256:584a20e2fb460330afe23a346d8cd0202b9f9101ae7f922481017e289706ddac"
+      "fingerprint": "sha256:a8f4790f6f73db5d2fef31a08560fab20ef735886ec88dfabfc1e9434d523bfd"
     },
     {
       "id": "bob.functions.GetItem",
@@ -5056,6 +5060,417 @@
       "fingerprint": "sha256:afa303ac7b5c34ee157c9224a7a885d03f1c6c741126ca4c02728d71d990cc76"
     },
     {
+      "id": "bob.functions.RequestExecution",
+      "serviceId": "bob",
+      "groupId": "functions",
+      "endpointId": "RequestExecution",
+      "transport": {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/v1/coordination/execution",
+        "openApiPath": "/api/v1/coordination/execution"
+      },
+      "policy": {
+        "isPublic": false,
+        "authentication": {
+          "mode": "service",
+          "derived": "service",
+          "mismatch": false,
+          "schemes": [
+            "bearer"
+          ]
+        },
+        "sla": {
+          "policy": {},
+          "provenance": {}
+        },
+        "slo": {
+          "availability": 0.999,
+          "latency": {
+            "good": 0.99,
+            "withinMs": 1000
+          },
+          "windowDays": 28
+        }
+      },
+      "request": {
+        "headers": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "X-Forge-Purpose": {
+                "type": "string"
+              },
+              "Idempotency-Key": {
+                "type": "string"
+              }
+            },
+            "required": []
+          },
+          "fingerprint": "sha256:c737fc8f90f91aea8642eb049490fbfc45bb300a3e3fc8683e10b38c32ffa4e3"
+        },
+        "bodies": [
+          {
+            "contentType": "application/json",
+            "schema": {
+              "jsonSchema": {
+                "type": "object",
+                "properties": {
+                  "contractVersion": {
+                    "type": "string",
+                    "x-forge-type": "text",
+                    "pattern": "^1$"
+                  },
+                  "requestId": {
+                    "type": "string",
+                    "x-forge-type": "text",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "attemptId": {
+                    "type": "string",
+                    "x-forge-type": "text",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "itemId": {
+                    "type": "string",
+                    "x-forge-type": "text",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "planId": {
+                    "type": "string",
+                    "x-forge-type": "text",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "planVersion": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991,
+                    "x-forge-type": "integer"
+                  },
+                  "issueSnapshotRef": {
+                    "type": "string",
+                    "x-forge-type": "text",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "target": {
+                    "type": "object",
+                    "properties": {
+                      "environmentId": {
+                        "type": "string",
+                        "x-forge-type": "text",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "projectId": {
+                        "type": "string",
+                        "x-forge-type": "text",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "repository": {
+                        "type": "object",
+                        "properties": {
+                          "integrationId": {
+                            "type": "string",
+                            "x-forge-type": "text",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "repositoryId": {
+                            "type": "string",
+                            "x-forge-type": "text",
+                            "minLength": 1,
+                            "maxLength": 128
+                          }
+                        },
+                        "required": [
+                          "integrationId",
+                          "repositoryId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "environmentId",
+                      "projectId",
+                      "repository"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "work": {
+                    "type": "object",
+                    "properties": {
+                      "title": {
+                        "type": "string",
+                        "x-forge-type": "text",
+                        "minLength": 1,
+                        "maxLength": 240
+                      },
+                      "instructions": {
+                        "type": "string",
+                        "x-forge-type": "text",
+                        "minLength": 1,
+                        "maxLength": 16000
+                      },
+                      "acceptanceCriteria": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "x-forge-type": "text",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "uniqueItems": false,
+                        "x-forge-collection": "list",
+                        "minItems": 1,
+                        "maxItems": 50
+                      }
+                    },
+                    "required": [
+                      "title",
+                      "instructions",
+                      "acceptanceCriteria"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "workspace": {
+                    "type": "object",
+                    "properties": {
+                      "baseRevision": {
+                        "type": "string",
+                        "x-forge-type": "text",
+                        "pattern": "^[a-f0-9]{40}$"
+                      },
+                      "branch": {
+                        "type": "string",
+                        "x-forge-type": "text",
+                        "minLength": 1,
+                        "maxLength": 240
+                      }
+                    },
+                    "required": [
+                      "baseRevision",
+                      "branch"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "executionProfileId": {
+                    "type": "string",
+                    "x-forge-type": "text",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "contractVersion",
+                  "requestId",
+                  "attemptId",
+                  "itemId",
+                  "planId",
+                  "planVersion",
+                  "issueSnapshotRef",
+                  "target",
+                  "work",
+                  "workspace",
+                  "executionProfileId"
+                ]
+              },
+              "fingerprint": "sha256:6a930b42686bf01254265a2e46b08f70dfe755bdcc07aae38c9b5e7af00fa451"
+            }
+          }
+        ]
+      },
+      "successes": [
+        {
+          "status": 200,
+          "bodies": [
+            {
+              "contentType": "application/json",
+              "schema": {
+                "jsonSchema": {
+                  "type": "object",
+                  "properties": {
+                    "contractVersion": {
+                      "type": "string",
+                      "x-forge-type": "text",
+                      "pattern": "^1$"
+                    },
+                    "operationId": {
+                      "type": "string",
+                      "x-forge-type": "text",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "commandId": {
+                      "type": "string",
+                      "x-forge-type": "text",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "accepted",
+                        "running",
+                        "succeeded",
+                        "failed",
+                        "cancelled"
+                      ],
+                      "x-forge-enum": "@bob/coordination/_/OperationState"
+                    },
+                    "resourceId": {
+                      "type": "string",
+                      "x-forge-type": "text",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "resourceVersion": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991,
+                      "x-forge-type": "integer"
+                    },
+                    "error": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "x-forge-type": "text",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "message": {
+                          "type": "string",
+                          "x-forge-type": "text",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                        "retryable"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "contractVersion",
+                    "operationId",
+                    "commandId",
+                    "state",
+                    "resourceId",
+                    "resourceVersion"
+                  ],
+                  "additionalProperties": false
+                },
+                "fingerprint": "sha256:b55d78292a05b82d82b3679b43498bc706203da9d09f764094ef8d3a0095016c"
+              }
+            }
+          ]
+        }
+      ],
+      "errors": [
+        {
+          "status": 401,
+          "bodies": [
+            {
+              "contentType": "application/problem+json",
+              "schema": {
+                "id": "Problem",
+                "jsonSchema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "fingerprint": "sha256:0b571d24869f949504b858404a8efc80cb2cfe2be71562b1c0dba56d1f11bbee"
+              }
+            }
+          ]
+        },
+        {
+          "status": 403,
+          "bodies": [
+            {
+              "contentType": "application/problem+json",
+              "schema": {
+                "id": "Problem",
+                "jsonSchema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "fingerprint": "sha256:0b571d24869f949504b858404a8efc80cb2cfe2be71562b1c0dba56d1f11bbee"
+              }
+            }
+          ]
+        },
+        {
+          "status": 409,
+          "bodies": [
+            {
+              "contentType": "application/problem+json",
+              "schema": {
+                "id": "Problem",
+                "jsonSchema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "fingerprint": "sha256:0b571d24869f949504b858404a8efc80cb2cfe2be71562b1c0dba56d1f11bbee"
+              }
+            }
+          ]
+        },
+        {
+          "status": 412,
+          "bodies": [
+            {
+              "contentType": "application/problem+json",
+              "schema": {
+                "id": "Problem",
+                "jsonSchema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "fingerprint": "sha256:0b571d24869f949504b858404a8efc80cb2cfe2be71562b1c0dba56d1f11bbee"
+              }
+            }
+          ]
+        },
+        {
+          "status": 422,
+          "bodies": [
+            {
+              "contentType": "application/problem+json",
+              "schema": {
+                "id": "Problem",
+                "jsonSchema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "fingerprint": "sha256:0b571d24869f949504b858404a8efc80cb2cfe2be71562b1c0dba56d1f11bbee"
+              }
+            }
+          ]
+        }
+      ],
+      "middleware": [
+        {
+          "key": "@forgegraph/runtime/AuthHost",
+          "security": true,
+          "schemes": [
+            "bearer"
+          ]
+        }
+      ],
+      "fingerprint": "sha256:5a1a5b12aee48a5a79880b59ed6cffd8519160bf0c29176612b98278d58fa812"
+    },
+    {
       "id": "bob.functions.RequestRelease",
       "serviceId": "bob",
       "groupId": "functions",
@@ -7704,7 +8119,7 @@
       "bearerFormat": "JWT"
     }
   },
-  "fingerprint": "sha256:f5d7bd07f5d6f8153b91595a163a3eafff43398d986f78fbc6b02ffbfc62ed67",
+  "fingerprint": "sha256:f99baf0136b50400c6523cda099796c15b44c23cd9f2c1a8d35798bf2448050e",
   "generator": {
     "name": "forgec",
     "version": "0.5.0"

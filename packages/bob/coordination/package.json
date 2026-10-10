@@ -26,6 +26,8 @@
   },
   "exports": {
     "./coordinator": "./runtime/coordinator.mjs",
-    "./client": "./generated/client.ts"
+    "./client": "./generated/client.mjs",
+    "./execution": "./runtime/execution.mjs",
+    "./execution-port": "./runtime/execution-port.mjs"
   }
 }

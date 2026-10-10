@@ -29,3 +29,21 @@ export resource CoordinationEvent @tenant {
   unique sequence
   list by owner, sequence
 }
+
+export resource CoordinationAttempt @tenant {
+  id : id
+  owner : text length 1..128
+  planId : text length 1..128
+  itemId : text length 1..128
+  requestId : text length 1..128
+  operationId : text length 1..128
+  request : json
+  state : text length 1..32
+  admission : json?
+  terminal : json?
+  lastSequence : integer >= 0
+  leaseOwner : text? length 1..128
+  leaseUntil : integer?
+  unique requestId
+  list by owner, planId, state
+}
