@@ -31,6 +31,7 @@ export interface RunMeta {
   session: Record<string, unknown>;
   worktree: { path: string; repoPath: string; branch: string; baseBranch: string } | null;
   startedAt: string;
+  runtime?: "t3";
 }
 
 interface JournalEntry {

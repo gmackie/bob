@@ -12,7 +12,7 @@ export const RunnerConfigSchema = z
     port: z.coerce.number().int().min(0).max(65535).default(3001),
     // External inference access requires an explicit bind plus BOB_API_KEY.
     inferenceHost: z.string().optional(),
-    // Preserve accepted live configuration; no T3 routing consumer is enabled.
+    // When set, gateway tasks execute on this T3 server through the supervised bridge.
     t3codeServerUrl: z.string().url().optional(),
     t3codeAuthToken: z.string().optional(),
     t3codeProjectId: z.string().optional(),
@@ -86,6 +86,9 @@ export const RunnerConfigSchema = z
     openaiHostModel: z.string().optional(),
   })
   .superRefine((config, context) => {
+    if (config.t3codeServerUrl && !config.t3codeAuthToken) {
+      context.addIssue({ code: "custom", path: ["t3codeAuthToken"], message: "T3 server execution requires OODA_T3CODE_AUTH_TOKEN" });
+    }
     if (config.obsidianDeliveryEnabled && !config.obsidianVaultPath) {
       context.addIssue({
         code: "custom",
