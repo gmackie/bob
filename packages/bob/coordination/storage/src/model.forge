@@ -1,0 +1,31 @@
+/// Internal storage; not a public CRUD surface. The adapter owns transactions.
+export resource CoordinationPlan @tenant @versioned {
+  id : id
+  owner : text length 1..128
+  definition : json
+  state : text length 1..32
+  list by owner
+}
+export resource CoordinationItem @tenant @versioned {
+  id : id
+  owner : text length 1..128
+  planId : text length 1..128
+  snapshot : json
+  list by owner, planId
+}
+export resource CoordinationOperation @tenant {
+  id : id
+  owner : text length 1..128
+  receipt : json
+  list by owner
+}
+export resource CoordinationEvent @tenant {
+  id : id
+  owner : text length 1..128
+  resourceId : text length 1..128
+  resourceVersion : integer >= 1
+  sequence : integer >= 1
+  recordedAt : datetime
+  unique sequence
+  list by owner, sequence
+}
