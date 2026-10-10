@@ -24,6 +24,17 @@ try {
     if (mode === '--write') copyFileSync(join(out, name), join(root, 'generated', name));
     else assert.equal(readFileSync(join(out, name), 'utf8'), readFileSync(join(root, 'generated', name), 'utf8'), name + ' is stale; run npm run generate');
   }
+  const storageOut = join(out, 'storage');
+  const storageRoot = join(root, 'storage');
+  execFileSync(forgec, ['check', storageRoot], { stdio: 'inherit' });
+  execFileSync(forgec, ['build', storageRoot, '--out', storageOut], { stdio: 'inherit' });
+  mkdirSync(join(storageRoot, 'generated'), { recursive: true });
+  for (const dialect of ['d1', 'postgres']) {
+    const generated = join(storageOut, dialect, '0001_init.sql');
+    const committed = join(storageRoot, 'generated', dialect + '.sql');
+    if (mode === '--write') copyFileSync(generated, committed);
+    else assert.equal(readFileSync(generated, 'utf8'), readFileSync(committed, 'utf8'), dialect + ' storage SQL is stale');
+  }
   console.log('ForgeC coordination artifacts ' + (mode === '--write' ? 'generated' : 'reproduce exactly'));
 } finally {
   rmSync(out, { recursive: true, force: true });
