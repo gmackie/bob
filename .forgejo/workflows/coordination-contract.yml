@@ -1,0 +1,23 @@
+name: Coordination contract
+on:
+  pull_request:
+  push:
+    branches: [master]
+jobs:
+  coordination-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: https://github.com/dtolnay/rust-toolchain@stable
+      - name: Install standalone contract dependencies
+        working-directory: packages/bob/coordination
+        run: npm ci --ignore-scripts --registry=https://registry.npmjs.org
+      - name: Reproduce contracts and validate wire fixtures
+        working-directory: packages/bob/coordination
+        run: npm run verify

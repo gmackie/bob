@@ -1,0 +1,565 @@
+/// Bob owns coordination; T3 owns environment-local execution.
+/// These functions declare the wire contract, not deployed handlers.
+export type OpaqueId = text length 1..128
+export type ContractVersion = text pattern "^1$"
+export type Sha256 = text pattern "^[a-f0-9]{64}$"
+export type CommitSha = text pattern "^[a-f0-9]{40}$"
+
+export enum CompletionTarget {
+  Execution = "execution"
+  ReviewReady = "review-ready"
+  Merged = "merged"
+  Production = "production"
+}
+export enum Milestone {
+  ExecutionSucceeded = "execution-succeeded"
+  ReviewReady = "review-ready"
+  Merged = "merged"
+  ProductionVerified = "production-verified"
+}
+export enum OperationState {
+  Accepted = "accepted"
+  Running = "running"
+  Succeeded = "succeeded"
+  Failed = "failed"
+  Cancelled = "cancelled"
+}
+export enum PlanAction {
+  Start = "start"
+  Pause = "pause"
+  Resume = "resume"
+  Cancel = "cancel"
+}
+export enum ExecutionOutcome {
+  Succeeded = "succeeded"
+  Failed = "failed"
+  Cancelled = "cancelled"
+}
+export enum ReleaseAction {
+  OpenPr = "open-pr"
+  Approve = "approve"
+  Merge = "merge"
+}
+export enum DeploymentAction {
+  Deploy = "deploy"
+  Promote = "promote"
+  Rollback = "rollback"
+}
+export enum OverlapPolicy { Skip = "skip" }
+
+export shape IssueRef {
+  integrationId : OpaqueId
+  workspaceId : OpaqueId
+  teamId : OpaqueId
+  projectId : OpaqueId
+  issueId : OpaqueId
+  identifier : text? length 1..128
+  url : url?
+}
+export shape RepositoryRef {
+  integrationId : OpaqueId
+  repositoryId : OpaqueId
+}
+export shape ExecutionTarget {
+  environmentId : OpaqueId
+  projectId : OpaqueId
+  repository : RepositoryRef
+}
+export shape ThreadRef {
+  environmentId : OpaqueId
+  projectId : OpaqueId
+  threadId : OpaqueId
+  turnId : OpaqueId?
+}
+export shape Origin {
+  environmentId : OpaqueId
+  projectId : OpaqueId
+  threadId : OpaqueId?
+}
+export shape PlanItem {
+  itemId : OpaqueId
+  issue : IssueRef
+  target : ExecutionTarget
+  issueSnapshotRef : OpaqueId
+  completionTarget : CompletionTarget
+}
+export shape Dependency {
+  upstreamItemId : OpaqueId
+  downstreamItemId : OpaqueId
+  requiredMilestone : Milestone
+}
+export shape PlanDefinition {
+  items : list<PlanItem> length 1..100
+  dependencies : list<Dependency> length <= 500
+  concurrencyLimit : integer >= 1 <= 32
+}
+export shape CreatePlanRequest {
+  contractVersion : ContractVersion
+  commandId : OpaqueId
+  origin : Origin?
+  plan : PlanDefinition
+}
+export shape UpdatePlanRequest {
+  contractVersion : ContractVersion
+  commandId : OpaqueId
+  planId : OpaqueId
+  expectedVersion : integer >= 1
+  origin : Origin?
+  plan : PlanDefinition
+}
+export shape PlanControlRequest {
+  contractVersion : ContractVersion
+  commandId : OpaqueId
+  planId : OpaqueId
+  expectedVersion : integer >= 1
+  origin : Origin?
+  action : PlanAction
+}
+export shape RetryItemRequest {
+  contractVersion : ContractVersion
+  commandId : OpaqueId
+  itemId : OpaqueId
+  expectedVersion : integer >= 1
+  previousAttemptId : OpaqueId
+  reason : text length 1..2000
+}
+export shape CancelItemRequest {
+  contractVersion : ContractVersion
+  commandId : OpaqueId
+  itemId : OpaqueId
+  expectedVersion : integer >= 1
+}
+export shape TriggerPlanRequest {
+  contractVersion : ContractVersion
+  commandId : OpaqueId
+  planId : OpaqueId
+  planVersion : integer >= 1
+  scheduleId : OpaqueId
+  occurrenceId : OpaqueId
+  scheduledAt : datetime
+  overlapPolicy : OverlapPolicy
+}
+export shape OperationError {
+  code : text length 1..128
+  message : text length 1..2000
+  retryable : boolean
+}
+export shape Operation {
+  contractVersion : ContractVersion
+  operationId : OpaqueId
+  commandId : OpaqueId
+  state : OperationState
+  resourceId : OpaqueId
+  resourceVersion : integer >= 1
+  error : OperationError?
+}
+export shape WorkScope {
+  title : text length 1..240
+  instructions : text length 1..16000
+  acceptanceCriteria : list<text length 1..2000> length 1..50
+}
+export shape WorkspaceRequest {
+  baseRevision : CommitSha
+  branch : text length 1..240
+}
+export shape SubmitExecutionRequest {
+  contractVersion : ContractVersion
+  requestId : OpaqueId
+  attemptId : OpaqueId
+  itemId : OpaqueId
+  planId : OpaqueId
+  planVersion : integer >= 1
+  issueSnapshotRef : OpaqueId
+  target : ExecutionTarget
+  work : WorkScope
+  workspace : WorkspaceRequest
+  executionProfileId : OpaqueId
+}
+export shape ExecutionAdmission {
+  contractVersion : ContractVersion
+  requestId : OpaqueId
+  executionId : OpaqueId
+  attemptId : OpaqueId
+  target : ExecutionTarget
+  thread : ThreadRef
+}
+export shape CancelExecutionRequest {
+  contractVersion : ContractVersion
+  commandId : OpaqueId
+  requestId : OpaqueId
+  executionId : OpaqueId
+  attemptId : OpaqueId
+  thread : ThreadRef
+}
+export shape ResolveInputRequest {
+  contractVersion : ContractVersion
+  commandId : OpaqueId
+  attemptId : OpaqueId
+  promptId : OpaqueId
+  answer : text length 1..16000
+}
+export shape SourceSnapshot {
+  repository : RepositoryRef
+  commitSha : CommitSha
+  treeDigest : Sha256
+  dirty : boolean
+  patchArtifactRef : OpaqueId?
+  toolchainDigest : Sha256?
+  checkProfileDigest : Sha256?
+}
+export shape ValidationRequest {
+  contractVersion : ContractVersion
+  commandId : OpaqueId
+  attemptId : OpaqueId
+  target : ExecutionTarget
+  sourceSnapshot : SourceSnapshot
+  checkProfileId : OpaqueId
+}
+export shape ReleaseRequest {
+  contractVersion : ContractVersion
+  commandId : OpaqueId
+  attemptId : OpaqueId
+  action : ReleaseAction
+  sourceRevision : CommitSha
+  pullRequestRef : OpaqueId?
+}
+export shape DeploymentRequest {
+  contractVersion : ContractVersion
+  commandId : OpaqueId
+  itemId : OpaqueId
+  action : DeploymentAction
+  artifactRef : OpaqueId
+  stageRef : OpaqueId
+  deploymentRef : OpaqueId?
+}
+export shape ExecutionReceipt {
+  contractVersion : ContractVersion
+  eventId : OpaqueId
+  environmentId : OpaqueId
+  executionId : OpaqueId
+  attemptId : OpaqueId
+  sequence : integer >= 1
+  occurredAt : datetime
+  outcome : ExecutionOutcome
+  thread : ThreadRef
+  sourceSnapshot : SourceSnapshot
+  evidenceRefs : list<OpaqueId> length <= 100
+}
+export shape ValidationReceipt {
+  contractVersion : ContractVersion
+  eventId : OpaqueId
+  environmentId : OpaqueId
+  attemptId : OpaqueId
+  validationId : OpaqueId
+  sequence : integer >= 1
+  sourceSnapshot : SourceSnapshot
+  checkProfileId : OpaqueId
+  startedAt : datetime
+  finishedAt : datetime
+  exitCode : integer >= 0 <= 255
+  outcome : ExecutionOutcome
+  evidenceRefs : list<OpaqueId> length 1..100
+}
+export shape ProductionEvidence {
+  contractVersion : ContractVersion
+  commandId : OpaqueId
+  itemId : OpaqueId
+  stageRef : OpaqueId
+  deploymentId : OpaqueId
+  sourceRevision : CommitSha
+  artifactDigest : Sha256
+  healthEvidenceRefs : list<OpaqueId> length 1..100
+  verifiedAt : datetime
+}
+export shape ReceiptAcknowledgement {
+  contractVersion : ContractVersion
+  eventId : OpaqueId
+  acceptedSequence : integer >= 1
+}
+export shape QueryById {
+  contractVersion : ContractVersion
+  resourceId : OpaqueId
+}
+export shape ExecutionQuery {
+  contractVersion : ContractVersion
+  requestId : OpaqueId
+  environmentId : OpaqueId
+}
+export shape ReconcileRequest {
+  contractVersion : ContractVersion
+  commandId : OpaqueId
+  itemId : OpaqueId
+}
+export shape EventQuery {
+  contractVersion : ContractVersion
+  cursor : OpaqueId?
+  limit : integer >= 1 <= 100
+}
+export shape CoordinationChange {
+  eventId : OpaqueId
+  resourceId : OpaqueId
+  resourceVersion : integer >= 1
+  sequence : integer >= 1
+  recordedAt : datetime
+}
+export shape EventPage {
+  contractVersion : ContractVersion
+  events : list<CoordinationChange> length <= 100
+  nextCursor : OpaqueId
+}
+export enum PlanState {
+  Draft = "draft"
+  Active = "active"
+  Paused = "paused"
+  Cancelling = "cancelling"
+  Cancelled = "cancelled"
+  Completed = "completed"
+}
+export enum ItemState {
+  Pending = "pending"
+  Ready = "ready"
+  Reserved = "reserved"
+  Running = "running"
+  WaitingInput = "waiting-input"
+  ExecutionUnknown = "execution-unknown"
+  Validating = "validating"
+  Review = "review"
+  Deploying = "deploying"
+  Failed = "failed"
+  Cancelling = "cancelling"
+  Cancelled = "cancelled"
+  Completed = "completed"
+}
+export shape ItemSnapshot {
+  itemId : OpaqueId
+  planId : OpaqueId
+  resourceVersion : integer >= 1
+  state : ItemState
+  currentAttemptId : OpaqueId?
+  execution : ExecutionAdmission?
+  achievedMilestones : list<Milestone> length <= 4
+  operationIds : list<OpaqueId> length <= 100
+  evidenceRefs : list<OpaqueId> length <= 100
+}
+export shape ItemSummary {
+  itemId : OpaqueId
+  resourceVersion : integer >= 1
+  state : ItemState
+  currentAttemptId : OpaqueId?
+  achievedMilestones : list<Milestone> length <= 4
+}
+export shape PlanSnapshot {
+  contractVersion : ContractVersion
+  planId : OpaqueId
+  resourceVersion : integer >= 1
+  state : PlanState
+  definition : PlanDefinition
+  items : list<ItemSummary> length 1..100
+  eventCursor : OpaqueId
+}
+export shape ItemSnapshotResponse {
+  contractVersion : ContractVersion
+  item : ItemSnapshot
+  eventCursor : OpaqueId
+}
+export shape CapabilityRequest { contractVersion : ContractVersion }
+export shape Capabilities {
+  contractVersion : ContractVersion
+  operations : list<text length 1..128> length <= 100
+  executionProfiles : list<OpaqueId> length <= 100
+  validationProfiles : list<OpaqueId> length <= 100
+  eventResume : boolean
+}
+
+export function CreatePlan @http(POST, "/api/v1/coordination/plans") {
+  input CreatePlanRequest
+  output Operation
+  errors {
+    IdempotencyConflict
+    InvalidGraph
+    Forbidden
+  }
+}
+export function UpdatePlan @http(POST, "/api/v1/coordination/plans/update") {
+  input UpdatePlanRequest
+  output Operation
+  errors {
+    IdempotencyConflict
+    VersionConflict
+    InvalidGraph
+    Forbidden
+  }
+}
+export function ControlPlan @http(POST, "/api/v1/coordination/plans/control") {
+  input PlanControlRequest
+  output Operation
+  errors {
+    IdempotencyConflict
+    VersionConflict
+    InvalidTransition
+    Forbidden
+  }
+}
+export function RetryItem @http(POST, "/api/v1/coordination/items/retry") {
+  input RetryItemRequest
+  output Operation
+  errors {
+    IdempotencyConflict
+    VersionConflict
+    ExecutionUnknown
+    Forbidden
+  }
+}
+export function CancelItem @http(POST, "/api/v1/coordination/items/cancel") {
+  input CancelItemRequest
+  output Operation
+  errors {
+    IdempotencyConflict
+    VersionConflict
+    Forbidden
+  }
+}
+export function TriggerPlan @http(POST, "/api/v1/coordination/plans/trigger") {
+  input TriggerPlanRequest
+  output Operation
+  errors {
+    IdempotencyConflict
+    VersionConflict
+    Forbidden
+  }
+}
+export function RequestValidation @http(POST, "/api/v1/coordination/validation") {
+  input ValidationRequest
+  output Operation
+  errors {
+    IdempotencyConflict
+    CapabilityUnavailable
+    Forbidden
+  }
+}
+export function RequestRelease @http(POST, "/api/v1/coordination/release") {
+  input ReleaseRequest
+  output Operation
+  errors {
+    IdempotencyConflict
+    RevisionConflict
+    GatesUnsatisfied
+    Forbidden
+  }
+}
+export function RequestDeployment @http(POST, "/api/v1/coordination/deployment") {
+  input DeploymentRequest
+  output Operation
+  errors {
+    IdempotencyConflict
+    GatesUnsatisfied
+    Forbidden
+  }
+}
+export function ResolveInput @http(POST, "/api/v1/coordination/input") {
+  input ResolveInputRequest
+  output Operation
+  errors {
+    IdempotencyConflict
+    InvalidTransition
+    Forbidden
+  }
+}
+export function ReconcileItem @http(POST, "/api/v1/coordination/reconciliation") {
+  input ReconcileRequest
+  output Operation
+  errors {
+    IdempotencyConflict
+    Forbidden
+  }
+}
+export function GetOperation @http(POST, "/api/v1/coordination/operations/query") {
+  input QueryById
+  output Operation
+  errors {
+    NotFound
+    Forbidden
+  }
+}
+export function ReadEvents @http(POST, "/api/v1/coordination/events/query") {
+  input EventQuery
+  output EventPage
+  errors {
+    CursorExpired
+    Forbidden
+  }
+}
+export function GetCapabilities @http(POST, "/api/v1/coordination/capabilities/query") {
+  input CapabilityRequest
+  output Capabilities
+}
+export function SubmitExecution @http(POST, "/api/v1/execution/requests") {
+  input SubmitExecutionRequest
+  output ExecutionAdmission
+  errors {
+    IdempotencyConflict
+    TargetMismatch
+    CapabilityUnavailable
+    Forbidden
+  }
+}
+export function FindExecution @http(POST, "/api/v1/execution/requests/query") {
+  input ExecutionQuery
+  output ExecutionAdmission
+  errors {
+    NotFound
+    Forbidden
+  }
+}
+export function CancelExecution @http(POST, "/api/v1/execution/cancel") {
+  input CancelExecutionRequest
+  output Operation
+  errors {
+    IdempotencyConflict
+    CapabilityUnavailable
+    Forbidden
+  }
+}
+export function RecordExecutionReceipt @http(POST, "/api/v1/coordination/receipts/execution") {
+  input ExecutionReceipt
+  output ReceiptAcknowledgement
+  errors {
+    ReceiptConflict
+    SequenceGap
+    Forbidden
+  }
+}
+export function RecordValidationReceipt @http(POST, "/api/v1/coordination/receipts/validation") {
+  input ValidationReceipt
+  output ReceiptAcknowledgement
+  errors {
+    ReceiptConflict
+    SequenceGap
+    Forbidden
+  }
+}
+export function RecordProductionEvidence @http(POST, "/api/v1/coordination/evidence/production") {
+  input ProductionEvidence
+  output Operation
+  errors {
+    EvidenceMismatch
+    Forbidden
+  }
+}
+
+export function GetPlan @http(POST, "/api/v1/coordination/plans/query") {
+  input QueryById
+  output PlanSnapshot
+  errors {
+    NotFound
+    Forbidden
+  }
+}
+export function GetItem @http(POST, "/api/v1/coordination/items/query") {
+  input QueryById
+  output ItemSnapshotResponse
+  errors {
+    NotFound
+    Forbidden
+  }
+}
