@@ -20,7 +20,7 @@ try {
   const contract = JSON.parse(readFileSync(join(out, 'contract.json'), 'utf8'));
   assert.equal(contract.serviceId, 'bob');
   assert.equal(contract.apiId, '@bob/coordination');
-  assert(contract.operations.length === 23, 'Coordination operations missing');
+  assert(contract.operations.length === 24, 'Coordination operations missing');
   mkdirSync(join(root, 'generated'), { recursive: true });
   for (const name of ['openapi.json', 'contract.json', 'client.ts']) {
     if (mode === '--write') copyFileSync(join(out, name), join(root, 'generated', name));

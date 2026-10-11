@@ -149,6 +149,7 @@ export const operations: Record<string, OperationSpec> = {
   "@bob/coordination/_/GetItem": { method: "POST", path: "/api/v1/coordination/items/query", kind: "function", resource: "GetItem" },
   "@bob/coordination/_/GetOperation": { method: "POST", path: "/api/v1/coordination/operations/query", kind: "function", resource: "GetOperation" },
   "@bob/coordination/_/GetPlan": { method: "POST", path: "/api/v1/coordination/plans/query", kind: "function", resource: "GetPlan" },
+  "@bob/coordination/_/ListPlans": { method: "POST", path: "/api/v1/coordination/plans/list", kind: "function", resource: "ListPlans" },
   "@bob/coordination/_/ReadEvents": { method: "POST", path: "/api/v1/coordination/events/query", kind: "function", resource: "ReadEvents" },
   "@bob/coordination/_/ReconcileItem": { method: "POST", path: "/api/v1/coordination/reconciliation", kind: "function", resource: "ReconcileItem" },
   "@bob/coordination/_/RecordExecutionReceipt": { method: "POST", path: "/api/v1/coordination/receipts/execution", kind: "function", resource: "RecordExecutionReceipt" },
@@ -188,6 +189,7 @@ export interface FunctionsApi {
   getItem(input: GetItemInput, opts?: CallOptions): Promise<GetItemOutput>;
   getOperation(input: GetOperationInput, opts?: CallOptions): Promise<GetOperationOutput>;
   getPlan(input: GetPlanInput, opts?: CallOptions): Promise<GetPlanOutput>;
+  listPlans(input: ListPlansInput, opts?: CallOptions): Promise<ListPlansOutput>;
   readEvents(input: ReadEventsInput, opts?: CallOptions): Promise<ReadEventsOutput>;
   reconcileItem(input: ReconcileItemInput, opts?: CallOptions): Promise<ReconcileItemOutput>;
   recordExecutionReceipt(input: RecordExecutionReceiptInput, opts?: CallOptions): Promise<RecordExecutionReceiptOutput>;
@@ -278,6 +280,14 @@ export interface GetPlanInput {
 }
 
 export type GetPlanOutput = { "contractVersion": string; "planId": string; "resourceVersion": number; "state": "draft" | "active" | "paused" | "cancelling" | "cancelled" | "completed"; "definition": { "items": Array<{ "itemId": string; "issue": { "integrationId": string; "workspaceId": string; "teamId": string; "projectId": string; "issueId": string; "identifier"?: string | null; "url"?: string | null }; "target": { "environmentId": string; "projectId": string; "repository": { "integrationId": string; "repositoryId": string } }; "issueSnapshotRef": string; "completionTarget": "execution" | "review-ready" | "merged" | "production" }>; "dependencies": Array<{ "upstreamItemId": string; "downstreamItemId": string; "requiredMilestone": "execution-succeeded" | "review-ready" | "merged" | "production-verified" }>; "concurrencyLimit": number }; "items": Array<{ "itemId": string; "resourceVersion": number; "state": "pending" | "ready" | "reserved" | "running" | "waiting-input" | "execution-unknown" | "validating" | "review" | "deploying" | "failed" | "cancelling" | "cancelled" | "completed"; "currentAttemptId"?: string | null; "achievedMilestones": Array<"execution-succeeded" | "review-ready" | "merged" | "production-verified"> }>; "eventCursor": string };
+
+export interface ListPlansInput {
+  contractVersion: string;
+  afterPlanId?: string | null;
+  limit: number;
+}
+
+export type ListPlansOutput = { "contractVersion": string; "plans": Array<{ "planId": string; "resourceVersion": number; "state": "draft" | "active" | "paused" | "cancelling" | "cancelled" | "completed"; "itemCount": number }>; "nextPlanId"?: string | null };
 
 export interface ReadEventsInput {
   contractVersion: string;
@@ -493,6 +503,7 @@ export function createClient(options: ClientOptions): ForgeClient {
       getItem: (input, opts) => t.unwrap(t.call("@bob/coordination/_/GetItem", input, opts)),
       getOperation: (input, opts) => t.unwrap(t.call("@bob/coordination/_/GetOperation", input, opts)),
       getPlan: (input, opts) => t.unwrap(t.call("@bob/coordination/_/GetPlan", input, opts)),
+      listPlans: (input, opts) => t.unwrap(t.call("@bob/coordination/_/ListPlans", input, opts)),
       readEvents: (input, opts) => t.unwrap(t.call("@bob/coordination/_/ReadEvents", input, opts)),
       reconcileItem: (input, opts) => t.unwrap(t.call("@bob/coordination/_/ReconcileItem", input, opts)),
       recordExecutionReceipt: (input, opts) => t.unwrap(t.call("@bob/coordination/_/RecordExecutionReceipt", input, opts)),

@@ -363,6 +363,22 @@ export shape ItemSnapshotResponse {
   eventCursor : OpaqueId
 }
 export shape CapabilityRequest { contractVersion : ContractVersion }
+export shape PlanListRequest {
+  contractVersion : ContractVersion
+  afterPlanId : OpaqueId?
+  limit : integer >= 1 <= 50
+}
+export shape PlanListEntry {
+  planId : OpaqueId
+  resourceVersion : integer >= 1
+  state : PlanState
+  itemCount : integer >= 1 <= 100
+}
+export shape PlanListResponse {
+  contractVersion : ContractVersion
+  plans : list<PlanListEntry> length <= 50
+  nextPlanId : OpaqueId?
+}
 export shape Capabilities {
   contractVersion : ContractVersion
   operations : list<text length 1..128> length <= 100
@@ -493,6 +509,11 @@ export function ReadEvents @http(POST, "/api/v1/coordination/events/query") {
 export function GetCapabilities @http(POST, "/api/v1/coordination/capabilities/query") {
   input CapabilityRequest
   output Capabilities
+}
+export function ListPlans @http(POST, "/api/v1/coordination/plans/list") {
+  input PlanListRequest
+  output PlanListResponse
+  errors { Forbidden }
 }
 export function SubmitExecution @http(POST, "/api/v1/execution/requests") {
   input SubmitExecutionRequest
