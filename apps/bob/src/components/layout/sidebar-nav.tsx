@@ -80,6 +80,16 @@ const UTILITY_ICON: Record<SidebarUtilityItem["key"], NavItem["icon"]> = {
       <path d="M5 4.25 6.1 5.35 8.5 3 9.2 3.7 6.1 6.75 4.3 4.95 5 4.25ZM5 8.25 6.1 9.35 8.5 7 9.2 7.7 6.1 10.75 4.3 8.95 5 8.25Z" />
     </svg>
   ),
+  executions: () => (
+    <svg
+      className="size-[15px]"
+      viewBox="0 0 15 15"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M4 2.8v9.4a.5.5 0 0 0 .77.42l7.2-4.7a.5.5 0 0 0 0-.84l-7.2-4.7A.5.5 0 0 0 4 2.8Z" />
+    </svg>
+  ),
   "pull-requests": () => (
     <svg
       className="size-[15px]"

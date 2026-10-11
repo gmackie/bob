@@ -179,12 +179,23 @@ async function resolvePersonaDefaults(
 // Handler functions
 // ---------------------------------------------------------------------------
 
+/**
+ * Prompt prefix GenTrellis research dispatches used before they declared a
+ * source (mirrors the runner's fallback in apps/ooda-runner/src/t3-bridge.ts).
+ */
+const LEGACY_RESEARCH_PROMPT =
+  "You are implementing one research hypothesis as a real code change.";
+const RESEARCH_SOURCE_SYSTEM = "gentrellis-research";
+
 export async function sessionList(
   ctx: HandlerContext,
   input: {
     repositoryId?: string;
     worktreeId?: string;
     status?: SessionStatus;
+    sessionType?: string;
+    /** Dispatching system recorded at dispatch (work item dispatchSource.system). */
+    source?: string;
     limit: number;
     cursor?: string;
   },
@@ -200,6 +211,41 @@ export async function sessionList(
   if (input.status) {
     conditions.push(eq(chatConversations.status, input.status));
   }
+  if (input.sessionType) {
+    conditions.push(eq(chatConversations.sessionType, input.sessionType));
+  }
+
+  const declaredSystem = sql<
+    string | null
+  >`${workItems.sourceMetadata}->'dispatchSource'->>'system'`;
+  const isLegacyResearch = sql<boolean>`(${workItems.sourceMetadata}->'dispatchSource' is null and ${workItems.description} like ${`${LEGACY_RESEARCH_PROMPT}%`})`;
+  if (input.source) {
+    conditions.push(
+      input.source === RESEARCH_SOURCE_SYSTEM
+        ? sql`(${declaredSystem} = ${input.source} or ${isLegacyResearch})`
+        : sql`${declaredSystem} = ${input.source}`,
+    );
+  }
+
+  // Keyset pagination on (updatedAt, id), both descending, so pages never
+  // repeat or skip a session even when timestamps tie.
+  if (input.cursor) {
+    const [anchor] = await ctx.db
+      .select({ updatedAt: chatConversations.updatedAt })
+      .from(chatConversations)
+      .where(
+        and(
+          eq(chatConversations.id, input.cursor),
+          eq(chatConversations.userId, ctx.userId),
+        ),
+      )
+      .limit(1);
+    if (anchor) {
+      conditions.push(
+        sql`(${chatConversations.updatedAt}, ${chatConversations.id}) < (${anchor.updatedAt}, ${input.cursor})`,
+      );
+    }
+  }
 
   const sessions = await ctx.db
     .select({
@@ -209,7 +255,9 @@ export async function sessionList(
       worktreeId: chatConversations.worktreeId,
       workingDirectory: chatConversations.workingDirectory,
       agentType: chatConversations.agentType,
+      sessionType: chatConversations.sessionType,
       status: chatConversations.status,
+      gitBranch: chatConversations.gitBranch,
       nextSeq: chatConversations.nextSeq,
       lastActivityAt: chatConversations.lastActivityAt,
       lastError: chatConversations.lastError,
@@ -218,10 +266,16 @@ export async function sessionList(
       workItemId: chatConversations.workItemId,
       workItemIdentifierSnapshot: chatConversations.workItemIdentifierSnapshot,
       planningTaskId: chatConversations.planningTaskId,
+      declaredSource: sql<Record<
+        string,
+        unknown
+      > | null>`${workItems.sourceMetadata}->'dispatchSource'`,
+      legacyResearch: isLegacyResearch,
     })
     .from(chatConversations)
+    .leftJoin(workItems, eq(workItems.id, chatConversations.workItemId))
     .where(and(...conditions))
-    .orderBy(desc(chatConversations.updatedAt))
+    .orderBy(desc(chatConversations.updatedAt), desc(chatConversations.id))
     .limit(input.limit + 1);
 
   const hasMore = sessions.length > input.limit;
@@ -264,8 +318,13 @@ export async function sessionList(
   }
 
   return {
-    items: items.map((session) => ({
+    items: items.map(({ declaredSource, legacyResearch, ...session }) => ({
       ...session,
+      dispatchSource:
+        declaredSource ??
+        (legacyResearch
+          ? { system: RESEARCH_SOURCE_SYSTEM, inferred: true as const }
+          : null),
       workItemId: session.workItemId ?? session.planningTaskId,
       workItemIdentifier:
         session.workItemIdentifierSnapshot ??

@@ -109,3 +109,13 @@ it("streams output, responds to permission/input, and confirms remote interrupti
   expect(launches[1]!.payload).not.toHaveProperty("completionPolicy");
   expect(launches[0]!.payload.threadId).toBe(launches[1]!.payload.threadId);
 });
+
+it("marks autolab tasks by declared dispatch source, which overrides prompt matching", async () => {
+  const fixture = await server();
+  const autolabPrompt = "You are implementing one research hypothesis as a real code change.\nFetch refs/autolab/champion";
+  await launchT3Task(fixture.client, fixture.config, { ...task, sessionId: "s-declared", sourceSystem: "gentrellis-research", prompt: "Implement it" });
+  await launchT3Task(fixture.client, fixture.config, { ...task, sessionId: "s-other", sourceSystem: "ooda", prompt: autolabPrompt });
+  const launches = fixture.calls.filter(c => c.tag === "orchestration.launchThread");
+  expect(launches[0]!.payload.completionPolicy).toBe("autolab");
+  expect(launches[1]!.payload).not.toHaveProperty("completionPolicy");
+});

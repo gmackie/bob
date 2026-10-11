@@ -54,6 +54,16 @@ import {
   type BobRunOutcome,
 } from "./ooda-callback.js";
 
+/** The dispatching system recorded by Bob's public dispatch (metadata.source). */
+export function dispatchSourceSystem(
+  metadata: Record<string, unknown> | undefined,
+): string | undefined {
+  const source = metadata?.source;
+  if (!source || typeof source !== "object") return undefined;
+  const system = (source as Record<string, unknown>).system;
+  return typeof system === "string" ? system : undefined;
+}
+
 const RECONNECT_DELAY_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 25_000;
 const HELLO_TIMEOUT_MS = 15_000;
@@ -1693,6 +1703,7 @@ export class BobGatewayConnector {
           sessionId,
           providerInstanceId: this.config.t3?.modelInstanceId ?? ({ claude: "claudeAgent", codex: "codex", grok: "grok" } as Record<string,string>)[session.agentType || "claude"],
           model: session.personaConfig?.model,
+          sourceSystem: dispatchSourceSystem(session.personaConfig?.metadata),
           title: session.title || session.identifier || "Bob task",
           repoPath: worktree?.repoPath ?? workDir, worktreePath: workDir,
           branch: worktree?.branch ?? session.branch,

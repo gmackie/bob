@@ -49,6 +49,12 @@ export const sessionRouter = {
         repositoryId: z.string().uuid().optional(),
         worktreeId: z.string().uuid().optional(),
         status: z.enum(sessionStatusValues).optional(),
+        sessionType: z.enum(["execution", "planning", "review"]).optional(),
+        // Dispatching system recorded at dispatch, e.g. "gentrellis-research".
+        source: z
+          .string()
+          .regex(/^[a-z0-9][a-z0-9-]{0,63}$/)
+          .optional(),
         limit: z.number().min(1).max(100).default(50),
         cursor: z.string().uuid().optional(),
       }),
