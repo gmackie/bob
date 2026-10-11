@@ -7,7 +7,10 @@ import {
   workItems,
 } from "@bob/db/schema";
 
-import { publicApiDispatchExecution } from "../publicApi.js";
+import {
+  dispatchSourceSchema,
+  publicApiDispatchExecution,
+} from "../publicApi.js";
 
 // The gate + tenant scoping are covered in publicApiDispatch.test.ts. This suite
 // exercises the branch/autonomy/model wiring added for headless dispatch:
@@ -212,5 +215,59 @@ describe("publicApiDispatchExecution — branch + persona wiring", () => {
     const personaMetadata = session?.personaMetadata as Record<string, unknown>;
     expect(personaMetadata.metadata).toEqual({ ooda: { threadId: "thread-1" } });
     expect(personaMetadata.autonomyLevel).toBe("full");
+  });
+
+  it("records the dispatching system's provenance on the work item and runner metadata", async () => {
+    const captured: CapturedInsert[] = [];
+    const db = makeDb(captured);
+    const source = {
+      system: "gentrellis-research",
+      kind: "research-hypothesis",
+      environment: "dronesplat-nvs",
+      suggestionId: "412",
+      url: "https://console.gentrellis.com/dashboard/research?env=dronesplat-nvs",
+    };
+
+    await publicApiDispatchExecution(
+      { db, userId: "user-1" },
+      { workspaceId: WORKSPACE_ID, title: "Do a thing", agentType: "claude", source },
+    );
+
+    expect(find(captured, workItems)?.sourceMetadata).toEqual({ dispatchSource: source });
+    const session = find(captured, chatConversations);
+    const personaMetadata = session?.personaMetadata as Record<string, unknown>;
+    expect(personaMetadata.metadata).toMatchObject({ source });
+  });
+
+  it("leaves provenance unset for dispatches that do not declare a source", async () => {
+    const captured: CapturedInsert[] = [];
+    const db = makeDb(captured);
+
+    await publicApiDispatchExecution(
+      { db, userId: "user-1" },
+      { workspaceId: WORKSPACE_ID, title: "Do a thing", agentType: "claude" },
+    );
+
+    expect(find(captured, workItems)?.sourceMetadata).toBeUndefined();
+    const session = find(captured, chatConversations);
+    const personaMetadata = session?.personaMetadata as Record<string, unknown>;
+    expect(personaMetadata.metadata).not.toHaveProperty("source");
+  });
+});
+
+describe("dispatchSourceSchema", () => {
+  it("accepts a minimal source", () => {
+    expect(dispatchSourceSchema.safeParse({ system: "gentrellis-research" }).success).toBe(true);
+  });
+
+  it.each([
+    [{}],
+    [{ system: "Gentrellis Research" }],
+    [{ system: "gentrellis-research", url: "javascript:alert(1)" }],
+    [{ system: "gentrellis-research", url: "http://console.gentrellis.com" }],
+    [{ system: "gentrellis-research", unexpected: true }],
+    [{ system: "gentrellis-research", environment: "x".repeat(201) }],
+  ])("rejects %j", (value) => {
+    expect(dispatchSourceSchema.safeParse(value).success).toBe(false);
   });
 });

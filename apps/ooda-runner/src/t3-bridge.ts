@@ -8,6 +8,8 @@ export interface T3Task {
   sessionId: string;
   providerInstanceId?: string;
   model?: string;
+  /** Dispatching system declared at Bob dispatch, e.g. "gentrellis-research". */
+  sourceSystem?: string;
   title: string;
   repoPath: string;
   worktreePath: string;
@@ -17,6 +19,16 @@ export interface T3Task {
 }
 export const t3ThreadId = (sessionId: string) => `bob-${createHash("sha256").update(sessionId).digest("hex").slice(0,32)}`;
 const terminal = new Set(["completed", "failed", "cancelled", "interrupted", "rolled_back"]);
+
+/**
+ * GenTrellis research dispatches declare their source. Prompt matching remains
+ * for dispatches made before the source was sent.
+ */
+export function isAutolabTask(task: Pick<T3Task, "sourceSystem" | "prompt">): boolean {
+  if (task.sourceSystem) return task.sourceSystem === "gentrellis-research";
+  return task.prompt.includes("You are implementing one research hypothesis as a real code change.") &&
+    task.prompt.includes("refs/autolab/champion");
+}
 
 export async function launchT3Task(client: T3Client, config: T3Config, task: T3Task) {
   const { projects } = await client.http<{ projects: { id: string; workspaceRoot: string }[] }>("/api/projects");
@@ -41,8 +53,7 @@ export async function launchT3Task(client: T3Client, config: T3Config, task: T3T
     projectId: project.id, title: task.title, modelSelection: { instanceId: provider.instanceId, model },
     runtimeMode: task.runtimeMode, interactionMode: "default",
     // Generated research tasks are consumed by the lab rather than human review.
-    ...(task.prompt.includes("You are implementing one research hypothesis as a real code change.") &&
-      task.prompt.includes("refs/autolab/champion") ? { completionPolicy: "autolab" } : {}),
+    ...(isAutolabTask(task) ? { completionPolicy: "autolab" } : {}),
     workspaceStrategy: { type: "existing_worktree", worktreePath: task.worktreePath, ...(task.branch ? { branch: task.branch } : {}) },
     initialMessage: { messageId: `${threadId}-message`, text: task.prompt, attachments: [] },
   });
