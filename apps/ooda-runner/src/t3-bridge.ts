@@ -40,6 +40,9 @@ export async function launchT3Task(client: T3Client, config: T3Config, task: T3T
     commandId: `${threadId}-launch`, threadId,
     projectId: project.id, title: task.title, modelSelection: { instanceId: provider.instanceId, model },
     runtimeMode: task.runtimeMode, interactionMode: "default",
+    // Generated research tasks are consumed by the lab rather than human review.
+    ...(task.prompt.includes("You are implementing one research hypothesis as a real code change.") &&
+      task.prompt.includes("refs/autolab/champion") ? { completionPolicy: "autolab" } : {}),
     workspaceStrategy: { type: "existing_worktree", worktreePath: task.worktreePath, ...(task.branch ? { branch: task.branch } : {}) },
     initialMessage: { messageId: `${threadId}-message`, text: task.prompt, attachments: [] },
   });

@@ -55,6 +55,7 @@ it("launches in the matching repo/worktree using protocol 2 and stable retry ide
   expect(launches[0]!.payload).toEqual(launches[1]!.payload);
   expect(launches[0]!.payload).toMatchObject({ projectId: "right", modelSelection: { instanceId: "codex", model: "server-default" }, runtimeMode: "approval-required", workspaceStrategy: { type: "existing_worktree", worktreePath: task.worktreePath, branch: "BOB-40" }, initialMessage: { text: task.prompt } });
   expect(launches[0]!.payload).not.toHaveProperty("reuseExistingThread");
+  expect(launches[0]!.payload).not.toHaveProperty("completionPolicy");
   expect(fixture.httpCalls.every(c => c.auth === "Bearer private-token" && c.protocol === "2")).toBe(true);
   expect(fixture.httpCalls.some(c => c.path === "/api/orchestration/dispatch")).toBe(false);
 });
@@ -98,3 +99,13 @@ it("streams output, responds to permission/input, and confirms remote interrupti
     expect.objectContaining({ type: "run.interrupt", runId: "run-1", holdQueue: true }),
   ]));
 }, 15_000);
+
+ it("marks generated autolab hypotheses without classifying ordinary mentions of autolab", async () => {
+  const fixture = await server();
+  await launchT3Task(fixture.client, fixture.config, { ...task, prompt: "You are implementing one research hypothesis as a real code change.\nFetch refs/autolab/champion" });
+  await launchT3Task(fixture.client, fixture.config, { ...task, prompt: "Fix refs/autolab/champion support in Bob" });
+  const launches = fixture.calls.filter(c => c.tag === "orchestration.launchThread");
+  expect(launches[0]!.payload.completionPolicy).toBe("autolab");
+  expect(launches[1]!.payload).not.toHaveProperty("completionPolicy");
+  expect(launches[0]!.payload.threadId).toBe(launches[1]!.payload.threadId);
+});
