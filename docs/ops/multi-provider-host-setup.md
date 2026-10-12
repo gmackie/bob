@@ -37,7 +37,11 @@ The legacy execution daemon remains stopped to avoid duplicate gateway claims.
 
 For local journals on a mounted volume, ensure the directory exists and the
 systemd service has `RequiresMountsFor` and `ReadWritePaths` for the resolved
-volume path, including when the home-directory path is a symlink.
+volume path, including when the home-directory path is a symlink. On
+hetzner-bob this applies to both `ooda-runner.service` and
+`t3code-bob.service` (drop-in `30-worktree-volume.conf` with
+`ReadWritePaths=/mnt/HC_Volume_106611335`); see
+[Hetzner Bob Runtime Verify](./hetzner-bob-runtime-verify.md#worktree-volume-write-access).
 
 ## Direct-provider installations
 

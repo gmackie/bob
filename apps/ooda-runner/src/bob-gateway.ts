@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import { withTraceSpan } from "@gmacko/core/telemetry/deep";
 import type { T3Config } from "./t3-client";
+import { isAutolabTask } from "./t3-bridge";
 import { readDispatchTrace } from "./trace-dispatch";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -63,6 +64,23 @@ export function dispatchSourceSystem(
   const system = (source as Record<string, unknown>).system;
   return typeof system === "string" ? system : undefined;
 }
+
+/**
+ * Whether a run counts as a failure when its branch ends with no change.
+ * Scoped to GenTrellis research: a hypothesis run exists to produce a code
+ * change for the lab to evaluate, whereas tracker work items and repair/review
+ * sessions can legitimately finish without touching their session branch.
+ */
+export function requiresCodeChange(
+  session: Pick<ServerSessionAvailable, "personaConfig" | "description">,
+): boolean {
+  return isAutolabTask({
+    sourceSystem: dispatchSourceSystem(session.personaConfig?.metadata),
+    prompt: session.description ?? "",
+  });
+}
+
+export const NO_COMMITS_ERROR = "agent finished without committing any changes";
 
 const RECONNECT_DELAY_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 25_000;
@@ -607,12 +625,13 @@ export class BobGatewayConnector {
     const session = meta.session as unknown as ServerSessionAvailable;
     let prUrl: string | null = null;
     if (meta.worktree) {
-      prUrl = await this.finalizeWorktreePr(session, meta.worktree).catch((e) => {
+      const finalized = await this.finalizeWorktreePr(session, meta.worktree).catch((e) => {
         console.warn(
           `[bob-gw] PR finalize failed for adopted run: ${e instanceof Error ? e.message : e}`,
         );
-        return null;
+        return { prUrl: null, unchanged: false };
       });
+      prUrl = finalized.prUrl;
       if (prUrl) {
         this.sendEvent(sessionId, "pull_request", "agent", {
           url: prUrl,
@@ -620,6 +639,10 @@ export class BobGatewayConnector {
         });
       }
       await this.removeWorktree(meta.worktree).catch(() => {});
+      if (finalized.unchanged && requiresCodeChange(session)) {
+        this.reportNoCommits(session, meta.worktree.branch);
+        return;
+      }
     }
     this.sendStatus(
       sessionId,
@@ -1200,15 +1223,28 @@ export class BobGatewayConnector {
       // Worktree path: push the branch and open a PR if commits were produced.
       let prUrl: string | null = null;
       if (worktree) {
-        prUrl = await this.finalizeWorktreePr(session, worktree).catch((e) => {
+        const finalized = await this.finalizeWorktreePr(session, worktree).catch((e) => {
           console.warn(`[bob-gw] PR finalize failed: ${e instanceof Error ? e.message : e}`);
-          return null;
+          return { prUrl: null, unchanged: false };
         });
+        prUrl = finalized.prUrl;
         if (prUrl) {
           this.sendEvent(session.sessionId, "pull_request", "agent", {
             url: prUrl,
             branch: worktree.branch,
           });
+        }
+        // A research run that changed nothing did not do its job; reporting it
+        // completed hid a day-long read-only-worktree outage (BOB-49).
+        if (finalized.unchanged && requiresCodeChange(session)) {
+          this.reportNoCommits(session, worktree.branch);
+          await this.bobReporter.pushLog(bobRunId, runOutput).catch(() => {});
+          await this.bobReporter
+            .finishRun(bobRunId, "failed", { code: "NO_COMMITS", error: NO_COMMITS_ERROR })
+            .catch(() => {});
+          void this.reportToBizPulse(session, "failed", Date.now() - startTime);
+          void this.recordSkillfleetRun(session, "failure", Date.now() - startTime);
+          return;
         }
       }
 
@@ -1292,6 +1328,14 @@ export class BobGatewayConnector {
     }
   }
 
+  /** Terminal error for a run that was expected to change code but did not. */
+  private reportNoCommits(session: ServerSessionAvailable, branch: string): void {
+    console.error(`[bob-gw] Session ${session.sessionId} failed: ${NO_COMMITS_ERROR} on ${branch}`);
+    this.sendStatus(session.sessionId, "error", { code: "NO_COMMITS", error: NO_COMMITS_ERROR, branch });
+    this.sendEvent(session.sessionId, "error", "system", { code: "NO_COMMITS", message: NO_COMMITS_ERROR });
+    void this.reportOodaOutcome(session, "failed", { pullRequestUrl: null, branch });
+  }
+
   private async reportInterrupted(
     session: ServerSessionAvailable,
     bobRunId: string | null,
@@ -1369,11 +1413,14 @@ export class BobGatewayConnector {
     return { path: wtPath, repoPath, branch, baseBranch };
   }
 
-  /** Push the worktree branch and open a PR if the agent produced commits. */
+  /**
+   * Push the worktree branch and open a PR if the agent produced commits.
+   * `unchanged` is true when the branch has no commits or no net diff vs base.
+   */
   private async finalizeWorktreePr(
     session: ServerSessionAvailable,
     worktree: WorktreeContext,
-  ): Promise<string | null> {
+  ): Promise<{ prUrl: string | null; unchanged: boolean }> {
     // Internal repair/review sessions must NEVER open a PR from their throwaway
     // session branch: a repair pushes its fix to the TARGET PR's own branch and a
     // review only posts a git-host review — the `bob/repair/*` / `bob/review/*`
@@ -1388,7 +1435,7 @@ export class BobGatewayConnector {
       console.log(
         `[bob-gw] ${worktree.branch} is an internal repair/review session branch; skipping PR (work lands on the target PR's own branch)`,
       );
-      return null;
+      return { prUrl: null, unchanged: false };
     }
 
     const ahead = (
@@ -1400,7 +1447,7 @@ export class BobGatewayConnector {
     ).trim();
     if (!ahead || ahead === "0") {
       console.log(`[bob-gw] No commits on ${worktree.branch}; skipping PR`);
-      return null;
+      return { prUrl: null, unchanged: true };
     }
 
     // Commits ahead ≠ a real change. A repair/review session pushes its actual
@@ -1429,7 +1476,7 @@ export class BobGatewayConnector {
       console.log(
         `[bob-gw] No net diff on ${worktree.branch} vs ${worktree.baseBranch}; skipping PR`,
       );
-      return null;
+      return { prUrl: null, unchanged: true };
     }
 
     const identifier = trackerIdentifierForSession(session);
@@ -1440,7 +1487,7 @@ export class BobGatewayConnector {
     const remote = (
       await this.git(worktree.repoPath, ["remote", "get-url", "origin"])
     ).trim();
-    return this.createPullRequest(
+    const prUrl = await this.createPullRequest(
       worktree.path,
       remote,
       worktree.branch,
@@ -1452,6 +1499,7 @@ export class BobGatewayConnector {
       // items keep their push-only behaviour on those repos unchanged.
       identifier ? process.env.BOB_FORGEJO_TOKEN : undefined,
     );
+    return { prUrl, unchanged: false };
   }
 
   /**
