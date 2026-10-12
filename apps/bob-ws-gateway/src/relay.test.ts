@@ -1370,6 +1370,66 @@ describe("Relay", () => {
       );
       expect(taskUpdate?.blockedReason).toBe("boom: agent exited 1");
     });
+
+    it("never marks a no-commit run done or in review", async () => {
+      const daemonWs = new FakeWs();
+      relay.handleConnection(daemonWs as any);
+      daemonWs.receive({
+        type: "hello",
+        clientId: "d1",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+
+      const SID = "44444444-4444-4444-8444-444444444444";
+      (db.query.chatConversations.findFirst as any).mockResolvedValueOnce({
+        id: SID,
+        userId: "user-1",
+        status: "running",
+        workItemId: "wi-1",
+        agentType: "codex",
+      });
+      (db.query.taskRuns.findFirst as any) = vi.fn(() =>
+        Promise.resolve({ id: "tr-1", workItemId: "wi-1" }),
+      );
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (payload: any) => {
+          setPayloads.push(payload);
+          return { where: () => Promise.resolve() };
+        },
+      }));
+      const recordPullRequest = vi.spyOn(relay as any, "recordPullRequest");
+
+      daemonWs.receive({
+        type: "session_status",
+        sessionId: SID,
+        status: "error",
+        summary: {
+          code: "NO_COMMITS",
+          error: "agent finished without committing any changes",
+          branch: "bob/abcd1234/hypothesis",
+        },
+      } as any);
+      await new Promise((r) => setImmediate(r));
+
+      const convUpdate = setPayloads.find((p) => p.lastError);
+      expect(convUpdate?.status).toBe("error");
+      expect(convUpdate?.lastError?.code).toBe("NO_COMMITS");
+      const taskUpdate = setPayloads.find((p) => "blockedReason" in p);
+      expect(taskUpdate).toMatchObject({
+        status: "failed",
+        blockedReason: "agent finished without committing any changes",
+      });
+      expect(taskUpdate).not.toHaveProperty("pullRequestId");
+      // The work item returns to ready for another attempt, never in_review.
+      expect(setPayloads).toContainEqual({ status: "ready" });
+      expect(setPayloads.map((p) => p.status)).not.toContain("in_review");
+      expect(setPayloads.map((p) => p.status)).not.toContain("completed");
+      expect(recordPullRequest).not.toHaveBeenCalled();
+    });
   });
 
   describe("session_claimed (runner adoption bridge)", () => {

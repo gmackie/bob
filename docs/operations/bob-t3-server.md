@@ -28,7 +28,9 @@ currently need the T3 server thread and are reported explicitly.
 
 Both services must see the same worktree path. The T3 systemd service uses
 PrivateTmp, so `/tmp` is unsuitable; use the existing `/home/bob/.bob/worktrees`
-location. T3 remains loopback-only.
+location. T3 remains loopback-only. That location is a symlink onto a mounted
+volume, so `t3code-bob.service` also needs the volume in `ReadWritePaths`; see
+`docs/ops/hetzner-bob-runtime-verify.md` ("Worktree volume write access").
 
 ## Codex compatibility prerequisite
 
