@@ -21,3 +21,5 @@ export * from "./proposals";
 export * from "./tts-policy";
 export * from "./tts-grant-token";
 export * from "./tts-grants";
+export * from "./lyria-music";
+export * from "./music-generations";
