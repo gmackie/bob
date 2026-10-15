@@ -1,0 +1,54 @@
+# TrueFlight review workflow: sign-in
+# Reaching the authenticated app. Proves the R1 reviewer-login path.
+#
+# Bob has ONE kind of user in the mobile app. The backend models workspace member
+# roles (owner/admin/member/viewer) and tenant plans (free/premium/pro), but the
+# mobile UI never branches on them, so a single workspace-owner account covers
+# every screen a reviewer can reach.
+#
+# There is NO email/password form. Sign-in is OAuth only — Continue with Apple /
+# Google / GitHub — or device pairing against Bob web: the app shows an
+# 8-character code (or scans a QR) and the user approves it under
+# Settings -> Link a Device on https://bob.blder.bot. Pairing is the path a
+# reviewer can follow deterministically, so this flow uses it; the demo account's
+# email/password below are the credentials for the Google identity behind the
+# demo account (Bob itself stores no password). A build-time dev bypass exists
+# (EXPO_PUBLIC_BOB_AUTH_BYPASS=true + _TOKEN) but it is not in store builds.
+#
+# tf:workflow id=sign-in title="Sign in by linking the device to Bob web" account=owner
+# tf:account role=owner email="reviewer+owner@blder.bot" secretRef=bob/review/owner_pw permissions=workspace-owner,planning,tasks,chat,nodes,settings notes="Workspace owner with a seeded workspace (projects, work items, a running session). Bob has no password login: the secret is the Google password of the demo Google account; sign in to https://bob.blder.bot with it, then Settings -> Link a Device to approve the code the phone shows."
+# TODO: confirm a real owner demo account is provisioned on bob.blder.bot (Google identity reviewer+owner@blder.bot, seeded workspace) and its password is stored at bob/review/owner_pw
+# tf:verify "The phone signs in automatically once the code is approved and lands on Home."
+# tf:verify "The bottom tab bar shows Home, Tasks, Chat, Nodes and More."
+appId: com.gmacko.bob
+---
+# tf:step "Launch the app. Skip the onboarding slides if shown — you land on 'Welcome to Bob' with Continue with Apple / Google / GitHub and Scan QR code." capture=screenshot
+- launchApp
+- extendedWaitUntil:
+    visible: "Skip|Welcome to Bob"
+    timeout: 60000
+- tapOn:
+    text: "Skip"
+    optional: true
+- extendedWaitUntil:
+    visible: "Welcome to Bob"
+    timeout: 30000
+# tf:step "Tap Scan QR code, then 'Can't scan? Enter a code on the web instead' — the app shows an 8-character pairing code and waits for approval." capture=screenshot
+- tapOn: "Scan QR code"
+- tapOn:
+    text: "Can't scan\\? Enter a code on the web instead|Use a code instead"
+- extendedWaitUntil:
+    visible:
+      id: "qr-pairing-user-code"
+    timeout: 30000
+- assertVisible: "Enter code on Bob web"
+# tf:step "In a browser, sign in to https://bob.blder.bot with the demo account, open Settings -> Link a Device, and enter the code. The phone signs in automatically." capture=none
+- assertVisible: "Waiting for approval — this signs you in automatically."
+# tf:step "You reach Home, signed in — the triage lanes (Needs you / Running now / Up next) and the tab bar are visible." capture=screenshot
+- extendedWaitUntil:
+    visible:
+      id: "mobile-tab-bar"
+    timeout: 180000
+- assertVisible: "Home"
+- assertVisible:
+    id: "mobile-tab-chat"
