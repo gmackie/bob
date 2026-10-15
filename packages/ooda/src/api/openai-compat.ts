@@ -95,6 +95,7 @@ function messageText(content: unknown): string {
 
 function toPrompt(body: {
   messages?: Array<{ role?: string; content?: unknown }>;
+  response_format?: { type?: string };
 }): string {
   const messages = body.messages ?? [];
   const system = messages
@@ -116,6 +117,9 @@ function toPrompt(body: {
   return [
     "You are answering an OpenAI-compatible chat completion on hetzner-bob.",
     "Do not use tools. Do not inspect a repo. Reply with only the requested output.",
+    wantsJson(body)
+      ? "Reply with a single JSON object and nothing else: no prose, no code fences."
+      : "",
     system ? `## System\n${system}` : "",
     `## User\n${rest}`,
   ]
@@ -123,10 +127,42 @@ function toPrompt(body: {
     .join("\n\n");
 }
 
-function pickAdapters(model: string | undefined, device: OodaOpenAiDevice): string[] {
+function wantsJson(body: { response_format?: { type?: string } }): boolean {
+  return body.response_format?.type === "json_object";
+}
+
+function adapterFor(model: string | undefined): string {
   const requested = (model ?? "claude").trim().toLowerCase();
-  const mapped =
-    requested === "cursor" ? "cursor-agent" : requested;
+  return requested === "cursor" ? "cursor-agent" : requested;
+}
+
+function supports(device: OodaOpenAiDevice, adapter: string): boolean {
+  const caps = new Set((device.capabilities ?? []).map((cap) => cap.toLowerCase()));
+  if (caps.size === 0 || caps.has(adapter)) return true;
+  return adapter === "cursor-agent" && (caps.has("cursor") || caps.has("cursor-acp"));
+}
+
+/**
+ * Strict callers get exactly the adapter they asked for, or an error. A
+ * scheduled job that needs Grok must never receive another model's answer.
+ */
+function strictAdapter(model: string | undefined, device: OodaOpenAiDevice): string[] {
+  const adapter = adapterFor(model);
+  if (!ADAPTERS.includes(adapter as (typeof ADAPTERS)[number])) {
+    throw new OodaOpenAiError(400, `strict mode needs a known model: ${ADAPTERS.join(", ")}`);
+  }
+  if (!supports(device, adapter)) {
+    throw new OodaOpenAiError(
+      503,
+      `${PREFERRED_RUNNER} runner does not offer ${adapter}`,
+      "server_error",
+    );
+  }
+  return [adapter];
+}
+
+function pickAdapters(model: string | undefined, device: OodaOpenAiDevice): string[] {
+  const mapped = adapterFor(model);
   const preferred = ADAPTERS.includes(mapped as (typeof ADAPTERS)[number])
     ? [mapped, ...ADAPTERS.filter((id) => id !== mapped)]
     : [...ADAPTERS];
@@ -179,6 +215,15 @@ function stripFences(raw: string): string {
   const trimmed = raw.trim();
   const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
   return (fenced?.[1] ?? trimmed).trim();
+}
+
+function parsesAsJsonObject(content: string): boolean {
+  try {
+    const value: unknown = JSON.parse(content);
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  } catch {
+    return false;
+  }
 }
 
 function unwrapThread(
@@ -235,6 +280,9 @@ export async function completeOodaOpenAiChat(
     model?: string;
     messages?: Array<{ role?: string; content?: unknown }>;
     stream?: boolean;
+    /** Bob extension: answer with the requested model or fail; never fall back. */
+    strict?: boolean;
+    response_format?: { type?: string };
   },
   dispatch: OodaOpenAiDispatch,
 ): Promise<{
@@ -242,6 +290,8 @@ export async function completeOodaOpenAiChat(
   object: "chat.completion";
   created: number;
   model: string;
+  /** Bob extension: the adapter that produced this answer. */
+  adapter: string;
   choices: Array<{
     index: number;
     message: { role: "assistant"; content: string };
@@ -259,7 +309,9 @@ export async function completeOodaOpenAiChat(
   const prompt = toPrompt(body);
   const devices = await dispatch.listDevices();
   const runner = pickRunner(devices);
-  const adapters = pickAdapters(body.model, runner);
+  const adapters = body.strict
+    ? strictAdapter(body.model, runner)
+    : pickAdapters(body.model, runner);
   const slug = `openai-${crypto.randomUUID()}`;
   const thread = unwrapThread(
     await dispatch.createThread({
@@ -285,12 +337,17 @@ export async function completeOodaOpenAiChat(
         lastError = new Error(`${adapterId} returned empty output`);
         continue;
       }
+      if (wantsJson(body) && !parsesAsJsonObject(content)) {
+        lastError = new Error(`${adapterId} returned output that is not a JSON object`);
+        continue;
+      }
       const model = body.model?.trim() || adapterId;
       return {
         id: `chatcmpl-${crypto.randomUUID()}`,
         object: "chat.completion",
         created: Math.floor((dispatch.now ?? Date.now)() / 1000),
         model,
+        adapter: adapterId,
         choices: [
           {
             index: 0,
