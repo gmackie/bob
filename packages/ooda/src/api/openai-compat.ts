@@ -8,7 +8,8 @@
 const ADAPTERS = ["claude", "codex", "grok", "cursor-agent"] as const;
 const PREFERRED_RUNNER = "hetzner-bob";
 const TOOL_PROFILE = "default";
-const SESSION_TIMEOUT_MS = 90_000;
+// A DailyDose council took Grok 155 s; stay under that caller's 240 s abort.
+const SESSION_TIMEOUT_MS = 230_000;
 const PENDING_CLAIM_MS = 25_000;
 const POLL_MS = 2_000;
 
