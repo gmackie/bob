@@ -204,7 +204,7 @@ describe("OODA OpenAI chat completions", () => {
   });
 
   it("waits long enough for a Grok council draft, but not forever", async () => {
-    // A DailyDose council took Grok 155 s through Bob on 2026-10-15.
+    // A DailyDose council took Grok 270-300 s through Bob on 2026-10-15.
     let clock = 0;
     const slow = (finishAt: number): OodaOpenAiDispatch => ({
       ...dispatch({}),
@@ -218,7 +218,7 @@ describe("OODA OpenAI chat completions", () => {
     });
     const body = { model: "grok", strict: true, messages: [{ role: "user", content: "hi" }] };
 
-    const done = await completeOodaOpenAiChat(body, slow(155_000));
+    const done = await completeOodaOpenAiChat(body, slow(300_000));
     expect(done.adapter).toBe("grok");
 
     clock = 0;
@@ -226,7 +226,7 @@ describe("OODA OpenAI chat completions", () => {
       status: 502,
       message: expect.stringMatching(/timed out/),
     });
-    expect(clock).toBeLessThan(240_000);
+    expect(clock).toBeLessThan(610_000);
   });
 
   it("adds CORS headers so other apps can call Bob in development", () => {
