@@ -40,10 +40,14 @@ try {
     if (mode === '--write') copyFileSync(generated, committed);
     else assert.equal(readFileSync(generated, 'utf8'), readFileSync(committed, 'utf8'), dialect + ' storage SQL is stale');
   }
-  const migration = readFileSync(join(storageOut, 'd1/0001_init.sql'), 'utf8').match(/CREATE TABLE coordination_attempt \([\s\S]*?\n\);/)[0] + '\n' + readFileSync(join(storageOut, 'd1/0001_init.sql'), 'utf8').split('\n').filter(line => line.startsWith('CREATE') && line.includes(' ON coordination_attempt ')).join('\n') + '\n';
-  const migrationFile = join(storageRoot, 'generated/0002_attempts.sql');
-  if (mode === '--write') writeFileSync(migrationFile, migration);
-  else assert.equal(readFileSync(migrationFile, 'utf8'), migration, 'Attempt migration is stale');
+  // Incremental migrations are the exact generated table and index statements.
+  const init = readFileSync(join(storageOut, 'd1/0001_init.sql'), 'utf8');
+  const tableMigration = table => init.match(new RegExp(`CREATE TABLE ${table} \\([\\s\\S]*?\\n\\);`))[0] + '\n' + init.split('\n').filter(line => line.startsWith('CREATE') && line.includes(` ON ${table} `)).join('\n') + '\n';
+  for (const [file, table] of [['0002_attempts.sql', 'coordination_attempt'], ['0003_issue_effects.sql', 'coordination_issue_effect']]) {
+    const migration = tableMigration(table), migrationFile = join(storageRoot, 'generated', file);
+    if (mode === '--write') writeFileSync(migrationFile, migration);
+    else assert.equal(readFileSync(migrationFile, 'utf8'), migration, file + ' migration is stale');
+  }
   console.log('ForgeC coordination artifacts ' + (mode === '--write' ? 'generated' : 'reproduce exactly'));
 } finally {
   rmSync(out, { recursive: true, force: true });
