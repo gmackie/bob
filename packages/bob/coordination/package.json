@@ -16,7 +16,8 @@
   },
   "bin": {
     "bob-coordinate": "runtime/cli.mjs",
-    "bob-coordinate-server": "runtime/serve.mjs"
+    "bob-coordinate-server": "runtime/serve.mjs",
+    "bob-coordinate-worker": "runtime/worker.mjs"
   },
   "engines": {
     "node": ">=24.0.0"
@@ -30,6 +31,9 @@
     "./client": "./generated/client.mjs",
     "./execution": "./runtime/execution.mjs",
     "./execution-port": "./runtime/execution-port.mjs",
-    "./http": "./runtime/http.mjs"
+    "./http": "./runtime/http.mjs",
+    "./kanbanger": "./runtime/kanbanger.mjs",
+    "./issue-effects": "./runtime/issue-effects.mjs",
+    "./worker": "./runtime/worker.mjs"
   }
 }

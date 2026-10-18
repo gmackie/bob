@@ -47,3 +47,23 @@ export resource CoordinationAttempt @tenant {
   unique requestId
   list by owner, planId, state
 }
+
+/// Kanbanger lifecycle effects. A row commits in the same transaction as the
+/// coordination fact it reports; a worker delivers it later. Never a public API.
+export resource CoordinationIssueEffect @tenant {
+  id : id
+  owner : text length 1..128
+  attemptId : text length 1..128
+  fact : text length 1..64
+  payload : json
+  status : text length 1..32
+  deliveryAttempts : integer >= 0
+  nextAttemptAt : integer >= 0
+  lastError : text? length 1..2000
+  leaseOwner : text? length 1..128
+  leaseUntil : integer?
+  createdAt : datetime
+  deliveredAt : datetime?
+  unique attemptId, fact
+  list by owner, status, nextAttemptAt
+}

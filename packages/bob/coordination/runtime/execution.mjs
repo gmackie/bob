@@ -1,7 +1,56 @@
 import { randomUUID } from 'node:crypto';
 import { Coordinator, supportedOperations, validators, outputValidators, canonical, digest, fail } from './coordinator.mjs';
 const executionOperations = ['RequestExecution', 'RetryItem', 'RecordExecutionReceipt'];
+/** Operations that admit issue scope and therefore need a resolved issue when an
+ * issue resolver is configured. */
+export const issueAdmissionOperations = Object.freeze(['CreatePlan', 'UpdatePlan', 'RequestExecution', 'RetryItem']);
+// Only admit() can produce this proof; hosts cannot pass it through JSON.
+const verifiedIssues = Symbol('verifiedIssues');
 export class ExecutionCoordinator extends Coordinator {
+  /** issueResolver(issueRef, policy) → snapshot is optional. When absent, admission
+   * behaves exactly as before; when present, issue-admitting operations must go
+   * through admit(), which resolves each issue outside the SQLite transaction. */
+  constructor(options) {
+    super(options);
+    this.issueResolver = options.issueResolver ?? null;
+  }
+  admissionIssues(name, body) {
+    const key = name === 'RequestExecution' ? body.requestId : body.commandId;
+    if (this.db.prepare('SELECT 1 FROM forge_receipt WHERE tenant=? AND operation=? AND key=?').get(this.tenant, `coordination:${this.owner}`, key)) return [];
+    if (name === 'CreatePlan' || name === 'UpdatePlan') return body.plan.items.map(item => item.issue);
+    const { definition } = this.item(body.itemId);
+    return [definition.items.find(item => item.itemId === body.itemId).issue];
+  }
+  /** Async admission entry point used by the CLI and HTTP host. Replays and other
+   * operations go straight to call(). Network resolution never holds a lock. */
+  async admit(name, input, options = {}) {
+    if (!this.issueResolver || !issueAdmissionOperations.includes(name)) return this.call(name, input, options);
+    let issues = [];
+    try {
+      const body = JSON.parse(JSON.stringify(input));
+      if (validators.get(name)(body)) issues = this.admissionIssues(name, body);
+    } catch { /* call() reports the canonical validation/authorization error */ }
+    const verified = new Set();
+    for (const issue of issues) {
+      const key = canonical(issue);
+      if (verified.has(key)) continue;
+      await this.issueResolver(issue, this.context);
+      verified.add(key);
+    }
+    return this.call(name, input, { ...options, [verifiedIssues]: verified });
+  }
+  verifyAdmission(name, body, options) {
+    if (!this.issueResolver || !issueAdmissionOperations.includes(name)) return;
+    const issues = name === 'CreatePlan' || name === 'UpdatePlan' ? body.plan.items.map(item => item.issue)
+      : [this.item(body.itemId).definition.items.find(item => item.itemId === body.itemId).issue];
+    const verified = options[verifiedIssues];
+    if (!(verified instanceof Set) || issues.some(issue => !verified.has(canonical(issue)))) fail('IssueUnverified', 'The issue must resolve in Kanbanger within the trusted policy before admission', 409);
+  }
+  /** Lifecycle effect for Kanbanger, written in the caller's transaction. */
+  issueEffect(attemptId, fact, payload) {
+    this.db.prepare('INSERT INTO coordination_issue_effect (tenant,id,owner,attempt_id,fact,payload,status,delivery_attempts,next_attempt_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      .run(this.tenant, `${attemptId}:${fact}`, this.owner, attemptId, fact, canonical({ fact, ...payload }), 'pending', 0, 0, new Date().toISOString());
+  }
   item(id) {
     const row = this.db.prepare('SELECT * FROM coordination_item WHERE tenant=? AND owner=? AND id=?').get(this.tenant, this.owner, id);
     if (!row) fail('NotFound', 'Item not found', 404);
@@ -34,6 +83,7 @@ export class ExecutionCoordinator extends Coordinator {
     this.db.prepare('INSERT INTO coordination_attempt (tenant,id,owner,plan_id,item_id,request_id,operation_id,request,state,last_sequence) VALUES (?,?,?,?,?,?,?,?,?,?)')
       .run(this.tenant, request.attemptId, this.owner, plan.id, request.itemId, request.requestId, operationId, canonical(request), 'queued', 0);
     this.storeSnapshot(next, operationId);
+    this.issueEffect(request.attemptId, 'admitted', { issue: declared.issue, planId: plan.id, itemId: request.itemId, requestId: request.requestId, attemptId: request.attemptId, environmentId: request.target.environmentId, executionProfileId: request.executionProfileId });
     const operation = { contractVersion: '1', operationId, commandId, state: 'accepted', resourceId: request.itemId, resourceVersion: next.resourceVersion, error: null };
     this.db.prepare('INSERT INTO coordination_operation VALUES (?,?,?,?)').run(this.tenant, operationId, this.owner, canonical(operation));
     return operation;
@@ -59,6 +109,7 @@ export class ExecutionCoordinator extends Coordinator {
         const attempt = this.attempt(body.attemptId); itemId = attempt.item_id;
         value = this.receive(attempt, body);
       } else if (name === 'RetryItem') {
+        this.verifyAdmission(name, body, options);
         const { snapshot, plan } = this.item(body.itemId); itemId = body.itemId;
         if (snapshot.resourceVersion !== body.expectedVersion) fail('VersionConflict', 'Item version changed');
         if (snapshot.currentAttemptId !== body.previousAttemptId) fail('InvalidTransition', 'Retry does not name the current attempt');
@@ -68,7 +119,7 @@ export class ExecutionCoordinator extends Coordinator {
         const request = { ...JSON.parse(previousAttempt.request), requestId: randomUUID(), attemptId: randomUUID(), planVersion: plan.version };
         this.db.prepare('UPDATE coordination_item SET snapshot=? WHERE tenant=? AND owner=? AND id=?').run(canonical({ ...snapshot, state: 'ready' }), this.tenant, this.owner, itemId);
         value = this.reserve(request, body.commandId);
-      } else { itemId = body.itemId; value = this.reserve(body, body.requestId); }
+      } else { itemId = body.itemId; this.verifyAdmission(name, body, options); value = this.reserve(body, body.requestId); }
       this.fault('after-execution-state');
       this.db.prepare('INSERT INTO forge_receipt VALUES (?,?,?,?,?,?,?)').run(this.tenant, namespace, key, hash, 200, canonical({ itemId, value }), new Date().toISOString());
       this.fault('before-execution-commit');
@@ -90,6 +141,10 @@ export class ExecutionCoordinator extends Coordinator {
     this.db.prepare("UPDATE coordination_attempt SET state='terminal',terminal=?,last_sequence=?,lease_owner=NULL,lease_until=NULL WHERE tenant=? AND id=?")
       .run(canonical(receipt), receipt.sequence, this.tenant, attempt.id);
     const { snapshot, definition } = this.item(attempt.item_id);
+    const source = receipt.sourceSnapshot;
+    this.issueEffect(attempt.id, `execution-${receipt.outcome}`, { issue: definition.items.find(item => item.itemId === attempt.item_id).issue, planId: attempt.plan_id, itemId: attempt.item_id, requestId: attempt.request_id, attemptId: attempt.id,
+      environmentId: receipt.environmentId, executionId: receipt.executionId, thread: receipt.thread, commitSha: source.commitSha, treeDigest: source.treeDigest, dirty: source.dirty, patchArtifactRef: source.patchArtifactRef ?? null,
+      occurredAt: receipt.occurredAt, evidenceRefs: receipt.evidenceRefs, currentAttempt: snapshot.currentAttemptId === attempt.id });
     if (snapshot.currentAttemptId === attempt.id) {
       const completeAtExecution = definition.items.find(item => item.itemId === attempt.item_id).completionTarget === 'execution';
       const state = receipt.outcome === 'succeeded' ? (completeAtExecution ? 'completed' : 'validating') : receipt.outcome;

@@ -4,10 +4,11 @@ The canonical wire model is [src/contract.forge](src/contract.forge). ForgeC
 generates the OpenAPI 3.1 document, ForgeGraph contract IR and typed TypeScript
 client in `generated/`. T3 can consume these without importing Bob's runtime.
 
-This package defines the shared contract, local durable adapter and opt-in HTTP
-host. It enables no scheduler, provider process, integration writes or deployments
-by default. Bob owns coordination; each T3 environment owns its
-execution. Parent work: BOB-41 and T3CODE-6. Contract publication: BOB-42. Local durable admission: BOB-43. Execution recovery: BOB-44.
+This package defines the shared contract, local durable adapter, opt-in HTTP
+host and opt-in dispatch worker. It enables no scheduler, provider process,
+integration writes or deployments by default; Kanbanger writes happen only when an
+operator runs `bob-coordinate-worker` with a Kanbanger configuration. Bob owns coordination; each T3 environment owns its
+execution. Parent work: BOB-41 and T3CODE-6. Contract publication: BOB-42. Local durable admission: BOB-43. Execution recovery: BOB-44. Kanbanger adapter and dispatch worker: BOB-54.
 
 ## Verify and generate
 
@@ -83,8 +84,10 @@ as environment-local profiles; no credentials enter coordination payloads.
 The opt-in `runtime/coordinator.mjs` adapter uses Node 24's built-in SQLite and
 ForgeC-generated D1 SQL from `storage/src/model.forge`. The PostgreSQL projection
 is generated for review only; no PostgreSQL adapter or production migration is
-enabled. Database version 2 is initialized once; the generated attempt migration upgrades
-version 1 transactionally. Unsupported versions fail.
+enabled. Database version 3 is initialized once. Version 1 upgrades transactionally
+with the generated attempt (`0002_attempts.sql`) and issue-effect
+(`0003_issue_effects.sql`) migrations; version 2 with the issue-effect migration
+only. A failed upgrade rolls back and leaves the prior version. Unsupported versions fail.
 The local store and policy file are owned by the local operator. The optional
 HTTP host derives actor/workspace authority from configured principals; requests
 cannot supply that authority.
@@ -218,5 +221,102 @@ Mutation `Idempotency-Key` headers must match their command/request identifiers.
 Routes and bodies come from the generated ForgeC OpenAPI document. `ListPlans`
 returns owner-scoped summaries in pages of at most 50. Bodies are bounded to
 1 MiB; unsupported operations fail explicitly. This host does not start a worker:
-run the explicit `DispatchOnce` CLI with operator-owned environment bindings to
-admit queued execution in T3.
+run `bob-coordinate-worker` (below) or the explicit `DispatchOnce` CLI with
+operator-owned environment bindings to admit queued execution in T3. Pass
+`--kanbanger ./kanbanger.json` to resolve issues on admission (below).
+
+## Kanbanger adapter
+
+`runtime/kanbanger.mjs` is a self-contained GraphQL client over `fetch` for
+Kanbanger's Linear-compatible API (it does not import Bob's API package). It sends
+the API key as `Authorization: <key>`, as Bob's `LinearClient` integration does,
+uses a timeout, refuses redirects, requires https (http only for loopback) and
+reports structured errors (`IssueNotFound`, `KanbangerUnauthorized`,
+`KanbangerUnavailable` (retryable), `KanbangerRejected`,
+`KanbangerReadBackMismatch`). Error messages never contain the key.
+
+- `resolveIssue(identifierOrUuid)` returns `{ id, identifier, title, url, state,
+  team: { id, key, name }, project: { id, name } }`. Reads accept `BOB-37`.
+- `workflowStates(teamId)` discovers the team's states once per client and caches
+  them. State IDs are never hard-coded.
+- `updateIssueState(uuid, stateId)` and `createComment(uuid, body)` require the
+  issue UUID (the deployed API needs UUIDs for mutations). Comment text and all
+  inputs travel as GraphQL variables. A state update is read back and verified.
+
+Operator-owned `kanbanger.json` (keep it private; prefer `tokenEnv`):
+
+```json
+{
+  "endpoint": "https://tasks.gmac.io/graphql",
+  "tokenEnv": "KANBANGER_API_KEY",
+  "integrationId": "kanbanger",
+  "inProgressStateName": "In Progress",
+  "timeoutMs": 10000
+}
+```
+
+`endpoint` defaults to `https://tasks.gmac.io/graphql`; `token` may replace
+`tokenEnv`. `integrationId` names which IssueRef integration this client serves.
+
+### Issue resolution on admission
+
+`ExecutionCoordinator` accepts an optional `issueResolver`. Without one, admission
+is unchanged. With one (`kanbangerIssueResolver(client)`, enabled by
+`--kanbanger` on `bob-coordinate` and `bob-coordinate-server`), CreatePlan,
+UpdatePlan, RequestExecution and RetryItem must enter through the async
+`admit()` method. It resolves every admitted IssueRef in Kanbanger before opening
+the SQLite transaction; the resolved issue must match the IssueRef identity and
+its team (UUID or key) and project UUID must equal both the IssueRef and a
+configured policy `issueProjects` entry. Otherwise admission fails with
+`IssueNotFound`, `IssueMismatch`, `IssueProjectMismatch`, `IssueUnresolvable`
+or `IssueResolutionUnavailable` and nothing is written. The transaction rechecks
+that the issue it admits is the one resolved; a synchronous `call()` with a
+resolver configured fails with `IssueUnverified`. Idempotent replays return the
+stored operation without contacting Kanbanger. The wire contract is unchanged.
+
+## Lifecycle outbox
+
+`coordination_issue_effect` (ForgeC model `CoordinationIssueEffect`) holds
+Kanbanger lifecycle effects keyed by `(attemptId, fact)`. Rows are inserted in the
+same transaction that admits an attempt (RequestExecution/RetryItem) or records a
+terminal execution receipt, so a rolled-back transaction leaves no row and a
+replayed command or receipt adds none.
+
+| Fact | Kanbanger write |
+| --- | --- |
+| `admitted` | Set the team's "In Progress" state (by name, else the first `started` state). An issue already started, in review, done or cancelled is left unchanged. |
+| `execution-succeeded` | Comment with request/attempt IDs, environment, execution, thread, checkpoint commit and tree digest. The state is never set to Done. |
+| `execution-failed`, `execution-cancelled` | Comment with the same receipt summary. No state change. |
+
+`drainIssueEffects()` claims one row at a time under a lease, writes outside any
+transaction, reads the result back and only then marks the row `delivered`.
+Comments embed a `bob-coordination-effect: <attemptId>:<fact>` marker; before
+commenting, the drain reads the issue's comments and treats a present marker as
+delivered, so a crash between the write and the settle does not comment twice.
+Retryable failures record `delivery_attempts`, `last_error` and a jittered
+exponential `next_attempt_at` (5 s doubling to 15 min); issue-specific failures
+(not found, moved project, missing state) become `rejected`; issues of another
+integration become `skipped`. Pending rows and leases survive restart.
+
+## Dispatch worker
+
+```sh
+bob-coordinate-worker --database ./coordination.sqlite --context ./policy.json \
+  --bindings ./environment-bindings.json --kanbanger ./kanbanger.json [--interval-ms 5000]
+```
+
+Each loop runs the existing `DispatchOnce` path unchanged (bounded lease,
+FindExecution before any replay, unknown state on ambiguity), then drains up to
+10 outbox rows. Idle loops wait about `--interval-ms` with jitter; failures back
+off exponentially with jitter up to 60 s. Each step prints one JSON line
+(`start`, `dispatch`, `drain`, `stop`) to stdout; tokens never appear in logs.
+SIGTERM/SIGINT stop the loop after the current step settles its lease, then the
+database closes. The worker records no receipts and does not validate, merge,
+deploy or close issues.
+
+Config files, all operator-owned:
+
+- `policy.json`: `{ workspaceId, actorId, targets: ExecutionTarget[], issueProjects: [{ integrationId, workspaceId, teamId, projectId }] }`.
+  With Kanbanger, `teamId` is the team UUID or key and `projectId` the project UUID.
+- `environment-bindings.json`: `[{ target: ExecutionTarget, baseUrl, authToken? }]`.
+- `kanbanger.json`: shown above.

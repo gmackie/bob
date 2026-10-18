@@ -144,7 +144,7 @@ test('execution write fault rolls back attempt, item, receipt and event updates'
   assert.equal(f.service.call('GetItem', query('item-1')).item.state, 'ready');
   assert.equal(f.service.pendingNotifications().length, before);
 });
-test('version-one local databases migrate using the generated attempt schema', t => {
+test('version-one local databases migrate through the generated attempt and issue-effect schemas', t => {
   const dir = mkdtempSync(join(tmpdir(), 'bob-migration-')), database = join(dir, 'store.sqlite');
   const db = new DatabaseSync(database);
   // Obtain the genuine published v1 SQL, not a hand-written mock schema.
@@ -153,9 +153,10 @@ test('version-one local databases migrate using the generated attempt schema', t
   db.prepare('INSERT INTO coordination_plan VALUES (?,?,?,?,?,?)').run('workspace', 'old-plan', 'actor', '{}', 'draft', 1); db.close();
   const c = new ExecutionCoordinator({ database, context });
   t.after(() => { c.close(); rmSync(dir, { recursive: true, force: true }); });
-  assert.equal(c.db.prepare('PRAGMA user_version').get().user_version, 2);
+  assert.equal(c.db.prepare('PRAGMA user_version').get().user_version, 3);
   assert.equal(c.db.prepare('SELECT COUNT(*) AS n FROM coordination_plan').get().n, 1);
   assert.equal(c.db.prepare('SELECT COUNT(*) AS n FROM coordination_attempt').get().n, 0);
+  assert.equal(c.db.prepare('SELECT COUNT(*) AS n FROM coordination_issue_effect').get().n, 0);
 });
 test('HTTP port refuses legacy capabilities and preserves IDs, target and environment-local credentials', async t => {
   const f = setup(t), body = request(f), calls = [];

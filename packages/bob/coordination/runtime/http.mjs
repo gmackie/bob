@@ -12,7 +12,7 @@ const operationNames = new Set(routes.values());
 
 /** Principals and their policies are operator-owned. Request headers/body cannot
  * select an actor, workspace, receipt identity or a wider target policy. */
-export function coordinationServer({ database, principals, maxBodyBytes = 1024 * 1024 }) {
+export function coordinationServer({ database, principals, maxBodyBytes = 1024 * 1024, issueResolver }) {
   if (!Array.isArray(principals) || !principals.length || !Number.isInteger(maxBodyBytes) || maxBodyBytes < 1 || maxBodyBytes > 4 * 1024 * 1024) fail('InvalidRequest', 'Invalid server configuration', 400);
   const digests = new Set();
   const services = [];
@@ -22,7 +22,7 @@ export function coordinationServer({ database, principals, maxBodyBytes = 1024 *
       const tokenHash = hash(principal.token), fingerprint = tokenHash.toString('hex');
       if (digests.has(fingerprint)) fail('InvalidRequest', 'Duplicate principal credential', 400);
       digests.add(fingerprint);
-      services.push({ tokenHash, operations: new Set(principal.operations), coordinator: new ExecutionCoordinator({ database, context: principal.context }) });
+      services.push({ tokenHash, operations: new Set(principal.operations), coordinator: new ExecutionCoordinator({ database, context: principal.context, issueResolver }) });
     }
   } catch (error) { for (const service of services) service.coordinator.close(); throw error; }
   const server = createServer(async (request, response) => {
@@ -45,7 +45,7 @@ export function coordinationServer({ database, principals, maxBodyBytes = 1024 *
       }
       let input;
       try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { fail('InvalidRequest', 'Expected a JSON request', 400); }
-      const value = service.coordinator.call(name, input, { idempotencyKey: request.headers['idempotency-key'] });
+      const value = await service.coordinator.admit(name, input, { idempotencyKey: request.headers['idempotency-key'] });
       // Capabilities reflect both implementation and this principal's authority.
       if (name === 'GetCapabilities') value.operations = value.operations.filter(operation => service.operations.has(operation));
       response.writeHead(200); response.end(JSON.stringify(value));

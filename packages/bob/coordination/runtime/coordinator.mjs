@@ -19,6 +19,7 @@ export class CoordinationError extends Error {
   constructor(code, message, status = 409) { super(message); this.code = code; this.status = status; }
 }
 export const fail = (code, message, status) => { throw new CoordinationError(code, message, status); };
+export const storageVersion = 3;
 const milestones = ['execution-succeeded', 'review-ready', 'merged', 'production-verified'];
 const completionTargets = ['execution', 'review-ready', 'merged', 'production'];
 
@@ -32,19 +33,22 @@ export class Coordinator {
     this.fault = fault;
     this.db = new DatabaseSync(database);
     this.db.exec('PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
+    // Version 3 is current. Older local stores upgrade transactionally with the
+    // exact generated table migrations; any other version is refused.
+    const sql = file => readFileSync(new URL(`../storage/generated/${file}`, import.meta.url), 'utf8');
     const version = this.db.prepare('PRAGMA user_version').get().user_version;
-    if (version === 0) this.transaction(() => {
-      if (this.db.prepare('PRAGMA user_version').get().user_version === 2) return;
-      this.db.exec(readFileSync(new URL('../storage/generated/d1.sql', import.meta.url), 'utf8'));
-      this.db.exec('PRAGMA user_version = 2');
-    });
-    else if (version === 1) this.transaction(() => {
-      const current = this.db.prepare('PRAGMA user_version').get().user_version;
-      if (current === 2) return;
-      this.db.exec(readFileSync(new URL('../storage/generated/0002_attempts.sql', import.meta.url), 'utf8'));
-      this.db.exec('PRAGMA user_version = 2');
-    });
-    else if (version !== 2) { this.db.close(); fail('StorageVersion', 'Unsupported coordination database version', 500); }
+    if (![0, 1, 2, storageVersion].includes(version)) { this.db.close(); fail('StorageVersion', 'Unsupported coordination database version', 500); }
+    if (version !== storageVersion) try {
+      this.transaction(() => {
+        const current = this.db.prepare('PRAGMA user_version').get().user_version;
+        if (current === storageVersion) return;
+        if (current === 0) this.db.exec(sql('d1.sql'));
+        else if (current === 1) { this.db.exec(sql('0002_attempts.sql')); this.db.exec(sql('0003_issue_effects.sql')); }
+        else if (current === 2) this.db.exec(sql('0003_issue_effects.sql'));
+        else fail('StorageVersion', 'Unsupported coordination database version', 500);
+        this.db.exec(`PRAGMA user_version = ${storageVersion}`);
+      });
+    } catch (error) { this.db.close(); throw error; }
   }
   close() { this.db.close(); }
   transaction(fn) {
@@ -124,7 +128,8 @@ export class Coordinator {
       this.event(item.itemId, snapshot.resourceVersion, operationId);
     }
   }
-  call(name, input, { idempotencyKey } = {}) {
+  call(name, input, options = {}) {
+    const { idempotencyKey } = options;
     if (!supportedOperations.includes(name)) fail('CapabilityUnavailable', 'Operation is not implemented in this slice', 501);
     // Normalize to actual JSON before hashing/validation; reject non-JSON input.
     let body;
@@ -144,6 +149,7 @@ export class Coordinator {
         this.authorize(stored.definition, stored.origin);
         return stored.operation;
       }
+      this.verifyAdmission(name, body, options);
       const operationId = randomUUID();
       let planId, definition, state, version;
       if (name === 'CreatePlan') {
@@ -179,6 +185,8 @@ export class Coordinator {
       return operation;
     });
   }
+  /** Hook for an injected admission check; runs after replay, inside the transaction. */
+  verifyAdmission(_name, _body, _options) {}
   afterPlanWrite(_planId) {}
   query(name, body) {
     if (name === 'ListPlans') {
