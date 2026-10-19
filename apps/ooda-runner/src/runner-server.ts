@@ -18,6 +18,7 @@ import { buildOutcomeNote } from "./ooda-callback.js";
 import {
   createRunnerTRPCClient,
   createResearchSurface,
+  streamSessionEvent,
   type RunnerTRPCClient,
 } from "./trpc-client";
 import { CapabilityRegistry } from "@gmacko/ooda/capability-registry";
@@ -771,7 +772,7 @@ export class RunnerServer {
         onEvent: (event) => {
           if (event.type === "stdout") {
             bobLog += event.data;
-            void this.trpc.runner.pushSessionEvent.mutate({
+            streamSessionEvent(this.trpc, {
               sessionId: session.id,
               type: "stdout_chunk",
               content: event.data,
@@ -779,21 +780,21 @@ export class RunnerServer {
           }
           if (event.type === "stderr") {
             bobLog += event.data;
-            void this.trpc.runner.pushSessionEvent.mutate({
+            streamSessionEvent(this.trpc, {
               sessionId: session.id,
               type: "stderr_chunk",
               content: event.data,
             });
           }
           if (event.type === "thought") {
-            void this.trpc.runner.pushSessionEvent.mutate({
+            streamSessionEvent(this.trpc, {
               sessionId: session.id,
               type: "thought",
               content: event.thought?.text ?? event.data,
             });
           }
           if (event.type === "tool_call" || event.type === "tool_result") {
-            void this.trpc.runner.pushSessionEvent.mutate({
+            streamSessionEvent(this.trpc, {
               sessionId: session.id,
               type: "tool_call",
               content: JSON.stringify({
@@ -803,14 +804,14 @@ export class RunnerServer {
             });
           }
           if (event.type === "error") {
-            void this.trpc.runner.pushSessionEvent.mutate({
+            streamSessionEvent(this.trpc, {
               sessionId: session.id,
               type: "error",
               content: event.data,
             });
           }
           if (event.type === "exit") {
-            void this.trpc.runner.pushSessionEvent.mutate({
+            streamSessionEvent(this.trpc, {
               sessionId: session.id,
               type: "exit",
               content: event.data,

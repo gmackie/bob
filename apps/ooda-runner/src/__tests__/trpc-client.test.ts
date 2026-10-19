@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { createRunnerTRPCClient } from "../trpc-client";
+import {
+  createRunnerTRPCClient,
+  streamSessionEvent,
+  type RunnerTRPCClient,
+} from "../trpc-client";
 
 describe("createRunnerTRPCClient", () => {
   it("creates a client without throwing", () => {
@@ -61,4 +65,27 @@ it("keeps concurrent job trace contexts on separate outgoing requests", async ()
   } finally {
     mock.mockRestore();
   }
+});
+
+describe("streamSessionEvent", () => {
+  it("logs a failed push instead of leaving the rejection unhandled", async () => {
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const mutate = vi.fn().mockRejectedValue(new Error("Failed query: insert into session_event"));
+    const trpc = { runner: { pushSessionEvent: { mutate } } } as unknown as RunnerTRPCClient;
+    try {
+      streamSessionEvent(trpc, { sessionId: "s1", type: "thought", content: "turn 5" });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(mutate).toHaveBeenCalledWith({ sessionId: "s1", type: "thought", content: "turn 5" });
+      expect(warn).toHaveBeenCalledWith(
+        "[runner] session s1: thought event not recorded:",
+        "Failed query: insert into session_event",
+      );
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+      warn.mockRestore();
+    }
+  });
 });
