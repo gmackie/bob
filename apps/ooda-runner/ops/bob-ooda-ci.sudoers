@@ -1,0 +1,2 @@
+# The root-owned helper accepts only fixed actions and an exact commit SHA.
+bob ALL=(root) NOPASSWD: /usr/local/sbin/bob-ooda-ci-service *

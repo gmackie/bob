@@ -22,7 +22,17 @@ Configure these repository Actions secrets before merging a runner change:
 - `OODA_RUNNER_DEPLOY_SSH_KEY`: the private deployment identity authorized for that account.
 - `OODA_RUNNER_DEPLOY_KNOWN_HOSTS`: the verified OpenSSH known-hosts entry for that address. CI requires strict host-key verification.
 
-The job also uses the existing `FG_REGISTRY_TOKEN` to install the locked private dependencies. It passes that token through SSH stdin and a temporary npm configuration, then removes it before restarting the service. The target needs Node 24+ at `/home/bob/.local/bin/node`, pnpm, curl, tar, flock, and noninteractive sudo access for release-directory creation and service promotion. No CI secrets are copied into the release.
+The job also uses the existing `FG_REGISTRY_TOKEN` to install the locked private dependencies. It passes that token through SSH stdin and a temporary npm configuration, then removes it before restarting the service. The target needs Node 24+ at `/home/bob/.local/bin/node`, pnpm, curl, tar, flock, and the root-owned deployment helper installed below. No CI secrets are copied into the release.
+
+One-time host installation, from a reviewed checkout of this change as an administrator:
+
+```sh
+sudo install -o root -g root -m 0755 apps/ooda-runner/ops/bob-ooda-ci-service /usr/local/sbin/bob-ooda-ci-service
+sudo visudo -cf apps/ooda-runner/ops/bob-ooda-ci.sudoers
+sudo install -o root -g root -m 0440 apps/ooda-runner/ops/bob-ooda-ci.sudoers /etc/sudoers.d/bob-ooda-ci
+```
+
+The sudoers entry permits only this helper. It validates an exact commit SHA, creates releases under the fixed `/opt/bob/releases` root, and changes only the OODA runner's CI service drop-in. It never executes release code as root or changes service credentials.
 
 `deploy-ooda-runner` runs only on pushes to master and requires the complete `ci` job to succeed. A missing deployment credential fails the job explicitly. Deployments are serialized and reject a commit when master has already advanced. The host installs an exact source archive into a new release directory and adds `zzzzzzzzzzzzzzzzzzzz-ci-release.conf`, overriding only `WorkingDirectory` and `ExecStart`; existing runtime/environment configuration stays in force. This drop-in sorts after the existing BOB release overrides.
 

@@ -11,58 +11,44 @@ digest="$3"
 export PATH=/home/bob/.local/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin
 node_bin=/home/bob/.local/bin/node
 "$node_bin" -e 'if (Number(process.versions.node.split(".")[0]) < 24) process.exit(1)'
-sudo -n true
+helper=/usr/local/sbin/bob-ooda-ci-service
+sudo -n "$helper" check "$sha"
 # Serialize host promotions as well as the workflow's concurrency group.
 exec 9>/home/bob/.ooda-runner-ci-deploy.lock
 flock -w 1200 9
 printf '%s  %s\n' "$digest" "$archive" | sha256sum --check --status
 release="/opt/bob/releases/ci-ooda-runner-$sha"
-dropin=/etc/systemd/system/ooda-runner.service.d/zzzzzzzzzzzzzzzzzzzz-ci-release.conf
 scratch="$(mktemp -d)"
 staging=""
 changed=false
-had_previous=false
 cleanup() {
   status=$?
   trap - EXIT
   if $changed && (( status != 0 )); then
     echo 'Runner verification failed; restoring previous service configuration' >&2
-    if $had_previous; then sudo -n install -m 0644 "$scratch/previous.conf" "$dropin";
-    else sudo -n rm -f "$dropin"; fi
-    sudo -n systemctl daemon-reload
-    sudo -n systemctl restart ooda-runner.service
+    sudo -n "$helper" rollback "$sha"
   fi
   rm -rf "$scratch"
-  [[ -z "$staging" ]] || rm -rf "$staging"
+  [[ -z "$staging" ]] || sudo -n "$helper" discard "$sha"
   exit "$status"
 }
 trap cleanup EXIT
 if [[ ! -d "$release" ]]; then
-  staging="$(sudo -n mktemp -d /opt/bob/releases/.ooda-ci.XXXXXXXXXX)"
-  sudo -n chown "$(id -u):$(id -g)" "$staging"
+  staging="$(sudo -n "$helper" prepare "$sha")"
   tar -xzf "$archive" -C "$staging"
   # This file contains a variable reference, never the credential itself.
   printf '%s\n' '//npm.forgegraf.com/:_authToken=${FG_REGISTRY_TOKEN}' > "$scratch/npmrc"
   export NPM_CONFIG_USERCONFIG="$scratch/npmrc"
   (cd "$staging" && ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile --filter @gmacko/ooda-runner...)
   printf '%s\n' "$sha" > "$staging/.release-sha"
-  sudo -n mv "$staging" "$release"
+  sudo -n "$helper" publish "$sha"
   staging=""
 fi
 [[ "$(cat "$release/.release-sha")" == "$sha" ]]
 # No registry credentials reach the restarted service.
 unset FG_REGISTRY_TOKEN NPM_CONFIG_USERCONFIG
-if [[ -f "$dropin" ]]; then cp "$dropin" "$scratch/previous.conf"; had_previous=true; fi
-cat > "$scratch/release.conf" <<CONFIG
-[Service]
-WorkingDirectory=$release/apps/ooda-runner
-ExecStart=
-ExecStart=$node_bin --import $release/apps/ooda-runner/node_modules/tsx/dist/loader.mjs $release/apps/ooda-runner/src/index.ts
-CONFIG
 changed=true
-sudo -n install -m 0644 "$scratch/release.conf" "$dropin"
-sudo -n systemctl daemon-reload
-sudo -n systemctl restart ooda-runner.service
+sudo -n "$helper" activate "$sha"
 for attempt in {1..60}; do
   pid="$(systemctl show -p MainPID --value ooda-runner.service)"
   if systemctl is-active --quiet ooda-runner.service && [[ "$pid" =~ ^[1-9][0-9]*$ ]] &&

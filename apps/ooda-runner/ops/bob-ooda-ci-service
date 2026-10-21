@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Install root-owned as /usr/local/sbin/bob-ooda-ci-service. Never execute
+# release code as root; systemd continues to run the runner as bob.
+set -euo pipefail
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+[[ "$EUID" == 0 ]] || exit 1
+[[ "$#" == 2 && "$2" =~ ^[0-9a-f]{40}$ ]] || exit 2
+action="$1"
+sha="$2"
+release="/opt/bob/releases/ci-ooda-runner-$sha"
+staging="/opt/bob/releases/.ci-ooda-runner-$sha"
+dropin=/etc/systemd/system/ooda-runner.service.d/zzzzzzzzzzzzzzzzzzzz-ci-release.conf
+state=/var/lib/bob-ooda-ci
+case "$action" in
+  check) exit 0 ;;
+  prepare)
+    [[ ! -e "$staging" && ! -L "$staging" && ! -e "$release" && ! -L "$release" ]]
+    install -d -m 0755 -o bob -g bob "$staging"
+    printf '%s\n' "$staging"
+    ;;
+  discard)
+    [[ ! -L "$staging" ]]
+    rm -rf -- "$staging"
+    ;;
+  publish)
+    [[ -d "$staging" && ! -L "$staging" && ! -e "$release" && ! -L "$release" ]]
+    [[ "$(cat "$staging/.release-sha")" == "$sha" ]]
+    mv "$staging" "$release"
+    ;;
+  activate)
+    [[ -d "$release" && ! -L "$release" && "$(cat "$release/.release-sha")" == "$sha" ]]
+    [[ -f "$release/apps/ooda-runner/src/index.ts" ]]
+    install -d -m 0700 -o root -g root "$state"
+    # Preserve the prior service configuration across a lost SSH acknowledgement.
+    if [[ ! -f "$state/active-sha" || "$(cat "$state/active-sha")" != "$sha" ]]; then
+      rm -f "$state/previous.conf" "$state/previous-sha"
+      if [[ -f "$dropin" ]]; then cp "$dropin" "$state/previous.conf"; fi
+      if [[ -f "$state/active-sha" ]]; then cp "$state/active-sha" "$state/previous-sha"; fi
+      printf '%s\n' "$sha" > "$state/active-sha"
+    fi
+    cat > "$state/release.conf" <<CONFIG
+[Service]
+WorkingDirectory=$release/apps/ooda-runner
+ExecStart=
+ExecStart=/home/bob/.local/bin/node --import $release/apps/ooda-runner/node_modules/tsx/dist/loader.mjs $release/apps/ooda-runner/src/index.ts
+CONFIG
+    install -m 0644 "$state/release.conf" "$dropin"
+    systemctl daemon-reload
+    systemctl restart ooda-runner.service
+    ;;
+  rollback)
+    [[ -f "$state/active-sha" && "$(cat "$state/active-sha")" == "$sha" ]]
+    if [[ -f "$state/previous.conf" ]]; then install -m 0644 "$state/previous.conf" "$dropin";
+    else rm -f "$dropin"; fi
+    if [[ -f "$state/previous-sha" ]]; then cp "$state/previous-sha" "$state/active-sha";
+    else rm -f "$state/active-sha"; fi
+    systemctl daemon-reload
+    systemctl restart ooda-runner.service
+    ;;
+  *) exit 2 ;;
+esac

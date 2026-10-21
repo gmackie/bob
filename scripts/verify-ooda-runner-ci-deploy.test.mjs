@@ -8,6 +8,7 @@ import test from 'node:test';
 const root = resolve(import.meta.dirname, '..');
 const script = join(root, 'apps/ooda-runner/deploy-ci.sh');
 const workflow = readFileSync(join(root, '.forgejo/workflows/ci.yml'), 'utf8');
+const helper = readFileSync(join(root, 'apps/ooda-runner/ops/bob-ooda-ci-service'), 'utf8');
 const remote = readFileSync(join(root, 'apps/ooda-runner/ops/promote-ci-release.sh'), 'utf8');
 
 test('runner promotion is master-push only, serialized and requires full successful CI', () => {
@@ -21,13 +22,14 @@ test('runner promotion is master-push only, serialized and requires full success
 });
 
 test('promotion preserves environment drop-ins, checks process identity and rolls back on failure', () => {
-  assert.match(remote, /ExecStart=\nExecStart=\$node_bin/);
+  assert.match(helper, /ExecStart=\nExecStart=\/home\/bob\/.local\/bin\/node/);
   assert.doesNotMatch(remote, /EnvironmentFile=/);
   assert.match(remote, /\/proc\/\$pid\/cwd/);
   assert.match(remote, /\/proc\/\$pid\/cmdline/);
   assert.match(remote, /127\.0\.0\.1:3010\/health/);
   assert.match(remote, /if \$changed && \(\( status != 0 \)\)/);
-  assert.match(remote, /install -m 0644 "\$scratch\/previous.conf" "\$dropin"/);
+  assert.match(remote, /sudo -n "\$helper" rollback "\$sha"/);
+  assert.match(helper, /install -m 0644 "\$state\/previous.conf" "\$dropin"/);
   assert.match(remote, /flock -w 1200/);
   assert.match(remote, /sha256sum --check --status/);
 });
