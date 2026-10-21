@@ -117,6 +117,9 @@ jobs:
       - name: Validate Bob execution service runtime
         run: node --test scripts/bob-execution-runtime.test.mjs
 
+      - name: Validate OODA runner CI deployment
+        run: node --test scripts/verify-ooda-runner-ci-deploy.test.mjs
+
       - name: Validate OODA runner Node runtime
         run: node --test scripts/verify-ooda-runner-node-runtime.test.mjs
 
@@ -489,3 +492,43 @@ jobs:
           printf '%s' "${FORGEGRAPH_API_KEY}" | pnpm exec wrangler secret put FORGEGRAPH_API_KEY --name ooda-blder-bot
           printf '%s' "${RESEARCH_SERVICE_TOKEN}" | pnpm exec wrangler secret put RESEARCH_SERVICE_TOKEN --name ooda-blder-bot
           ../../scripts/retry-cloudflare-command.sh pnpm exec vinext deploy
+
+  deploy-ooda-runner:
+    name: Deploy OODA runner to hetzner-bob
+    needs: ci
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: forgegraph-ci
+    timeout-minutes: 30
+    concurrency:
+      group: bob-ooda-runner-production
+      cancel-in-progress: false
+    steps:
+      - name: Require successful runner CI
+        env:
+          CI_RESULT: ${{ needs.ci.result }}
+        run: |
+          test "$CI_RESULT" = success || { echo 'Runner deployment blocked by CI'; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Configure authenticated deployment transport
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.OODA_RUNNER_DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.OODA_RUNNER_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_SSH_KEY" && test -n "$DEPLOY_KNOWN_HOSTS" || {
+            echo 'Configure OODA_RUNNER_DEPLOY_SSH_KEY and OODA_RUNNER_DEPLOY_KNOWN_HOSTS'; exit 1;
+          }
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/ooda_deploy"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/ooda_deploy" "$HOME/.ssh/known_hosts"
+          printf '%s\n' 'Host *' '  IdentityFile ~/.ssh/ooda_deploy' '  IdentitiesOnly yes' '  BatchMode yes' '  StrictHostKeyChecking yes' '  ConnectTimeout 15' > "$HOME/.ssh/config"
+      - name: Promote and verify the exact runner release
+        env:
+          OODA_DEPLOY_TARGET: ${{ secrets.OODA_RUNNER_DEPLOY_TARGET }}
+        run: bash apps/ooda-runner/deploy-ci.sh "$GITHUB_SHA"
+      - name: Remove deployment identity
+        if: always()
+        run: rm -f "$HOME/.ssh/ooda_deploy"

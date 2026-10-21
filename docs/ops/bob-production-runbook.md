@@ -10,9 +10,23 @@ Cloudflare Worker at `bob.blder.bot`.**
 | What | Command | Notes |
 |---|---|---|
 | Gateway | `apps/bob-ws-gateway/deploy.sh` | Builds, **runs migrations first**, ships dist + node_modules, restarts, health-checks. Targets `hetzner-master`. |
-| Runner | tsx checkout on `hetzner-bob` (user `bob`) | `git pull && systemctl restart ooda-runner`. Runs from source via tsx — `supervisor-wrapper.cjs` ships with the source tree. |
+| Runner | `CI / Deploy OODA runner to hetzner-bob` after a successful master CI run | Exact-commit source release under `/opt/bob/releases/ci-ooda-runner-<sha>`, health checked with rollback. |
 | Web | wrangler deploy (existing CF pipeline) | |
 | Mobile | Preflight local iOS build | Native build needed for push-config changes (not OTA). |
+
+### Runner CI deployment setup
+
+Configure these repository Actions secrets before merging a runner change:
+
+- `OODA_RUNNER_DEPLOY_TARGET`: `bob@<reachable address of hetzner-bob>`. Use an address reachable from the `forgegraph-ci` runner pool; container jobs may not resolve Tailscale hostnames.
+- `OODA_RUNNER_DEPLOY_SSH_KEY`: the private deployment identity authorized for that account.
+- `OODA_RUNNER_DEPLOY_KNOWN_HOSTS`: the verified OpenSSH known-hosts entry for that address. CI requires strict host-key verification.
+
+The job also uses the existing `FG_REGISTRY_TOKEN` to install the locked private dependencies. It passes that token through SSH stdin and a temporary npm configuration, then removes it before restarting the service. The target needs Node 24+ at `/home/bob/.local/bin/node`, pnpm, curl, tar, flock, and noninteractive sudo access for release-directory creation and service promotion. No CI secrets are copied into the release.
+
+`deploy-ooda-runner` runs only on pushes to master and requires the complete `ci` job to succeed. A missing deployment credential fails the job explicitly. Deployments are serialized and reject a commit when master has already advanced. The host installs an exact source archive into a new release directory and adds `zzzzzzzzzzzzzzzzzzzz-ci-release.conf`, overriding only `WorkingDirectory` and `ExecStart`; existing runtime/environment configuration stays in force. This drop-in sorts after the existing BOB release overrides.
+
+Success requires the active service PID to use the expected release directory and entry point, a healthy response from `127.0.0.1:3010/health`, and a stable PID after startup. A failed promotion restores the previous CI drop-in (or removes the new one on the first deployment) and restarts the prior release. Old releases are retained because detached agent supervisors may still use them. The older `deploy-hetzner-bob.sh` is a manual checkout-based path and is not used by CI.
 
 **Migration-first deploy order is mandatory** for schema changes: the
 `agent_run_status` enum gained `blocked` and `host_unknown` — code that
