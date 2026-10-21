@@ -10,7 +10,8 @@ import { launchT3Task } from "./t3-bridge";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0)) await close(); });
-async function server(options: { reject?: boolean; unauthorized?: boolean; bridge?: boolean } = {}) {
+async function server(options: { reject?: boolean; unauthorized?: boolean; bridge?: boolean; completed?: boolean; failed?: boolean; failSettlementOnce?: boolean } = {}) {
+  let settlementFailed = false;
   let answered = false;
   let interrupted = false;
   const calls: { tag: string; payload: any }[] = [];
@@ -28,10 +29,15 @@ async function server(options: { reject?: boolean; unauthorized?: boolean; bridg
     expect(req.url).toBe("/ws?orchestrationProtocol=2&wsTicket=one-use-ticket");
     socket.on("message", data => {
       const request = JSON.parse(data.toString()); calls.push(request);
+      if (request.payload.type === "thread.settle" && options.failSettlementOnce && !settlementFailed) {
+        settlementFailed = true;
+        socket.close();
+        return;
+      }
       if (request.payload.type === "runtime-request.respond") answered = true;
       if (request.payload.type === "run.interrupt") interrupted = true;
       const projection = { thread: { id: "t", projectId: "right", worktreePath: task.worktreePath },
-        runs: [{ id: "run-1", ordinal: 1, status: interrupted ? "interrupted" : "running" }],
+        runs: [{ id: "run-1", ordinal: 1, status: interrupted ? "interrupted" : options.failed ? "failed" : options.completed ? "completed" : "running" }],
         turnItems: [{ id: "output", type: "assistant_message", text: "SERVER_OUTPUT", status: "completed" }],
         runtimeRequests: [{ id: "approval-1", kind: "command", status: answered ? "resolved" : "pending" }] };
       const value = request.tag === "server.getConfig" ? { providers: [{ instanceId: "codex", status: "ready", models: [{ slug: "server-default", isDefault: true }] }] } : request.tag === "orchestration.getThreadProjection" ? projection : { threadId: request.payload.threadId, projection: options.bridge ? projection : { runs: [] } };
@@ -72,7 +78,7 @@ it("surfaces RPC rejection without exposing server configuration", async () => {
 it("streams output, responds to permission/input, and confirms remote interruption before exiting", async () => {
   const fixture = await server({ bridge: true });
   const child = spawn(process.execPath, ["--import", createRequire(import.meta.url).resolve("tsx"), fileURLToPath(new URL("./t3-bridge.ts", import.meta.url))], {
-    env: { ...process.env, BOB_T3_CONFIG: JSON.stringify(fixture.config), BOB_T3_TASK: JSON.stringify(task) },
+    env: { ...process.env, BOB_T3_CONFIG: JSON.stringify(fixture.config), BOB_T3_TASK: JSON.stringify({ ...task, branch: "bob/review/stopped-review" }) },
     stdio: ["pipe", "pipe", "pipe"],
   });
   cleanup.push(async () => { if (child.exitCode === null) child.kill("SIGKILL"); });
@@ -93,6 +99,7 @@ it("streams output, responds to permission/input, and confirms remote interrupti
   expect(output).toContain('"type":"control_resolved"');
   expect(output).toContain("T3 run interrupted");
   const commands = fixture.calls.filter(c => c.tag === "orchestration.dispatchCommand").map(c => c.payload);
+  expect(commands.some(c => c.type === "thread.settle")).toBe(false);
   expect(commands).toEqual(expect.arrayContaining([
     expect.objectContaining({ type: "runtime-request.respond", requestId: "approval-1", decision: "accept" }),
     expect.objectContaining({ type: "message.dispatch", text: "Follow-up from mobile", dispatchMode: { type: "steer_active", targetRunId: "run-1" } }),
@@ -119,3 +126,29 @@ it("marks autolab tasks by declared dispatch source, which overrides prompt matc
   expect(launches[0]!.payload.completionPolicy).toBe("autolab");
   expect(launches[1]!.payload).not.toHaveProperty("completionPolicy");
 });
+
+
+it.each([
+  { branch: "bob/review/repo-12-head-id", settles: true, failed: false },
+  { branch: "bob/repair/repo-12-head-id", settles: false, failed: false },
+  { branch: "feature/ordinary-task", settles: false, failed: false },
+  { branch: "bob/review/failed-review", settles: false, failed: true },
+])("settles successful automated review branches only: $branch", async ({ branch, settles, failed }) => {
+  const fixture = await server({ completed: true, failed, failSettlementOnce: settles });
+  const child = spawn(process.execPath, ["--import", createRequire(import.meta.url).resolve("tsx"), fileURLToPath(new URL("./t3-bridge.ts", import.meta.url))], {
+    env: { ...process.env, BOB_T3_CONFIG: JSON.stringify(fixture.config), BOB_T3_TASK: JSON.stringify({ ...task, branch }) },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  cleanup.push(async () => { if (child.exitCode === null) child.kill("SIGKILL"); });
+  let output = "";
+  child.stdout.on("data", data => { output += String(data); });
+  const [code] = await once(child, "exit");
+  expect(code).toBe(failed ? 1 : 0);
+  if (!failed) expect(output).toContain("T3 run completed");
+  const commands = fixture.calls.filter(c => c.payload.type === "thread.settle");
+  expect(commands).toHaveLength(settles ? 2 : 0);
+  if (settles) {
+    expect(commands[0]!.payload).toEqual(commands[1]!.payload);
+    expect(output.indexOf("settlement interrupted")).toBeLessThan(output.indexOf('"type":"result"'));
+  }
+}, 15_000);

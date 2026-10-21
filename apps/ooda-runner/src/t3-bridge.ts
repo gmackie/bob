@@ -170,6 +170,20 @@ export async function runBridge(config: T3Config, task: T3Task) {
       const latest = [...projection.runs].sort((a,b) => b.ordinal-a.ordinal)[0];
       if (latest && projection.runs.every(r => terminal.has(r.status))) {
         if (latest.status !== "completed" && !stopping) throw new Error(`T3 run ${latest.status}`);
+        // Bob consumes the verdict on the git host. Completed automated review
+        // threads have no remaining human action; keep failures/stops visible.
+        if (!stopping && latest.status === "completed" && task.branch?.startsWith("bob/review/")) {
+          try {
+            await client.rpc("orchestration.dispatchCommand", {
+              type: "thread.settle", commandId: `${threadId}-review-settle`, threadId,
+            });
+          } catch (error) {
+            if (!(error instanceof T3UnavailableError)) throw error;
+            emit({ type: "error", error: "T3 review settlement interrupted; retrying" });
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
+          }
+        }
         emit({ type: "result", result: stopping ? "T3 run interrupted" : "T3 run completed" });
         return;
       }
