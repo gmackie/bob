@@ -26,9 +26,10 @@ export class ExternalStatusWorker {
     },
   ) {}
 
-  async poll(): Promise<void> {
+  /** Resolves true when a claim was made (BOB-60 poll backoff signal). */
+  async poll(): Promise<boolean> {
     if (this.stopping || this.polling || this.config.adapters.size === 0)
-      return;
+      return false;
     this.polling = true;
     try {
       const claim = await this.config.api.claimStatus({
@@ -36,7 +37,7 @@ export class ExternalStatusWorker {
         destinations: [...this.config.adapters.keys()].sort(),
         leaseSeconds: 90,
       });
-      if (!claim) return;
+      if (!claim) return false;
       const adapter = this.config.adapters.get(claim.link.destination);
       if (!adapter) {
         await this.config.api.failStatus({
@@ -45,7 +46,7 @@ export class ExternalStatusWorker {
           error: `No adapter is configured for ${claim.link.destination}`,
           retrySeconds: 3_600,
         });
-        return;
+        return true;
       }
       try {
         const status = await adapter.readStatus(claim.link);
@@ -62,6 +63,7 @@ export class ExternalStatusWorker {
           retrySeconds: 60,
         });
       }
+      return true;
     } finally {
       this.polling = false;
     }

@@ -26,9 +26,10 @@ export class IntegrationDeliveryWorker {
     },
   ) {}
 
-  async poll(): Promise<void> {
+  /** Resolves true when a claim was made (BOB-60 poll backoff signal). */
+  async poll(): Promise<boolean> {
     if (this.stopping || this.polling || this.config.adapters.size === 0)
-      return;
+      return false;
     this.polling = true;
     try {
       const claim = await this.config.api.claim({
@@ -36,7 +37,7 @@ export class IntegrationDeliveryWorker {
         destinations: [...this.config.adapters.keys()].sort(),
         leaseSeconds: 90,
       });
-      if (!claim) return;
+      if (!claim) return false;
       const adapter = this.config.adapters.get(claim.delivery.destination);
       if (!adapter) {
         await this.config.api.fail({
@@ -46,7 +47,7 @@ export class IntegrationDeliveryWorker {
           error: `No adapter is configured for ${claim.delivery.destination}`,
           retryable: false,
         });
-        return;
+        return true;
       }
       const validation = await adapter.validateProposal(claim.proposal);
       if (!validation.valid) {
@@ -58,7 +59,7 @@ export class IntegrationDeliveryWorker {
             validation.errors.join("; ") || "Destination validation failed",
           retryable: false,
         });
-        return;
+        return true;
       }
 
       try {
@@ -85,7 +86,7 @@ export class IntegrationDeliveryWorker {
               runnerId: this.config.runnerId,
               receipt: reconciled,
             });
-            return;
+            return true;
           }
         } catch (reconcileError) {
           const detail =
@@ -99,7 +100,7 @@ export class IntegrationDeliveryWorker {
             error: `${message}; reconciliation failed: ${detail}`,
             retryable: true,
           });
-          return;
+          return true;
         }
         await this.config.api.fail({
           outboxId: claim.delivery.id,
@@ -109,6 +110,7 @@ export class IntegrationDeliveryWorker {
           retryable: true,
         });
       }
+      return true;
     } finally {
       this.polling = false;
     }
