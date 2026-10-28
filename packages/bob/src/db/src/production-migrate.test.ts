@@ -10,10 +10,11 @@ const approved = {
   filename: "0036_canonical_auth_foreign_keys.sql",
   hash: "approved-hash",
 };
-const files = [...historical, approved];
+const oauth = { filename: "0037_mcp_oauth.sql", hash: "oauth-hash" };
+const files = [...historical, approved, oauth];
 
 describe("production migration deployment guard", () => {
-  it("accepts only the approved pending migration and allows historical extra ledger entries", () => {
+  it("accepts only the approved pending migrations and allows historical extra ledger entries", () => {
     expect(() =>
       validateProductionMigrationLedger(files, [
         ...historical,
@@ -34,7 +35,7 @@ describe("production migration deployment guard", () => {
     ).toThrow("mismatch");
     expect(() =>
       validateProductionMigrationLedger(
-        [...files, { filename: "0037_unreviewed.sql", hash: "new" }],
+        [...files, { filename: "0038_unreviewed.sql", hash: "new" }],
         historical,
       ),
     ).toThrow("roster");

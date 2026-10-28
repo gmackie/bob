@@ -74,6 +74,7 @@
     "typescript": "catalog:",
     "vite": "8.0.16",
     "vitest": "^4.1.11",
-    "wrangler": "4.83.0"
+    "wrangler": "4.83.0",
+    "@modelcontextprotocol/sdk": "1.29.0"
   }
 }
