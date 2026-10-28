@@ -1,79 +1,14 @@
 import { existsSync } from "node:fs";
 
-import type { AgentAdapter, AdapterEvent, BuddyMcpServer, PromptImage } from "@gmacko/ooda/agent-adapters";
-import {
-  createBuddyToolDescriptors,
-  registerTools,
-  type ToolDescriptor,
-} from "@gmacko/ooda/agent-adapters";
-import type {
-  BudgetState,
-  HandlerContext,
-  ResearchTRPCSurface,
-} from "@gmacko/ooda/buddy-tools";
-import { CapabilityRegistry } from "@gmacko/ooda/capability-registry";
-import {
-  emitSkillfleetWorkflowEvent,
-  normalizeSkillfleetRuntime,
-} from "@gmacko/core/skillfleet-bridge";
+import type { AgentAdapter, AdapterEvent } from "@gmacko/ooda/agent-adapters";
 import { createThreadWorkspace } from "@gmacko/ooda/thread-workspace";
 import { resolveThreadPath } from "@gmacko/ooda/thread-model";
 
 import { extractAgentResponse } from "../pty-output-parser";
 
-// Default per-session tool budget (mirrors the buddy-tools design doc:
-// budget_seconds=180, max_s2_requests=200; tokens are runner-owned and not
-// decremented by the tool middleware, so we seed a generous ceiling).
-const DEFAULT_TOOL_BUDGET: Readonly<BudgetState> = {
-  tokens: 1_000_000,
-  wallClockMs: 180_000,
-  s2Requests: 200,
-};
-
 export interface SessionExecutorConfig {
   adapter: AgentAdapter;
   storageRoot: string;
-  /**
-   * tRPC research surface the buddy-tool handlers call. When provided (and
-   * the input carries a `threadId`), the executor builds + registers buddy
-   * tool descriptors on the adapter so the agent can invoke them mid-session.
-   * When omitted, tool registration is skipped (the adapter runs tool-less).
-   */
-  research?: ResearchTRPCSurface;
-  /**
-   * Capability registry used to gate the exposed tool set by
-   * `toolProfileId`. If it has no tool capabilities for the profile (the
-   * unseeded default), the executor falls back to the full implemented set.
-   */
-  capabilityRegistry?: CapabilityRegistry;
-  /**
-   * In-process HTTP MCP server that exposes the session's gated buddy tools
-   * to the agent. When provided (and the adapter speaks `registerMcpServers`),
-   * the executor registers the session's descriptor set and advertises the
-   * resulting per-session URL to the adapter, which connects out and invokes
-   * tools mid-session. Every advertising adapter reaches the SAME in-process
-   * server: Grok via `session/new.mcpServers`, Claude via a `--mcp-config`
-   * file, Codex via `-c mcp_servers.*` overrides. When omitted, only the
-   * (dormant) in-process ACP dispatch backstop is wired.
-   */
-  mcpServer?: BuddyMcpServer;
-  /**
-   * Overrides for the Skillfleet workflow journal, for tests. Omit in
-   * production: the emitter then resolves the journal path from
-   * `SKILLFLEET_OODA_WORKFLOW_JOURNAL` / `SKILLFLEET_WORKFLOW_JOURNAL` and
-   * stays disabled when neither is set.
-   *
-   * Deliberately NOT mirroring the standalone runner, which passed
-   * `{ journalPath: this.workflowJournalPath }` with a field nothing ever
-   * assigned. Because the key was always present, the emitter took the
-   * explicit branch, read `undefined`, and short-circuited to `disabled` —
-   * so the environment variables never took effect and the journal never
-   * produced a record. Omitting the option is what makes it configurable.
-   */
-  workflowJournal?: {
-    journalPath?: string | null;
-    environment?: Record<string, string | undefined>;
-  };
 }
 
 export interface ExecuteSessionInput {
@@ -81,15 +16,9 @@ export interface ExecuteSessionInput {
   threadTitle: string;
   sessionId: string;
   prompt: string;
-  /** Images attached to the prompt (vision); passed to the first message. */
-  images?: PromptImage[];
   toolProfileId: string;
-  /**
-   * Thread id the buddy-tool handlers thread through their tRPC calls.
-   * Required for tool registration; when absent, tools are not registered.
-   */
-  threadId?: string;
   systemPrompt?: string;
+  model?: string;
   onEvent: (event: AdapterEvent) => void;
 }
 
@@ -103,48 +32,14 @@ export interface ExecuteSessionResult {
 export class SessionExecutor {
   private adapter: AgentAdapter;
   private storageRoot: string;
-  private research?: ResearchTRPCSurface;
-  private capabilityRegistry?: CapabilityRegistry;
-  private mcpServer?: BuddyMcpServer;
-  private workflowJournal?: SessionExecutorConfig["workflowJournal"];
 
   constructor(config: SessionExecutorConfig) {
     this.adapter = config.adapter;
     this.storageRoot = config.storageRoot;
-    this.research = config.research;
-    this.capabilityRegistry = config.capabilityRegistry;
-    this.mcpServer = config.mcpServer;
-    this.workflowJournal = config.workflowJournal;
   }
 
   async execute(input: ExecuteSessionInput): Promise<ExecuteSessionResult> {
     const threadDir = resolveThreadPath(this.storageRoot, input.threadSlug);
-    const startedAt = Date.now();
-
-    // Skillfleet workflow journal. Local, append-only, digest-only, and
-    // failure-isolated by the emitter — a journal problem can never fail a
-    // session. `source: "ooda"` because this executor only runs OODA thread
-    // sessions; Bob-claimed runs report `source: "bob"` from the gateway
-    // path. The collector validates source per adapter and drops mismatches.
-    const recordRun = (status: "success" | "failure") =>
-      emitSkillfleetWorkflowEvent(
-        {
-          source: "ooda",
-          identity: `${input.sessionId}:terminal`,
-          observedAt: new Date().toISOString(),
-          sessionId: input.sessionId,
-          projectId: input.threadSlug,
-          provenanceQuality: "direct",
-          kind: "agent_run",
-          payload: {
-            runtime: normalizeSkillfleetRuntime(this.adapter.id),
-            status,
-            durationMs: Date.now() - startedAt,
-            turnCount: 1,
-          },
-        },
-        this.workflowJournal ?? {},
-      );
 
     // Ensure workspace exists
     if (!existsSync(threadDir)) {
@@ -155,119 +50,44 @@ export class SessionExecutor {
       });
     }
 
-    // Build a HandlerContext + session budget and expose the (profile-gated)
-    // buddy tool descriptors for this session. The live path stands them up
-    // on the in-process MCP server and advertises its per-session URL to the
-    // adapter (Grok over `session/new.mcpServers`, Claude/Codex via CLI MCP
-    // config) so the agent connects out and calls tools mid-session; the
-    // adapter's `registerTools` backstop is also wired. Adapters that speak
-    // neither hook ignore both (no-op). `cleanupTools` tears the session's
-    // MCP exposure back down when execution finishes.
-    const cleanupTools = this.registerBuddyTools(input);
+    // TODO(acp): When the ACP dispatcher lands, build a HandlerContext
+    // + session BudgetState here and register buddy tool descriptors on
+    // the adapter before execute:
+    //
+    //   import { createBuddyToolDescriptors, registerTools }
+    //     from "@gmacko/ooda/agent-adapters";
+    //   const descriptors = createBuddyToolDescriptors(ctx, { budget });
+    //   registerTools(this.adapter, descriptors);
+    //
+    // Today the CLI-spawn adapters have no channel to receive these, so
+    // the call is intentionally omitted (it would be a no-op).
 
-    try {
-      // Build command
-      const command = this.adapter.buildCommand({
-        prompt: input.prompt,
-        workspaceRoot: threadDir,
-        systemPrompt: input.systemPrompt,
-        images: input.images,
-      });
-
-      // Capture output
-      let fullOutput = "";
-
-      const wrappedOnEvent = (event: AdapterEvent) => {
-        // Capture assistant text (stdout) for the parsed agentResponse.
-        // Structured ACP events (thought / tool_call / tool_result) pass
-        // through to the caller untouched for richer session reporting.
-        if (event.type === "stdout") {
-          fullOutput += event.data;
-        }
-        input.onEvent(event);
-      };
-
-      // Execute
-      let result: { exitCode: number };
-      try {
-        result = await this.adapter.execute(command, wrappedOnEvent);
-        await recordRun(result.exitCode === 0 ? "success" : "failure");
-      } catch (error) {
-        await recordRun("failure");
-        throw error;
-      }
-
-      return {
-        exitCode: result.exitCode,
-        threadDir,
-        rawOutput: fullOutput,
-        agentResponse: extractAgentResponse(fullOutput),
-      };
-    } finally {
-      cleanupTools();
-    }
-  }
-
-  /**
-   * Build + expose buddy tool descriptors for this session, gated by the
-   * session's tool profile. Returns a cleanup function that tears the
-   * session's MCP exposure back down (a no-op when nothing was registered).
-   *
-   * No-op unless a research surface is configured and the input carries a
-   * threadId (the handlers need both to run).
-   */
-  private registerBuddyTools(input: ExecuteSessionInput): () => void {
-    if (!this.research || !input.threadId) return () => {};
-
-    const ctx: HandlerContext = {
-      threadId: input.threadId,
-      runnerSessionId: input.sessionId,
-      trpc: { research: this.research },
-    };
-
-    // Fresh mutable budget per session so one session's spend can't bleed
-    // into the next.
-    const budget: BudgetState = { ...DEFAULT_TOOL_BUDGET };
-
-    let descriptors: ToolDescriptor[] = createBuddyToolDescriptors(ctx, {
-      budget,
+    // Build command
+    const command = this.adapter.buildCommand({
+      prompt: input.prompt,
+      workspaceRoot: threadDir,
+      systemPrompt: input.systemPrompt,
+      model: input.model,
     });
 
-    // Gate by tool profile. An unseeded registry (no tool capabilities for
-    // this profile) falls through to the full implemented set so the default
-    // path is never accidentally starved of tools.
-    const allowed = this.allowedToolNames(input.toolProfileId);
-    if (allowed) {
-      descriptors = descriptors.filter((d) => allowed.has(d.name));
-    }
+    // Capture output
+    let fullOutput = "";
 
-    // Backstop: stash on the adapter for the (now-dormant) in-process ACP
-    // `tools/call` dispatch path.
-    registerTools(this.adapter, descriptors);
+    const wrappedOnEvent = (event: AdapterEvent) => {
+      if (event.type === "stdout") {
+        fullOutput += event.data;
+      }
+      input.onEvent(event);
+    };
 
-    // Live path: expose the gated set on the in-process MCP server and
-    // advertise its per-session URL to any adapter that speaks
-    // `registerMcpServers` (Grok, Claude, Codex).
-    if (this.mcpServer && typeof this.adapter.registerMcpServers === "function") {
-      const handle = this.mcpServer.registerSession(descriptors);
-      this.adapter.registerMcpServers([handle.config]);
-      return () => handle.dispose();
-    }
+    // Execute
+    const result = await this.adapter.execute(command, wrappedOnEvent);
 
-    return () => {};
-  }
-
-  /**
-   * Resolve the tool-name allowlist for a profile from the capability
-   * registry, or `null` to mean "no gating — expose all implemented tools".
-   * Capability ids may carry a `tool:` prefix (e.g. `tool:papers_search`).
-   */
-  private allowedToolNames(toolProfileId: string): Set<string> | null {
-    if (!this.capabilityRegistry) return null;
-    const toolCaps = this.capabilityRegistry
-      .listForProfile(toolProfileId)
-      .filter((c) => c.kind === "tool");
-    if (toolCaps.length === 0) return null;
-    return new Set(toolCaps.map((c) => c.id.replace(/^tool:/, "")));
+    return {
+      exitCode: result.exitCode,
+      threadDir,
+      rawOutput: fullOutput,
+      agentResponse: extractAgentResponse(fullOutput),
+    };
   }
 }

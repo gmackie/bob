@@ -1,8 +1,11 @@
 import { loadConfig } from "./config";
+import { startInferenceServer } from "./inference-server";
 import { RunnerServer } from "./runner-server";
 
 const config = loadConfig();
 const server = new RunnerServer(config);
+
+startInferenceServer(server, config);
 
 server.start().catch((err) => {
   console.error("[runner] fatal:", err);
