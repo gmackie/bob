@@ -1,19 +1,30 @@
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { validateProductionMigrationLedger } from "./production-migrate";
 
-const historical = Array.from({ length: 43 }, (_, index) => ({
-  filename: `${String(index).padStart(4, "0")}_historical.sql`,
-  hash: `hash-${index}`,
-}));
-const approved = {
-  filename: "0036_canonical_auth_foreign_keys.sql",
-  hash: "approved-hash",
-};
-const files = [...historical, approved];
+const migrations = new URL("../drizzle/", import.meta.url);
+const files = readdirSync(migrations)
+  .filter((name) => name.endsWith(".sql"))
+  .sort()
+  .map((filename) => ({
+    filename,
+    hash: createHash("sha256")
+      .update(readFileSync(new URL(filename, migrations)))
+      .digest("hex"),
+  }));
+const historical = files.filter(
+  (entry) =>
+    ![
+      "0034_plan_draft_kanbanger_issue.sql",
+      "0036_canonical_auth_foreign_keys.sql",
+      "0037_mcp_oauth.sql",
+    ].includes(entry.filename),
+);
 
 describe("production migration deployment guard", () => {
-  it("accepts only the approved pending migration and allows historical extra ledger entries", () => {
+  it("accepts only the approved pending migrations and allows historical extra ledger entries", () => {
     expect(() =>
       validateProductionMigrationLedger(files, [
         ...historical,
@@ -28,13 +39,14 @@ describe("production migration deployment guard", () => {
     ).toThrow("missing");
     expect(() =>
       validateProductionMigrationLedger(files, [
-        ...historical.slice(1),
-        { filename: "0000_historical.sql", hash: "changed" },
+        ...historical.map((entry, index) =>
+          index === 0 ? { ...entry, hash: "changed" } : entry,
+        ),
       ]),
     ).toThrow("mismatch");
     expect(() =>
       validateProductionMigrationLedger(
-        [...files, { filename: "0037_unreviewed.sql", hash: "new" }],
+        [...files, { filename: "0038_unreviewed.sql", hash: "new" }],
         historical,
       ),
     ).toThrow("roster");

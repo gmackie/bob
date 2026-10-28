@@ -44,7 +44,8 @@ therefore prevents worker upload.
 
 The production guard requires database/role `bob`, all 43 historical source
 migration hashes through `0035`, and the reviewed identity schema. Only
-`0036_canonical_auth_foreign_keys.sql` may be newly applied; adding another
+`0034_plan_draft_kanbanger_issue.sql`, `0036_canonical_auth_foreign_keys.sql`, and
+`0037_mcp_oauth.sql` may be newly applied; adding another
 migration requires reviewing the guard's roster. It takes the ordinary migration
 advisory lock, preserves identity rows and foreign-key behavior, and rolls back
 if canonical identity coverage is incomplete. The existing code-only Forgejo

@@ -12,7 +12,12 @@ const migrationsDir = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "../drizzle",
 );
-const approvedMigration = "0036_canonical_auth_foreign_keys.sql";
+const approvedMigrations = new Set([
+  // Existing additive planning migration was not in the production ledger.
+  "0034_plan_draft_kanbanger_issue.sql",
+  "0036_canonical_auth_foreign_keys.sql",
+  "0037_mcp_oauth.sql",
+]);
 interface MigrationHash {
   filename: string;
   hash: string;
@@ -23,14 +28,14 @@ export function validateProductionMigrationLedger(
   ledger: MigrationHash[],
 ): void {
   const applied = new Map(ledger.map((entry) => [entry.filename, entry.hash]));
-  if (files.length !== 44 || files.at(-1)?.filename !== approvedMigration) {
+  if (files.length !== 46 || files.at(-1)?.filename !== "0037_mcp_oauth.sql") {
     throw new Error(
       "Production migration roster changed; review the deployment migration guard",
     );
   }
   for (const file of files) {
     const recorded = applied.get(file.filename);
-    if (file.filename !== approvedMigration && recorded === undefined) {
+    if (!approvedMigrations.has(file.filename) && recorded === undefined) {
       throw new Error(
         `Historical production migration is missing: ${file.filename}`,
       );
@@ -51,10 +56,7 @@ export async function applyProductionMigrations(
   const identity = await client.query<{ database: string; role: string }>(
     "SELECT current_database() AS database, current_user AS role",
   );
-  if (
-    identity.rows[0]?.database !== "bob" ||
-    identity.rows[0].role !== "bob"
-  ) {
+  if (identity.rows[0]?.database !== "bob" || identity.rows[0].role !== "bob") {
     throw new Error(
       "Production migration requires the bob database and bob role",
     );
