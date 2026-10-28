@@ -22,6 +22,10 @@ export const RunnerConfigSchema = z.object({
   t3codeModelInstanceId: z.string().optional(),
   t3codeModel: z.string().optional(),
   t3codeWorktreePath: z.string().optional(),
+  /** JSON registry of OODA thread slug -> worktree (multi-project runner). */
+  t3codeProjectsFile: z.string().optional(),
+  /** `--base-dir` used when the runner must create a t3code project. */
+  t3codeBaseDir: z.string().optional(),
   t3codeRuntimeMode: z.enum([
     "approval-required",
     "auto-accept-edits",
@@ -52,6 +56,8 @@ export function loadConfig(): RunnerConfig {
     t3codeModel: process.env.OODA_T3CODE_MODEL ?? process.env.T3CODE_MODEL,
     t3codeWorktreePath:
       process.env.OODA_T3CODE_WORKTREE_PATH ?? process.env.T3CODE_WORKTREE_PATH,
+    t3codeProjectsFile: process.env.OODA_T3CODE_PROJECTS_FILE,
+    t3codeBaseDir: process.env.OODA_T3CODE_BASE_DIR,
     t3codeRuntimeMode:
       process.env.OODA_T3CODE_RUNTIME_MODE ?? process.env.T3CODE_RUNTIME_MODE,
   });

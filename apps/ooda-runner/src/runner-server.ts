@@ -19,6 +19,8 @@ import {
 } from "./trpc-client";
 import { BobGatewayConnector } from "./bob-gateway";
 import { BobRunReporter } from "./bob-run-reporter";
+import { mirrorT3ThreadToSession } from "./session/t3-mirror";
+import { createT3ProjectResolver } from "./session/t3-project-resolver";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const POLL_INTERVAL_MS = 2_000;
@@ -113,6 +115,7 @@ export class RunnerServer {
   private activePromotions = new Set<string>();
   private bobGateway: BobGatewayConnector | null = null;
   private bobReporter: BobRunReporter;
+  private t3ProjectResolver?: ReturnType<typeof createT3ProjectResolver>;
 
   constructor(private config: RunnerConfig) {
     this.sessions = new SessionManager();
@@ -120,6 +123,14 @@ export class RunnerServer {
 
     // Report run status + output to Bob's public API so OODA-originated work is
     // monitorable/reviewable in the Bob dashboard. No-ops unless bob* env is set.
+    if (config.t3codeProjectsFile && config.t3codeServerUrl) {
+      this.t3ProjectResolver = createT3ProjectResolver({
+        registryFile: config.t3codeProjectsFile,
+        serverUrl: config.t3codeServerUrl,
+        authToken: config.t3codeAuthToken,
+        t3BaseDir: config.t3codeBaseDir,
+      });
+    }
     this.bobReporter = new BobRunReporter({
       baseUrl: config.bobApiUrl,
       apiKey: config.bobApiKey,
@@ -164,7 +175,7 @@ export class RunnerServer {
       storageRoot: this.config.storageRoot,
       t3code:
         this.config.t3codeServerUrl &&
-        this.config.t3codeProjectId &&
+        (this.config.t3codeProjectId || this.config.t3codeProjectsFile) &&
         this.config.t3codeModelInstanceId &&
         this.config.t3codeModel
           ? {
@@ -175,6 +186,7 @@ export class RunnerServer {
               model: this.config.t3codeModel,
               worktreePath: this.config.t3codeWorktreePath,
               runtimeMode: this.config.t3codeRuntimeMode,
+              resolveTarget: this.t3ProjectResolver?.resolve,
             }
           : undefined,
     });
@@ -283,7 +295,7 @@ export class RunnerServer {
   private async buildT3codeRuntimeStatus(): Promise<Record<string, unknown> | undefined> {
     if (
       !this.config.t3codeServerUrl ||
-      !this.config.t3codeProjectId ||
+      !(this.config.t3codeProjectId || this.config.t3codeProjectsFile) ||
       !this.config.t3codeModelInstanceId ||
       !this.config.t3codeModel
     ) {
@@ -295,6 +307,7 @@ export class RunnerServer {
       serverUrl: this.config.t3codeServerUrl,
       endpointMode: classifyEndpointMode(this.config.t3codeServerUrl),
       projectId: this.config.t3codeProjectId,
+      projectsFile: this.config.t3codeProjectsFile,
       modelInstanceId: this.config.t3codeModelInstanceId,
       model: this.config.t3codeModel,
       runtimeMode: this.config.t3codeRuntimeMode ?? "full-access",
@@ -552,10 +565,47 @@ export class RunnerServer {
       }
 
       if (result.dispatchedToT3Code) {
+        // The t3code server does not push runtime events back to OODA, so
+        // mirror the thread ourselves: forward assistant messages as they land
+        // and close the session when the provider turn finishes.
+        console.log(
+          `[runner] session ${session.id} dispatched to t3code; mirroring thread ooda-session-${session.id}`,
+        );
+        const mirror = await mirrorT3ThreadToSession({
+          serverUrl: this.config.t3codeServerUrl!,
+          authToken: this.config.t3codeAuthToken,
+          threadId: `ooda-session-${session.id}`,
+          onAssistantMessage: async (text) => {
+            bobLog += `\n${text}`;
+            await this.trpc.runner.pushSessionEvent
+              .mutate({ sessionId: session.id, type: "stdout_chunk", content: text })
+              .catch(() => {});
+          },
+        });
+        if (mirror.finalText) {
+          await this.trpc.runner.pushSessionEvent
+            .mutate({ sessionId: session.id, type: "stdout", content: mirror.finalText })
+            .catch(() => {});
+        }
+        if (mirror.error) {
+          bobLog += `\n[t3code] ${mirror.error}`;
+          await this.trpc.runner.pushSessionEvent
+            .mutate({ sessionId: session.id, type: "error", content: mirror.error })
+            .catch(() => {});
+        }
+        const mirrorStatus = mirror.status === "completed" ? "completed" : "failed";
+        await this.trpc.runner.updateSessionStatus.mutate({
+          sessionId: session.id,
+          status: mirrorStatus,
+          exitCode: mirrorStatus === "completed" ? 0 : 1,
+        });
         if (bobFlush) clearInterval(bobFlush);
         await this.bobReporter.pushLog(bobRunId, bobLog);
+        await this.bobReporter.finishRun(bobRunId, mirrorStatus, {
+          exitCode: mirrorStatus === "completed" ? 0 : 1,
+        });
         console.log(
-          `[runner] session ${session.id} dispatched to t3code; awaiting mirrored runtime events`,
+          `[runner] session ${session.id} ${mirrorStatus} via t3code mirror (${mirror.status})`,
         );
         return;
       }

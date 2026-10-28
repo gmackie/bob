@@ -14,8 +14,12 @@ import {
 export interface SessionExecutorConfig {
   adapter: AgentAdapter;
   storageRoot: string;
-  t3code?: OodaT3DispatchRuntimeConfig & {
+  t3code?: Omit<OodaT3DispatchRuntimeConfig, "projectId"> & {
+    /** Default project when no per-thread target resolves. */
+    projectId?: string;
     worktreePath?: string;
+    /** Per-thread project/worktree resolution (multi-project runners). */
+    resolveTarget?: (threadSlug: string) => Promise<{ projectId: string; worktreePath: string } | null>;
     dispatch?: (command: Record<string, unknown>) => Promise<unknown>;
   };
 }
@@ -62,7 +66,21 @@ export class SessionExecutor {
     }
 
     if (this.t3code) {
-      const t3WorkspaceRoot = this.t3code.worktreePath ?? threadDir;
+      const target = this.t3code.resolveTarget
+        ? await this.t3code.resolveTarget(input.threadSlug)
+        : null;
+      const projectId = target?.projectId ?? this.t3code.projectId;
+      if (!projectId) {
+        throw new Error(
+          `No t3code project for thread ${input.threadSlug}: register it in the projects file or set OODA_T3CODE_PROJECT_ID`,
+        );
+      }
+      const t3WorkspaceRoot = target?.worktreePath ?? this.t3code.worktreePath ?? threadDir;
+      input.onEvent({
+        type: "stdout",
+        data: `t3code target: project ${projectId} worktree ${t3WorkspaceRoot}`,
+        timestamp: new Date().toISOString(),
+      });
       const command = buildOodaT3ThreadTurnStartCommand({
         threadId: input.threadSlug,
         threadSlug: input.threadSlug,
@@ -76,7 +94,7 @@ export class SessionExecutor {
           oodaThreadSlug: input.threadSlug,
           oodaSessionId: input.sessionId,
         },
-        config: this.t3code,
+        config: { ...this.t3code, projectId },
         makeId: (prefix) =>
           prefix === "thread"
             ? `ooda-session-${input.sessionId}`
