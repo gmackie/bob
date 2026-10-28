@@ -355,6 +355,43 @@ export function makeOAuth(options: {
     const hash = await digest(
       one(body, type === "authorization_code" ? "code" : "refresh_token"),
     );
+    // Worker requests have a one-connection pool. Membership queries use the
+    // request DB, so run them before reserving that connection for credentials.
+    // The transaction below revalidates and atomically consumes the credential.
+    const candidate = await store.credential(hash);
+    if (
+      candidate &&
+      !candidate.usedAt &&
+      fresh(candidate.expiresAt) &&
+      candidate.kind === (type === "authorization_code" ? "code" : "refresh")
+    ) {
+      const principal =
+        type === "authorization_code"
+          ? (candidate.data as unknown as Authorization & {
+              userId: string;
+              workspaceId: string;
+            })
+          : candidate.grantId
+            ? await store.grant(candidate.grantId)
+            : undefined;
+      const requested = one(body, "scope", false);
+      const effectiveScopes =
+        type === "refresh_token" && requested
+          ? scopes(requested)
+          : (candidate.data.scopes as string[]);
+      if (
+        principal &&
+        !(await identity.access(
+          principal.userId,
+          principal.workspaceId,
+          effectiveScopes.includes(WRITE_SCOPE),
+        ))
+      )
+        throw new OAuthError(
+          "invalid_grant",
+          "Workspace access is no longer permitted",
+        );
+    }
     const result = await store.transaction(async (tx) => {
       const record = await tx.credential(hash);
       if (
@@ -379,14 +416,6 @@ export function makeOAuth(options: {
         if (
           !/^[A-Za-z0-9._~-]{43,128}$/.test(verifier) ||
           (await digest(verifier)) !== auth.challenge
-        )
-          return null;
-        if (
-          !(await identity.access(
-            auth.userId,
-            auth.workspaceId,
-            auth.scopes.includes(WRITE_SCOPE),
-          ))
         )
           return null;
         if (!(await tx.consume(hash))) return null;
@@ -426,14 +455,6 @@ export function makeOAuth(options: {
           "invalid_scope",
           "Cannot expand an existing grant",
         );
-      if (
-        !(await identity.access(
-          grant.userId,
-          grant.workspaceId,
-          nextScopes.includes(WRITE_SCOPE),
-        ))
-      )
-        return null;
       if (!(await tx.consume(hash))) {
         await tx.revoke(grant.id);
         return null;
