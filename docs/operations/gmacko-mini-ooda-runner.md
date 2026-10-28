@@ -170,3 +170,30 @@ requiredCapabilities: ["macos"]
 
 are rejected if the selected runner does not advertise `macos`. This prevents a
 macOS-only task from being queued to a Linux runner by mistake.
+
+## Polling and Request Volume (BOB-60)
+
+Every runner polls `ooda.blder.bot` for work: `runner.listSessionsByRunner`,
+then `jobs.claim` and the other worker claims, in one tick. Each call is a
+Worker invocation plus a Hyperdrive query on `ooda-blder-bot`.
+
+The tick runs every 2s while the runner has pending or running sessions, a
+claimed job or turn, or saw any of those in the last 60s. When idle it backs
+off 4s, 8s, 16s, then 20s. New work on an idle runner is picked up within 20s
+(one idle interval plus one request); once seen, polling returns to 2s.
+`OODA_RUNNER_POLL_IDLE_MAX_MS` (2000 to 120000, default 20000) sets the
+ceiling.
+
+`gmacko-mini` runs two runner identities, not one: `gmacko-mini` (this
+LaunchAgent) and `levelforge-gmacko-mini`, the dedicated LevelForge Unity
+runner with its own env file (see
+`docs/levelforge-ooda-dispatch-permission-gap.md`). Both heartbeat to
+production and share the home connection's public IP, so before BOB-60 the
+home address showed `listSessionsByRunner` every 1s: two independent 2s
+polls. That is expected; each identity backs off on its own. A third
+registration, `lf-testgame-gmacko-mini`, last heartbeat 2026-08-23 and is not
+running.
+
+Both identities run from a checkout on `gmacko-mini`, so they pick up the
+backoff only after that checkout is updated to a `master` containing BOB-60 and
+each LaunchAgent is restarted (`launchctl kickstart -k gui/$(id -u)/<label>`).

@@ -84,6 +84,11 @@ export const RunnerConfigSchema = z
     grokHostModel: z.string().optional(),
     claudeHostModel: z.string().optional(),
     openaiHostModel: z.string().optional(),
+    // Idle poll ceiling (BOB-60). The work poll runs every 2s while anything is
+    // active or was active in the last minute, then backs off to this ceiling.
+    // It is also the worst-case pickup latency for work arriving on an idle
+    // runner, so keep it short.
+    pollIdleMaxMs: z.coerce.number().int().min(2_000).max(120_000).default(20_000),
   })
   .superRefine((config, context) => {
     if (config.t3codeServerUrl && !config.t3codeAuthToken) {
@@ -160,5 +165,6 @@ export function loadConfig(): RunnerConfig {
     grokHostModel: process.env.OODA_GROK_HOST_MODEL,
     claudeHostModel: process.env.OODA_CLAUDE_HOST_MODEL,
     openaiHostModel: process.env.OODA_OPENAI_HOST_MODEL,
+    pollIdleMaxMs: process.env.OODA_RUNNER_POLL_IDLE_MAX_MS,
   });
 }
