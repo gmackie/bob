@@ -50,6 +50,16 @@ const redirect = "https://client.example/callback";
 const workspaceId = "aaaabbbb-1111-4000-8000-000000000001";
 function fixture() {
   const store = memoryStore();
+  let transactionActive = false;
+  const transaction = store.transaction;
+  store.transaction = async (work) => {
+    transactionActive = true;
+    try {
+      return await transaction(work);
+    } finally {
+      transactionActive = false;
+    }
+  };
   let currentTime = Date.now();
   let member = true;
   let write = true;
@@ -59,8 +69,12 @@ function fixture() {
     workspaces: async () => [
       { id: workspaceId, name: "Workspace <one>", canWrite: write },
     ],
-    access: async (u, w, needsWrite) =>
-      member && u === "alice" && w === workspaceId && (!needsWrite || write),
+    access: async (u, w, needsWrite) => {
+      // The Worker has one connection: an outer identity query cannot acquire
+      // it while the credential transaction owns it.
+      if (transactionActive) throw new Error("Nested connection acquisition");
+      return member && u === "alice" && w === workspaceId && (!needsWrite || write);
+    },
   };
   const oauth = makeOAuth({ origin, store, identity, now: () => currentTime });
   const post = (
