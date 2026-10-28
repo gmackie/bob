@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,10 +49,25 @@ vi.mock("./agent-jobs/scratch-sandbox", () => ({
 import { PROMOTION_RESCAN_INTERVAL_MS, RunnerServer } from "./runner-server";
 let server: RunnerServer | undefined;
 let root: string | undefined;
+// Simulated idle time after which the poll has settled at the idle ceiling:
+// the 60s grace window, then 4s, 8s, 16s, then at least three 20s ticks.
+const SETTLED_IDLE_MS = 3 * 60_000;
+beforeEach(() => {
+  // register() reads credential health by running ADAPTER_CRED_HEALTH_BIN
+  // (default /home/bob/bin/adapter-cred-health, 45s timeout). On hetzner-bob
+  // that script exists, so the tests ran a real host probe; point it at a
+  // path that cannot exist so they never depend on the host.
+  vi.stubEnv(
+    "ADAPTER_CRED_HEALTH_BIN",
+    join(tmpdir(), "ooda-runner-test-no-such-dir", "adapter-cred-health"),
+  );
+  vi.spyOn(console, "log").mockImplementation(() => {});
+});
 afterEach(async () => {
   await server?.stop();
   server = undefined;
   vi.useRealTimers();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   vi.clearAllMocks();
   api.runner.listSessionsByRunner.query.mockReset();
@@ -65,16 +80,13 @@ afterEach(async () => {
   root = undefined;
 });
 
+/**
+ * Fake only what the work poll uses. The 30s heartbeat and 30min reaper stay on
+ * real setInterval, so they never fire during a test (stop() clears them) and
+ * simulated time only steps through poll ticks.
+ */
 function useFakeClock(): void {
-  vi.useFakeTimers({
-    toFake: [
-      "setTimeout",
-      "clearTimeout",
-      "setInterval",
-      "clearInterval",
-      "Date",
-    ],
-  });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
 }
 
 async function startServer(
@@ -148,19 +160,33 @@ describe("PollBackoff", () => {
   });
 });
 
-it("backs off an idle runner, so an hour costs a fraction of the fixed 2s poll", async () => {
+it("an idle hour costs a fraction of the fixed 2s poll", () => {
+  // Walk the schedule itself: one step per tick, no timers.
+  const hourMs = 60 * 60_000;
+  const backoff = new PollBackoff({ now: 0 });
+  let now = POLL_ACTIVE_INTERVAL_MS;
+  let ticks = 0;
+  while (now <= hourMs) {
+    ticks += 1;
+    now += backoff.next(false, now);
+  }
+  // A fixed 2s poll is 1,800 per hour. Backoff: 30 in the first minute, a few
+  // ramping, then 3 a minute: under 210, a cut of more than 88%.
+  expect(ticks).toBeLessThan(210);
+  expect(1 - ticks / (hourMs / POLL_ACTIVE_INTERVAL_MS)).toBeGreaterThan(0.88);
+});
+
+it("backs off an idle runner to the ceiling, with jobs.claim on the same tick", async () => {
   useFakeClock();
   const times = recordPollTimes();
   await startServer("runner-idle-");
-  await vi.advanceTimersByTimeAsync(60 * 60_000);
+  await vi.advanceTimersByTimeAsync(SETTLED_IDLE_MS);
 
   const gaps = times.slice(1).map((time, i) => time - times[i]!);
   expect(times[0]).toBe(2_000);
-  expect(Math.max(...gaps)).toBe(20_000);
-  expect(gaps.slice(-10)).toEqual(Array(10).fill(20_000));
-  // A fixed 2s poll is 1,800 per hour. Backoff: 30 in the first minute, a few
-  // ramping, then 3 a minute: under 210, a cut of more than 88%.
-  expect(times.length).toBeLessThan(210);
+  expect(gaps.slice(0, 29)).toEqual(Array(29).fill(2_000));
+  expect(Math.max(...gaps)).toBe(POLL_IDLE_MAX_INTERVAL_MS);
+  expect(gaps.slice(-3)).toEqual(Array(3).fill(POLL_IDLE_MAX_INTERVAL_MS));
   // jobs.claim shares the tick, so it backs off with it.
   expect(api.jobs.claim.mutate).toHaveBeenCalledTimes(times.length);
 });
@@ -169,9 +195,9 @@ it("returns to 2s polling as soon as a pending session appears", async () => {
   useFakeClock();
   const times = recordPollTimes();
   await startServer("runner-wake-");
-  await vi.advanceTimersByTimeAsync(10 * 60_000);
+  await vi.advanceTimersByTimeAsync(SETTLED_IDLE_MS);
   const idleCount = times.length;
-  const startedAt = Date.now() - 10 * 60_000;
+  const startedAt = Date.now() - SETTLED_IDLE_MS;
 
   // A session arrives: the next poll (at most 20s away) sees it.
   api.runner.listSessionsByRunner.query.mockImplementation(async () => {
@@ -204,7 +230,7 @@ it("returns to 2s polling when jobs.claim hands out work", async () => {
   useFakeClock();
   const times = recordPollTimes();
   await startServer("runner-job-wake-");
-  await vi.advanceTimersByTimeAsync(10 * 60_000);
+  await vi.advanceTimersByTimeAsync(SETTLED_IDLE_MS);
   const idleCount = times.length;
 
   // A job for a provider this runner lacks: claimed (activity) but not run.
