@@ -18,6 +18,20 @@ function withPublicApiCors(response: NextResponse): NextResponse {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Vinext excludes dot-prefixed app folders from its route scanner. Route
+  // standards-defined OAuth metadata URLs through an ordinary API folder.
+  if (
+    pathname === "/.well-known/oauth-authorization-server" ||
+    pathname === "/.well-known/oauth-protected-resource" ||
+    pathname === "/.well-known/oauth-protected-resource/mcp"
+  ) {
+    const rewritten = new URL(
+      pathname.replace("/.well-known/", "/api/mcp-discovery/"),
+      request.url,
+    );
+    return NextResponse.rewrite(rewritten);
+  }
+
   if (pathname === "/api/v1" || pathname.startsWith("/api/v1/")) {
     const response =
       request.method === "OPTIONS"
@@ -40,5 +54,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/v1/:path*", "/api/v1/:path*"],
+  matcher: ["/", "/.well-known/:path*", "/v1/:path*", "/api/v1/:path*"],
 };

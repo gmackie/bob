@@ -53,11 +53,13 @@ describe("worker runtime env helpers", () => {
         HERMES_OODA_CONVERSATION_ID: "conversation-1",
         HERMES_OODA_BRANCH_ID: "branch-1",
         HERMES_USAGE_DIGEST_SECRET: "digest-secret",
+        BOB_MCP_ALLOWED_ORIGINS: "https://client.example",
         IGNORED: "not-copied",
       },
       target,
     );
     expect(target).toEqual({
+      BOB_MCP_ALLOWED_ORIGINS: "https://client.example",
       SKILLFLEET_NOTIFICATION_SECRET: "ingress-secret",
       SKILLFLEET_ORIGIN_URL: "https://llm.gmac.io",
       SKILLFLEET_HERMES_READ_SECRET: "skillfleet-read-secret",
@@ -112,20 +114,27 @@ describe("worker runtime env helpers", () => {
   });
 
   it("wrapFetch tolerates a missing Cloudflare env in Node-hosted vinext", async () => {
-    const sent = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({}));
+    const sent = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json({}));
     const pending: Promise<unknown>[] = [];
     try {
       const response = await wrapFetch(async () => new Response("ok"))(
         new Request("http://127.0.0.1/api/health"),
         undefined,
-        { waitUntil(promise) { pending.push(promise); } },
+        {
+          waitUntil(promise) {
+            pending.push(promise);
+          },
+        },
       );
       await Promise.all(pending);
       expect(response.status).toBe(200);
       expect(await response.text()).toBe("ok");
       const payload = JSON.parse(String(sent.mock.calls[0]?.[1]?.body));
       expect(payload.resourceSpans[0].resource.attributes).toContainEqual({
-        key: "service.name", value: { stringValue: "bob" },
+        key: "service.name",
+        value: { stringValue: "bob" },
       });
     } finally {
       sent.mockRestore();

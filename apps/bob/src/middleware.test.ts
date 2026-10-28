@@ -60,3 +60,18 @@ describe("Bob middleware", () => {
     expect(config.matcher).toContain("/api/v1/:path*");
   });
 });
+
+it("rewrites standard OAuth discovery URLs into scanned routes", () => {
+  for (const path of [
+    "oauth-authorization-server",
+    "oauth-protected-resource",
+    "oauth-protected-resource/mcp",
+  ]) {
+    const response = middleware(
+      new NextRequest(`https://bob.blder.bot/.well-known/${path}`),
+    );
+    expect(response.headers.get("x-middleware-rewrite")).toBe(
+      `https://bob.blder.bot/api/mcp-discovery/${path}`,
+    );
+  }
+});
