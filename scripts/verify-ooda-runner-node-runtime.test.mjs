@@ -26,8 +26,10 @@ test("the Hetzner runner deploy refuses unsupported build and service runtimes",
   assert.match(deployScript, /require_node_24 "deploy toolchain" "node"/);
   assert.match(
     deployScript,
-    /if require_node_24 "active service" "\/proc\/\$\{main_pid\}\/exe"; then\s+exit 0\s+fi/,
+    /if require_node_24 "active service" "\/proc\/\$\{main_pid\}\/exe"; then/,
   );
+  assert.match(deployScript, /verify-running-source\.mjs/);
+  assert.match(deployScript, /\"\$deploy_dir\" \"\$deploy_sha\" \"\$main_pid\"/);
 });
 
 test("CI enforces the OODA runner Node runtime deployment contract", () => {

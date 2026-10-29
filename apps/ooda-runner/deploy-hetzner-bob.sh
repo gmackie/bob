@@ -94,10 +94,12 @@ pnpm --filter @gmacko/ooda-runner test
 pnpm --filter @gmacko/ooda-runner build
 REMOTE_SCRIPT
 
-ssh "$DEPLOY_HOST" sudo bash -s -- "$DEPLOY_DIR" <<'REMOTE_SERVICE'
+ssh "$DEPLOY_HOST" sudo bash -s -- "$DEPLOY_DIR" "$DEPLOY_SHA" "$DEPLOY_USER" <<'REMOTE_SERVICE'
 set -euo pipefail
 
 deploy_dir="$1"
+deploy_sha="$2"
+deploy_user="$3"
 
 require_node_24() {
   local runtime_label="$1"
@@ -119,6 +121,14 @@ install -D -m 0644 \
   "${deploy_dir}/apps/ooda-runner/ops/ooda-runner-node24.conf" \
   /etc/systemd/system/ooda-runner.service.d/20-node24.conf
 systemctl daemon-reload
+# Later-sorting drop-ins can keep the service pinned to an old archive. Refuse
+# before restarting when the effective unit does not select this deployment.
+expected_cwd="$(readlink -f "${deploy_dir}/apps/ooda-runner")"
+effective_cwd="$(systemctl show -p WorkingDirectory --value ooda-runner.service)"
+if [[ "$(readlink -f "$effective_cwd")" != "$expected_cwd" ]]; then
+  echo "Refusing deployment: effective WorkingDirectory is ${effective_cwd}, expected ${expected_cwd}" >&2
+  exit 1
+fi
 systemctl restart ooda-runner.service
 
 for _ in {1..30}; do
@@ -126,32 +136,19 @@ for _ in {1..30}; do
     main_pid="$(systemctl show -p MainPID --value ooda-runner.service)"
     if [[ "$main_pid" =~ ^[1-9][0-9]*$ ]]; then
       if require_node_24 "active service" "/proc/${main_pid}/exe"; then
-        exit 0
+        node_binary="$(readlink -f "/proc/${main_pid}/exe")"
+        if sudo -u "$deploy_user" "$node_binary" \
+          "${deploy_dir}/apps/ooda-runner/ops/verify-running-source.mjs" \
+          "$deploy_dir" "$deploy_sha" "$main_pid"; then
+          exit 0
+        fi
       fi
     fi
   fi
   sleep 1
 done
 
-echo "OODA runner did not start with Node 24+" >&2
-journalctl -u ooda-runner.service -n 100 --no-pager >&2
+echo "OODA runner did not start with Node 24+ and the expected source revision" >&2
+systemctl show -p ActiveState -p SubState -p MainPID -p WorkingDirectory ooda-runner.service >&2
 exit 1
 REMOTE_SERVICE
-
-for _ in {1..30}; do
-  if ssh "$DEPLOY_HOST" systemctl is-active --quiet ooda-runner.service; then
-    active_sha="$(
-      ssh "$DEPLOY_HOST" sudo -u "$DEPLOY_USER" \
-        git -C "$DEPLOY_DIR" rev-parse HEAD
-    )"
-    if [[ "$active_sha" == "$DEPLOY_SHA" ]]; then
-      echo "OODA runner active at ${active_sha}"
-      exit 0
-    fi
-  fi
-  sleep 1
-done
-
-echo "OODA runner did not become active at ${DEPLOY_SHA}" >&2
-ssh "$DEPLOY_HOST" sudo journalctl -u ooda-runner.service -n 100 --no-pager >&2
-exit 1
