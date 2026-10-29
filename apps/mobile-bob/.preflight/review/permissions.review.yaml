@@ -1,0 +1,70 @@
+# TrueFlight standard workflow: permissions
+# Bob declares three iOS purpose strings (apps/mobile-bob/app.config.js plugins):
+#   NSCameraUsageDescription            — "Allow Bob to use the camera to scan the sign-in QR code from Bob web."
+#   NSMicrophoneUsageDescription        — "Allow Bob to use the microphone for voice prompts."
+#   NSSpeechRecognitionUsageDescription — "Allow Bob to transcribe voice prompts."
+# It also requests push-notification permission (expo-notifications; no purpose
+# string required) once a user is signed in, for review-ready / needs-input
+# alerts (UIBackgroundModes: remote-notification).
+#
+# Order in this flow follows where each prompt is raised: camera on the sign-in
+# screen's QR scanner (before any session exists), notifications right after
+# sign-in, microphone + speech recognition on the first Hold to talk in Chat.
+#
+# tf:workflow id=permissions title="Permission prompts (camera, notifications, microphone, speech)" account=owner
+# tf:account role=owner email="reviewer+owner@blder.bot" secretRef=bob/review/owner_pw permissions=workspace-owner,planning,tasks,chat,nodes,settings notes="Any signed-in account works; reuses the owner reviewer account. Sign in to https://bob.blder.bot with the Google identity, then Settings -> Link a Device to approve the code the phone shows."
+# TODO: confirm the owner demo account is provisioned on bob.blder.bot and its password is stored at bob/review/owner_pw
+# TODO: Chat needs the OODA gateway reachable for the account, otherwise the composer reads 'Connect once to start a conversation' and the microphone step cannot run
+# tf:verify "Tapping Scan QR code then Allow camera access raises the iOS camera prompt with Bob's purpose string; granting it opens the QR viewfinder."
+# tf:verify "After sign-in iOS asks to allow notifications; the first Hold to talk raises the microphone and speech-recognition prompts, and granting them starts voice capture."
+appId: com.gmacko.bob
+---
+# tf:step "Launch the app and skip onboarding — you land on 'Welcome to Bob'." capture=screenshot
+- launchApp
+- extendedWaitUntil:
+    visible: "Skip|Welcome to Bob"
+    timeout: 60000
+- tapOn:
+    text: "Skip"
+    optional: true
+- extendedWaitUntil:
+    visible: "Welcome to Bob"
+    timeout: 30000
+# tf:step "Tap Scan QR code, then Allow camera access — iOS asks for the camera, explaining it scans the sign-in QR code from Bob web. Tap Allow." capture=video
+- tapOn: "Scan QR code"
+- assertVisible: "Bob needs camera access to scan the sign-in code."
+- tapOn: "Allow camera access"
+- tapOn:
+    text: "Allow"
+    optional: true
+# tf:step "The QR viewfinder opens. Tap 'Use a code instead' to get a pairing code, then approve it on Bob web (Settings -> Link a Device) with the demo account." capture=screenshot
+- assertVisible: "On Bob web, open Settings → Link a Device and point the camera at the QR code."
+- tapOn: "Use a code instead"
+- extendedWaitUntil:
+    visible:
+      id: "qr-pairing-user-code"
+    timeout: 30000
+# tf:step "Once the code is approved the phone signs in and iOS asks to allow notifications for review-ready and needs-input alerts — tap Allow." capture=video
+- extendedWaitUntil:
+    visible:
+      id: "mobile-tab-bar"
+    timeout: 180000
+- tapOn:
+    text: "Allow"
+    optional: true
+# tf:step "Open the Chat tab and start a new thought, then press and hold 'Hold to talk' — iOS asks for the microphone and then speech recognition. Allow both; the button switches to Recording." capture=video
+- tapOn:
+    id: "mobile-tab-chat"
+- tapOn:
+    text: "Start a new thought"
+    optional: true
+- extendedWaitUntil:
+    visible: "Hold to talk"
+    timeout: 30000
+- longPressOn: "Hold to talk"
+- tapOn:
+    text: "OK|Allow"
+    optional: true
+- tapOn:
+    text: "OK|Allow"
+    optional: true
