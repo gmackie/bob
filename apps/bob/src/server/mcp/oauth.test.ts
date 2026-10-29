@@ -222,6 +222,21 @@ describe("MCP OAuth", () => {
     const f = fixture();
     const flow = await f.start();
     expect(flow.html).toContain("Test &lt;client&gt;");
+    const page = await f.oauth.handle(
+      new Request(`${origin}/oauth/authorize?${flow.params}`, {
+        headers: { cookie: "session=yes" },
+      }),
+    );
+    expect(page.headers.get("referrer-policy")).toBe("same-origin");
+    for (const badOrigin of ["null", "https://evil.example"]) {
+      const rejected = await f.post(
+        "/oauth/authorize",
+        { consent: flow.consent!, decision: "allow", workspace_id: workspaceId },
+        { Origin: badOrigin, cookie: "session=yes" },
+      );
+      expect(rejected.status).toBe(403);
+    }
+
     expect((await flow.authorize()).status).toBe(400);
     const denied = await f.post(
       "/oauth/authorize",
