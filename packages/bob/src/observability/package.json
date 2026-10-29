@@ -39,6 +39,7 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
+    "@bob/config": "workspace:*",
     "@sentry/node": "^10.53.1",
     "posthog-node": "^5.33.3",
     "@gmacko/core": "workspace:*",

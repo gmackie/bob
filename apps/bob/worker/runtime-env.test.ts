@@ -1,14 +1,69 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  getIntegrationStatuses,
+  initializeIntegrationConfig,
+  integrations,
+} from "@bob/config/integrations";
+
+import { wrapFetch } from "./lib/otel";
+import {
   applyRuntimeAuthEnv,
+  applyRuntimeIntegrationEnv,
   applyRuntimeServiceEnv,
   getHyperdriveConnectionString,
   getSentryOptions,
 } from "./runtime-env";
-import { wrapFetch } from "./lib/otel";
 
 describe("worker runtime env helpers", () => {
+  it("validates authoritative runtime bindings before consumers and clears stale credentials", () => {
+    const target = {
+      STRIPE_SECRET_KEY: "stale-private-fixture",
+      UNRELATED: "retained",
+    };
+    const bindings = {
+      BOB_STRIPE_ENABLED: "true",
+      STRIPE_SECRET_KEY: "rk_test_fixtureOnly",
+      STRIPE_WEBHOOK_SECRET: "whsec_fixtureOnly",
+      STRIPE_PRICE_PREMIUM: "price_fixturePremium",
+      STRIPE_PRICE_PRO: "price_fixturePro",
+      SENTRY_DSN: "https://fixturePublicKey@sentry.example/1",
+    };
+    try {
+      const statuses = applyRuntimeIntegrationEnv(bindings, target);
+      expect(statuses).toBe(getIntegrationStatuses());
+      expect(integrations.stripe).toBe(true);
+      expect(target.STRIPE_SECRET_KEY).toBe(bindings.STRIPE_SECRET_KEY);
+      expect(getSentryOptions(bindings).enabled).toBe(true);
+
+      const invalid = applyRuntimeIntegrationEnv(
+        {
+          ...bindings,
+          STRIPE_WEBHOOK_SECRET: 42,
+          SENTRY_DSN: "malformed-private-fixture",
+        },
+        target,
+      );
+      expect(invalid.stripe.status).toBe("invalid");
+      expect(invalid.sentry.status).toBe("invalid");
+      expect(integrations.stripe).toBe(false);
+      expect(
+        getSentryOptions({ SENTRY_DSN: "malformed-private-fixture" }).enabled,
+      ).toBe(false);
+      expect(
+        getSentryOptions({
+          SENTRY_DSN: 42,
+          NEXT_PUBLIC_SENTRY_DSN: bindings.SENTRY_DSN,
+        }).enabled,
+      ).toBe(false);
+      const cleared = applyRuntimeIntegrationEnv({}, target);
+      expect(cleared.stripe.enabled).toBe(false);
+      expect(cleared.sentry.status).toBe("not_configured");
+      expect(target).toEqual({ UNRELATED: "retained" });
+    } finally {
+      initializeIntegrationConfig({});
+    }
+  });
   it("copies Cloudflare auth bindings into the Node-compatible environment", () => {
     const target: Record<string, string | undefined> = {};
 
@@ -90,11 +145,11 @@ describe("worker runtime env helpers", () => {
     const oldStage = process.env.FG_STAGE;
     try {
       process.env.DATABASE_URL = "postgres://node-hosted";
-      process.env.SENTRY_DSN = "https://sentry.example/1";
+      process.env.SENTRY_DSN = "https://fixturePublicKey@sentry.example/1";
       process.env.FG_STAGE = "hetzner";
 
       expect(getSentryOptions(undefined)).toEqual({
-        dsn: "https://sentry.example/1",
+        dsn: "https://fixturePublicKey@sentry.example/1",
         environment: "hetzner",
         tracesSampleRate: 0.1,
         enabled: true,

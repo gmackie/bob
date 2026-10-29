@@ -1692,6 +1692,9 @@ importers:
 
   packages/bob/src/observability:
     dependencies:
+      '@bob/config':
+        specifier: workspace:*
+        version: link:../config
       '@gmacko/core':
         specifier: workspace:*
         version: link:../../../core
