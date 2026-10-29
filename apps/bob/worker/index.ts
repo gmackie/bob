@@ -37,6 +37,7 @@ import {
 import { wrapFetch } from "./lib/otel";
 import {
   applyRuntimeAuthEnv,
+  applyRuntimeIntegrationEnv,
   applyRuntimeServiceEnv,
   getHyperdriveConnectionString,
   getSentryOptions,
@@ -104,6 +105,7 @@ export default Sentry.withSentry(
       ctx: ExecutionContext,
     ): Promise<void> => {
       const runtimeEnv = (rawEnv ?? {}) as Env;
+      applyRuntimeIntegrationEnv(rawEnv);
       const autoDrainOn =
         String(runtimeEnv.BOB_AUTO_DRAIN_ENABLED ?? "") === "true";
       // Review is done by a runner agent (dispatchReviewSession), not a model
@@ -646,6 +648,7 @@ export default Sentry.withSentry(
       ): Promise<Response> => {
         const url = new URL(request.url);
         const runtimeEnv = (rawEnv ?? {}) as Env;
+        applyRuntimeIntegrationEnv(rawEnv);
         applyRuntimeAuthEnv(runtimeEnv);
         applyRuntimeServiceEnv(runtimeEnv);
 

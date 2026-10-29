@@ -66,6 +66,15 @@ when unset.
 
 Canonical worker config: `apps/bob/wrangler.jsonc`
 
+Integration configuration is validated when Node starts or a Worker invocation
+receives its bindings. Settings > Integrations and authenticated
+`GET /api/integrations/configuration` read the same credential-free status snapshot.
+Validation is local and does not test provider connectivity. Stripe billing and
+paid-plan enforcement require `BOB_STRIPE_ENABLED=true`, valid API/webhook keys,
+and at least one configured paid-plan price. See `.env.example` for field names
+and disable overrides. This code change needs no database migration or live
+OAuth setup.
+
 - Route: `bob.blder.bot` (custom domain)
 - `FRONTEND_URL`: `https://bob.blder.bot`
 - `GATEWAY_URL` / `GATEWAY_PUBLIC_URL`: `https://ws.blder.bot`

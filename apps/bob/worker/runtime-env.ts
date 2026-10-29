@@ -1,4 +1,8 @@
 import {
+  initializeIntegrationConfig,
+  integrationEnvKeys,
+} from "@bob/config/integrations";
+import {
   getSentryInitOptions,
   resolveObservabilityConfig,
 } from "@bob/observability/config";
@@ -38,6 +42,22 @@ interface RuntimeEnv {
   HERMES_OODA_BRANCH_ID?: unknown;
   HERMES_USAGE_DIGEST_SECRET?: unknown;
   [key: string]: unknown;
+}
+
+/** Worker bindings are authoritative; removed values must not survive a refresh. */
+export function applyRuntimeIntegrationEnv(
+  env: RuntimeEnv | undefined,
+  target: Record<string, string | undefined> = process.env,
+) {
+  if (env === undefined) return initializeIntegrationConfig(target);
+  const values = Object.fromEntries(
+    integrationEnvKeys.map((key) => [key, env[key]]),
+  );
+  for (const key of integrationEnvKeys) {
+    if (typeof values[key] === "string") target[key] = values[key];
+    else delete target[key];
+  }
+  return initializeIntegrationConfig(values);
 }
 
 export function applyRuntimeServiceEnv(
@@ -91,13 +111,14 @@ export function applyRuntimeAuthEnv(
   }
 }
 
-function runtimeEnvToMap(
-  env: RuntimeEnv | undefined,
-): Record<string, string | undefined> {
+function runtimeEnvToMap(env: RuntimeEnv | undefined): Record<string, unknown> {
   return {
-    SENTRY_DSN: getEnvString(env?.SENTRY_DSN) ?? process.env.SENTRY_DSN,
-    POSTHOG_KEY: getEnvString(env?.POSTHOG_KEY) ?? process.env.POSTHOG_KEY,
-    POSTHOG_HOST: getEnvString(env?.POSTHOG_HOST) ?? process.env.POSTHOG_HOST,
+    ...Object.fromEntries(
+      integrationEnvKeys.map((key) => [
+        key,
+        env === undefined ? process.env[key] : env[key],
+      ]),
+    ),
     FG_STAGE: getEnvString(env?.FG_STAGE) ?? process.env.FG_STAGE,
     BOB_TENANT_ID:
       getEnvString(env?.BOB_TENANT_ID) ?? process.env.BOB_TENANT_ID,

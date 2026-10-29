@@ -9,6 +9,7 @@ import { Input } from "@gmacko/core/ui/input";
 import { Label } from "@gmacko/core/ui/label";
 
 import { useBobRpcClient } from "~/rpc/react";
+import { RuntimeIntegrations } from "./runtime-integrations";
 
 type Workspace = { id: string; name: string };
 type LinearTeam = { id: string; name: string; key: string };
@@ -41,6 +42,15 @@ function formatSyncTime(value: string): string {
 }
 
 export function IntegrationsSection() {
+  return (
+    <div className="space-y-6">
+      <RuntimeIntegrations />
+      <WorkspaceIntegrations />
+    </div>
+  );
+}
+
+function WorkspaceIntegrations() {
   const rpc = useBobRpcClient();
   const { data: workspaces = [], isLoading } = useQuery({
     queryKey: ["rpc", "planning.listWorkspaces"],
