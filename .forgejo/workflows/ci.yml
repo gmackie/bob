@@ -118,7 +118,7 @@ jobs:
         run: node --test scripts/bob-execution-runtime.test.mjs
 
       - name: Validate OODA runner Node runtime
-        run: node --test scripts/verify-ooda-runner-node-runtime.test.mjs
+        run: node --test scripts/verify-ooda-runner-node-runtime.test.mjs scripts/verify-ooda-runner-source.test.mjs
 
       - name: Validate OODA durable-work rollout
         run: node --test scripts/verify-ooda-durable-work-rollout.test.mjs
