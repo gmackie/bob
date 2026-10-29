@@ -107,7 +107,7 @@ const escapeHtml = (s: string) =>
         c
       ]!,
   );
-function page(content: string, script?: (nonce: string) => string) {
+function page(content: string, script?: (nonce: string) => string, callback?: string) {
   const nonce = randomToken();
   return new Response(
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect to Bob</title></head><body><main><h1>Connect to Bob</h1>${content}</main>${script?.(nonce) ?? ""}</body></html>`,
@@ -119,7 +119,7 @@ function page(content: string, script?: (nonce: string) => string) {
         // Preserve same-origin consent submissions without leaking cross-origin.
         "Referrer-Policy": "same-origin",
         "X-Content-Type-Options": "nosniff",
-        "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`,
+        "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; connect-src 'self'; form-action 'self'${callback ? ` ${new URL(callback).origin.replace(/;/g, '%3B')}` : ''}; frame-ancestors 'none'; base-uri 'none'`,
       },
     },
   );
@@ -284,6 +284,8 @@ export function makeOAuth(options: {
           .join(
             "",
           )}</select></label><button name="decision" value="allow"${choices.length ? "" : " disabled"}>Allow connection</button><button name="decision" value="deny">Cancel</button></form>`,
+        undefined,
+        authorization.redirectUri,
       );
     }
     if (request.headers.get("origin") !== origin)
