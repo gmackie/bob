@@ -228,6 +228,9 @@ describe("MCP OAuth", () => {
       }),
     );
     expect(page.headers.get("referrer-policy")).toBe("same-origin");
+    expect(page.headers.get("content-security-policy")).toContain(
+      "form-action 'self' https://client.example;",
+    );
     for (const badOrigin of ["null", "https://evil.example"]) {
       const rejected = await f.post(
         "/oauth/authorize",
