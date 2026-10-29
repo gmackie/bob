@@ -115,7 +115,9 @@ function page(content: string, script?: (nonce: string) => string) {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-store",
-        "Referrer-Policy": "no-referrer",
+        // A no-referrer document can produce Origin: null on a form POST.
+        // Preserve same-origin consent submissions without leaking cross-origin.
+        "Referrer-Policy": "same-origin",
         "X-Content-Type-Options": "nosniff",
         "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`,
       },
