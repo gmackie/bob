@@ -10,7 +10,7 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { finalizePortableDeploy } from "./portable-deploy.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -55,7 +55,7 @@ function assertExists(label, filePath) {
   }
 }
 
-function main() {
+async function main() {
   const build = spawnSync(process.execPath, [path.join(__dirname, "build-node-app.mjs")], { cwd: repoRoot, stdio: "inherit", env: { ...process.env, BOB_NODE_APP_DIR: nodeAppDir } });
   if (build.status !== 0) throw new Error("Node app build failed");
   const serverBuild = spawnSync("pnpm", ["--filter", "@bob/server", "build"], { cwd: repoRoot, stdio: "inherit", env: process.env });
@@ -81,8 +81,10 @@ function main() {
   rmrf(path.join(targets.blder, "dist"));
   copyDir(path.join(nodeAppDir, "dist"), path.join(targets.blder, "dist"));
   copyDir(migrationsSrc, targets.dbMigrations);
+  const { writeBundledResourceManifest } = await import(pathToFileURL(path.join(bobServerSrc, "dist/bundled-resources.js")).href);
+  writeBundledResourceManifest(stagingDir);
 
   console.log(`[stage-packaging] staged resources under ${stagingDir}`);
 }
 
-main();
+await main();
