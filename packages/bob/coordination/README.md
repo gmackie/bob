@@ -320,3 +320,48 @@ Config files, all operator-owned:
   With Kanbanger, `teamId` is the team UUID or key and `projectId` the project UUID.
 - `environment-bindings.json`: `[{ target: ExecutionTarget, baseUrl, authToken? }]`.
 - `kanbanger.json`: shown above.
+
+### Flightdeck lifecycle export (BOB-62)
+
+The autonomous worker can export durable `admitted` and `execution-*` facts to
+Flightdeck's authenticated server ingestion API (FLIG-8). Pass
+`--flightdeck /etc/bob/flightdeck.json` with operator-owned configuration:
+
+```json
+{
+  "endpoint": "https://<flightdeck-host>/v1/server/events",
+  "tokenEnv": "BOB_FLIGHTDECK_TOKEN",
+  "checkpoint": "/home/bob/.bob/flightdeck/checkpoint.sqlite"
+}
+```
+
+Provide the token through the service's secret environment file. Keep the
+checkpoint directory writable by the service user and separate from the domain
+SQLite database. The checkpoint is scoped to workspace, policy owner and endpoint.
+Use a new checkpoint when restoring/replacing the domain database.
+
+Export reads committed facts without modifying their Kanbanger delivery state.
+It sends at most 50 events per loop, uses a two-second HTTP timeout and backs off
+analytics failures up to one minute independently of execution backoff. A restart
+retries unacknowledged facts with the same SHA-256 event ID. Pipelines accepts
+at least once; analytics consumers must deduplicate by `(app_id, event_id)`.
+Keep lifecycle rows until their analytics checkpoint has passed them; do not
+prune/reuse rowids underneath an exporter.
+
+Payloads contain an explicit allowlist of plan, item, request, attempt, environment,
+execution/profile IDs, lifecycle fact and current-attempt flag. Work instructions,
+credentials, exception messages and evidence URLs never enter these events.
+Existing execution traces remain unchanged. This initial slice covers durable
+admission and terminal receipts; it does not claim dispatch latency, trace export,
+Kanbanger delivery counts, or full runner-health coverage.
+
+Analytics configuration errors are logged as `configuration-unavailable` and do
+not stop the worker; fix configuration and restart to enable export. Failed HTTP
+or partial acceptance leaves the checkpoint unchanged. `flightdeck: unavailable`
+logs identify an export outage without leaking the response or credential.
+
+Roll out Flightdeck's FLIG-8 migration and endpoint first, register `app_bob`,
+install an expiring app-scoped key, then enable the worker option. Verify a scratch
+plan's admission and receipt event IDs and counts in Flightdeck, plus worker
+health and unchanged issue lifecycle. Retain the existing worker configuration
+for rollback; removing `--flightdeck` disables analytics without altering work.
