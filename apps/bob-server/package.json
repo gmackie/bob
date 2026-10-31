@@ -31,6 +31,10 @@
     "./startup-timeout": {
       "types": "./dist/startup-timeout.d.ts",
       "default": "./src/startup-timeout.ts"
+    },
+    "./bundled-resources": {
+      "types": "./dist/bundled-resources.d.ts",
+      "default": "./src/bundled-resources.ts"
     }
   }
 }

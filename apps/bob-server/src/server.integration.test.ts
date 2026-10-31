@@ -11,7 +11,7 @@ afterEach(async () => { process.env = { ...originalEnv }; for (const root of roo
 describe("bob-server loopback integration", () => {
   it("spawns an upstream, exchanges bootstrap auth, and preserves application identity and bounded authority", async () => {
     const baseDir = await mkdtemp(path.join(os.tmpdir(), "bob-server-integration-")); roots.push(baseDir);
-    const appDir = path.join(baseDir, "app");
+    const appDir = path.join(baseDir, "Bob Updated Installation With Spaces", "app");
     await mkdir(path.join(appDir, "dist", "server"), { recursive: true });
     await writeFile(path.join(appDir, "package.json"), '{"type":"module"}');
     await writeFile(path.join(appDir, "dist", "server", "index.js"), `
@@ -30,6 +30,9 @@ describe("bob-server loopback integration", () => {
     `);
     process.env.BOB_VINEXT_CLI = path.join(appDir, "dist", "server", "index.js");
     process.env.BOB_BLDER_DIR = appDir; delete process.env.BOB_DESKTOP_DEV;
+    // The child must launch without a package manager or Node on PATH.
+    process.env.PATH = "";
+    process.env.BOB_NODE = process.execPath;
     const { url, stop } = await startServer({ port: 0, host: "127.0.0.1", authToken: "bootstrap-token", bootstrapFd: undefined, noBrowser: true, baseDir, filesystemRoots: [baseDir] });
     try {
       expect((await fetch(url)).status).toBe(401);

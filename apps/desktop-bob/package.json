@@ -13,7 +13,7 @@
     "start": "node scripts/start-electron.mjs",
     "stage": "node scripts/stage-packaging.mjs",
     "prepackage": "node scripts/stage-packaging.mjs",
-    "package": "pnpm build && electron-builder --config electron-builder.yml",
+    "package": "pnpm build && node scripts/package-desktop.mjs",
     "dist": "pnpm package",
     "build:daemon": "node scripts/build-daemon.mjs",
     "typecheck": "tsc --noEmit",

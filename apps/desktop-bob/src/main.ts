@@ -1,5 +1,6 @@
 import { desktopSessionPartition, preserveSupervisorTitle } from "./window-session.js";
 import { serverStartupTimeout } from "@bob/server/startup-timeout";
+import { bundledServerEnvironment, verifyBundledResources } from "@bob/server/bundled-resources";
 import { app, BrowserWindow, dialog } from "electron";
 import { mkdtemp, mkdir, writeFile, rm, realpath } from "node:fs/promises";
 import type { Writable } from "node:stream";
@@ -68,6 +69,7 @@ let upstreamProcessGroupId: number | undefined;
 type ServerReady = { url: string; token: string };
 
 async function spawnBobServer(roots: string[]): Promise<ServerReady> {
+  if (app.isPackaged) verifyBundledResources(process.resourcesPath);
   const token = crypto.randomBytes(32).toString("hex");
   const child = spawn(
     process.execPath,
@@ -98,6 +100,7 @@ async function spawnBobServer(roots: string[]): Promise<ServerReady> {
         BOB_DB_MIGRATIONS_DIR: app.isPackaged
           ? path.join(process.resourcesPath, "db-migrations")
           : path.join(APP_ROOT, "packages", "bob", "src", "db", "drizzle"),
+        ...(app.isPackaged ? bundledServerEnvironment(process.resourcesPath, process.execPath, process.env) : {}),
       },
     },
   );

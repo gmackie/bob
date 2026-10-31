@@ -30,29 +30,27 @@ token is generated and printed in the ready line.
 
 ## Build-time caveats
 
-1. **blder must be built first.** `pnpm --filter @bob/server start` spawns
-   `pnpm --filter @bob/blder start` which runs `vinext start` against
-   `apps/blder/dist/`. Run `pnpm --filter @bob/blder build` (with
-   `BOB_BUILD_TARGET=node`) before starting bob-server for the first time.
-2. **wrangler.jsonc workaround (Phase 1).** To build blder with
-   `BOB_BUILD_TARGET=node`, `apps/blder/wrangler.jsonc` must be temporarily
-   renamed during build. This is a build-time workaround — bob-server itself
-   does not need to touch it because it spawns against an already-built dist.
-3. **PGlite migrations.** bob-server injects `BOB_DB_MIGRATIONS_DIR` pointing
-   at `packages/db/drizzle/` so PGlite bootstrap resolves migrations even when
-   spawned from a different cwd. Computed at runtime from the compiled
-   `server.js` location.
-4. **Direct node spawn.** bob-server invokes blder's vinext CLI or production
-   `dist/server/{index,entry}.js` entrypoints via `node` — no `pnpm` at runtime.
-   The desktop shell spawns bob-server with `process.execPath` +
-   `ELECTRON_RUN_AS_NODE=1`.
+1. **Build the Node app first.** `pnpm --filter @bob/desktop stage` builds a
+   separate Node app and stages production dependencies, bob-server, and migrations.
+   Development can use `BOB_DESKTOP_DEV=1` with the workspace Vinext CLI.
+2. **Direct bundled runtime.** bob-server invokes Vinext's HTTP adapter directly
+   using `process.execPath`; production output exports a handler and must not be
+   executed as a standalone listening server. No package manager runs at startup.
+   Electron supplies its own executable with `ELECTRON_RUN_AS_NODE=1`, pins
+   `BOB_NODE` to that executable, and overrides development/old-install paths.
+3. **Packaged resources.** Paths come from the current Electron `resourcesPath`,
+   including migrations. Staging writes `runtime-resources.json` with checksums
+   for launch modules, built server/client assets, and SQL migrations. Local packaged startup
+   checks it before spawning and reports a missing/corrupt resource with reinstall
+   guidance. This detects accidental damage; platform code signing remains the
+   authenticity boundary. See `apps/desktop-bob/PACKAGING.md` for validation.
 
 ## Architecture
 
 ```
   external:auth-gated HTTP  ←→  internal:random port (vinext/blder)
                │                             │
-       createHttpServer()              spawn(node, [vinext cli | dist/server entry])
+       createHttpServer()              spawn(process.execPath, [vinext cli, "start", ...])
 ```
 
 Auth presents as either `Authorization: Bearer <token>` or `?t=<token>` query
@@ -62,4 +60,4 @@ can be attached by the page.
 ## Dev mode
 
 When `BOB_DESKTOP_DEV=1`, bob-server spawns vinext `dev` instead of the production
-server entry so HMR works.
+HTTP adapter so HMR works.
