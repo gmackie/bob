@@ -34,6 +34,13 @@ CI (`.forgejo/workflows/ci.yml`) runs step 2 automatically on `master` after
 tests pass. The `predeploy` hook is skipped in CI because it needs Tailscale to
 reach production Postgres.
 
+That CI job is the one production deploy for a merge. It stamps the Worker with
+`FG_COMMIT_HASH`, checks `/api/health`, and reports the deploy to ForgeGraph
+(`scripts/forgegraph-deploy-report.sh`), so `forge deploy history --stage
+production` shows the merged commit as active. Do not follow a merge with
+`forge deploy create production`: it rebuilds the same commit on hetzner-master.
+Use the ForgeGraph target only for schema releases (below) and rollbacks.
+
 The ForgeGraph `production-cf` target performs the guarded migration as the
 final build step on the Tailscale-connected deployment node, before the normal
 Wrangler upload. `python3 ../../scripts/migrate-production.py` obtains Bob's

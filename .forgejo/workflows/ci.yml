@@ -422,7 +422,16 @@ jobs:
           echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/forgegraph.npmrc" >> "$GITHUB_ENV"
 
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
-      - name: Deploy CF Worker (vinext deploy, code-only)
+      - name: Build CF Worker
+        working-directory: apps/bob
+        run: pnpm exec vinext build
+      # This job is the only production deploy: ForgeGraph records it from the
+      # report below instead of deploying again. `vinext deploy` is this build
+      # plus a bare `wrangler deploy`, which cannot stamp FG_COMMIT_HASH, and
+      # ForgeGraph's source-order guard refuses any later deploy (rollbacks
+      # included) while the serving version carries no stamp.
+      - name: Deploy CF Worker (code-only)
+        id: deploy
         working-directory: apps/bob
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -430,7 +439,21 @@ jobs:
         # Wrangler occasionally reaches Cloudflare but times out waiting for its
         # API response. Retry only that exact transient; configuration, auth,
         # build, and other deploy failures still fail on the first attempt.
-        run: ../../scripts/retry-cloudflare-command.sh pnpm exec vinext deploy
+        run: ../../scripts/retry-cloudflare-command.sh pnpm exec wrangler deploy --var "FG_COMMIT_HASH:${{ github.sha }}"
+      - name: Report deploy to ForgeGraph
+        id: report
+        working-directory: apps/bob
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FG_API_TOKEN: ${{ secrets.FORGEGRAPH_TOKEN }}
+        run: ../../scripts/forgegraph-deploy-report.sh success bob blder-bot https://bob.blder.bot/api/health
+      - name: Report deploy failure to ForgeGraph
+        if: failure() && (steps.deploy.outcome == 'failure' || steps.report.outcome == 'failure')
+        working-directory: apps/bob
+        env:
+          FG_API_TOKEN: ${{ secrets.FORGEGRAPH_TOKEN }}
+        run: ../../scripts/forgegraph-deploy-report.sh failed bob blder-bot "CI wrangler deploy, stamp check, or health check failed"
 
   # OODA is promoted independently from the Bob web worker and only after the
   # guarded database bootstrap has completed. The repository secret is a

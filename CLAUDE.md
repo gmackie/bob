@@ -136,3 +136,8 @@ Key routing rules:
 - Ship/deploy/PR → invoke /ship or /land-and-deploy
 - Save progress → invoke /context-save
 - Resume context → invoke /context-restore
+
+## Deploy Configuration
+
+- Production deploy: merging to `master` runs the `deploy` job in `.forgejo/workflows/ci.yml`, which ships `blder-bot` and reports it to ForgeGraph. It is the only deploy per merge: do not run `forge deploy create production` after merging. See `deploy/README.md` for schema releases and rollbacks.
+- Verify: `forge deploy history --stage production` shows the merged commit as active, and `https://bob.blder.bot/api/health` returns 200.
