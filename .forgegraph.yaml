@@ -14,7 +14,9 @@ stages:
 # PRODUCTION WEB: Cloudflare Workers (apps/bob/wrangler.jsonc, worker "blder-bot" at bob.blder.bot)
 #   — NOT Node/VPS. See deploy/README.md. bob-server is desktop/local only.
 # deploy trigger: .forgejo/workflows/ci.yml "Deploy web to bob.blder.bot" job on push to master
-#   (Forgejo runner, `pnpm exec vinext deploy`)
+#   (Forgejo runner, `vinext build` + `wrangler deploy --var FG_COMMIT_HASH:<sha>`), reported
+#   to ForgeGraph via /api/fg/deploys/complete. It is the only deploy per merge: do not run
+#   `forge deploy create production` after merging (schema releases and rollbacks only).
 # primary web service path: apps/bob
 # healthcheck path: / (302 -> /login when unauthenticated)
 # database strategy: colocated-postgres on hetzner-master via Cloudflare Hyperdrive
