@@ -87,6 +87,24 @@ const HEARTBEAT_INTERVAL_MS = 25_000;
 const HELLO_TIMEOUT_MS = 15_000;
 
 /**
+ * A runner state directory: the env override, else `~/.bob-runner/<name>`.
+ * Under vitest the override is required, so a test can never read or write the
+ * live runner's journal and get its fixture frames replayed to the gateway
+ * (BOB-64). `src/__tests__/setup.ts` sets both overrides per test file.
+ */
+export function runnerStateDir(
+  envVar: "BOB_RUNNER_BUFFER_DIR" | "BOB_RUNNER_SUPERVISE_DIR",
+  name: string,
+): string {
+  const override = process.env[envVar];
+  if (override) return override;
+  if (process.env.VITEST) {
+    throw new Error(`${envVar} is unset under vitest; refusing to use ~/.bob-runner/${name}`);
+  }
+  return join(homedir(), ".bob-runner", name);
+}
+
+/**
  * Extract a short, human-readable tail from an agent's captured output for use
  * in an error message. Prefers the last non-empty lines; if the output is
  * stream-json (claude/codex), pulls the message text out of the last few JSON
@@ -334,8 +352,7 @@ export class BobGatewayConnector {
   ) {
     this.adapters = adapters;
     this.buffer = new EventBuffer(
-      process.env.BOB_RUNNER_BUFFER_DIR ??
-        join(homedir(), ".bob-runner", "event-buffer"),
+      runnerStateDir("BOB_RUNNER_BUFFER_DIR", "event-buffer"),
     );
     this.dispatch = new DispatchControl({ send: (msg) => this.send(msg as never) });
     this.credentials = new AgentCredentials({
@@ -668,8 +685,7 @@ export class BobGatewayConnector {
    * orphan-marked (that ordering is the false-death fix).
    */
   private async adoptOrphanedRuns(): Promise<void> {
-    const base =
-      process.env.BOB_RUNNER_SUPERVISE_DIR ?? join(homedir(), ".bob-runner", "runs");
+    const base = runnerStateDir("BOB_RUNNER_SUPERVISE_DIR", "runs");
     if (!existsSync(base)) return;
 
     for (const name of readdirSync(base)) {
@@ -1642,10 +1658,7 @@ export class BobGatewayConnector {
 
   /** Where a supervised run's wrapper, journal, and meta live. */
   private superviseDir(sessionId: string): string {
-    return join(
-      process.env.BOB_RUNNER_SUPERVISE_DIR ?? join(homedir(), ".bob-runner", "runs"),
-      sessionId,
-    );
+    return join(runnerStateDir("BOB_RUNNER_SUPERVISE_DIR", "runs"), sessionId);
   }
 
   /**

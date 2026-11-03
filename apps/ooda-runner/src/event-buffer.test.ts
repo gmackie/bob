@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { EventBuffer, isLifecycleFrame } from "./event-buffer";
+import { EventBuffer, QUARANTINE_DIR, isLifecycleFrame } from "./event-buffer";
 
 const S1 = "11111111-1111-4111-8111-111111111111";
 const S2 = "22222222-2222-4222-8222-222222222222";
@@ -84,6 +84,26 @@ describe("EventBuffer", () => {
     expect(reloaded.unacked(S1).map((e) => e.sendSeq)).toEqual([2, 3]);
     // Seq counter continues where it left off — no reuse of unacked seqs.
     expect(reloaded.assignSeq(S1)).toBe(4);
+  });
+
+  it("quarantines non-UUID sessions on load instead of replaying them", () => {
+    // The BOB-64 leak: a test's "s1" fixture, unacked, in the live buffer.
+    const seq = buf.assignSeq(S1);
+    buf.append(S1, seq, statusFrame(S1, seq, "running"));
+    const gap = {
+      sendSeq: 1,
+      frame: { type: "session_event", sessionId: "s1", eventType: "gap_marker", sendSeq: 1 },
+    };
+    writeFileSync(join(dir, "s1.jsonl"), `${JSON.stringify(gap)}\n`);
+    writeFileSync(join(dir, "s1.meta.json"), JSON.stringify({ nextSendSeq: 2, ackedSeq: 0 }));
+
+    const reloaded = new EventBuffer(dir);
+    expect(reloaded.sessionsWithUnacked()).toEqual([S1]);
+    expect(reloaded.unacked("s1")).toEqual([]);
+    expect(existsSync(join(dir, "s1.jsonl"))).toBe(false);
+    expect(existsSync(join(dir, "s1.meta.json"))).toBe(false);
+    expect(readFileSync(join(dir, QUARANTINE_DIR, "s1.jsonl"), "utf8")).toContain("gap_marker");
+    expect(existsSync(join(dir, QUARANTINE_DIR, "s1.meta.json"))).toBe(true);
   });
 
   it("skips a torn trailing journal line instead of crashing", () => {

@@ -73,6 +73,14 @@ const LIFECYCLE_EVENT_TYPES = new Set([
   "planning_drafts",
 ]);
 
+// The gateway rejects any frame whose sessionId is not a UUID, so a journal
+// under any other name can never be acked and would replay on every start.
+const SESSION_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Where loadAll moves journals the gateway could never accept. */
+export const QUARANTINE_DIR = "quarantine";
+
 export function isLifecycleFrame(frame: Record<string, unknown>): boolean {
   if (frame.type === "session_status" || frame.type === "session_claimed") {
     return true;
@@ -203,6 +211,10 @@ export class EventBuffer {
     for (const name of readdirSync(this.dir)) {
       if (!name.endsWith(".meta.json")) continue;
       const sessionId = name.slice(0, -".meta.json".length);
+      if (!SESSION_ID_PATTERN.test(sessionId)) {
+        this.quarantine(sessionId);
+        continue;
+      }
       try {
         const parsed = JSON.parse(
           readFileSync(join(this.dir, name), "utf8"),
@@ -220,6 +232,25 @@ export class EventBuffer {
         this.meta.set(sessionId, { nextSendSeq: maxSeq + 1, ackedSeq: 0 });
       }
     }
+  }
+
+  /**
+   * Move a non-UUID session's journal and meta aside instead of replaying it.
+   * These are foreign frames (BOB-64: test fixtures written into the live
+   * buffer); keeping them out of the buffer stops the replay, and keeping the
+   * files lets an operator see what leaked.
+   */
+  private quarantine(sessionId: string): void {
+    const target = join(this.dir, QUARANTINE_DIR);
+    mkdirSync(target, { recursive: true });
+    for (const file of [`${sessionId}.meta.json`, `${sessionId}.jsonl`]) {
+      if (existsSync(join(this.dir, file))) {
+        renameSync(join(this.dir, file), join(target, file));
+      }
+    }
+    console.warn(
+      `[event-buffer] Quarantined non-UUID session ${JSON.stringify(sessionId)} to ${target}`,
+    );
   }
 
   private getMeta(sessionId: string): SessionMeta {
