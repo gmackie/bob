@@ -1,0 +1,70 @@
+# TrueFlight standard workflow: core-flow
+# Bob's headline is "Planning stays primary. Task execution stays one tap away":
+# Home triages what needs you across the workspace (Needs you / Running now /
+# Up next), Tasks exposes the priority queue and recent outcomes, and Chat lets
+# you talk to the Bob agent by voice or keyboard. This flow signs in, reads the
+# triage, opens the priority queue, and sends Bob a message from Chat.
+#
+# Sign-in is device pairing against Bob web (see sign-in.review.yaml).
+#
+# tf:workflow id=core-flow title="Triage your work and talk to Bob" account=owner
+# tf:account role=owner email="reviewer+owner@blder.bot" secretRef=bob/review/owner_pw permissions=workspace-owner,planning,tasks,chat,nodes,settings notes="Workspace owner with a seeded workspace so Home has triage lanes and Tasks has a queue. Sign in to https://bob.blder.bot with the Google identity, then Settings -> Link a Device to approve the code the phone shows."
+# TODO: confirm the owner demo account is provisioned on bob.blder.bot with seeded work items (so Home shows 'Needs you' / 'Up next') and the OODA gateway reachable (so Chat can send); password stored at bob/review/owner_pw
+# tf:verify "Home groups the workspace's work into Needs you / Running now / Up next (or reads 'All clear' when nothing is pending)."
+# tf:verify "Tasks opens the priority queue; Chat accepts a typed message to Bob and shows it in the conversation."
+appId: com.gmacko.bob
+---
+# tf:step "Launch the app and sign in with the demo account by linking the device (Scan QR code -> enter a code on the web)." capture=screenshot
+- launchApp
+- extendedWaitUntil:
+    visible: "Skip|Welcome to Bob"
+    timeout: 60000
+- tapOn:
+    text: "Skip"
+    optional: true
+- extendedWaitUntil:
+    visible: "Welcome to Bob"
+    timeout: 30000
+# tf:step "Tap Scan QR code, then 'Can't scan? Enter a code on the web instead' — the app shows an 8-character pairing code and waits for approval." capture=screenshot
+- tapOn: "Scan QR code"
+- tapOn:
+    text: "Can't scan\\? Enter a code on the web instead|Use a code instead"
+- extendedWaitUntil:
+    visible:
+      id: "qr-pairing-user-code"
+    timeout: 30000
+- assertVisible: "Enter code on Bob web"
+# tf:step "In a browser, sign in to https://bob.blder.bot with the demo account, open Settings -> Link a Device, and enter the code. The phone signs in automatically." capture=none
+- assertVisible: "Waiting for approval — this signs you in automatically."
+# tf:step "Home loads with the host status card, the Today and Sessions shortcuts, and the triage lanes." capture=screenshot
+- extendedWaitUntil:
+    visible:
+      id: "mobile-tab-bar"
+    timeout: 180000
+- assertVisible:
+    id: "home-open-today"
+- assertVisible:
+    text: "Needs you|Running now|Up next|All clear"
+# tf:step "Tap the Tasks tab, then Open priority queue to see the ordered backlog Bob will work next. Tap Back to tasks." capture=screenshot
+- tapOn:
+    id: "mobile-tab-tasks"
+- tapOn: "Open priority queue"
+- extendedWaitUntil:
+    visible: "Back to tasks"
+    timeout: 15000
+- tapOn: "Back to tasks"
+# tf:step "Tap the Chat tab, start a new thought, switch to the keyboard and send Bob a message." capture=video
+- tapOn:
+    id: "mobile-tab-chat"
+- tapOn:
+    text: "Start a new thought"
+    optional: true
+- extendedWaitUntil:
+    visible: "Keyboard"
+    timeout: 30000
+- tapOn: "Keyboard"
+- tapOn: "Type a message..."
+- inputText: "Summarize what needs my attention today."
+- tapOn: "Send"
+# tf:step "Your message appears in the conversation and Bob starts responding." capture=screenshot
+- assertVisible: "Summarize what needs my attention today."
