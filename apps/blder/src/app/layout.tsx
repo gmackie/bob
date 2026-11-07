@@ -1,3 +1,5 @@
+import Script from "next/script";
+
 import { ThemeProvider } from "@gmacko/core/ui/theme";
 
 import "~/app/globals.css";
@@ -26,6 +28,15 @@ export default function RootLayout(props: { children: React.ReactNode }) {
       </head>
       <body className="min-h-screen bg-background font-[Geist,sans-serif] text-foreground antialiased">
         <ThemeProvider defaultTheme="bob">{props.children}</ThemeProvider>
+        <Script
+          src="/dataflare.js"
+          data-enabled={
+            process.env.NEXT_PUBLIC_DATAFLARE_ENABLED !== "false"
+              ? "true"
+              : "false"
+          }
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );

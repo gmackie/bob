@@ -132,6 +132,15 @@ export default function RootLayout(props: {
           </div>
           <Toaster />
         </ThemeProvider>
+        <Script
+          src="/dataflare.js"
+          data-enabled={
+            process.env.NEXT_PUBLIC_DATAFLARE_ENABLED !== "false"
+              ? "true"
+              : "false"
+          }
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );
