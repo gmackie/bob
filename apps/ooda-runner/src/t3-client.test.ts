@@ -6,7 +6,7 @@ import { once } from "node:events";
 import { afterEach, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 import { T3Client } from "./t3-client";
-import { launchT3Task } from "./t3-bridge";
+import { isAutolabTask, launchT3Task } from "./t3-bridge";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0)) await close(); });
@@ -55,7 +55,7 @@ it("launches in the matching repo/worktree using protocol 2 and stable retry ide
   expect(launches[0]!.payload).toEqual(launches[1]!.payload);
   expect(launches[0]!.payload).toMatchObject({ projectId: "right", modelSelection: { instanceId: "codex", model: "server-default" }, runtimeMode: "approval-required", workspaceStrategy: { type: "existing_worktree", worktreePath: task.worktreePath, branch: "BOB-40" }, initialMessage: { text: task.prompt } });
   expect(launches[0]!.payload).not.toHaveProperty("reuseExistingThread");
-  expect(launches[0]!.payload).not.toHaveProperty("completionPolicy");
+  expect(launches[0]!.payload.completionPolicy).toBe("autolab");
   expect(fixture.httpCalls.every(c => c.auth === "Bearer private-token" && c.protocol === "2")).toBe(true);
   expect(fixture.httpCalls.some(c => c.path === "/api/orchestration/dispatch")).toBe(false);
 });
@@ -100,22 +100,13 @@ it("streams output, responds to permission/input, and confirms remote interrupti
   ]));
 }, 15_000);
 
- it("marks generated autolab hypotheses without classifying ordinary mentions of autolab", async () => {
-  const fixture = await server();
-  await launchT3Task(fixture.client, fixture.config, { ...task, prompt: "You are implementing one research hypothesis as a real code change.\nFetch refs/autolab/champion" });
-  await launchT3Task(fixture.client, fixture.config, { ...task, prompt: "Fix refs/autolab/champion support in Bob" });
-  const launches = fixture.calls.filter(c => c.tag === "orchestration.launchThread");
-  expect(launches[0]!.payload.completionPolicy).toBe("autolab");
-  expect(launches[1]!.payload).not.toHaveProperty("completionPolicy");
-  expect(launches[0]!.payload.threadId).toBe(launches[1]!.payload.threadId);
+it("recognizes generated autolab hypotheses without classifying ordinary mentions of autolab", () => {
+  expect(isAutolabTask({ prompt: "You are implementing one research hypothesis as a real code change.\nFetch refs/autolab/champion" })).toBe(true);
+  expect(isAutolabTask({ prompt: "Fix refs/autolab/champion support in Bob" })).toBe(false);
 });
 
-it("marks autolab tasks by declared dispatch source, which overrides prompt matching", async () => {
-  const fixture = await server();
+it("recognizes autolab tasks by declared dispatch source, which overrides prompt matching", () => {
   const autolabPrompt = "You are implementing one research hypothesis as a real code change.\nFetch refs/autolab/champion";
-  await launchT3Task(fixture.client, fixture.config, { ...task, sessionId: "s-declared", sourceSystem: "gentrellis-research", prompt: "Implement it" });
-  await launchT3Task(fixture.client, fixture.config, { ...task, sessionId: "s-other", sourceSystem: "ooda", prompt: autolabPrompt });
-  const launches = fixture.calls.filter(c => c.tag === "orchestration.launchThread");
-  expect(launches[0]!.payload.completionPolicy).toBe("autolab");
-  expect(launches[1]!.payload).not.toHaveProperty("completionPolicy");
+  expect(isAutolabTask({ sourceSystem: "gentrellis-research", prompt: "Implement it" })).toBe(true);
+  expect(isAutolabTask({ sourceSystem: "ooda", prompt: autolabPrompt })).toBe(false);
 });
