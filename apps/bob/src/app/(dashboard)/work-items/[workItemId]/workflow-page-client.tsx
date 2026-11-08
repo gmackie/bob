@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "@gmacko/core/ui/toast";
 
+import { track } from "~/lib/analytics";
 import { useBobQueryClient } from "~/rpc/react";
 import {
   WorkflowPage,
@@ -192,6 +193,7 @@ export function WorkflowPageClient({
                 mergeMethod: "squash",
               });
               merged++;
+              track("pull_request_merged");
               toast(`Merged PR #${pr.number}`);
             } catch (err: any) {
               console.error(`Failed to merge PR #${pr.number}:`, err);

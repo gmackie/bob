@@ -10,6 +10,8 @@ import {
 } from "@bob/observability/identity";
 import { resolveObservabilityConfig } from "@bob/observability/config";
 
+import { identifyUser } from "~/lib/analytics";
+
 let initialized = false;
 
 export function initBrowserObservability(): void {
@@ -78,6 +80,8 @@ export function ObservabilityIdentity({
     initBrowserObservability();
     if (user) {
       identifyBrowserUser(user, tenant);
+      // observe.gmac.io journeys: opaque user id only, never email or name.
+      identifyUser(user.userId);
     }
   }, [user, tenant]);
 
