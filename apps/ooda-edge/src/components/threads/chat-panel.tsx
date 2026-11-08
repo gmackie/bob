@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 
+import { track } from "~/lib/analytics";
 import { useTRPC } from "~/trpc/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSessionStream } from "~/hooks/use-session-stream";
@@ -112,6 +113,7 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
   const sendMutation = useMutation(
     trpc.runner.sendPrompt.mutationOptions({
       onSuccess: (session) => {
+        track("prompt_sent");
         if (session) {
           setActiveSessionId(session.id);
         }

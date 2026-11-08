@@ -16,6 +16,7 @@ import {
 } from "@gmacko/core/ui/dialog";
 import { Input } from "@gmacko/core/ui/input";
 
+import { track } from "~/lib/analytics";
 import { useBobQueryClient } from "~/rpc/react";
 
 interface ImportGitHubDialogProps {
@@ -199,6 +200,7 @@ export function ImportGitHubDialog({
             : `Imported from ${fullName}`,
           color: COLORS[i % COLORS.length],
         });
+        track("project_created", { source: "github" });
 
         // Also register the repository so agent sessions can use it
         if (repo) {

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
 
+import { track } from "~/lib/analytics";
 import { useBobQueryClient } from "~/rpc/react";
 import { KanbanCard } from "./kanban-card";
 import type { KanbanCardItem } from "./kanban-card";
@@ -60,6 +61,7 @@ export function KanbanBoard({ workspaceId, projectId }: KanbanBoardProps) {
   const dispatchMutation = useMutation(
     bobQuery("workItem.dispatch").mutationOptions({
       onSuccess: () => {
+        track("work_item_dispatched", { source: "board" });
         queryClient.invalidateQueries({
           queryKey: bobQuery("workItem.list").queryKey(),
         });

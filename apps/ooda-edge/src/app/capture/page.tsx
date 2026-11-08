@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 
+import { track } from "~/lib/analytics";
 import { useTRPC } from "~/trpc/react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 
@@ -93,6 +94,7 @@ export default function CapturePage() {
   const createThread = useMutation(
     trpc.threads.create.mutationOptions({
       onSuccess: (rows: unknown) => {
+        track("thread_created", { source: "capture" });
         const t = (Array.isArray(rows) ? rows[0] : rows) as
           | { slug?: string }
           | undefined;

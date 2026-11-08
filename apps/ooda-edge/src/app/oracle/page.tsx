@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { track } from "~/lib/analytics";
 import { useTRPC } from "~/trpc/react";
 
 // Stopwords + Twitter noise stripped before building the topic cloud. Kept
@@ -161,6 +162,7 @@ export default function OraclePage() {
   const createThreadMutation = useMutation(
     trpc.threads.create.mutationOptions({
       onSuccess: (rows: any) => {
+        track("thread_created", { source: "oracle" });
         const created = Array.isArray(rows) ? rows[0] : rows;
         if (created?.slug) window.location.assign(`/threads/${created.slug}`);
       },
