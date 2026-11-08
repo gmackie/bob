@@ -52,8 +52,9 @@ export async function launchT3Task(client: T3Client, config: T3Config, task: T3T
     commandId: `${threadId}-launch`, threadId,
     projectId: project.id, title: task.title, modelSelection: { instanceId: provider.instanceId, model },
     runtimeMode: task.runtimeMode, interactionMode: "default",
-    // Generated research tasks are consumed by the lab rather than human review.
-    ...(isAutolabTask(task) ? { completionPolicy: "autolab" } : {}),
+    // Bob consumes every dispatched result itself (lab, review, repair, PR reaper), so T3
+    // settles the thread when its run completes instead of after days of inactivity.
+    completionPolicy: "autolab",
     workspaceStrategy: { type: "existing_worktree", worktreePath: task.worktreePath, ...(task.branch ? { branch: task.branch } : {}) },
     initialMessage: { messageId: `${threadId}-message`, text: task.prompt, attachments: [] },
   });
