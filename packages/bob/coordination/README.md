@@ -1,5 +1,10 @@
 # Bob coordination contract
 
+For a T3 Code agent supervising durable plans over remote MCP, see
+[Supervise the factory from T3 Code](REMOTE-MCP.md). MCP and REST use the same
+authenticated coordinator and durable receipts; the dispatch worker remains the
+execution owner.
+
 The canonical wire model is [src/contract.forge](src/contract.forge). ForgeC
 generates the OpenAPI 3.1 document, ForgeGraph contract IR and typed TypeScript
 client in `generated/`. T3 can consume these without importing Bob's runtime.
