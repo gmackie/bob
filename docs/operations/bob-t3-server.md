@@ -47,3 +47,47 @@ The shared-worktree probe completed with `BOB_SERVER_T3_HANDOFF_OK` in thread
 same completed run. This proves the server bridge boundary, not the full mobile
 production flow. Keep BOB-40 open until merged runner/mobile code, TestFlight,
 and a mobile task through Kanbanger/T3/ForgeGraph are verified.
+
+## Durable factory coordinator (BOB-55 / BOB-68)
+
+The standalone coordinator has its own REST/MCP listener and SQLite database.
+Install the checked-in [coordinator systemd units and operator configuration](../../deploy/coordination/README.md).
+The OODA runner remains the gateway daemon owner. Native coordinator requests
+use T3's durable admission API; they do not start a second gateway daemon.
+
+On 2026-11-12, `t3code-bob.service` switched to
+`/opt/t3code-releases/BOB-55/runtime/t3-0.1.7-gmacko.202611081333-linux-x64/t3`.
+The published Linux archive SHA256 was
+`38753a9e07c63c98feba66ddba52b9cbe00be87acb068a6b809e1a02d7de8829`.
+The worktree-volume, Codex and CLI proxy drop-ins were retained. The old runtime
+at `/opt/t3code-runtime-T3CODE-11-f6f3d94e/t3` remains installed.
+
+Before switching, the new CLI read a SQLite backup in an isolated data directory
+and a fresh isolated server advertised durable `SubmitExecution` and
+`FindExecution`. The gateway owner was stopped briefly, all T3 runs were checked
+terminal, and the production databases were backed up through SQLite's backup
+API. The existing gateway bearer credential still authenticated after restart.
+The old CLI also read the isolated migration snapshot successfully.
+
+An inherited migration-32 name conflict remains visible in T3's warning output:
+`ProjectionThreadsExternalTask` versus `AuthPairingProofKeyThumbprint`. Both
+`projection_threads.external_task_json` and
+`auth_pairing_links.proof_key_thumbprint` were present on this host; do not edit
+migration history to conceal the warning. Check these columns when repeating
+this upgrade on a different installation.
+
+The private rollback snapshot is `/root/BOB-55-rollback`, including the previous
+`runtime.conf` and both SQLite databases. To revert a migration, first stop the
+gateway owner and T3, then restore the matching database snapshots and their
+bob ownership, remove only their stale WAL/SHM files while stopped, restore the
+runtime drop-in, reload systemd, and start T3 and the gateway owner. Restoring
+a snapshot loses changes accepted since that snapshot: check for new work and
+retain a fresh backup before proceeding.
+
+Bob's coordinator is at `127.0.0.1:4780`; the private remote MCP URL is
+`https://hetzner-bob.tail1e1a32.ts.net:8444/mcp`. T3's existing private web listener
+stays on port 8443. The `bob-factory` remote tool on Bob uses the loopback MCP
+URL, with Authorization in T3's sensitive header storage. Its initial execution
+policy is limited to the disposable factory acceptance project and the Bob
+Kanbanger project. Expanding repository access requires explicit project/target
+bindings and corresponding T3 configuration.

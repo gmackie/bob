@@ -1,0 +1,24 @@
+[Unit]
+Description=Bob durable execution dispatch and Kanbanger outbox worker
+After=network-online.target bob-coordinator.service
+Wants=network-online.target bob-coordinator.service
+RequiresMountsFor=/home/bob/.bob/coordination
+
+[Service]
+Type=simple
+User=bob
+Group=bob
+WorkingDirectory=/opt/bob-coordinator/current
+ExecStart=/home/bob/.local/bin/node runtime/worker.mjs --database /home/bob/.bob/coordination/coordination.sqlite --context /etc/bob/coordination/context.json --bindings /etc/bob/coordination/bindings.json --kanbanger /etc/bob/coordination/kanbanger.json
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/bob/.bob/coordination /mnt/HC_Volume_106611335/bob/coordination
+
+[Install]
+WantedBy=multi-user.target
