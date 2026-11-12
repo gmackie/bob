@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { ExecutionCoordinator } from './execution.mjs';
 import { fail } from './coordinator.mjs';
+import { handleMcp } from './mcp.mjs';
 
 const api = JSON.parse(readFileSync(new URL('../generated/openapi.json', import.meta.url)));
 const routes = new Map(Object.entries(api.paths).flatMap(([path, methods]) => Object.entries(methods)
@@ -12,8 +13,11 @@ const operationNames = new Set(routes.values());
 
 /** Principals and their policies are operator-owned. Request headers/body cannot
  * select an actor, workspace, receipt identity or a wider target policy. */
-export function coordinationServer({ database, principals, maxBodyBytes = 1024 * 1024, issueResolver }) {
+export function coordinationServer({ database, principals, maxBodyBytes = 1024 * 1024, issueResolver, allowedOrigins = [] }) {
   if (!Array.isArray(principals) || !principals.length || !Number.isInteger(maxBodyBytes) || maxBodyBytes < 1 || maxBodyBytes > 4 * 1024 * 1024) fail('InvalidRequest', 'Invalid server configuration', 400);
+  if (!Array.isArray(allowedOrigins) || allowedOrigins.some(origin => {
+    try { const url = new URL(origin); return !['http:', 'https:'].includes(url.protocol) || url.origin !== origin; } catch { return true; }
+  })) fail('InvalidRequest', 'Allowed origins must be exact HTTP(S) origins', 400);
   const digests = new Set();
   const services = [];
   try {
@@ -33,9 +37,13 @@ export function coordinationServer({ database, principals, maxBodyBytes = 1024 *
       const presented = hash(credential);
       const service = services.find(candidate => timingSafeEqual(candidate.tokenHash, presented));
       if (!service) fail('Unauthorized', 'Authentication required', 401);
-      const name = routes.get(`${request.method} ${new URL(request.url, 'http://localhost').pathname}`);
-      if (!name) fail('NotFound', 'Coordination route not found', 404);
-      if (!service.operations.has(name)) fail('Forbidden', 'Operation is outside the principal policy', 403);
+      const path = new URL(request.url, 'http://localhost').pathname;
+      const mcp = path === '/mcp';
+      if (mcp && request.headers.origin && !allowedOrigins.includes(request.headers.origin)) fail('Forbidden', 'Origin is outside the server policy', 403);
+      if (mcp && request.method !== 'POST') { await handleMcp(request, response, undefined, service); return; }
+      const name = routes.get(`${request.method} ${path}`);
+      if (!mcp && !name) fail('NotFound', 'Coordination route not found', 404);
+      if (!mcp && !service.operations.has(name)) fail('Forbidden', 'Operation is outside the principal policy', 403);
       if (request.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/json') fail('InvalidRequest', 'Expected application/json', 415);
       const chunks = []; let size = 0;
       for await (const chunk of request) {
@@ -44,12 +52,17 @@ export function coordinationServer({ database, principals, maxBodyBytes = 1024 *
         chunks.push(chunk);
       }
       let input;
-      try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { fail('InvalidRequest', 'Expected a JSON request', 400); }
+      try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch {
+        if (mcp) { response.writeHead(400); response.end(JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } })); return; }
+        fail('InvalidRequest', 'Expected a JSON request', 400);
+      }
+      if (mcp) { await handleMcp(request, response, input, service); return; }
       const value = await service.coordinator.admit(name, input, { idempotencyKey: request.headers['idempotency-key'] });
       // Capabilities reflect both implementation and this principal's authority.
       if (name === 'GetCapabilities') value.operations = value.operations.filter(operation => service.operations.has(operation));
       response.writeHead(200); response.end(JSON.stringify(value));
     } catch (error) {
+      if (response.headersSent) { response.end(); return; }
       const status = Number.isInteger(error.status) ? error.status : 500;
       response.writeHead(status);
       response.end(JSON.stringify({ type: 'about:blank', title: status === 500 ? 'Internal error' : error.message, status, code: error.code ?? 'InternalError', retryable: status >= 500 }));
