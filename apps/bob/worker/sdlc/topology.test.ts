@@ -27,6 +27,18 @@ describe("fetchBizPulseRepos", () => {
     const fetch = (async () => new Response("no", { status: 500 })) as unknown as typeof globalThis.fetch;
     await expect(fetchBizPulseRepos({ apiUrl: "https://pulse.test", apiKey: "key", fetch })).rejects.toThrow(/HTTP 500/);
   });
+  it("gives up after its timeout (5 s by default) so a slow BizPulse cannot hold the refresh", async () => {
+    let signal: AbortSignal | undefined;
+    const fetch = ((_url: string, init: RequestInit) => {
+      signal = init.signal ?? undefined;
+      return new Promise((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
+    }) as unknown as typeof globalThis.fetch;
+    await expect(fetchBizPulseRepos({ apiUrl: "https://pulse.test", apiKey: "key", fetch, timeoutMs: 20 })).rejects.toThrow(/timed out|abort/i);
+    expect(signal?.aborted).toBe(true);
+    let defaulted: AbortSignal | null | undefined;
+    await fetchBizPulseRepos({ apiUrl: "https://pulse.test", apiKey: "key", fetch: (async (_u: string, init: RequestInit) => { defaulted = init.signal; return Response.json({ result: { data: { json: { repos: [] } } } }); }) as unknown as typeof globalThis.fetch });
+    expect(defaulted).toBeInstanceOf(AbortSignal);
+  });
   it("throws on a tRPC error body", async () => {
     const fetch = (async () => Response.json({ error: { json: { message: "UNAUTHORIZED" } } })) as unknown as typeof globalThis.fetch;
     await expect(fetchBizPulseRepos({ apiUrl: "https://pulse.test", apiKey: "key", fetch })).rejects.toThrow(/UNAUTHORIZED/);

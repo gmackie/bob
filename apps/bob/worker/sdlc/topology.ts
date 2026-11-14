@@ -1,12 +1,14 @@
 import type { TopologyRepo } from "@bob/sdlc-view";
 
-export interface BizPulseTopologyOptions { apiUrl: string; apiKey: string; fetch?: typeof fetch }
+export interface BizPulseTopologyOptions { apiUrl: string; apiKey: string; fetch?: typeof fetch; timeoutMs?: number }
 
 /**
  * Reads BizPulse's startup-to-repo mapping. BizPulse serves tRPC with superjson (see
- * bizpulseIntake.ts): `repos.list` takes `{ startupId? }` and returns `{ repos }`, each
- * row a startup_repo record plus `startupName` and `cloneUrl`. Only ForgeGraph repos
- * can join coordinator items. Throws on any failure, so the caller keeps its last topology.
+ * packages/bob/src/api/src/services/intake/bizpulseIntake.ts): `repos.list` takes
+ * `{ startupId? }` and returns `{ repos }`, each row a startup_repo record plus
+ * `startupName` and `cloneUrl`. Only ForgeGraph repos
+ * can join coordinator items. Throws on any failure or after timeoutMs (default 5 s), so
+ * the caller keeps its last topology. The caller sorts the result before comparing it.
  */
 export async function fetchBizPulseRepos(options: BizPulseTopologyOptions): Promise<TopologyRepo[]> {
   const doFetch = options.fetch ?? fetch;
@@ -14,6 +16,7 @@ export async function fetchBizPulseRepos(options: BizPulseTopologyOptions): Prom
   const input = encodeURIComponent(JSON.stringify({ json: {} }));
   const response = await doFetch(`${base}/api/trpc/repos.list?input=${input}`, {
     method: "GET",
+    signal: AbortSignal.timeout(options.timeoutMs ?? 5_000),
     headers: { authorization: `Bearer ${options.apiKey}`, accept: "application/json" },
   });
   if (!response.ok) throw new Error(`BizPulse repos.list failed: HTTP ${response.status}`);
