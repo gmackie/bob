@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MAX_INGEST_BYTES } from "./store";
 import { bearerMatches, handleSdlcRoute, type SdlcRouteEnv } from "./routes";
 
@@ -34,7 +34,9 @@ const env = (over: Partial<FakeEnv> = {}): FakeEnv & { SDLC_EDGE: ReturnType<typ
 const req = (path: string, init: RequestInit = {}) => new Request(`https://bob.test${path}`, init);
 const ingest = (body: BodyInit, headers: Record<string, string> = { authorization: `Bearer ${TOKEN}` }) =>
   req("/api/sdlc/ingest", { method: "POST", body, headers });
-const upgrade = (headers: Record<string, string> = {}) => req("/api/sdlc/ws", { headers: { upgrade: "websocket", ...headers } });
+const ORIGIN = "https://bob.test";
+/** A same-origin websocket upgrade, as a browser on bob.test sends it. */
+const upgrade = (headers: Record<string, string> = {}) => req("/api/sdlc/ws", { headers: { upgrade: "websocket", origin: ORIGIN, ...headers } });
 const route = (request: Request, e: FakeEnv, userId: string | null = null) =>
   handleSdlcRoute(request, e as unknown as SdlcRouteEnv, async () => userId);
 
@@ -180,7 +182,35 @@ describe("handleSdlcRoute: socket", () => {
   });
   it("accepts the upgrade header in any case", async () => {
     const e = env();
-    expect((await route(req("/api/sdlc/ws", { headers: { upgrade: "WebSocket" } }), e, "u1")).status).toBe(200);
+    expect((await route(req("/api/sdlc/ws", { headers: { upgrade: "WebSocket", origin: ORIGIN } }), e, "u1")).status).toBe(200);
+  });
+  it("answers 403 to a cross-site Origin without ever looking up the session", async () => {
+    for (const origin of ["https://evil.test", "http://bob.test", "https://bob.test:8443", "https://sub.bob.test", "https://bob.test/", "null", "HTTPS://BOB.TEST"]) {
+      const e = env();
+      const getUserId = vi.fn(async () => "u1");
+      const res = await handleSdlcRoute(upgrade({ origin }), e as never, getUserId);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: "forbidden origin" });
+      expect(getUserId).not.toHaveBeenCalled();
+      expect(e.SDLC_EDGE.calls).toEqual([]);
+    }
+  });
+  it("answers 403 to an upgrade with no Origin, without looking up the session", async () => {
+    const e = env();
+    const getUserId = vi.fn(async () => "u1");
+    const res = await handleSdlcRoute(req("/api/sdlc/ws", { headers: { upgrade: "websocket" } }), e as never, getUserId);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "forbidden origin" });
+    expect(getUserId).not.toHaveBeenCalled();
+    expect(e.SDLC_EDGE.calls).toEqual([]);
+  });
+  it("forwards a same-origin upgrade from a listed user after looking up the session once", async () => {
+    const e = env();
+    const getUserId = vi.fn(async () => "u1");
+    const res = await handleSdlcRoute(upgrade(), e as never, getUserId);
+    expect(res.status).toBe(200);
+    expect(getUserId).toHaveBeenCalledTimes(1);
+    expect(e.SDLC_EDGE.calls.map((c) => c.path)).toEqual(["/ws"]);
   });
 });
 

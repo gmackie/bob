@@ -56,7 +56,7 @@ const error = (status: number, message: string) => Response.json({ error: messag
 
 /**
  * POST /api/sdlc/ingest: the coordinator exporter's batches, by bearer token.
- * GET /api/sdlc/ws: a websocket for a signed-in user on SDLC_VIEWER_USER_IDS.
+ * GET /api/sdlc/ws: a same-origin websocket for a signed-in user on SDLC_VIEWER_USER_IDS.
  * Both go to the one SdlcEdge Durable Object named by SDLC_EDGE_WORKSPACE_ID; until that
  * and the binding exist, both answer 503 before checking anything else.
  */
@@ -84,6 +84,9 @@ export async function handleSdlcRoute(
 
   if (pathname === "/api/sdlc/ws") {
     if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") return error(426, "expected websocket");
+    // Cross-site WebSocket hijacking: the session cookie rides along on any site's
+    // handshake, so only our own origin may open one. Browsers always send Origin here.
+    if (request.headers.get("origin") !== new URL(request.url).origin) return error(403, "forbidden origin");
     const userId = await getUserId();
     if (!userId) return error(401, "unauthorized");
     if (!listed(userId, env.SDLC_VIEWER_USER_IDS)) return error(403, "forbidden");
