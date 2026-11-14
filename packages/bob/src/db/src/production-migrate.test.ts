@@ -20,6 +20,7 @@ const historical = files.filter(
       "0034_plan_draft_kanbanger_issue.sql",
       "0036_canonical_auth_foreign_keys.sql",
       "0037_mcp_oauth.sql",
+      "0038_budget_telemetry.sql",
     ].includes(entry.filename),
 );
 

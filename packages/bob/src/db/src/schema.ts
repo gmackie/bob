@@ -36,3 +36,4 @@ export {
   type NewAgentPersona,
 } from "@gmacko/core/db/schema/agent-personas";
 export * from "./mcp-schema.js";
+export * from "./budget-schema.js";

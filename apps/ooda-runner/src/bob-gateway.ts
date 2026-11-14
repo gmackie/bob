@@ -32,6 +32,7 @@ import {
   PLANNING_DRAFT_INSTRUCTION,
 } from "@bob/execution/planning/extractPlanDrafts";
 import { ProxyControl } from "./proxy-control";
+import { UsagePoller } from "./budget/usage-poller";
 import { releaseBranchFromStaleWorktrees } from "./worktree-prepare.js";
 import {
   commitTrailer,
@@ -308,6 +309,8 @@ export class BobGatewayConnector {
   private readonly credentials: AgentCredentials;
   private readonly dispatch: DispatchControl;
   private readonly proxyControl: ProxyControl | undefined;
+  /** Token ledger from the proxy usage queue (BOB-76); absent without a route and management key. */
+  private readonly usagePoller: UsagePoller | undefined;
   /**
    * Last few KB of each run's output, kept only until the run ends. Needed
    * because a provider's billing error (the 402 that went undetected for
@@ -375,11 +378,32 @@ export class BobGatewayConnector {
           refreshSnapshot: () => this.credentials.refreshSnapshot(),
         })
       : undefined;
+    const managementKey = process.env.CLIPROXY_MANAGEMENT_KEY?.trim() || undefined;
+    this.usagePoller =
+      proxyRoute && managementKey
+        ? new UsagePoller({
+            baseUrl: proxyRoute.baseUrl,
+            managementKey,
+            // Requests made with this host's proxy keys are Bob's; any other
+            // key on the proxy is interactive use. Extra runner keys (e.g. a
+            // review runner) can be listed in BOB_BUDGET_BOB_API_KEYS.
+            bobApiKeys: [
+              proxyRoute.apiKey,
+              ...(process.env.BOB_BUDGET_BOB_API_KEYS ?? "").split(",").map((key) => key.trim()).filter(Boolean),
+            ],
+            spoolPath:
+              process.env.BOB_RUNNER_BUDGET_SPOOL ?? join(homedir(), ".bob-runner", "budget", "usage-ledger.json"),
+            send: (msg) => this.send(msg),
+            isConnected: () => this.authenticated && this.ws?.readyState === WebSocket.OPEN,
+            log: (line) => console.log(`[bob-gw] ${JSON.stringify(line)}`),
+          })
+        : undefined;
   }
 
   start(): void {
     this.stopped = false;
     this.connect();
+    this.usagePoller?.start();
     // Re-adopt runs whose detached wrappers outlived the previous runner
     // generation. Status/output frames produced here are journaled by the
     // event buffer and replay after hello_ok, so ordering vs. connection
@@ -392,6 +416,7 @@ export class BobGatewayConnector {
   stop(): void {
     this.stopped = true;
     this.cleanup();
+    this.usagePoller?.stop();
     for (const [sessionId, handle] of this.sessionHandles) {
       if (this.supervisedSessions.has(sessionId)) {
         // Supervised runs survive runner shutdown by design — the detached
