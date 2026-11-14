@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { emptyView, reduce, rows, type EdgeView, type ItemSnapshot, type PlanSnapshot, type TopologyRepo } from "@bob/sdlc-view";
 import { ItemDetail } from "./item-detail";
 import { PlanDag } from "./plan-dag";
-import { bannerFor, breadcrumbs, drillInto, scopeFromParams, sdlcHref, sdlcPageModel } from "./sdlc-page-model";
+import { bannerFor, breadcrumbs, drillInto, scopeFromParams, sdlcHref, sdlcPageModel, stateFromParams } from "./sdlc-page-model";
 
 const repo = (repositoryId: string, integrationId = "forgegraph") => ({ environmentId: "hetzner-bob", projectId: "p", repository: { integrationId, repositoryId } });
 const issue = (id: string) => ({ integrationId: "kanbanger", workspaceId: "gmacko", teamId: "BOB", projectId: "bob", issueId: id, identifier: `BOB-${id}`, url: `https://tasks.gmac.io/BOB-${id}` });
@@ -73,6 +73,32 @@ describe("sdlc page model", () => {
     expect(model.counts).toMatchObject({ running: 1, validating: 1, pending: 1, failed: 1 });
     expect(model.listed.map((r) => r.item.itemId)).toEqual(["b"]);
     expect(model.attention.map((r) => r.item.itemId)).toEqual(["d", "b"]);
+  });
+
+  it("keeps the state filter in the URL, through drill-down and breadcrumbs, ignoring unknown states", () => {
+    expect(stateFromParams(params("state=validating"))).toBe("validating");
+    expect(stateFromParams(params("state=bogus"))).toBeNull();
+    expect(stateFromParams(params(""))).toBeNull();
+    expect(sdlcHref({}, "failed")).toBe("/sdlc?state=failed");
+    expect(sdlcHref({ startupId: "s-bob", repoKey: "forgegraph:bob" }, "running")).toBe("/sdlc?project=s-bob&repo=forgegraph%3Abob&state=running");
+    const model = sdlcPageModel(view, { startupId: "s-bob", repoKey: "forgegraph:bob" }, "running");
+    expect(model.breadcrumbs.map((b) => b.href)).toEqual(["/sdlc?state=running", "/sdlc?project=s-bob&state=running", undefined]);
+  });
+
+  it("shows the selected item and its plan only while the item is in scope", () => {
+    const selection = { itemId: "a", planId: plan.planId };
+    const inBob = sdlcPageModel(view, { startupId: "s-bob" }, null, selection);
+    expect(inBob.selected?.item.itemId).toBe("a");
+    expect(inBob.plan?.planId).toBe(plan.planId);
+    // Drilling into a project that does not hold item a drops the item; the plan stays
+    // because its items c and d are in this project.
+    const elsewhere = sdlcPageModel(view, { startupId: "unassigned" }, null, selection);
+    expect(elsewhere.selected).toBeNull();
+    expect(elsewhere.plan?.planId).toBe(plan.planId);
+    // A scope with none of the plan's items drops the plan too.
+    const empty = sdlcPageModel(view, { startupId: "unassigned", repoKey: "forgegraph:other" }, null, selection);
+    expect(empty).toMatchObject({ selected: null, plan: null });
+    expect(sdlcPageModel(view, {}, null, { itemId: "missing", planId: "gone" })).toMatchObject({ selected: null, plan: null });
   });
 
   it("labels a repo crumb from its key when no row is in view", () => {

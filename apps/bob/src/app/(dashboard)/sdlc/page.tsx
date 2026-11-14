@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { STATE_PRESENTATION, type ItemState } from "@bob/sdlc-view";
+import { useRouter, useSearchParams } from "next/navigation";
+import { STATE_PRESENTATION } from "@bob/sdlc-view";
 
 import { cn } from "@gmacko/core/ui";
 
@@ -17,6 +17,7 @@ import {
   scopeFromParams,
   sdlcHref,
   sdlcPageModel,
+  stateFromParams,
   type Banner,
 } from "~/components/sdlc/sdlc-page-model";
 import { AttentionBadge } from "~/components/sdlc/state-badge";
@@ -48,16 +49,19 @@ function bannerText(banner: Banner): string {
 export default function SdlcPage() {
   const { view, connection } = useSdlcEdge();
   const now = useNow(15_000);
+  const router = useRouter();
   const searchParams = useSearchParams();
   const scope = useMemo(() => scopeFromParams(searchParams), [searchParams]);
-  const [state, setState] = useState<ItemState | null>(null);
+  const state = stateFromParams(searchParams);
+  const setState = (next: typeof state) => router.replace(sdlcHref(scope, next), { scroll: false });
   const [itemId, setItemId] = useState<string | null>(null);
   const [planId, setPlanId] = useState<string | null>(null);
 
-  const model = useMemo(() => sdlcPageModel(view, scope, state), [view, scope, state]);
+  // The selection is looked up within the scope, so drilling elsewhere hides it.
+  const model = useMemo(() => sdlcPageModel(view, scope, state, { itemId, planId }), [view, scope, state, itemId, planId]);
   const banner = bannerFor(view, connection, now);
-  const selectedRow = itemId ? model.all.find((r) => r.item.itemId === itemId) ?? null : null;
-  const plan = planId ? view.plans[planId] ?? null : null;
+  const selectedRow = model.selected;
+  const plan = model.plan;
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-6 py-10">
@@ -86,7 +90,7 @@ export default function SdlcPage() {
         <StateGraph
           counts={model.counts}
           selected={state}
-          onSelect={(s) => setState((current) => (current === s ? null : s))}
+          onSelect={(s) => setState(state === s ? null : s)}
         />
       </section>
 
@@ -110,7 +114,7 @@ export default function SdlcPage() {
                 {model.groups.map((g) => (
                   <Link
                     key={g.key}
-                    href={sdlcHref(drillInto(scope, model.groupLevel!, g))}
+                    href={sdlcHref(drillInto(scope, model.groupLevel!, g), state)}
                     className="rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-muted/50"
                   >
                     <div className="font-medium text-foreground">{g.label}</div>

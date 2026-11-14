@@ -5,11 +5,13 @@ import {
   groupRows,
   inScope,
   isOffline,
+  ITEM_STATES,
   repoKey,
   rows as toRows,
   type EdgeView,
   type Group,
   type ItemState,
+  type PlanSnapshot,
   type Row,
   type Scope,
 } from "@bob/sdlc-view";
@@ -18,17 +20,27 @@ import type { EdgeConnection } from "./edge-client";
 
 export interface BreadcrumbItem { label: string; href?: string }
 
-/** The drill-down scope lives in the URL: /sdlc?project=<startupId>&repo=<repoKey>. */
-export function scopeFromParams(params: { get(name: string): string | null } | null | undefined): Scope {
+type Params = { get(name: string): string | null } | null | undefined;
+
+/** The drill-down scope and state filter live in the URL: /sdlc?project=<startupId>&repo=<repoKey>&state=<ItemState>. */
+export function scopeFromParams(params: Params): Scope {
   const startupId = params?.get("project") || undefined;
   const repo = params?.get("repo") || undefined;
   return { ...(startupId ? { startupId } : {}), ...(repo ? { repoKey: repo } : {}) };
 }
 
-export function sdlcHref(scope: Scope): string {
+const STATE_SET = new Set<string>(ITEM_STATES);
+/** The selected state from ?state=, or null when absent or not a known state. */
+export function stateFromParams(params: Params): ItemState | null {
+  const state = params?.get("state");
+  return state && STATE_SET.has(state) ? (state as ItemState) : null;
+}
+
+export function sdlcHref(scope: Scope, state: ItemState | null = null): string {
   const params = new URLSearchParams();
   if (scope.startupId) params.set("project", scope.startupId);
   if (scope.repoKey) params.set("repo", scope.repoKey);
+  if (state) params.set("state", state);
   const query = params.toString();
   return query ? `/sdlc?${query}` : "/sdlc";
 }
@@ -40,11 +52,11 @@ const repoLabel = (key: string, all: Row[]) =>
 const projectLabel = (startupId: string, all: Row[]) =>
   all.find((row) => row.startupId === startupId)?.startupName ?? startupId;
 
-/** Fleet → Project → Repo; the last crumb is the current level and has no link. */
-export function breadcrumbs(scope: Scope, all: Row[]): BreadcrumbItem[] {
-  const items: BreadcrumbItem[] = [{ label: "Fleet", href: sdlcHref({}) }];
-  if (scope.startupId) items.push({ label: projectLabel(scope.startupId, all), href: sdlcHref({ startupId: scope.startupId }) });
-  if (scope.repoKey) items.push({ label: repoLabel(scope.repoKey, all), href: sdlcHref(scope) });
+/** Fleet → Project → Repo, keeping the state filter; the last crumb is the current level and has no link. */
+export function breadcrumbs(scope: Scope, all: Row[], state: ItemState | null = null): BreadcrumbItem[] {
+  const items: BreadcrumbItem[] = [{ label: "Fleet", href: sdlcHref({}, state) }];
+  if (scope.startupId) items.push({ label: projectLabel(scope.startupId, all), href: sdlcHref({ startupId: scope.startupId }, state) });
+  if (scope.repoKey) items.push({ label: repoLabel(scope.repoKey, all), href: sdlcHref(scope, state) });
   delete items[items.length - 1]!.href;
   return items;
 }
@@ -72,9 +84,20 @@ export interface SdlcPageModel {
   breadcrumbs: BreadcrumbItem[];
   /** waiting: no snapshot yet; empty: a snapshot with no plans or items; ready otherwise. */
   status: "waiting" | "empty" | "ready";
+  /** The selected item, only while it is in scope. */
+  selected: Row | null;
+  /** The opened plan, only while at least one of its items is in scope. */
+  plan: PlanSnapshot | null;
 }
 
-export function sdlcPageModel(view: EdgeView, scope: Scope, state: ItemState | null): SdlcPageModel {
+export interface Selection { itemId: string | null; planId: string | null }
+
+/**
+ * Selection is looked up in the scoped rows, so drilling somewhere that does not hold
+ * the selected item (or any item of the opened plan) hides its detail rather than
+ * showing an item from outside the breadcrumb.
+ */
+export function sdlcPageModel(view: EdgeView, scope: Scope, state: ItemState | null, selection: Selection = { itemId: null, planId: null }): SdlcPageModel {
   const all = toRows(view);
   const scoped = all.filter((row) => inScope(row, scope));
   const groupLevel = scope.repoKey ? null : scope.startupId ? "repo" : "project";
@@ -87,8 +110,10 @@ export function sdlcPageModel(view: EdgeView, scope: Scope, state: ItemState | n
     groupLevel,
     groups: groupLevel ? groupRows(scoped, groupLevel) : [],
     attention: attentionRows(scoped),
-    breadcrumbs: breadcrumbs(scope, all),
+    breadcrumbs: breadcrumbs(scope, all, state),
     status,
+    selected: selection.itemId ? scoped.find((row) => row.item.itemId === selection.itemId) ?? null : null,
+    plan: selection.planId && scoped.some((row) => row.plan.planId === selection.planId) ? view.plans[selection.planId] ?? null : null,
   };
 }
 
