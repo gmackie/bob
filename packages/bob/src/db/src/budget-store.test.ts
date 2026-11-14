@@ -16,9 +16,10 @@ import {
   upsertBobSessions,
   upsertBudgetAccounts,
   upsertUsageBuckets,
-  writeBudgetPolicy,
-  type UsageBucketInput,
+  writeBudgetPolicy
+  
 } from "./budget-store.js";
+import type {UsageBucketInput} from "./budget-store.js";
 
 const DRIZZLE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "drizzle");
 const WS = "4b0f8e5e-3a5c-4a52-9a7a-5d1d6c0b9f01";
@@ -142,12 +143,13 @@ describe("budget telemetry store", () => {
     const rows = await handle.db.execute(sql`
       select requests, total_tokens, first_at, last_at, meters_last from budget_session_usage`);
     expect(rows.rows).toHaveLength(1);
-    const row = rows.rows[0]!;
+    const [row] = rows.rows;
+    if (!row) throw new Error("expected one session row");
     expect(row.requests).toBe(3);
     expect(row.total_tokens).toBe(39);
     expect(new Date(String(row.first_at)).toISOString()).toBe("2026-11-14T20:20:00.000Z");
     expect(new Date(String(row.last_at)).toISOString()).toBe("2026-11-14T20:40:00.000Z");
-    expect((row.meters_last as Array<{ usedPercent: number }>)[0]!.usedPercent).toBe(49);
+    expect(row.meters_last).toMatchObject([{ usedPercent: 49 }]);
   });
 
   it("upserts account states and lets the latest heartbeat win", async () => {

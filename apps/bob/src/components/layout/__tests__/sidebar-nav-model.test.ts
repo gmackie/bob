@@ -70,6 +70,7 @@ describe("sidebar nav model", () => {
       "Pull Requests",
       "SDLC",
       "Nodes",
+      "Budget",
       "Hermes",
       "Settings",
     ]);

@@ -38,9 +38,9 @@ export interface SidebarTabItem {
 }
 
 export interface SidebarUtilityItem {
-  key: "onboarding" | "discovery" | "executions" | "pull-requests" | "sdlc" | "nodes" | "hermes" | "settings";
-  label: "Onboarding" | "Discovery" | "Executions" | "Pull Requests" | "SDLC" | "Nodes" | "Hermes" | "Settings";
-  href: "/onboarding" | "/discovery" | "/executions" | "/pull-requests" | "/sdlc" | "/nodes" | "/hermes-console" | "/settings";
+  key: "onboarding" | "discovery" | "executions" | "pull-requests" | "sdlc" | "nodes" | "budget" | "hermes" | "settings";
+  label: "Onboarding" | "Discovery" | "Executions" | "Pull Requests" | "SDLC" | "Nodes" | "Budget" | "Hermes" | "Settings";
+  href: "/onboarding" | "/discovery" | "/executions" | "/pull-requests" | "/sdlc" | "/nodes" | "/budget" | "/hermes-console" | "/settings";
 }
 
 export interface SidebarProjectSummary {
@@ -157,6 +157,8 @@ const UTILITY_ITEMS: SidebarUtilityItem[] = [
   { key: "pull-requests", label: "Pull Requests", href: "/pull-requests" },
   { key: "sdlc", label: "SDLC", href: "/sdlc" },
   { key: "nodes", label: "Nodes", href: "/nodes" },
+  // BOB-76: subscription budget cockpit.
+  { key: "budget", label: "Budget", href: "/budget" },
   { key: "hermes", label: "Hermes", href: "/hermes-console" },
   { key: "settings", label: "Settings", href: "/settings" },
 ];

@@ -16,9 +16,10 @@ import {
   budgetPolicy,
   budgetPolicyChanges,
   budgetSessionUsage,
-  budgetUsageLedger,
-  type BudgetMeterJson,
+  budgetUsageLedger
+  
 } from "./budget-schema.js";
+import type {BudgetMeterJson} from "./budget-schema.js";
 
 // Structural inputs: the gateway passes @bob/ws wire objects straight through.
 export interface LedgerTokensInput {
@@ -67,6 +68,7 @@ export interface MeterAccountInput {
 type Db = PgDatabase<PgQueryResultHKT, any, any>;
 
 const MAX_ROWS = 2_000;
+const LEDGER_SOURCES: ReadonlySet<string> = new Set(["bob", "interactive"]);
 
 const tokenValues = (tokens: LedgerTokensInput) => ({
   inputTokens: Math.max(0, Math.round(tokens.input)),
@@ -103,7 +105,8 @@ export async function upsertUsageBuckets(
 ): Promise<number> {
   const rows = input.buckets.slice(0, MAX_ROWS).flatMap((bucket) => {
     const hour = validTime(bucket.hour);
-    if (!hour || (bucket.source !== "bob" && bucket.source !== "interactive")) return [];
+    // The type says bob | interactive; the data came off a socket, so check anyway.
+    if (!hour || !LEDGER_SOURCES.has(bucket.source)) return [];
     return [
       {
         workspaceId: input.workspaceId,
@@ -189,7 +192,7 @@ export async function recordMeterSamples(
   db: Db,
   input: { workspaceId: string; hostId: string; accounts: readonly MeterAccountInput[] },
 ): Promise<number> {
-  const rows: Array<typeof budgetMeterSamples.$inferInsert> = [];
+  const rows: typeof budgetMeterSamples.$inferInsert[] = [];
   const push = (account: MeterAccountInput, model: string, meter: BudgetMeterJson) => {
     const observedAt = validTime(meter.observedAt);
     if (!observedAt || !Number.isFinite(meter.usedPercent)) return;
@@ -311,10 +314,10 @@ export async function recordBudgetDecision(
 
 /** Raw rows the governor's read model is built from (see assembleBudgetState in @bob/ws). */
 export interface BudgetStateRows {
-  accounts: Array<{ accountId: string; provider: string; label: string; status: string; detail: string | null; authIndex: string | null; updatedAt: Date }>;
-  meters: Array<{ accountId: string; windowName: string; windowMinutes: number | null; usedPercent: number; resetsAt: Date | null; status: string | null; observedAt: Date }>;
-  ledger: Array<{ hour: Date; authIndex: string; provider: string; model: string; source: string; requests: number; failed: number; inputTokens: number; outputTokens: number; reasoningTokens: number; cacheReadTokens: number; cacheCreationTokens: number; totalTokens: number }>;
-  sessions: Array<{ sessionId: string; authIndex: string; provider: string; model: string; requests: number; inputTokens: number; outputTokens: number; reasoningTokens: number; cacheReadTokens: number; cacheCreationTokens: number; totalTokens: number; firstAt: Date; lastAt: Date }>;
+  accounts: { accountId: string; provider: string; label: string; status: string; detail: string | null; authIndex: string | null; updatedAt: Date }[];
+  meters: { accountId: string; windowName: string; windowMinutes: number | null; usedPercent: number; resetsAt: Date | null; status: string | null; observedAt: Date }[];
+  ledger: { hour: Date; authIndex: string; provider: string; model: string; source: string; requests: number; failed: number; inputTokens: number; outputTokens: number; reasoningTokens: number; cacheReadTokens: number; cacheCreationTokens: number; totalTokens: number }[];
+  sessions: { sessionId: string; authIndex: string; provider: string; model: string; requests: number; inputTokens: number; outputTokens: number; reasoningTokens: number; cacheReadTokens: number; cacheCreationTokens: number; totalTokens: number; firstAt: Date; lastAt: Date }[];
 }
 
 export async function readBudgetStateRows(db: Db, input: { now: Date; ledgerHours?: number; sessionDays?: number; accountMaxAgeHours?: number }): Promise<BudgetStateRows> {
@@ -338,4 +341,33 @@ export async function readBudgetStateRows(db: Db, input: { now: Date; ledgerHour
     ledger: ledger.map((l) => ({ hour: l.hour, authIndex: l.authIndex, provider: l.provider, model: l.model, source: l.source, requests: l.requests, failed: l.failed, inputTokens: l.inputTokens, outputTokens: l.outputTokens, reasoningTokens: l.reasoningTokens, cacheReadTokens: l.cacheReadTokens, cacheCreationTokens: l.cacheCreationTokens, totalTokens: l.totalTokens })),
     sessions: sessions.map((s) => ({ sessionId: s.sessionId, authIndex: s.authIndex, provider: s.provider, model: s.model, requests: s.requests, inputTokens: s.inputTokens, outputTokens: s.outputTokens, reasoningTokens: s.reasoningTokens, cacheReadTokens: s.cacheReadTokens, cacheCreationTokens: s.cacheCreationTokens, totalTokens: s.totalTokens, firstAt: s.firstAt, lastAt: s.lastAt })),
   };
+}
+
+export interface BudgetDecisionSummary {
+  id: number;
+  decidedAt: Date;
+  enforce: boolean;
+  mode: string;
+  totalSlots: number;
+  legacyBudget: number | null;
+  byProvider: Record<string, { slots: number; targetConcurrent: number; active: number }>;
+  reasons: { accountId: string; reasons: string[]; slots: number }[];
+}
+
+/** The most recent decisions, trimmed to what the dashboard's "why" feed shows. */
+export async function readRecentBudgetDecisions(db: Db, limit = 48): Promise<BudgetDecisionSummary[]> {
+  const rows = await db.select().from(budgetDecisions).orderBy(sql`${budgetDecisions.decidedAt} desc`).limit(Math.min(500, Math.max(1, limit)));
+  return rows.map((row) => {
+    const verdict = row.verdict as { byProvider?: BudgetDecisionSummary["byProvider"]; accounts?: { accountId: string; reasons?: string[]; slots?: number }[] };
+    return {
+      id: row.id,
+      decidedAt: row.decidedAt,
+      enforce: row.enforce,
+      mode: row.mode,
+      totalSlots: row.totalSlots,
+      legacyBudget: row.legacyBudget,
+      byProvider: verdict.byProvider ?? {},
+      reasons: (verdict.accounts ?? []).map((a) => ({ accountId: a.accountId, reasons: a.reasons ?? [], slots: a.slots ?? 0 })),
+    };
+  });
 }

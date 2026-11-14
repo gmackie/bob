@@ -117,6 +117,21 @@ const UTILITY_ICON: Record<SidebarUtilityItem["key"], NavItem["icon"]> = {
       <path d="M5.5 3.5h4M11.5 5v2.5H7.5V10" stroke="currentColor" />
     </svg>
   ),
+  budget: () => (
+    <svg
+      className="size-[15px]"
+      viewBox="0 0 15 15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M2.5 10.5a5 5 0 1 1 10 0" />
+      <path d="M7.5 10.5 10 6.5" />
+      <circle cx="7.5" cy="10.5" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  ),
   nodes: () => (
     <svg
       className="size-[15px]"
