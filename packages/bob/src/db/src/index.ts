@@ -26,3 +26,6 @@ export { createHermesUsageStore } from "./hermes-usage-store.js";
 export type { HermesUsageEvent } from "./hermes-usage-store.js";
 
 export { registerSessionAgentRun } from "./session-agent-run.js";
+
+export { recordMeterSamples, upsertBobSessions, upsertUsageBuckets } from "./budget-store.js";
+export type { BobSessionInput, MeterAccountInput, UsageBucketInput } from "./budget-store.js";

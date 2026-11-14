@@ -155,6 +155,7 @@
     <section class="card reveal" style="--i:5"><div class="k">Authority</div><div class="v">Fill the remainder</div><p>The governor steers only Bob-dispatched work. Your interactive sessions are measured and forecast, never throttled.</p></section>
     <section class="card reveal" style="--i:6"><div class="k">Measurement</div><div class="v">Meters + ledger</div><p>Provider 5-hour and weekly meters are the source of truth. The CLIProxyAPI usage ledger provides attribution and estimates for Kimi and xAI.</p></section>
     <section class="card reveal" style="--i:7"><div class="k">Surplus</div><div class="v">Full ladder + BizPulse</div><p>Grooming, pulling work forward, discovering new issues, and BizPulse venture work. Each tier can be switched on or off and ordered; "lapse" is the floor.</p></section>
+    <section class="card reveal" style="--i:8"><div class="k">Hook point (revised after Phase 0)</div><div class="v">Shared module, both dispatchers</div><p>Production runs on legacy <code>autoDrain</code>, which sits at its flat 40 runs/day cap almost every day. The durable coordinator (<code>packages/bob/coordination</code>) had 0 dispatches in 7 days. The governor is one shared pure module: <code>autoDrain</code> uses it now in place of the flat cap, and the coordinator later gates <code>dispatchOne</code> by <code>executionProfileId</code>.</p></section>
     <section class="card reveal" style="--i:8"><div class="k">Surface</div><div class="v">Web cockpit + mobile glance</div><p>A full <code>/budget</code> page in <code>apps/bob</code>, plus gauges, mode control and pushes on mobile Home.</p></section>
   </div>
 
@@ -335,7 +336,7 @@
       <p class="muted">Fixture: <code>apps/ooda-runner/src/budget/__fixtures__/auth-files-quota.2026-11-14.json</code> (identifiers replaced).</p></li>
 
     
-<li class="active"><div class="head"><h3>Phase 1 — Collect</h3><span class="chip active">Next</span></div>
+<li class="active"><div class="head"><h3>Phase 1 — Collect</h3><span class="chip active">Code complete · not deployed</span></div><p class="muted">The meter poller was folded into the existing <code>proxy-monitor</code> heartbeat (it already fetches <code>auth-files</code>). The ledger travels as a new <code>budget_usage</code> daemon message; the gateway validates it field by field and upserts with <code>GREATEST</code>, so resends are idempotent and totals never shrink. Policy and decision tables moved to Phase 2 with the governor. Still open: joining proxy <code>session_id</code> to Bob runs (needs a production check that it equals the agent CLI session id) and <code>extractAgentUsage</code>.</p>
       <details><summary>Tasks</summary><div class="table-scroll"><table>
         <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
         <tbody>
