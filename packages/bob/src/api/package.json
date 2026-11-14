@@ -124,6 +124,7 @@
     "@bob/telemetry": "workspace:*",
     "@bob/tenancy": "workspace:*",
     "@bob/work-items": "workspace:*",
+    "@bob/ws": "workspace:*",
     "@elevenlabs/client": "^0.13.0",
     "@gmacko/bob": "workspace:*",
     "@gmacko/core": "workspace:*",

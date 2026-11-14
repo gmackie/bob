@@ -9,7 +9,16 @@
 import { sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 
-import { budgetMeterSamples, budgetSessionUsage, budgetUsageLedger, type BudgetMeterJson } from "./budget-schema.js";
+import {
+  budgetAccounts,
+  budgetDecisions,
+  budgetMeterSamples,
+  budgetPolicy,
+  budgetPolicyChanges,
+  budgetSessionUsage,
+  budgetUsageLedger,
+  type BudgetMeterJson,
+} from "./budget-schema.js";
 
 // Structural inputs: the gateway passes @bob/ws wire objects straight through.
 export interface LedgerTokensInput {
@@ -208,4 +217,125 @@ export async function recordMeterSamples(
   if (rows.length === 0) return 0;
   await db.insert(budgetMeterSamples).values(rows.slice(0, MAX_ROWS)).onConflictDoNothing();
   return Math.min(rows.length, MAX_ROWS);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: account states, policy, decisions, and the governor's read model.
+// ---------------------------------------------------------------------------
+
+export interface BudgetAccountInput {
+  id: string;
+  provider: string;
+  label: string;
+  status: string;
+  detail?: string;
+  ref?: { authIndex?: string };
+}
+
+export async function upsertBudgetAccounts(
+  db: Db,
+  input: { workspaceId: string; hostId: string; accounts: readonly BudgetAccountInput[] },
+): Promise<number> {
+  const rows = input.accounts.slice(0, 200).map((account) => ({
+    workspaceId: input.workspaceId,
+    accountId: account.id,
+    hostId: input.hostId,
+    authIndex: account.ref?.authIndex ?? null,
+    provider: account.provider,
+    label: account.label,
+    status: account.status,
+    detail: account.detail ?? null,
+  }));
+  if (rows.length === 0) return 0;
+  await db
+    .insert(budgetAccounts)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: [budgetAccounts.workspaceId, budgetAccounts.accountId],
+      set: {
+        hostId: sql.raw("excluded.host_id"),
+        authIndex: sql.raw("excluded.auth_index"),
+        provider: sql.raw("excluded.provider"),
+        label: sql.raw("excluded.label"),
+        status: sql.raw("excluded.status"),
+        detail: sql.raw("excluded.detail"),
+        updatedAt: sql`now()`,
+      },
+    });
+  return rows.length;
+}
+
+const POLICY_ID = "default";
+
+/** The stored policy as written; callers normalize it (normalizeBudgetPolicy in @bob/ws). */
+export async function readBudgetPolicy(db: Db): Promise<{ policy: Record<string, unknown>; updatedAt: Date; updatedBy: string | null } | undefined> {
+  const rows = await db.select().from(budgetPolicy).where(sql`${budgetPolicy.id} = ${POLICY_ID}`).limit(1);
+  const row = rows[0];
+  return row ? { policy: row.policy, updatedAt: row.updatedAt, updatedBy: row.updatedBy } : undefined;
+}
+
+/** Replace the policy and record the change with its author and note, atomically. */
+export async function writeBudgetPolicy(
+  db: Db,
+  input: { policy: Record<string, unknown>; changedBy: string; note?: string },
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const before = await tx.select().from(budgetPolicy).where(sql`${budgetPolicy.id} = ${POLICY_ID}`).for("update");
+    await tx
+      .insert(budgetPolicy)
+      .values({ id: POLICY_ID, policy: input.policy, updatedBy: input.changedBy })
+      .onConflictDoUpdate({ target: budgetPolicy.id, set: { policy: input.policy, updatedBy: input.changedBy, updatedAt: sql`now()` } });
+    await tx.insert(budgetPolicyChanges).values({
+      changedBy: input.changedBy,
+      before: before[0]?.policy ?? {},
+      after: input.policy,
+      note: input.note ?? null,
+    });
+  });
+}
+
+export async function recordBudgetDecision(
+  db: Db,
+  input: { enforce: boolean; mode: string; totalSlots: number; legacyBudget?: number; dispatched?: number; verdict: Record<string, unknown>; inputs: Record<string, unknown> },
+): Promise<void> {
+  await db.insert(budgetDecisions).values({
+    enforce: input.enforce,
+    mode: input.mode,
+    totalSlots: input.totalSlots,
+    legacyBudget: input.legacyBudget ?? null,
+    dispatched: input.dispatched ?? null,
+    verdict: input.verdict,
+    inputs: input.inputs,
+  });
+}
+
+/** Raw rows the governor's read model is built from (see assembleBudgetState in @bob/ws). */
+export interface BudgetStateRows {
+  accounts: Array<{ accountId: string; provider: string; label: string; status: string; detail: string | null; authIndex: string | null; updatedAt: Date }>;
+  meters: Array<{ accountId: string; windowName: string; windowMinutes: number | null; usedPercent: number; resetsAt: Date | null; status: string | null; observedAt: Date }>;
+  ledger: Array<{ hour: Date; authIndex: string; provider: string; model: string; source: string; requests: number; failed: number; inputTokens: number; outputTokens: number; reasoningTokens: number; cacheReadTokens: number; cacheCreationTokens: number; totalTokens: number }>;
+  sessions: Array<{ sessionId: string; authIndex: string; provider: string; model: string; requests: number; inputTokens: number; outputTokens: number; reasoningTokens: number; cacheReadTokens: number; cacheCreationTokens: number; totalTokens: number; firstAt: Date; lastAt: Date }>;
+}
+
+export async function readBudgetStateRows(db: Db, input: { now: Date; ledgerHours?: number; sessionDays?: number; accountMaxAgeHours?: number }): Promise<BudgetStateRows> {
+  const now = input.now.getTime();
+  const ledgerSince = new Date(now - (input.ledgerHours ?? 26) * 3_600_000);
+  const sessionSince = new Date(now - (input.sessionDays ?? 7) * 86_400_000);
+  const accountSince = new Date(now - (input.accountMaxAgeHours ?? 24) * 3_600_000);
+  const [accounts, meters, ledger, sessions] = await Promise.all([
+    db.select().from(budgetAccounts).where(sql`${budgetAccounts.updatedAt} >= ${accountSince}`),
+    db
+      .select()
+      .from(budgetMeterSamples)
+      .where(sql`${budgetMeterSamples.model} = '' and ${budgetMeterSamples.observedAt} >= ${new Date(now - 8 * 86_400_000)}`)
+      .orderBy(budgetMeterSamples.observedAt),
+    db.select().from(budgetUsageLedger).where(sql`${budgetUsageLedger.hour} >= ${ledgerSince}`),
+    db.select().from(budgetSessionUsage).where(sql`${budgetSessionUsage.lastAt} >= ${sessionSince}`),
+  ]);
+  return {
+    accounts: accounts.map((a) => ({ accountId: a.accountId, provider: a.provider, label: a.label, status: a.status, detail: a.detail, authIndex: a.authIndex, updatedAt: a.updatedAt })),
+    meters: meters.map((m) => ({ accountId: m.accountId, windowName: m.windowName, windowMinutes: m.windowMinutes, usedPercent: m.usedPercent, resetsAt: m.resetsAt, status: m.status, observedAt: m.observedAt })),
+    ledger: ledger.map((l) => ({ hour: l.hour, authIndex: l.authIndex, provider: l.provider, model: l.model, source: l.source, requests: l.requests, failed: l.failed, inputTokens: l.inputTokens, outputTokens: l.outputTokens, reasoningTokens: l.reasoningTokens, cacheReadTokens: l.cacheReadTokens, cacheCreationTokens: l.cacheCreationTokens, totalTokens: l.totalTokens })),
+    sessions: sessions.map((s) => ({ sessionId: s.sessionId, authIndex: s.authIndex, provider: s.provider, model: s.model, requests: s.requests, inputTokens: s.inputTokens, outputTokens: s.outputTokens, reasoningTokens: s.reasoningTokens, cacheReadTokens: s.cacheReadTokens, cacheCreationTokens: s.cacheCreationTokens, totalTokens: s.totalTokens, firstAt: s.firstAt, lastAt: s.lastAt })),
+  };
 }

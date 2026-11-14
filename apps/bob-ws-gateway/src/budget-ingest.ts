@@ -6,7 +6,7 @@
  * (or a forged frame) can neither store a stray field such as an API key nor
  * write a partial oversized batch.
  */
-import type { BobSessionInput, MeterAccountInput, UsageBucketInput, upsertUsageBuckets } from "@bob/db";
+import type { BobSessionInput, BudgetAccountInput, MeterAccountInput, UsageBucketInput, upsertUsageBuckets } from "@bob/db";
 
 /** The database handle the @bob/db budget store writes through. */
 export type BudgetDb = Parameters<typeof upsertUsageBuckets>[0];
@@ -16,6 +16,7 @@ export interface BudgetStore {
   upsertUsageBuckets(db: BudgetDb, input: { workspaceId: string; hostId: string; buckets: UsageBucketInput[] }): Promise<number>;
   upsertBobSessions(db: BudgetDb, input: { workspaceId: string; hostId: string; sessions: BobSessionInput[] }): Promise<number>;
   recordMeterSamples(db: BudgetDb, input: { workspaceId: string; hostId: string; accounts: MeterAccountInput[] }): Promise<number>;
+  upsertBudgetAccounts(db: BudgetDb, input: { workspaceId: string; hostId: string; accounts: BudgetAccountInput[] }): Promise<number>;
 }
 
 interface Scope {
@@ -118,4 +119,20 @@ export async function ingestMeterSamples(db: BudgetDb, store: BudgetStore, scope
     return [{ id, provider, ...(authIndex ? { ref: { authIndex } } : {}), ...(accountMeters ? { meters: accountMeters } : {}), ...(Object.keys(modelMeters).length ? { modelMeters } : {}) }];
   });
   if (accounts.length) await store.recordMeterSamples(db, { ...scope, accounts });
+}
+
+/** Latest state of every proxy account on the heartbeat, metered or not. */
+export async function ingestAccountStates(db: BudgetDb, store: BudgetStore, scope: Scope, snapshot: HostSnapshotWire): Promise<void> {
+  const statuses = new Set(["ready", "cooldown", "disabled", "error"]);
+  const accounts = (snapshot.proxy?.accounts ?? []).slice(0, 200).flatMap((account): BudgetAccountInput[] => {
+    const id = text(account.id);
+    const provider = text(account.provider, 40);
+    const label = text(account.label) ?? "account";
+    const status = typeof account.status === "string" && statuses.has(account.status) ? account.status : undefined;
+    if (!id || !provider || !status) return [];
+    const authIndex = text(account.ref?.authIndex);
+    const detail = text(account.detail, 300);
+    return [{ id, provider, label, status, ...(detail ? { detail } : {}), ...(authIndex ? { ref: { authIndex } } : {}) }];
+  });
+  if (accounts.length) await store.upsertBudgetAccounts(db, { ...scope, accounts });
 }

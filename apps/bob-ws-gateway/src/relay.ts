@@ -37,8 +37,8 @@ import type { SessionEventRecord } from "./persistence.js";
 import { pushToUser } from "./push.js";
 import { workspaceOwnerId } from "./auth.js";
 import { ProxyAlertNotifier } from "./proxy-alert-notifier.js";
-import { ingestBudgetUsage, ingestMeterSamples, type BudgetStore } from "./budget-ingest.js";
-import { recordMeterSamples, upsertBobSessions, upsertUsageBuckets } from "@bob/db";
+import { ingestAccountStates, ingestBudgetUsage, ingestMeterSamples, type BudgetStore } from "./budget-ingest.js";
+import { recordMeterSamples, upsertBobSessions, upsertBudgetAccounts, upsertUsageBuckets } from "@bob/db";
 import { enqueueTransition } from "./outbox.js";
 import { parsePrUrl } from "./pr-url.js";
 import { orphanReapCutoffs } from "./reap-orphans.js";
@@ -163,7 +163,7 @@ export interface RelayConfig {
 
 
 
-const budgetStore: BudgetStore = { recordMeterSamples, upsertBobSessions, upsertUsageBuckets };
+const budgetStore: BudgetStore = { recordMeterSamples, upsertBobSessions, upsertBudgetAccounts, upsertUsageBuckets };
 
 export class Relay {
   private readonly cfg: RelayConfig;
@@ -890,6 +890,8 @@ export class Relay {
             // blocks or fails the heartbeat.
             void ingestMeterSamples(db, budgetStore, { workspaceId: conn.workspaceId, hostId: conn.hostId ?? "unknown" }, msg.hostSnapshot)
               .catch((error) => console.error("[relay] budget meter samples failed:", error instanceof Error ? error.message : error));
+            void ingestAccountStates(db, budgetStore, { workspaceId: conn.workspaceId, hostId: conn.hostId ?? "unknown" }, msg.hostSnapshot)
+              .catch((error) => console.error("[relay] budget account states failed:", error instanceof Error ? error.message : error));
           }
           await db
             .update(runnerLeases)

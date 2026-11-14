@@ -1332,6 +1332,9 @@ importers:
       '@bob/work-items':
         specifier: workspace:*
         version: link:../work-items
+      '@bob/ws':
+        specifier: workspace:*
+        version: link:../ws
       '@elevenlabs/client':
         specifier: ^0.13.0
         version: 0.13.1(@types/dom-mediacapture-record@1.0.22)

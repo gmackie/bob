@@ -8,7 +8,17 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PgliteDbHandle } from "./client-pglite.js";
 import { makePgliteDb } from "./client-pglite.js";
 import { applyMigrations, noop } from "./migrate.js";
-import { recordMeterSamples, upsertBobSessions, upsertUsageBuckets, type UsageBucketInput } from "./budget-store.js";
+import {
+  readBudgetPolicy,
+  readBudgetStateRows,
+  recordBudgetDecision,
+  recordMeterSamples,
+  upsertBobSessions,
+  upsertBudgetAccounts,
+  upsertUsageBuckets,
+  writeBudgetPolicy,
+  type UsageBucketInput,
+} from "./budget-store.js";
 
 const DRIZZLE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "drizzle");
 const WS = "4b0f8e5e-3a5c-4a52-9a7a-5d1d6c0b9f01";
@@ -37,8 +47,9 @@ describe("budget telemetry store", () => {
   beforeEach(async () => {
     handle = await makePgliteDb({ dataDir: ":memory:", bootstrap: false });
     dir = mkdtempSync(join(tmpdir(), "bob-budget-migration-"));
-    const filename = "0038_budget_telemetry.sql";
-    writeFileSync(join(dir, filename), readFileSync(join(DRIZZLE_DIR, filename), "utf8"));
+    for (const filename of ["0038_budget_telemetry.sql", "0039_budget_governor.sql"]) {
+      writeFileSync(join(dir, filename), readFileSync(join(DRIZZLE_DIR, filename), "utf8"));
+    }
     await applyMigrations({ client: handle.client, migrationsDir: dir, log: noop });
   });
 
@@ -137,5 +148,36 @@ describe("budget telemetry store", () => {
     expect(new Date(String(row.first_at)).toISOString()).toBe("2026-11-14T20:20:00.000Z");
     expect(new Date(String(row.last_at)).toISOString()).toBe("2026-11-14T20:40:00.000Z");
     expect((row.meters_last as Array<{ usedPercent: number }>)[0]!.usedPercent).toBe(49);
+  });
+
+  it("upserts account states and lets the latest heartbeat win", async () => {
+    await upsertBudgetAccounts(handle.db, { workspaceId: WS, hostId: HOST, accounts: [{ id: "auth-1", provider: "claude", label: "m…@x.com", status: "error", detail: "invalid grant", ref: { authIndex: "a2" } }] });
+    await upsertBudgetAccounts(handle.db, { workspaceId: WS, hostId: HOST, accounts: [{ id: "auth-1", provider: "claude", label: "m…@x.com", status: "ready" }] });
+    const rows = await handle.db.execute(sql`select status, detail, auth_index from budget_accounts`);
+    expect(rows.rows).toEqual([{ status: "ready", detail: null, auth_index: null }]);
+  });
+
+  it("writes the policy and records every change with its author", async () => {
+    expect(await readBudgetPolicy(handle.db)).toBeUndefined();
+    await writeBudgetPolicy(handle.db, { policy: { reservePct: 15 }, changedBy: "user-1" });
+    await writeBudgetPolicy(handle.db, { policy: { reservePct: 20 }, changedBy: "user-1", note: "more headroom" });
+    expect((await readBudgetPolicy(handle.db))?.policy).toEqual({ reservePct: 20 });
+    const changes = await handle.db.execute(sql`select before, after, note from budget_policy_changes order by id`);
+    expect(changes.rows).toEqual([
+      { before: {}, after: { reservePct: 15 }, note: null },
+      { before: { reservePct: 15 }, after: { reservePct: 20 }, note: "more headroom" },
+    ]);
+  });
+
+  it("records decisions and reads back the governor state window", async () => {
+    await recordBudgetDecision(handle.db, { enforce: false, mode: "run", totalSlots: 3, legacyBudget: 2, verdict: { a: 1 }, inputs: { b: 2 } });
+    const now = new Date("2026-11-14T21:00:00Z");
+    await upsertBudgetAccounts(handle.db, { workspaceId: WS, hostId: HOST, accounts: [{ id: "auth-0", provider: "claude", label: "m…@x.com", status: "ready", ref: { authIndex: "a1" } }] });
+    await upsertUsageBuckets(handle.db, { workspaceId: WS, hostId: HOST, buckets: [bucket(), bucket({ hour: "2026-11-10T00:00:00.000Z" })] });
+    const state = await readBudgetStateRows(handle.db, { now, accountMaxAgeHours: 1e6 });
+    expect(state.accounts.map((a) => a.accountId)).toEqual(["auth-0"]);
+    expect(state.ledger.map((l) => l.hour.toISOString())).toEqual(["2026-11-14T20:00:00.000Z"]);
+    const decisions = await handle.db.execute(sql`select total_slots, legacy_budget from budget_decisions`);
+    expect(decisions.rows).toEqual([{ total_slots: 3, legacy_budget: 2 }]);
   });
 });

@@ -19,6 +19,7 @@ const approvedMigrations = new Set([
   "0037_mcp_oauth.sql",
   // BOB-76: additive budget telemetry tables; no existing table is touched.
   "0038_budget_telemetry.sql",
+  "0039_budget_governor.sql",
 ]);
 interface MigrationHash {
   filename: string;
@@ -30,7 +31,7 @@ export function validateProductionMigrationLedger(
   ledger: MigrationHash[],
 ): void {
   const applied = new Map(ledger.map((entry) => [entry.filename, entry.hash]));
-  if (files.length !== 47 || files.at(-1)?.filename !== "0038_budget_telemetry.sql") {
+  if (files.length !== 48 || files.at(-1)?.filename !== "0039_budget_governor.sql") {
     throw new Error(
       "Production migration roster changed; review the deployment migration guard",
     );
