@@ -1,0 +1,21 @@
+{
+  "name": "@bob/sdlc-view",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "clean": "git clean -xdf .cache .turbo node_modules",
+    "generate": "node scripts/generate-contract.mjs --write",
+    "test": "node scripts/generate-contract.mjs --check && vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@bob/tsconfig": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "^4.1.11"
+  }
+}
