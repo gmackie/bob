@@ -29,6 +29,13 @@
       "id": "c1f467f772dc4ce99d99e572df74c121"
     }
   ],
+  // SDLC edge (worker/sdlc/edge-do.ts): one SQLite-backed Durable Object per
+  // coordinator workspace, holding the SDLC view and its viewers' websockets.
+  "durable_objects": {
+    "bindings": [{ "name": "SDLC_EDGE", "class_name": "SdlcEdge" }]
+  },
+  // Append new migrations; never edit or reorder an applied one.
+  "migrations": [{ "tag": "v1-sdlc-edge", "new_sqlite_classes": ["SdlcEdge"] }],
   "triggers": {
     // Autonomous backlog driver: every 5 minutes, dispatch ready work items up
     // to the concurrency cap + daily rate limit (see worker/index.ts scheduled).
@@ -102,6 +109,13 @@
     // ForgeGraph deployment by commitSha) and post 🚀/💥 to the card + a
     // deployment artifact on the work item. Needs BOB_FORGEJO_TOKEN; uses the
     // FG_API_TOKEN secret when present. Same on/off lever as the other drivers.
-    "BOB_DEPLOY_TRACKING_ENABLED": "true"
+    "BOB_DEPLOY_TRACKING_ENABLED": "true",
+    // SDLC edge. Filled in at deploy (BOB-75 Task 13): the coordinator's
+    // context.json workspaceId, and the user ids allowed to watch. While the
+    // workspace id is empty, /api/sdlc/* answers 503; an empty viewer list
+    // lets nobody watch. The exporter's token is the secret
+    // SDLC_EDGE_INGEST_TOKEN (wrangler secret put), NOT a var here.
+    "SDLC_EDGE_WORKSPACE_ID": "",
+    "SDLC_VIEWER_USER_IDS": ""
   }
 }

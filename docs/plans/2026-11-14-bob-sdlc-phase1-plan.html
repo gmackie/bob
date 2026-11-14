@@ -1,0 +1,1356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDLC edge phase 1</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--foreground, #202124); font: 14px/1.55 var(--font-sans, system-ui, sans-serif); }
+  main { width: 100%; min-width: 0; }
+  h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.02rem; margin: 1.6rem 0 .5rem; padding-bottom: .3rem; border-bottom: 1px solid var(--border, #d8dce2); }
+  h3 { font-size: .9rem; margin: 0; }
+  h4 { font-size: .82rem; margin: .9rem 0 .3rem; color: var(--muted-foreground, #606773); text-transform: uppercase; letter-spacing: .05em; }
+  p { max-width: 80ch; margin: .45rem 0; }
+  a { color: var(--accent-surface-foreground, #2458ac); }
+  .meta, .muted { color: var(--muted-foreground, #606773); }
+  .meta { font-size: .82rem; }
+  code { font-family: var(--font-mono, Menlo, monospace); font-size: .84em; background: var(--code-background, #f1f3f5); color: var(--code-foreground, #202124); border-radius: 4px; padding: .05rem .3rem; }
+  pre { font-family: var(--font-mono, Menlo, monospace); font-size: .76rem; line-height: 1.45; background: var(--code-background, #f1f3f5); color: var(--code-foreground, #202124); padding: .7rem .8rem; border-radius: var(--radius, .5rem); overflow-x: auto; margin: .35rem 0 .6rem; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+  th, td { text-align: left; vertical-align: top; padding: .4rem .5rem; border-bottom: 1px solid var(--border, #d8dce2); }
+  th { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted-foreground, #606773); }
+  ul, ol { padding-left: 1.2rem; }
+  .badge, .chip { display: inline-block; border-radius: 999px; padding: .06rem .5rem; font-size: .72rem; font-weight: 600; white-space: nowrap; vertical-align: middle; }
+  .badge { background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #2458ac); }
+  .chip.todo { background: var(--muted, #f1f3f5); color: var(--muted-foreground, #606773); }
+  .chip.area { background: color-mix(in srgb, var(--info, #1a73e8) 15%, transparent); color: var(--info, #1a73e8); }
+  .callout { border-left: 3px solid var(--accent, #2458ac); background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #1a2b4d); border-radius: 0 var(--radius, .5rem) var(--radius, .5rem) 0; padding: .6rem .85rem; margin: .7rem 0; }
+  .callout.warn { border-left-color: var(--warning, #e8a100); background: var(--warning-surface, #fff4d6); color: var(--warning-foreground, #7a5200); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: .6rem; }
+  .card { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .5rem); background: var(--card, #f7f8fa); padding: .65rem .75rem; }
+  .card .k { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-foreground, #606773); }
+  .card p { font-size: .84rem; margin: .25rem 0 0; }
+  .lanes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem; margin: .6rem 0; }
+  @media (max-width: 600px) { .lanes { grid-template-columns: 1fr 1fr; } }
+  .lane { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .5rem); padding: .5rem; background: var(--card, #f7f8fa); }
+  .lane b { display: block; font-size: .78rem; margin-bottom: .3rem; }
+  .lane span { display: block; font-size: .74rem; padding: .2rem .4rem; margin: .2rem 0; border-radius: 4px; background: var(--background, #fff); border: 1px solid var(--border, #d8dce2); }
+  details.task { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .5rem); background: var(--card, #f7f8fa); padding: .5rem .75rem; margin: .5rem 0; }
+  details.task > summary { cursor: pointer; display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; list-style: none; }
+  details.task > summary::-webkit-details-marker { display: none; }
+  details.task > summary::before { content: "▸"; color: var(--muted-foreground, #606773); }
+  details.task[open] > summary::before { content: "▾"; }
+  details.task > summary .n { font: 700 .75rem var(--font-mono, monospace); color: var(--accent, #2458ac); }
+  .files { font-size: .8rem; margin: .4rem 0; }
+  .files li { margin: .1rem 0; }
+  .step { margin: .2rem 0 .1rem; font-weight: 600; font-size: .84rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal { animation: rise .45s cubic-bezier(.2,.7,.3,1) both; animation-delay: calc(var(--i, 0) * 50ms); }
+    .lane span { animation: rise .4s ease-out both; animation-delay: calc(200ms + var(--i, 0) * 60ms); }
+    @keyframes rise { from { opacity: 0; transform: translateY(5px); } }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 class="reveal">SDLC edge: Phase 1 implementation plan <span class="badge">Ready to execute</span></h1>
+  <p class="meta reveal" style="--i:1">2026-11-14 · gmackie/bob @ master <code>4fe38915</code> · <a href="https://tasks.gmac.io/gmacko/issue/BOB-75">BOB-75</a> · design: <code>docs/plans/2026-11-14-bob-sdlc-state-machine.html</code> (rev 2)</p>
+
+  <div class="callout reveal" style="--i:2"><strong>For Claude:</strong> execute this task by task with <code>superpowers:executing-plans</code> or <code>superpowers:subagent-driven-development</code>. Every task is test-first: write the test, watch it fail, implement, watch it pass, commit.</div>
+
+  <p class="reveal" style="--i:3"><strong>Goal:</strong> a read-only, live <code>/sdlc</code> page in Bob that draws the durable coordinator's item state machine. It has a Fleet → Project → Repo → Item drill-down and a plan dependency view, and it's fed from hetzner-bob through a Cloudflare Durable Object.</p>
+  <p class="reveal" style="--i:4"><strong>Architecture:</strong> the coordinator's worker gains an <em>edge exporter</em> that copies Flightdeck's checkpointed outbound-push pattern. It sends a full snapshot once, then the plan and item snapshots changed since its checkpoint, to <code>POST /api/sdlc/ingest</code> on the Bob Worker. A per-workspace <code>SdlcEdge</code> Durable Object stores the latest snapshots, keeps a short delta log, and streams to browsers over hibernatable websockets. A new pure package, <code>@bob/sdlc-view</code>, holds the presentation spec (generated from the contract's enums), the reducer and the aggregations, so mobile and the TUI can reuse them in later phases. Projects come from BizPulse's existing <code>repos.list</code>.</p>
+  <p class="reveal" style="--i:5"><strong>Tech stack:</strong> Node 24 ESM and <code>node:test</code> (coordinator); TypeScript and Vitest 4 (<code>@bob/sdlc-view</code>, <code>apps/bob</code>); Cloudflare Durable Objects with SQLite storage and the WebSocket Hibernation API; vinext and React 19 for the page; jj for version control.</p>
+
+  <h2 class="reveal" style="--i:6">Decisions this plan relies on</h2>
+  <div class="grid reveal" style="--i:7">
+    <div class="card"><span class="k">Transport</span><p>In Phase 1 the exporter <strong>POSTs</strong> batches, as Flightdeck does, rather than holding a websocket. Data flows one way until commands arrive in Phase 2, which adds a command channel.</p></div>
+    <div class="card"><span class="k">Who can see it</span><p>The edge passes a verified Bob user id as the actor (<span class="chip todo">decided</span>). Phase 1 is read-only, so viewers are a user-id allow-list, <code>SDLC_VIEWER_USER_IDS</code>, following the existing <code>HERMES_OPERATOR_USER_IDS</code> pattern. Per-user actors arrive with commands.</p></div>
+    <div class="card"><span class="k">Projects</span><p>BizPulse owns the mapping (<span class="chip todo">decided</span>). <code>repos.list</code> already returns <code>startupId</code>, <code>startupName</code>, <code>provider</code> and <code>repoSlug</code>. An item is joined when <code>repository.integrationId = "forgegraph"</code> and <code>repositoryId</code> equals the slug or its last segment. Anything else goes under “Unassigned”. No BizPulse change is needed.</p></div>
+    <div class="card"><span class="k">Truth</span><p>The coordinator stays the only writer. The DO keeps only the newest snapshot per resource (by <code>resourceVersion</code>) and a watermark. When it notices a gap it asks for a fresh snapshot instead of guessing.</p></div>
+  </div>
+
+  <h2 class="reveal" style="--i:8">Task map</h2>
+  <div class="lanes">
+    <div class="lane"><b>Coordinator</b><span style="--i:0">1 · Edge exporter</span><span style="--i:1">2 · Worker <code>--edge</code></span></div>
+    <div class="lane"><b>@bob/sdlc-view</b><span style="--i:2">3 · Package + enum generator</span><span style="--i:3">4 · Presentation spec</span><span style="--i:4">5 · Reducer and aggregations</span></div>
+    <div class="lane"><b>Edge (Worker)</b><span style="--i:5">6 · Store and delta log</span><span style="--i:6">7 · Controller</span><span style="--i:7">8 · BizPulse topology</span><span style="--i:8">9 · DO, routes, wrangler</span></div>
+    <div class="lane"><b>Web and ship</b><span style="--i:9">10 · Live hook</span><span style="--i:10">11 · State graph</span><span style="--i:11">12 · /sdlc page and nav</span><span style="--i:12">13 · Deploy and verify</span></div>
+  </div>
+
+  <h2>Task 0 · Set up</h2>
+  <pre><code>cd ~/dev/bob/bob
+jj log -r master@forgejo -n1 --no-graph      # must show the current master tip, not a stale seed
+wt seed workspace add BOB-75-phase1
+cd ~/work/bob/BOB-75-phase1
+jj describe -m "BOB-75: SDLC edge phase 1"
+kanbanger issue view BOB-75                   # confirm In Progress</code></pre>
+  <p class="muted">All paths below are relative to <code>~/work/bob/BOB-75-phase1</code>. Commit with <code>jj commit -m "…"</code>, which closes the current change and starts a fresh one.</p>
+
+  <!-- ───────────────────────── Task 1 ───────────────────────── -->
+  <details class="task" open><summary><span class="n">Task 1</span><h3>Edge exporter in the coordinator</h3><span class="chip area">coordinator</span></summary>
+    <ul class="files"><li>Create: <code>packages/bob/coordination/runtime/edge.mjs</code></li><li>Test: <code>packages/bob/coordination/test/edge.test.mjs</code></li></ul>
+    <p class="step">Step 1: Write the failing tests</p>
+<pre><code>import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Coordinator } from '../runtime/coordinator.mjs';
+import { edgeExporter } from '../runtime/edge.mjs';
+
+const target = { environmentId: 'hetzner-bob', projectId: 'bob', repository: { integrationId: 'forgegraph', repositoryId: 'bob' } };
+const project = { integrationId: 'kanbanger', workspaceId: 'gmacko', teamId: 'GMA', projectId: 'bob' };
+const context = { workspaceId: 'gmacko', actorId: 'graham', targets: [target], issueProjects: [project] };
+const TOKEN = 't'.repeat(40), ENDPOINT = 'https://bob.test/api/sdlc/ingest';
+const create = (c, commandId, itemId) =&gt; c.call('CreatePlan', { contractVersion: '1', commandId, plan: { items: [{ itemId, issue: { ...project, issueId: `issue-${itemId}` }, target, issueSnapshotRef: `snap-${itemId}`, completionTarget: 'production' }], dependencies: [], concurrencyLimit: 2 } }, { idempotencyKey: commandId });
+
+function fixture(t) {
+  const dir = mkdtempSync(join(tmpdir(), 'bob-edge-'));
+  const coordinator = new Coordinator({ database: join(dir, 'coordination.sqlite'), context });
+  const batches = [];
+  let reply = body =&gt; ({ accepted: true, watermark: body.watermark });
+  let clock = 1_000;
+  const fetch = async (url, request) =&gt; {
+    assert.equal(url, ENDPOINT); assert.equal(request.redirect, 'error');
+    assert.equal(request.headers.Authorization, `Bearer ${TOKEN}`);
+    const body = JSON.parse(request.body); batches.push(body);
+    return Response.json(reply(body));
+  };
+  t.after(() =&gt; { coordinator.close(); rmSync(dir, { recursive: true, force: true }); });
+  return {
+    coordinator, batches,
+    options: { coordinator, endpoint: ENDPOINT, token: TOKEN, checkpoint: join(dir, 'edge.sqlite'), fetch, now: () =&gt; clock },
+    setReply: fn =&gt; { reply = fn; }, tick: ms =&gt; { clock += ms; },
+  };
+}
+
+test('first flush sends a full snapshot and checkpoints its watermark', async t =&gt; {
+  const f = fixture(t); create(f.coordinator, 'c1', 'item-1');
+  const exporter = edgeExporter(f.options);
+  assert.deepEqual(await exporter.flush(), { kind: 'snapshot', sent: 2 });
+  const [batch] = f.batches;
+  assert.equal(batch.contractVersion, '1');
+  assert.equal(batch.plans.length, 1); assert.equal(batch.items[0].itemId, 'item-1');
+  assert.equal(batch.watermark, f.coordinator.watermark());
+  assert.deepEqual(await exporter.flush(), { kind: 'idle', sent: 0 });
+  exporter.close();
+});
+
+test('later flushes send only changed resources, once each, from the checkpoint', async t =&gt; {
+  const f = fixture(t); create(f.coordinator, 'c1', 'item-1');
+  const exporter = edgeExporter(f.options); await exporter.flush();
+  const planId = f.batches[0].plans[0].planId;
+  f.coordinator.call('ControlPlan', { contractVersion: '1', commandId: 'c2', planId, expectedVersion: 1, action: 'start' }, { idempotencyKey: 'c2' });
+  assert.deepEqual(await exporter.flush(), { kind: 'changes', sent: 2 });
+  const batch = f.batches[1];
+  assert.equal(batch.fromSequence, f.batches[0].watermark);
+  assert.equal(batch.plans[0].state, 'active');
+  assert.equal(batch.items[0].state, 'ready');
+  exporter.close();
+});
+
+test('a restarted exporter resends a rejected batch unchanged', async t =&gt; {
+  const f = fixture(t); create(f.coordinator, 'c1', 'item-1');
+  f.setReply(() =&gt; ({ accepted: false }));
+  let exporter = edgeExporter(f.options);
+  await assert.rejects(exporter.flush(), /did not accept/); exporter.close();
+  f.setReply(body =&gt; ({ accepted: true, watermark: body.watermark }));
+  exporter = edgeExporter(f.options); await exporter.flush();
+  assert.deepEqual(f.batches[0], f.batches[1]);
+  exporter.close();
+});
+
+test('idle exporters send heartbeats, and the edge can demand a fresh snapshot', async t =&gt; {
+  const f = fixture(t); create(f.coordinator, 'c1', 'item-1');
+  const exporter = edgeExporter(f.options); await exporter.flush();
+  f.tick(31_000);
+  assert.deepEqual(await exporter.flush(), { kind: 'heartbeat', sent: 0 });
+  f.setReply(() =&gt; ({ accepted: false, resync: true })); f.tick(31_000);
+  await assert.rejects(exporter.flush(), /snapshot/);
+  f.setReply(body =&gt; ({ accepted: true, watermark: body.watermark }));
+  assert.equal((await exporter.flush()).kind, 'snapshot');
+  exporter.close();
+});
+
+test('unsafe configuration is refused', t =&gt; {
+  const f = fixture(t);
+  for (const endpoint of ['http://bob.test/api/sdlc/ingest', 'https://u:p@bob.test/api/sdlc/ingest', 'https://bob.test/api/sdlc/ingest?x=1', 'https://bob.test/other']) {
+    assert.throws(() =&gt; edgeExporter({ ...f.options, endpoint }));
+  }
+  assert.throws(() =&gt; edgeExporter({ ...f.options, token: 'short' }));
+  assert.throws(() =&gt; edgeExporter({ ...f.options, checkpoint: ':memory:' }));
+});</code></pre>
+    <p class="step">Step 2: Run the tests and confirm they fail</p>
+    <pre><code>cd packages/bob/coordination &amp;&amp; node --test test/edge.test.mjs
+# Expected: FAIL with ERR_MODULE_NOT_FOUND for ../runtime/edge.mjs</code></pre>
+    <p class="step">Step 3: Implement</p>
+<pre><code>import { DatabaseSync } from 'node:sqlite';
+import { readFileSync, realpathSync, existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const HEARTBEAT_MS = 30_000;
+
+/** Pushes coordinator plan and item snapshots to Bob's SdlcEdge. Read-only:
+ * it never changes domain state, and keeps its checkpoint in a separate database. */
+export function edgeExporter({ coordinator, endpoint, token, checkpoint, fetch: send = fetch, timeoutMs = 5000, now = Date.now }) {
+  const url = new URL(endpoint);
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/api/sdlc/ingest') throw new Error('Edge needs an HTTPS /api/sdlc/ingest endpoint');
+  if (!/^[A-Za-z0-9_-]{32,256}$/.test(token ?? '') || !checkpoint || checkpoint === ':memory:') throw new Error('Invalid edge configuration');
+  const source = coordinator.db.prepare('PRAGMA database_list').all().find(row =&gt; row.name === 'main')?.file;
+  const destination = existsSync(checkpoint) ? realpathSync(checkpoint) : resolve(checkpoint);
+  if (source &amp;&amp; realpathSync(source) === destination) throw new Error('Edge checkpoint must be a separate database');
+  const db = new DatabaseSync(checkpoint);
+  db.exec('CREATE TABLE IF NOT EXISTS edge_checkpoint (owner TEXT PRIMARY KEY, position INTEGER NOT NULL, sent_at INTEGER NOT NULL)');
+  const owner = JSON.stringify([coordinator.tenant, coordinator.owner, url.href]);
+  const read = () =&gt; db.prepare('SELECT position, sent_at FROM edge_checkpoint WHERE owner=?').get(owner);
+  const save = position =&gt; db.prepare('INSERT INTO edge_checkpoint VALUES (?,?,?) ON CONFLICT(owner) DO UPDATE SET position=excluded.position, sent_at=excluded.sent_at').run(owner, position, now());
+  const reset = () =&gt; db.prepare('DELETE FROM edge_checkpoint WHERE owner=?').run(owner);
+  const q = (name, body) =&gt; coordinator.call(name, { contractVersion: '1', ...body });
+
+  function snapshot() {
+    // Read the watermark first: anything written during the scan is re-sent as a change.
+    const watermark = coordinator.watermark(), plans = [], items = [];
+    let afterPlanId = null;
+    do {
+      const page = q('ListPlans', { limit: 50, ...(afterPlanId ? { afterPlanId } : {}) });
+      for (const entry of page.plans) {
+        const plan = q('GetPlan', { resourceId: entry.planId });
+        plans.push(plan);
+        for (const summary of plan.items) items.push(q('GetItem', { resourceId: summary.itemId }).item);
+      }
+      afterPlanId = page.nextPlanId;
+    } while (afterPlanId);
+    return { kind: 'snapshot', watermark, plans, items };
+  }
+
+  function changes(position) {
+    const page = q('ReadEvents', { cursor: coordinator.cursor(position), limit: 100 });
+    if (!page.events.length) return null;
+    const plans = [], items = [];
+    for (const id of new Set(page.events.map(event =&gt; event.resourceId))) {
+      try { items.push(q('GetItem', { resourceId: id }).item); }
+      catch (error) { if (error.code !== 'NotFound') throw error; plans.push(q('GetPlan', { resourceId: id })); }
+    }
+    return { kind: 'changes', fromSequence: position, watermark: page.events.at(-1).sequence, plans, items };
+  }
+
+  async function post(batch) {
+    const response = await send(url.href, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contractVersion: '1', ...batch }) });
+    if (!response.ok) { await response.body?.cancel(); throw new Error('Edge unavailable'); }
+    const result = await response.json();
+    if (result.resync === true) { reset(); throw new Error('Edge requested a fresh snapshot'); }
+    if (result.accepted !== true || result.watermark !== batch.watermark) throw new Error('Edge did not accept the batch');
+  }
+
+  return {
+    async flush() {
+      const state = read();
+      let batch = null;
+      if (!state) batch = snapshot();
+      else {
+        try { batch = changes(state.position); }
+        catch (error) { if (error.code !== 'CursorExpired') throw error; batch = snapshot(); }
+        if (!batch) {
+          if (now() - state.sent_at &lt; HEARTBEAT_MS) return { kind: 'idle', sent: 0 };
+          batch = { kind: 'heartbeat', watermark: state.position, plans: [], items: [] };
+        }
+      }
+      await post(batch);
+      save(batch.watermark);
+      return { kind: batch.kind, sent: batch.plans.length + batch.items.length };
+    },
+    close() { db.close(); },
+  };
+}
+
+export function loadEdgeConfig(path, env = process.env) {
+  const config = JSON.parse(readFileSync(path, 'utf8'));
+  if (typeof config.tokenEnv !== 'string' || !/^[A-Z][A-Z0-9_]*$/.test(config.tokenEnv)) throw new Error('Edge tokenEnv is required');
+  return { endpoint: config.endpoint, checkpoint: config.checkpoint, token: env[config.tokenEnv] };
+}</code></pre>
+    <p class="step">Step 4: Run the tests and confirm they pass</p>
+    <pre><code>node --test test/edge.test.mjs        # Expected: 5 passing
+npm run verify                         # generated artifacts unchanged, all suites green</code></pre>
+    <p class="step">Step 5: Commit</p>
+    <pre><code>jj commit -m "BOB-75: coordinator edge exporter (snapshot, changes, heartbeat, resync)"</code></pre>
+  </details>
+
+  <!-- ───────────────────────── Task 2 ───────────────────────── -->
+  <details class="task"><summary><span class="n">Task 2</span><h3>Run the exporter from the worker loop</h3><span class="chip area">coordinator</span></summary>
+    <ul class="files"><li>Modify: <code>packages/bob/coordination/runtime/worker.mjs</code> (lines 17–48 loop, 59–75 <code>main</code>)</li><li>Modify: <code>deploy/coordination/bob-coordinator-worker.service</code></li><li>Test: <code>packages/bob/coordination/test/worker.test.mjs</code></li></ul>
+    <p class="step">Step 1: Failing test, appended to <code>test/worker.test.mjs</code></p>
+<pre><code>test('edge failure does not stop dispatch or leak its exception', async () =&gt; {
+  const controller = new AbortController(), lines = []; let calls = 0;
+  await runWorker({ coordinator: { dispatchOne: async () =&gt; { calls++; return { dispatched: false }; } }, port: {}, intervalMs: 10, signal: controller.signal,
+    edge: { flush: async () =&gt; { controller.abort(); throw new Error('SECRET'); } }, log: line =&gt; lines.push(line) });
+  assert.equal(calls, 1);
+  assert(lines.some(line =&gt; line.step === 'edge' &amp;&amp; line.outcome === 'unavailable'));
+  assert(!JSON.stringify(lines).includes('SECRET'));
+});</code></pre>
+    <pre><code>node --test test/worker.test.mjs     # Expected: FAIL, no 'edge' step logged</code></pre>
+    <p class="step">Step 2: Implement. Factor Flightdeck's backoff into a helper both exporters use</p>
+<pre><code>// worker.mjs, above runWorker
+const exporterState = () =&gt; ({ failures: 0, retryAt: 0 });
+async function flushExporter(step, exporter, state, log) {
+  if (!exporter || Date.now() &lt; state.retryAt) return;
+  try {
+    const result = await exporter.flush();
+    state.failures = 0; state.retryAt = 0;
+    const count = result.exported ?? result.sent ?? 0;
+    if (count) log({ at: new Date().toISOString(), step, outcome: 'exported', count });
+  } catch {
+    state.retryAt = Date.now() + Math.min(1000 * 2 ** Math.min(state.failures++, 6), 60000);
+    log({ at: new Date().toISOString(), step, outcome: 'unavailable' });
+  }
+}
+
+// runWorker signature: add `edge` next to `flightdeck`
+// replace `let failures = 0, analyticsFailures = 0, analyticsRetryAt = 0;` with:
+let failures = 0; const analytics = exporterState(), edgeState = exporterState();
+// replace the whole `if (flightdeck &amp;&amp; Date.now() &gt;= analyticsRetryAt) { … }` block with:
+await flushExporter('flightdeck', flightdeck, analytics, log);
+await flushExporter('edge', edge, edgeState, log);
+
+// main(): add `edge: { type: 'string' }` to parseArgs options and to the --help text, then:
+let edge;
+if (values.edge) {
+  try { edge = edgeExporter({ coordinator, ...loadEdgeConfig(values.edge) }); }
+  catch { console.error(JSON.stringify({ at: new Date().toISOString(), step: 'edge', outcome: 'configuration-unavailable' })); }
+}
+// pass `edge` to runWorker, and add `edge?.close();` to the finally block
+// import { edgeExporter, loadEdgeConfig } from './edge.mjs';</code></pre>
+    <p class="step">Step 3: Wire it into the systemd unit (config only; the deploy happens in Task 13)</p>
+<pre><code># deploy/coordination/bob-coordinator-worker.service, [Service]
+EnvironmentFile=/etc/bob/coordination/edge.env
+ExecStart=… existing flags … --edge /etc/bob/coordination/edge.json</code></pre>
+    <p class="step">Step 4: Verify and commit</p>
+    <pre><code>node --test test/worker.test.mjs test/flightdeck.test.mjs   # Expected: all pass (Flightdeck behaviour unchanged)
+npm run verify
+jj commit -m "BOB-75: run the edge exporter from the coordinator worker"</code></pre>
+  </details>
+
+  <!-- ───────────────────────── Task 3 ───────────────────────── -->
+  <details class="task"><summary><span class="n">Task 3</span><h3><code>@bob/sdlc-view</code> package and contract enum generator</h3><span class="chip area">sdlc-view</span></summary>
+    <ul class="files"><li>Create: <code>packages/bob/src/sdlc-view/package.json</code>, <code>tsconfig.json</code>, <code>vitest.config.ts</code></li><li>Create: <code>packages/bob/src/sdlc-view/scripts/generate-contract.mjs</code></li><li>Create (generated): <code>packages/bob/src/sdlc-view/src/generated/contract.ts</code></li><li>Create: <code>packages/bob/src/sdlc-view/src/index.ts</code></li></ul>
+    <p class="step">Step 1: Scaffold the package (the <code>packages/bob/src/*</code> glob already covers it)</p>
+<pre><code>{
+  "name": "@bob/sdlc-view",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "generate": "node scripts/generate-contract.mjs --write",
+    "test": "node scripts/generate-contract.mjs --check &amp;&amp; vitest run",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false"
+  },
+  "devDependencies": { "@bob/tsconfig": "workspace:*", "typescript": "catalog:", "vitest": "^4.1.11" }
+}</code></pre>
+<pre><code>// tsconfig.json
+{ "extends": "@bob/tsconfig/compiled-package.json", "include": ["src", "test"], "exclude": ["node_modules"] }
+// vitest.config.ts
+import { defineConfig } from "vitest/config";
+export default defineConfig({ test: { environment: "node", include: ["test/**/*.test.ts"] } });</code></pre>
+    <p class="step">Step 2: Generator. It reads the coordinator's OpenAPI, so the enums can't drift</p>
+<pre><code>import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+
+const api = JSON.parse(readFileSync(new URL('../../../coordination/generated/openapi.json', import.meta.url)));
+const out = new URL('../src/generated/contract.ts', import.meta.url);
+const response = path =&gt; api.paths[path].post.responses['200'].content['application/json'].schema;
+const item = response('/api/v1/coordination/items/query').properties.item.properties;
+const plan = response('/api/v1/coordination/plans/query').properties;
+const list = (name, values) =&gt; `export const ${name} = ${JSON.stringify(values)} as const;\n`;
+const source = '// Generated from packages/bob/coordination/generated/openapi.json. Do not edit.\n'
+  + '// Regenerate: pnpm --filter @bob/sdlc-view generate\n'
+  + list('ITEM_STATES', item.state.enum)
+  + list('PLAN_STATES', plan.state.enum)
+  + list('MILESTONES', item.achievedMilestones.items.enum)
+  + 'export type ItemState = (typeof ITEM_STATES)[number];\n'
+  + 'export type PlanState = (typeof PLAN_STATES)[number];\n'
+  + 'export type Milestone = (typeof MILESTONES)[number];\n';
+if (process.argv.includes('--write')) { mkdirSync(new URL('.', out), { recursive: true }); writeFileSync(out, source); }
+else if (readFileSync(out, 'utf8') !== source) {
+  console.error('src/generated/contract.ts is stale; run: pnpm --filter @bob/sdlc-view generate'); process.exit(1);
+}</code></pre>
+    <p class="step">Step 3: Generate, check, export</p>
+    <pre><code>pnpm install
+pnpm --filter @bob/sdlc-view generate
+node packages/bob/src/sdlc-view/scripts/generate-contract.mjs --check   # Expected: exit 0
+grep -c '"waiting-input"' packages/bob/src/sdlc-view/src/generated/contract.ts   # Expected: 1</code></pre>
+<pre><code>// src/index.ts (grows in Tasks 4–5)
+export * from "./generated/contract";</code></pre>
+    <pre><code>jj commit -m "BOB-75: @bob/sdlc-view package with generated coordinator enums"</code></pre>
+  </details>
+
+  <!-- ───────────────────────── Task 4 ───────────────────────── -->
+  <details class="task"><summary><span class="n">Task 4</span><h3>Presentation spec</h3><span class="chip area">sdlc-view</span></summary>
+    <ul class="files"><li>Create: <code>packages/bob/src/sdlc-view/src/presentation.ts</code></li><li>Test: <code>packages/bob/src/sdlc-view/test/presentation.test.ts</code></li></ul>
+    <p class="step">Step 1: Failing test</p>
+<pre><code>import { describe, expect, it } from "vitest";
+import { ITEM_STATES, MILESTONES } from "../src/generated/contract";
+import { MILESTONE_LABEL, STATE_EDGES, STATE_PRESENTATION } from "../src/presentation";
+
+describe("presentation spec", () =&gt; {
+  it("covers every coordinator item state exactly", () =&gt; {
+    expect(Object.keys(STATE_PRESENTATION).sort()).toEqual([...ITEM_STATES].sort());
+  });
+  it("labels every milestone", () =&gt; {
+    expect(Object.keys(MILESTONE_LABEL).sort()).toEqual([...MILESTONES].sort());
+  });
+  it("gives every state its own grid cell", () =&gt; {
+    const cells = Object.values(STATE_PRESENTATION).map((s) =&gt; `${s.col}:${s.row}`);
+    expect(new Set(cells).size).toBe(cells.length);
+  });
+  it("draws edges only between known states", () =&gt; {
+    for (const edge of STATE_EDGES) {
+      expect(ITEM_STATES).toContain(edge.from);
+      expect(ITEM_STATES).toContain(edge.to);
+    }
+  });
+});</code></pre>
+    <pre><code>pnpm --filter @bob/sdlc-view test    # Expected: FAIL, cannot resolve ../src/presentation</code></pre>
+    <p class="step">Step 2: Check the edges against the real transitions</p>
+    <p class="muted">Before writing <code>STATE_EDGES</code>, read <code>packages/bob/coordination/runtime/execution.mjs</code> (<code>reserve</code>, <code>receive</code>, <code>readyDependents</code>, <code>dispatchOne</code>) and keep only transitions the code actually performs. The list below is the expected starting point; delete any edge the code doesn't produce.</p>
+    <p class="step">Step 3: Implement</p>
+<pre><code>import type { ItemState, Milestone } from "./generated/contract";
+
+export type Owner = "system" | "agent" | "human" | "terminal";
+export type Attention = "ok" | "needs_human" | "stalled" | "failed";
+export interface StatePresentation { label: string; owner: Owner; attention: Attention; col: number; row: number; hint: string }
+
+export const STATE_PRESENTATION = {
+  pending:             { label: "Pending",           owner: "system",   attention: "ok",          col: 0, row: 0, hint: "dependencies unmet" },
+  ready:               { label: "Ready",             owner: "system",   attention: "ok",          col: 1, row: 0, hint: "waiting for capacity" },
+  reserved:            { label: "Reserved",          owner: "system",   attention: "ok",          col: 2, row: 0, hint: "T3 admission" },
+  running:             { label: "Running",           owner: "agent",    attention: "ok",          col: 3, row: 0, hint: "attempt in a T3 thread" },
+  "waiting-input":     { label: "Waiting for input", owner: "human",    attention: "needs_human", col: 3, row: 1, hint: "an agent asked a question" },
+  "execution-unknown": { label: "Execution unknown", owner: "system",   attention: "stalled",     col: 2, row: 1, hint: "needs reconcile" },
+  validating:          { label: "Validating",        owner: "system",   attention: "ok",          col: 4, row: 0, hint: "CI and validation receipt" },
+  review:              { label: "Review",            owner: "human",    attention: "needs_human", col: 4, row: 2, hint: "PR, approve, merge" },
+  deploying:           { label: "Deploying",         owner: "system",   attention: "ok",          col: 3, row: 2, hint: "deploy and promote" },
+  completed:           { label: "Completed",         owner: "system",   attention: "ok",          col: 2, row: 2, hint: "completion target met" },
+  failed:              { label: "Failed",            owner: "terminal", attention: "failed",      col: 0, row: 3, hint: "retry starts a new attempt" },
+  cancelling:          { label: "Cancelling",        owner: "terminal", attention: "ok",          col: 1, row: 3, hint: "" },
+  cancelled:           { label: "Cancelled",         owner: "terminal", attention: "ok",          col: 2, row: 3, hint: "" },
+} as const satisfies Record&lt;ItemState, StatePresentation&gt;;
+
+export const STATE_EDGES: ReadonlyArray&lt;{ from: ItemState; to: ItemState; loop?: true }&gt; = [
+  { from: "pending", to: "ready" }, { from: "ready", to: "reserved" }, { from: "reserved", to: "running" },
+  { from: "running", to: "waiting-input" }, { from: "waiting-input", to: "running", loop: true },
+  { from: "running", to: "execution-unknown" }, { from: "execution-unknown", to: "running", loop: true },
+  { from: "running", to: "validating" }, { from: "validating", to: "review" }, { from: "validating", to: "completed" },
+  { from: "review", to: "deploying" }, { from: "review", to: "completed" }, { from: "deploying", to: "completed" },
+];
+
+export const MILESTONE_LABEL = {
+  "execution-succeeded": "exec ✓", "review-ready": "review-ready", merged: "merged", "production-verified": "prod-verified",
+} as const satisfies Record&lt;Milestone, string&gt;;</code></pre>
+<pre><code>// src/index.ts
+export * from "./generated/contract";
+export * from "./presentation";</code></pre>
+    <pre><code>pnpm --filter @bob/sdlc-view test        # Expected: 4 passing
+pnpm --filter @bob/sdlc-view typecheck
+jj commit -m "BOB-75: SDLC presentation spec over coordinator states"</code></pre>
+  </details>
+
+  <!-- ───────────────────────── Task 5 ───────────────────────── -->
+  <details class="task"><summary><span class="n">Task 5</span><h3>Reducer, project join, aggregations, plan layers</h3><span class="chip area">sdlc-view</span></summary>
+    <ul class="files"><li>Create: <code>packages/bob/src/sdlc-view/src/model.ts</code></li><li>Test: <code>packages/bob/src/sdlc-view/test/model.test.ts</code></li></ul>
+    <p class="step">Step 1: Failing tests</p>
+<pre><code>import { describe, expect, it } from "vitest";
+import { countsByState, emptyView, groupRows, isOffline, planLayers, projectFor, reduce, rows, type ItemSnapshot, type PlanSnapshot } from "../src/model";
+
+const target = (repositoryId: string) =&gt; ({ environmentId: "hetzner-bob", projectId: "p", repository: { integrationId: "forgegraph", repositoryId } });
+const issue = { integrationId: "kanbanger", workspaceId: "gmacko", teamId: "GMA", projectId: "bob", issueId: "i" };
+const plan = (planId: string, ids: string[], deps: Array&lt;[string, string]&gt; = [], repo = "bob"): PlanSnapshot =&gt; ({
+  planId, resourceVersion: 1, state: "active",
+  definition: { items: ids.map((itemId) =&gt; ({ itemId, issue, target: target(repo), completionTarget: "production" })),
+    dependencies: deps.map(([u, d]) =&gt; ({ upstreamItemId: u, downstreamItemId: d, requiredMilestone: "merged" as const })), concurrencyLimit: 2 },
+});
+const item = (itemId: string, planId: string, state: ItemSnapshot["state"], resourceVersion = 1): ItemSnapshot =&gt;
+  ({ itemId, planId, resourceVersion, state, currentAttemptId: null, execution: null, achievedMilestones: [], operationIds: [], evidenceRefs: [] });
+const topology = [{ startupId: "s1", startupName: "Bob", repoSlug: "gmackie/bob" }];
+
+describe("reduce", () =&gt; {
+  it("replaces everything on a snapshot and keeps only newer versions on a delta", () =&gt; {
+    let view = reduce(emptyView(), { type: "snapshot", seq: 1, plans: [plan("p1", ["a"])], items: [item("a", "p1", "ready", 2)], topology, coordinatorSeenAt: 10 });
+    view = reduce(view, { type: "delta", seq: 2, plans: [], items: [item("a", "p1", "pending", 1)], coordinatorSeenAt: 20 });
+    expect(view.items.a.state).toBe("ready");
+    view = reduce(view, { type: "delta", seq: 3, plans: [], items: [item("a", "p1", "running", 3)], coordinatorSeenAt: 30 });
+    expect(view.items.a.state).toBe("running");
+    expect(view.seq).toBe(3);
+    view = reduce(view, { type: "snapshot", seq: 4, plans: [], items: [], topology: [], coordinatorSeenAt: 40 });
+    expect(view.items).toEqual({});
+  });
+});
+
+describe("projectFor", () =&gt; {
+  it("matches a ForgeGraph repository by full slug or last segment", () =&gt; {
+    expect(projectFor(topology, { integrationId: "forgegraph", repositoryId: "bob" }).startupId).toBe("s1");
+    expect(projectFor(topology, { integrationId: "forgegraph", repositoryId: "gmackie/bob" }).startupId).toBe("s1");
+  });
+  it("puts anything else under Unassigned", () =&gt; {
+    expect(projectFor(topology, { integrationId: "github", repositoryId: "bob" }).startupId).toBe("unassigned");
+    expect(projectFor(topology, { integrationId: "forgegraph", repositoryId: "other" }).startupId).toBe("unassigned");
+  });
+});
+
+describe("aggregations", () =&gt; {
+  const view = reduce(emptyView(), { type: "snapshot", seq: 1, topology, coordinatorSeenAt: 0,
+    plans: [plan("p1", ["a", "b"]), plan("p2", ["c"], [], "other")],
+    items: [item("a", "p1", "running"), item("b", "p1", "waiting-input"), item("c", "p2", "running")] });
+  it("counts items per state, with zeros for empty states", () =&gt; {
+    const counts = countsByState(rows(view));
+    expect(counts.running).toBe(2); expect(counts["waiting-input"]).toBe(1); expect(counts.completed).toBe(0);
+  });
+  it("groups by project with attention counts", () =&gt; {
+    const groups = groupRows(rows(view), "project");
+    expect(groups.map((g) =&gt; [g.label, g.count, g.attention])).toEqual([["Bob", 2, 1], ["Unassigned", 1, 0]]);
+  });
+});
+
+describe("planLayers", () =&gt; {
+  it("layers a diamond by longest dependency path", () =&gt; {
+    const diamond = plan("p", ["a", "b", "c", "d"], [["a", "b"], ["a", "c"], ["b", "d"], ["c", "d"]]);
+    expect(planLayers(diamond)).toEqual([["a"], ["b", "c"], ["d"]]);
+  });
+});
+
+describe("isOffline", () =&gt; {
+  it("is offline when the coordinator hasn't been heard from for 90 s", () =&gt; {
+    expect(isOffline({ ...emptyView(), coordinatorSeenAt: null }, 0)).toBe(true);
+    expect(isOffline({ ...emptyView(), coordinatorSeenAt: 1_000 }, 60_000)).toBe(false);
+    expect(isOffline({ ...emptyView(), coordinatorSeenAt: 1_000 }, 92_000)).toBe(true);
+  });
+});</code></pre>
+    <pre><code>pnpm --filter @bob/sdlc-view test   # Expected: FAIL, cannot resolve ../src/model</code></pre>
+    <p class="step">Step 2: Implement</p>
+<pre><code>import { ITEM_STATES, type ItemState, type Milestone, type PlanState } from "./generated/contract";
+import { STATE_PRESENTATION, type Attention } from "./presentation";
+
+export interface RepositoryRef { integrationId: string; repositoryId: string }
+export interface ExecutionTarget { environmentId: string; projectId: string; repository: RepositoryRef }
+export interface ThreadRef { environmentId: string; projectId: string; threadId: string; turnId?: string | null }
+export interface IssueRef { integrationId: string; workspaceId: string; teamId: string; projectId: string; issueId: string; identifier?: string | null; url?: string | null }
+export interface PlanSnapshot {
+  planId: string; resourceVersion: number; state: PlanState;
+  definition: {
+    items: Array&lt;{ itemId: string; issue: IssueRef; target: ExecutionTarget; completionTarget: string }&gt;;
+    dependencies: Array&lt;{ upstreamItemId: string; downstreamItemId: string; requiredMilestone: Milestone }&gt;;
+    concurrencyLimit: number;
+  };
+}
+export interface ItemSnapshot {
+  itemId: string; planId: string; resourceVersion: number; state: ItemState; currentAttemptId?: string | null;
+  execution?: { attemptId: string; target: ExecutionTarget; thread: ThreadRef } | null;
+  achievedMilestones: Milestone[]; operationIds: string[]; evidenceRefs: string[];
+}
+export interface TopologyRepo { startupId: string; startupName: string; repoSlug: string }
+export interface EdgeView { seq: number; plans: Record&lt;string, PlanSnapshot&gt;; items: Record&lt;string, ItemSnapshot&gt;; topology: TopologyRepo[]; coordinatorSeenAt: number | null }
+export type EdgeMessage =
+  | { type: "snapshot"; seq: number; plans: PlanSnapshot[]; items: ItemSnapshot[]; topology: TopologyRepo[]; coordinatorSeenAt: number | null }
+  | { type: "delta"; seq: number; plans: PlanSnapshot[]; items: ItemSnapshot[]; coordinatorSeenAt: number | null }
+  | { type: "status"; coordinatorSeenAt: number | null };
+
+export const emptyView = (): EdgeView =&gt; ({ seq: 0, plans: {}, items: {}, topology: [], coordinatorSeenAt: null });
+const newer = &lt;T extends { resourceVersion: number }&gt;(current: T | undefined, next: T) =&gt; !current || next.resourceVersion &gt; current.resourceVersion;
+
+export function reduce(view: EdgeView, message: EdgeMessage): EdgeView {
+  if (message.type === "status") return { ...view, coordinatorSeenAt: message.coordinatorSeenAt };
+  const base = message.type === "snapshot" ? { ...emptyView(), topology: message.topology } : view;
+  const plans = { ...base.plans }, items = { ...base.items };
+  for (const p of message.plans) if (newer(plans[p.planId], p)) plans[p.planId] = p;
+  for (const i of message.items) if (newer(items[i.itemId], i)) items[i.itemId] = i;
+  return { ...base, seq: message.seq, plans, items, coordinatorSeenAt: message.coordinatorSeenAt };
+}
+
+export const UNASSIGNED = { startupId: "unassigned", startupName: "Unassigned" } as const;
+export function projectFor(topology: TopologyRepo[], ref: RepositoryRef): { startupId: string; startupName: string } {
+  if (ref.integrationId !== "forgegraph") return UNASSIGNED;
+  const id = ref.repositoryId.toLowerCase();
+  const hit = topology.find((repo) =&gt; { const slug = repo.repoSlug.toLowerCase(); return slug === id || slug.split("/").at(-1) === id; });
+  return hit ? { startupId: hit.startupId, startupName: hit.startupName } : UNASSIGNED;
+}
+
+export interface Row { item: ItemSnapshot; plan: PlanSnapshot; target: ExecutionTarget; issue: IssueRef; startupId: string; startupName: string; attention: Attention }
+export function rows(view: EdgeView): Row[] {
+  const out: Row[] = [];
+  for (const item of Object.values(view.items)) {
+    const plan = view.plans[item.planId];
+    const def = plan?.definition.items.find((d) =&gt; d.itemId === item.itemId);
+    if (!plan || !def) continue;
+    out.push({ item, plan, target: def.target, issue: def.issue, ...projectFor(view.topology, def.target.repository), attention: STATE_PRESENTATION[item.state].attention });
+  }
+  return out;
+}
+
+export interface Scope { startupId?: string; repositoryId?: string }
+export const inScope = (row: Row, scope: Scope) =&gt;
+  (!scope.startupId || row.startupId === scope.startupId) &amp;&amp; (!scope.repositoryId || row.target.repository.repositoryId === scope.repositoryId);
+
+export function countsByState(list: Row[]): Record&lt;ItemState, number&gt; {
+  const counts = Object.fromEntries(ITEM_STATES.map((s) =&gt; [s, 0])) as Record&lt;ItemState, number&gt;;
+  for (const row of list) counts[row.item.state]++;
+  return counts;
+}
+
+export interface Group { key: string; label: string; count: number; attention: number }
+export function groupRows(list: Row[], level: "project" | "repo"): Group[] {
+  const groups = new Map&lt;string, Group&gt;();
+  for (const row of list) {
+    const key = level === "project" ? row.startupId : row.target.repository.repositoryId;
+    const label = level === "project" ? row.startupName : row.target.repository.repositoryId;
+    const group = groups.get(key) ?? { key, label, count: 0, attention: 0 };
+    group.count++; if (row.attention !== "ok") group.attention++;
+    groups.set(key, group);
+  }
+  return [...groups.values()].sort((a, b) =&gt; (a.key === "unassigned" ? 1 : 0) - (b.key === "unassigned" ? 1 : 0) || b.count - a.count);
+}
+
+const ATTENTION_ORDER: Record&lt;Attention, number&gt; = { needs_human: 0, failed: 1, stalled: 2, ok: 3 };
+export const attentionRows = (list: Row[]) =&gt; list.filter((r) =&gt; r.attention !== "ok").sort((a, b) =&gt; ATTENTION_ORDER[a.attention] - ATTENTION_ORDER[b.attention]);
+
+export function planLayers(plan: PlanSnapshot): string[][] {
+  const ids = plan.definition.items.map((i) =&gt; i.itemId);
+  const depth = new Map(ids.map((id) =&gt; [id, 0]));
+  for (let pass = 0, changed = true; changed &amp;&amp; pass &lt; ids.length; pass++) {
+    changed = false;
+    for (const d of plan.definition.dependencies) {
+      const next = (depth.get(d.upstreamItemId) ?? 0) + 1;
+      if (next &gt; (depth.get(d.downstreamItemId) ?? 0)) { depth.set(d.downstreamItemId, next); changed = true; }
+    }
+  }
+  const layers: string[][] = [];
+  for (const id of ids) (layers[depth.get(id) ?? 0] ??= []).push(id);
+  return layers;
+}
+
+export const OFFLINE_AFTER_MS = 90_000;
+export const isOffline = (view: EdgeView, now: number) =&gt; view.coordinatorSeenAt === null || now - view.coordinatorSeenAt &gt; OFFLINE_AFTER_MS;</code></pre>
+<pre><code>// src/index.ts
+export * from "./generated/contract";
+export * from "./presentation";
+export * from "./model";</code></pre>
+    <pre><code>pnpm --filter @bob/sdlc-view test &amp;&amp; pnpm --filter @bob/sdlc-view typecheck   # Expected: all passing
+jj commit -m "BOB-75: SDLC view reducer, BizPulse project join, aggregations, plan layers"</code></pre>
+  </details>
+
+  <!-- ───────────────────────── Task 6 ───────────────────────── -->
+  <details class="task"><summary><span class="n">Task 6</span><h3>Edge store and delta log (pure)</h3><span class="chip area">edge</span></summary>
+    <ul class="files"><li>Modify: <code>apps/bob/package.json</code> (add <code>"@bob/sdlc-view": "workspace:*"</code>, then <code>pnpm install</code>)</li><li>Create: <code>apps/bob/worker/sdlc/store.ts</code></li><li>Test: <code>apps/bob/worker/sdlc/store.test.ts</code></li></ul>
+    <p class="step">Step 1: Failing tests</p>
+<pre><code>import { describe, expect, it } from "vitest";
+import { applyBatch, DeltaLog, emptyEdge, helloReply, parseBatch, type IngestBatch } from "./store";
+
+const item = (itemId: string, resourceVersion: number, state = "ready") =&gt;
+  ({ itemId, planId: "p", resourceVersion, state, currentAttemptId: null, execution: null, achievedMilestones: [], operationIds: [], evidenceRefs: [] }) as IngestBatch["items"][number];
+const batch = (b: Partial&lt;IngestBatch&gt;): IngestBatch =&gt; ({ contractVersion: "1", kind: "changes", watermark: 0, plans: [], items: [], ...b });
+
+describe("applyBatch", () =&gt; {
+  it("accepts a snapshot and sets the watermark", () =&gt; {
+    const { state, result, message } = applyBatch(emptyEdge(), batch({ kind: "snapshot", watermark: 4, items: [item("a", 1)] }), 100);
+    expect(result).toEqual({ accepted: true, watermark: 4 });
+    expect(state.watermark).toBe(4); expect(message?.type).toBe("snapshot");
+  });
+  it("asks for a resync when changes start past its watermark", () =&gt; {
+    const first = applyBatch(emptyEdge(), batch({ kind: "snapshot", watermark: 4 }), 100).state;
+    expect(applyBatch(first, batch({ fromSequence: 9, watermark: 12 }), 200).result).toEqual({ accepted: false, resync: true });
+    expect(applyBatch(first, batch({ kind: "heartbeat", watermark: 9 }), 200).result).toEqual({ accepted: false, resync: true });
+  });
+  it("applies contiguous changes and records when the coordinator was last heard from", () =&gt; {
+    const first = applyBatch(emptyEdge(), batch({ kind: "snapshot", watermark: 4, items: [item("a", 1)] }), 100).state;
+    const next = applyBatch(first, batch({ fromSequence: 4, watermark: 6, items: [item("a", 2, "running")] }), 200);
+    expect(next.state.view.items.a.state).toBe("running");
+    expect(next.state.view.coordinatorSeenAt).toBe(200);
+    expect(next.message).toMatchObject({ type: "delta", seq: 2 });
+  });
+});
+
+describe("parseBatch", () =&gt; {
+  it("rejects anything that isn't a contract-version-1 batch", () =&gt; {
+    expect(parseBatch(null)).toBeNull();
+    expect(parseBatch({ contractVersion: "2", kind: "changes", watermark: 1, plans: [], items: [] })).toBeNull();
+    expect(parseBatch({ contractVersion: "1", kind: "nope", watermark: 1, plans: [], items: [] })).toBeNull();
+    expect(parseBatch({ contractVersion: "1", kind: "changes", watermark: -1, plans: [], items: [] })).toBeNull();
+    expect(parseBatch({ contractVersion: "1", kind: "heartbeat", watermark: 3, plans: [], items: [] })).not.toBeNull();
+  });
+});
+
+describe("helloReply", () =&gt; {
+  it("sends only the missing deltas to a client that is close behind, otherwise a snapshot", () =&gt; {
+    const log = new DeltaLog(2);
+    let state = applyBatch(emptyEdge(), batch({ kind: "snapshot", watermark: 1 }), 1).state;
+    for (let w = 2; w &lt;= 4; w++) {
+      const r = applyBatch(state, batch({ fromSequence: w - 1, watermark: w, items: [item("a", w)] }), w);
+      state = r.state; if (r.message) log.push(r.message);
+    }
+    expect(helloReply(state, log, 3).map((m) =&gt; m.type)).toEqual(["delta"]);   // seq 4 only
+    expect(helloReply(state, log, 4)).toEqual([]);
+    expect(helloReply(state, log, 1).map((m) =&gt; m.type)).toEqual(["snapshot"]); // fell out of the log
+    expect(helloReply(state, log, null).map((m) =&gt; m.type)).toEqual(["snapshot"]);
+  });
+});</code></pre>
+    <pre><code>cd apps/bob &amp;&amp; pnpm exec vitest run worker/sdlc/store.test.ts   # Expected: FAIL, cannot resolve ./store</code></pre>
+    <p class="step">Step 2: Implement</p>
+<pre><code>import { emptyView, reduce, type EdgeMessage, type EdgeView, type ItemSnapshot, type PlanSnapshot } from "@bob/sdlc-view";
+
+export interface IngestBatch { contractVersion: "1"; kind: "snapshot" | "changes" | "heartbeat"; watermark: number; fromSequence?: number; plans: PlanSnapshot[]; items: ItemSnapshot[] }
+export interface EdgeState { watermark: number; view: EdgeView; topologyAt?: number }
+export type IngestResult = { accepted: true; watermark: number } | { accepted: false; resync: true };
+type Delta = Extract&lt;EdgeMessage, { type: "delta" }&gt;;
+
+export const emptyEdge = (): EdgeState =&gt; ({ watermark: 0, view: emptyView() });
+
+export function parseBatch(value: unknown): IngestBatch | null {
+  const b = value as Partial&lt;IngestBatch&gt; | null;
+  if (!b || b.contractVersion !== "1" || !["snapshot", "changes", "heartbeat"].includes(b.kind as string)) return null;
+  if (!Number.isSafeInteger(b.watermark) || (b.watermark as number) &lt; 0 || !Array.isArray(b.plans) || !Array.isArray(b.items)) return null;
+  if (b.fromSequence !== undefined &amp;&amp; (!Number.isSafeInteger(b.fromSequence) || b.fromSequence &lt; 0)) return null;
+  return b as IngestBatch;
+}
+
+export function applyBatch(state: EdgeState, batch: IngestBatch, now: number): { state: EdgeState; result: IngestResult; message: EdgeMessage | null } {
+  const behind = batch.kind === "changes" ? (batch.fromSequence ?? 0) &gt; state.watermark
+    : batch.kind === "heartbeat" ? batch.watermark &gt; state.watermark : false;
+  if (behind) return { state, result: { accepted: false, resync: true }, message: null };
+  const accepted: IngestResult = { accepted: true, watermark: batch.watermark };
+  if (batch.kind === "heartbeat") {
+    const message: EdgeMessage = { type: "status", coordinatorSeenAt: now };
+    return { state: { ...state, view: reduce(state.view, message) }, result: accepted, message };
+  }
+  const seq = state.view.seq + 1;
+  const message: EdgeMessage = batch.kind === "snapshot"
+    ? { type: "snapshot", seq, plans: batch.plans, items: batch.items, topology: state.view.topology, coordinatorSeenAt: now }
+    : { type: "delta", seq, plans: batch.plans, items: batch.items, coordinatorSeenAt: now };
+  const watermark = batch.kind === "snapshot" ? batch.watermark : Math.max(state.watermark, batch.watermark);
+  return { state: { ...state, watermark, view: reduce(state.view, message) }, result: accepted, message };
+}
+
+/** In-memory only: after the DO hibernates or restarts, clients simply get a snapshot. */
+export class DeltaLog {
+  private entries: Delta[] = [];
+  constructor(private readonly limit = 200) {}
+  push(message: EdgeMessage) {
+    if (message.type === "snapshot") this.entries = [];
+    else if (message.type === "delta") { this.entries.push(message); if (this.entries.length &gt; this.limit) this.entries.shift(); }
+  }
+  since(cursor: number, current: number): Delta[] | null {
+    if (cursor === current) return [];
+    const first = this.entries[0];
+    if (!first || cursor &lt; first.seq - 1 || cursor &gt; current) return null;
+    return this.entries.filter((d) =&gt; d.seq &gt; cursor);
+  }
+}
+
+export function snapshotOf(state: EdgeState): EdgeMessage {
+  const { view } = state;
+  return { type: "snapshot", seq: view.seq, plans: Object.values(view.plans), items: Object.values(view.items), topology: view.topology, coordinatorSeenAt: view.coordinatorSeenAt };
+}
+
+export function helloReply(state: EdgeState, log: DeltaLog, cursor: number | null): EdgeMessage[] {
+  const deltas = cursor === null ? null : log.since(cursor, state.view.seq);
+  return deltas ?? [snapshotOf(state)];
+}</code></pre>
+    <pre><code>pnpm exec vitest run worker/sdlc/store.test.ts   # Expected: all passing
+jj commit -m "BOB-75: SDLC edge store, batch validation and delta log"</code></pre>
+  </details>
+
+  <!-- ───────────────────────── Task 7 ───────────────────────── -->
+  <details class="task"><summary><span class="n">Task 7</span><h3>Edge controller (pure; the DO only delegates to it)</h3><span class="chip area">edge</span></summary>
+    <ul class="files"><li>Create: <code>apps/bob/worker/sdlc/controller.ts</code></li><li>Test: <code>apps/bob/worker/sdlc/controller.test.ts</code></li></ul>
+    <p class="step">Step 1: Failing tests</p>
+<pre><code>import { describe, expect, it } from "vitest";
+import { EdgeController } from "./controller";
+import type { EdgeState, IngestBatch } from "./store";
+
+function harness(now = () =&gt; 1_000, topology = async () =&gt; [{ startupId: "s1", startupName: "Bob", repoSlug: "gmackie/bob" }]) {
+  let stored: EdgeState | undefined;
+  const sockets: Array&lt;{ sent: string[]; send(d: string): void }&gt; = [];
+  const socket = () =&gt; { const s = { sent: [] as string[], send(d: string) { s.sent.push(d); } }; sockets.push(s); return s; };
+  const storage = { get: async () =&gt; stored, put: async (s: EdgeState) =&gt; { stored = structuredClone(s); } };
+  const make = () =&gt; new EdgeController(storage, () =&gt; sockets, now, topology);
+  return { make, socket, sockets, stored: () =&gt; stored };
+}
+const batch = (b: Partial&lt;IngestBatch&gt;): IngestBatch =&gt; ({ contractVersion: "1", kind: "changes", watermark: 0, plans: [], items: [], ...b });
+const types = (s: { sent: string[] }) =&gt; s.sent.map((d) =&gt; JSON.parse(d).type);
+
+describe("EdgeController", () =&gt; {
+  it("persists accepted batches and broadcasts them to connected clients", async () =&gt; {
+    const h = harness(), edge = h.make(), client = h.socket();
+    expect(await edge.ingest(batch({ kind: "snapshot", watermark: 2 }))).toEqual({ accepted: true, watermark: 2 });
+    expect(types(client)).toEqual(["snapshot"]);
+    expect(h.stored()?.watermark).toBe(2);
+  });
+  it("does not persist or broadcast a batch it must resync", async () =&gt; {
+    const h = harness(), edge = h.make(), client = h.socket();
+    expect(await edge.ingest(batch({ fromSequence: 5, watermark: 6 }))).toEqual({ accepted: false, resync: true });
+    expect(client.sent).toEqual([]); expect(h.stored()).toBeUndefined();
+  });
+  it("greets a new client with a snapshot that includes BizPulse topology", async () =&gt; {
+    const h = harness(), edge = h.make();
+    await edge.ingest(batch({ kind: "snapshot", watermark: 1 }));
+    const client = h.socket(); await edge.hello(client, null);
+    const hello = JSON.parse(client.sent.at(-1)!);
+    expect(hello.type).toBe("snapshot"); expect(hello.topology[0].startupName).toBe("Bob");
+  });
+  it("still serves the stored state after a restart (no delta log, so a snapshot)", async () =&gt; {
+    const h = harness();
+    await h.make().ingest(batch({ kind: "snapshot", watermark: 3 }));
+    const client = h.socket(); await h.make().hello(client, 1);
+    expect(types(client)).toEqual(["snapshot"]);
+  });
+  it("keeps the last topology if BizPulse fails", async () =&gt; {
+    let fail = false, t = 0;
+    const h = harness(() =&gt; t, async () =&gt; { if (fail) throw new Error("down"); return [{ startupId: "s1", startupName: "Bob", repoSlug: "bob" }]; });
+    const edge = h.make(); await edge.hello(h.socket(), null);
+    fail = true; t = 400_000;
+    const client = h.socket(); await edge.hello(client, null);
+    expect(JSON.parse(client.sent[0]).topology).toHaveLength(1);
+  });
+});</code></pre>
+    <pre><code>pnpm exec vitest run worker/sdlc/controller.test.ts   # Expected: FAIL, cannot resolve ./controller</code></pre>
+    <p class="step">Step 2: Implement</p>
+<pre><code>import type { TopologyRepo } from "@bob/sdlc-view";
+import { applyBatch, DeltaLog, emptyEdge, helloReply, type EdgeState, type IngestBatch, type IngestResult } from "./store";
+
+export interface EdgeStorage { get(): Promise&lt;EdgeState | undefined&gt;; put(state: EdgeState): Promise&lt;void&gt; }
+export interface EdgeSocket { send(data: string): void }
+const TOPOLOGY_TTL_MS = 5 * 60_000;
+
+export class EdgeController {
+  private state: EdgeState | null = null;
+  private readonly log = new DeltaLog();
+  constructor(
+    private readonly storage: EdgeStorage,
+    private readonly sockets: () =&gt; EdgeSocket[],
+    private readonly now: () =&gt; number = Date.now,
+    private readonly loadTopology?: () =&gt; Promise&lt;TopologyRepo[]&gt;,
+  ) {}
+
+  private async current(): Promise&lt;EdgeState&gt; {
+    this.state ??= (await this.storage.get()) ?? emptyEdge();
+    return this.state;
+  }
+
+  async ingest(batch: IngestBatch): Promise&lt;IngestResult&gt; {
+    const { state, result, message } = applyBatch(await this.current(), batch, this.now());
+    if (!result.accepted) return result;
+    this.state = state;
+    await this.storage.put(state);
+    if (message) { this.log.push(message); this.broadcast(JSON.stringify(message)); }
+    return result;
+  }
+
+  async hello(socket: EdgeSocket, cursor: number | null): Promise&lt;void&gt; {
+    const fresh = await this.refreshTopology();
+    for (const message of helloReply(await this.current(), this.log, fresh ? null : cursor)) socket.send(JSON.stringify(message));
+  }
+
+  /** Returns true when the topology changed, so the client needs a full snapshot. */
+  private async refreshTopology(): Promise&lt;boolean&gt; {
+    const state = await this.current();
+    if (!this.loadTopology || this.now() - (state.topologyAt ?? -Infinity) &lt; TOPOLOGY_TTL_MS) return false;
+    try {
+      const topology = await this.loadTopology();
+      this.state = { ...state, topologyAt: this.now(), view: { ...state.view, topology } };
+      await this.storage.put(this.state);
+      return true;
+    } catch {
+      return false; // keep the last good topology
+    }
+  }
+
+  private broadcast(data: string) {
+    for (const socket of this.sockets()) { try { socket.send(data); } catch { /* closed socket */ } }
+  }
+}</code></pre>
+    <pre><code>pnpm exec vitest run worker/sdlc   # Expected: store + controller passing
+jj commit -m "BOB-75: SDLC edge controller (ingest, hello, broadcast, topology refresh)"</code></pre>
+  </details>
+
+  <!-- ───────────────────────── Task 8 ───────────────────────── -->
+  <details class="task"><summary><span class="n">Task 8</span><h3>BizPulse topology client</h3><span class="chip area">edge</span></summary>
+    <ul class="files"><li>Create: <code>apps/bob/worker/sdlc/topology.ts</code></li><li>Test: <code>apps/bob/worker/sdlc/topology.test.ts</code></li></ul>
+    <p class="step">Step 0: Confirm the response shape against the live API (read-only)</p>
+    <pre><code>curl -s -H "authorization: Bearer $BOB_BIZPULSE_API_KEY" \
+  "$BOB_BIZPULSE_API_URL/api/trpc/repos.list?input=%7B%22json%22%3A%7B%7D%7D" | jq '.result.data.json[0] | keys'
+# Expected keys include: startupId, startupName, provider, repoSlug</code></pre>
+    <p class="muted">If the shape differs, adjust the parser and its test fixture before going on. This uses the same Bearer key and superjson envelope that <code>bizpulseIntake.ts</code> already uses for <code>tasks.todayBriefing</code>.</p>
+    <p class="step">Step 1: Failing test</p>
+<pre><code>import { describe, expect, it } from "vitest";
+import { fetchBizPulseRepos } from "./topology";
+
+describe("fetchBizPulseRepos", () =&gt; {
+  it("reads repos.list and keeps only ForgeGraph repos", async () =&gt; {
+    const seen: string[] = [];
+    const fetch = (async (url: string, init: RequestInit) =&gt; {
+      seen.push(url); expect((init.headers as Record&lt;string, string&gt;).authorization).toBe("Bearer key");
+      return Response.json({ result: { data: { json: [
+        { startupId: "s1", startupName: "Bob", provider: "forgegraph", repoSlug: "gmackie/bob" },
+        { startupId: "s2", startupName: "Other", provider: "github", repoSlug: "x/y" },
+      ] } } });
+    }) as unknown as typeof globalThis.fetch;
+    expect(await fetchBizPulseRepos({ apiUrl: "https://pulse.test/", apiKey: "key", fetch })).toEqual([{ startupId: "s1", startupName: "Bob", repoSlug: "gmackie/bob" }]);
+    expect(seen[0]).toBe("https://pulse.test/api/trpc/repos.list?input=%7B%22json%22%3A%7B%7D%7D");
+  });
+  it("throws on HTTP errors so the controller keeps the old topology", async () =&gt; {
+    const fetch = (async () =&gt; new Response("no", { status: 500 })) as unknown as typeof globalThis.fetch;
+    await expect(fetchBizPulseRepos({ apiUrl: "https://pulse.test", apiKey: "key", fetch })).rejects.toThrow(/HTTP 500/);
+  });
+});</code></pre>
+    <p class="step">Step 2: Implement</p>
+<pre><code>import type { TopologyRepo } from "@bob/sdlc-view";
+
+export async function fetchBizPulseRepos(options: { apiUrl: string; apiKey: string; fetch?: typeof fetch }): Promise&lt;TopologyRepo[]&gt; {
+  const doFetch = options.fetch ?? fetch;
+  const base = options.apiUrl.replace(/\/+$/, "");
+  const input = encodeURIComponent(JSON.stringify({ json: {} }));
+  const response = await doFetch(`${base}/api/trpc/repos.list?input=${input}`, {
+    headers: { authorization: `Bearer ${options.apiKey}`, accept: "application/json" },
+  });
+  if (!response.ok) throw new Error(`BizPulse repos.list failed: HTTP ${response.status}`);
+  const body = (await response.json()) as { result?: { data?: unknown } };
+  const data = body.result?.data;
+  const payload = data &amp;&amp; typeof data === "object" &amp;&amp; "json" in data ? (data as { json: unknown }).json : data;
+  if (!Array.isArray(payload)) throw new Error("BizPulse repos.list returned no list");
+  return payload.flatMap((row: Record&lt;string, unknown&gt;) =&gt;
+    row?.provider === "forgegraph" &amp;&amp; typeof row.startupId === "string" &amp;&amp; typeof row.repoSlug === "string"
+      ? [{ startupId: row.startupId, startupName: String(row.startupName ?? "Unknown"), repoSlug: row.repoSlug }]
+      : []);
+}</code></pre>
+    <pre><code>pnpm exec vitest run worker/sdlc/topology.test.ts   # Expected: 2 passing
+jj commit -m "BOB-75: read the startup-to-repo mapping from BizPulse repos.list"</code></pre>
+  </details>
+
+  <!-- ───────────────────────── Task 9 ───────────────────────── -->
+  <details class="task"><summary><span class="n">Task 9</span><h3>Durable Object, routes, wrangler</h3><span class="chip area">edge</span></summary>
+    <ul class="files"><li>Create: <code>apps/bob/worker/sdlc/edge-do.ts</code>, <code>apps/bob/worker/sdlc/routes.ts</code></li><li>Modify: <code>apps/bob/worker/index.ts</code> (route near line 655; export the class)</li><li>Modify: <code>apps/bob/wrangler.jsonc</code></li><li>Test: <code>apps/bob/worker/sdlc/routes.test.ts</code></li></ul>
+    <p class="step">Step 1: Failing route tests (they run under node, with no DO runtime)</p>
+<pre><code>import { describe, expect, it } from "vitest";
+import { handleSdlcRoute } from "./routes";
+
+const TOKEN = "k".repeat(40);
+const ns = () =&gt; {
+  const calls: string[] = [];
+  return { calls, idFromName: (n: string) =&gt; n, get: () =&gt; ({ fetch: async (r: Request) =&gt; { calls.push(new URL(r.url).pathname); return new Response("ok"); } }) };
+};
+const env = (over = {}) =&gt; ({ SDLC_EDGE: ns(), SDLC_EDGE_WORKSPACE_ID: "gmacko", SDLC_EDGE_INGEST_TOKEN: TOKEN, SDLC_VIEWER_USER_IDS: "u1", ...over });
+const req = (path: string, init: RequestInit = {}) =&gt; new Request(`https://bob.test${path}`, init);
+
+describe("handleSdlcRoute", () =&gt; {
+  it("rejects ingest without the exact bearer token", async () =&gt; {
+    const e = env();
+    for (const authorization of [undefined, "Bearer nope", `Bearer ${TOKEN}x`]) {
+      const res = await handleSdlcRoute(req("/api/sdlc/ingest", { method: "POST", body: "{}", headers: authorization ? { authorization } : {} }), e as never, async () =&gt; null);
+      expect(res.status).toBe(401);
+    }
+    expect(e.SDLC_EDGE.calls).toEqual([]);
+  });
+  it("forwards authorised ingest to the workspace DO", async () =&gt; {
+    const e = env();
+    const res = await handleSdlcRoute(req("/api/sdlc/ingest", { method: "POST", body: "{}", headers: { authorization: `Bearer ${TOKEN}` } }), e as never, async () =&gt; null);
+    expect(res.status).toBe(200); expect(e.SDLC_EDGE.calls).toEqual(["/ingest"]);
+  });
+  it("only lets signed-in, listed users open the socket", async () =&gt; {
+    const upgrade = { headers: { upgrade: "websocket" } };
+    expect((await handleSdlcRoute(req("/api/sdlc/ws", upgrade), env() as never, async () =&gt; null)).status).toBe(401);
+    expect((await handleSdlcRoute(req("/api/sdlc/ws", upgrade), env() as never, async () =&gt; "u2")).status).toBe(403);
+    const e = env();
+    expect((await handleSdlcRoute(req("/api/sdlc/ws", upgrade), e as never, async () =&gt; "u1")).status).toBe(200);
+    expect(e.SDLC_EDGE.calls).toEqual(["/ws"]);
+  });
+  it("is unavailable until configured", async () =&gt; {
+    const res = await handleSdlcRoute(req("/api/sdlc/ws"), env({ SDLC_EDGE_WORKSPACE_ID: undefined }) as never, async () =&gt; "u1");
+    expect(res.status).toBe(503);
+  });
+});</code></pre>
+    <p class="step">Step 2: Routes</p>
+<pre><code>export interface SdlcRouteEnv {
+  SDLC_EDGE: DurableObjectNamespace;
+  SDLC_EDGE_WORKSPACE_ID?: string;
+  SDLC_EDGE_INGEST_TOKEN?: string;
+  SDLC_VIEWER_USER_IDS?: string;
+}
+
+export function bearerMatches(header: string | null, token: string | undefined): boolean {
+  if (!token || token.length &lt; 32 || !header?.startsWith("Bearer ")) return false;
+  const a = new TextEncoder().encode(header.slice(7)), b = new TextEncoder().encode(token);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i &lt; Math.max(a.length, b.length); i++) diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
+  return diff === 0;
+}
+
+const listed = (userId: string, csv: string | undefined) =&gt; (csv ?? "").split(",").map((s) =&gt; s.trim()).filter(Boolean).includes(userId);
+
+export async function handleSdlcRoute(request: Request, env: SdlcRouteEnv, getUserId: () =&gt; Promise&lt;string | null&gt;): Promise&lt;Response&gt; {
+  const { pathname } = new URL(request.url);
+  if (!env.SDLC_EDGE_WORKSPACE_ID || !env.SDLC_EDGE) return Response.json({ error: "sdlc edge not configured" }, { status: 503 });
+  const stub = env.SDLC_EDGE.get(env.SDLC_EDGE.idFromName(env.SDLC_EDGE_WORKSPACE_ID));
+  if (pathname === "/api/sdlc/ingest") {
+    if (request.method !== "POST" || !bearerMatches(request.headers.get("authorization"), env.SDLC_EDGE_INGEST_TOKEN)) {
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
+    const body = await request.text();
+    if (body.length &gt; 4_000_000) return Response.json({ error: "batch too large" }, { status: 413 });
+    return stub.fetch(new Request("https://sdlc-edge/ingest", { method: "POST", body, headers: { "content-type": "application/json" } }));
+  }
+  if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") return new Response("expected websocket", { status: 426 });
+  const userId = await getUserId();
+  if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
+  if (!listed(userId, env.SDLC_VIEWER_USER_IDS)) return Response.json({ error: "forbidden" }, { status: 403 });
+  return stub.fetch(new Request("https://sdlc-edge/ws", request));
+}</code></pre>
+    <p class="muted">Note: the 503 test sends no upgrade header, so the configuration check must come first, as written.</p>
+    <p class="step">Step 3: Durable Object (thin; it delegates to the tested controller)</p>
+<pre><code>import { DurableObject } from "cloudflare:workers";
+import { EdgeController } from "./controller";
+import { parseBatch, type EdgeState } from "./store";
+import { fetchBizPulseRepos } from "./topology";
+
+interface SdlcEdgeEnv { BOB_BIZPULSE_API_URL?: string; BOB_BIZPULSE_API_KEY?: string }
+
+export class SdlcEdge extends DurableObject&lt;SdlcEdgeEnv&gt; {
+  private readonly controller: EdgeController;
+  constructor(ctx: DurableObjectState, env: SdlcEdgeEnv) {
+    super(ctx, env);
+    const { BOB_BIZPULSE_API_URL: apiUrl, BOB_BIZPULSE_API_KEY: apiKey } = env;
+    this.controller = new EdgeController(
+      { get: () =&gt; ctx.storage.get&lt;EdgeState&gt;("state"), put: (state) =&gt; ctx.storage.put("state", state) },
+      () =&gt; ctx.getWebSockets(),
+      Date.now,
+      apiUrl &amp;&amp; apiKey ? () =&gt; fetchBizPulseRepos({ apiUrl, apiKey }) : undefined,
+    );
+  }
+
+  async fetch(request: Request): Promise&lt;Response&gt; {
+    const { pathname } = new URL(request.url);
+    if (pathname === "/ingest" &amp;&amp; request.method === "POST") {
+      const batch = parseBatch(await request.json().catch(() =&gt; null));
+      if (!batch) return Response.json({ error: "invalid batch" }, { status: 400 });
+      return Response.json(await this.controller.ingest(batch));
+    }
+    if (pathname === "/ws") {
+      const pair = new WebSocketPair();
+      this.ctx.acceptWebSocket(pair[1]);
+      return new Response(null, { status: 101, webSocket: pair[0] });
+    }
+    return new Response("not found", { status: 404 });
+  }
+
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise&lt;void&gt; {
+    if (typeof message !== "string" || message.length &gt; 1024) return;
+    let parsed: { type?: unknown; cursor?: unknown };
+    try { parsed = JSON.parse(message); } catch { return; }
+    if (parsed.type === "hello") await this.controller.hello(ws, typeof parsed.cursor === "number" ? parsed.cursor : null);
+  }
+}</code></pre>
+    <p class="step">Step 4: Wire it into <code>worker/index.ts</code> and <code>wrangler.jsonc</code></p>
+<pre><code>// worker/index.ts — imports
+import { handleSdlcRoute, type SdlcRouteEnv } from "./sdlc/routes";
+export { SdlcEdge } from "./sdlc/edge-do";
+// interface Env: extend with SdlcRouteEnv fields
+//   SDLC_EDGE: DurableObjectNamespace; SDLC_EDGE_WORKSPACE_ID?: string; SDLC_EDGE_INGEST_TOKEN?: string; SDLC_VIEWER_USER_IDS?: string;
+
+// fetch(): directly after the /api/internal/hermes-origin-auth block
+if (url.pathname === "/api/sdlc/ingest" || url.pathname === "/api/sdlc/ws") {
+  return handleSdlcRoute(request, runtimeEnv as unknown as SdlcRouteEnv, async () =&gt; {
+    const { connectionString, isHyperdrive } = getHyperdriveConnectionString(runtimeEnv);
+    const session = await runWithDb(connectionString, isHyperdrive, async () =&gt; {
+      const { auth } = await import("../src/auth/server");
+      return auth.api.getSession({ headers: request.headers });
+    });
+    return session?.user?.id ?? null;
+  });
+}</code></pre>
+<pre><code>// wrangler.jsonc — top level
+"durable_objects": { "bindings": [{ "name": "SDLC_EDGE", "class_name": "SdlcEdge" }] },
+"migrations": [{ "tag": "v1-sdlc-edge", "new_sqlite_classes": ["SdlcEdge"] }],
+// "vars": add
+"SDLC_EDGE_WORKSPACE_ID": "&lt;coordinator context.json workspaceId&gt;",
+"SDLC_VIEWER_USER_IDS": "&lt;same ids as HERMES_OPERATOR_USER_IDS&gt;",
+// secret (not a var): wrangler secret put SDLC_EDGE_INGEST_TOKEN</code></pre>
+    <p class="step">Step 5: Verify and commit</p>
+    <pre><code>pnpm exec vitest run worker/sdlc        # Expected: routes, store, controller, topology passing
+pnpm exec tsc --noEmit -p .             # Worker typechecks (DurableObject types from @cloudflare/workers-types)
+pnpm build                              # vinext build succeeds; the bundle exports SdlcEdge
+jj commit -m "BOB-75: SdlcEdge Durable Object, ingest and socket routes"</code></pre>
+  </details>
+
+  <!-- ───────────────────────── Task 10 ───────────────────────── -->
+  <details class="task"><summary><span class="n">Task 10</span><h3>Live client hook</h3><span class="chip area">web</span></summary>
+    <ul class="files"><li>Create: <code>apps/bob/src/components/sdlc/use-sdlc-edge.ts</code></li></ul>
+    <p class="muted">The reducer is already tested in Task 5, so this hook is kept thin: connect, say hello with the last <code>seq</code>, reduce messages, and reconnect with backoff. It's verified in the browser in Task 12.</p>
+<pre><code>"use client";
+import { useEffect, useReducer, useRef, useState } from "react";
+import { emptyView, reduce, type EdgeMessage, type EdgeView } from "@bob/sdlc-view";
+
+export type EdgeConnection = "connecting" | "live" | "reconnecting";
+
+export function useSdlcEdge(): { view: EdgeView; connection: EdgeConnection } {
+  const [view, dispatch] = useReducer(reduce, undefined, emptyView);
+  const [connection, setConnection] = useState&lt;EdgeConnection&gt;("connecting");
+  const seq = useRef&lt;number | null&gt;(null);
+
+  useEffect(() =&gt; {
+    let socket: WebSocket | null = null, attempt = 0, closed = false;
+    let timer: ReturnType&lt;typeof setTimeout&gt; | undefined;
+    const open = () =&gt; {
+      const url = new URL("/api/sdlc/ws", window.location.href);
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+      socket = new WebSocket(url);
+      socket.onopen = () =&gt; { attempt = 0; setConnection("live"); socket?.send(JSON.stringify({ type: "hello", cursor: seq.current })); };
+      socket.onmessage = (event) =&gt; {
+        const message = JSON.parse(String(event.data)) as EdgeMessage;
+        if (message.type !== "status") seq.current = message.seq;
+        dispatch(message);
+      };
+      socket.onclose = () =&gt; {
+        if (closed) return;
+        setConnection("reconnecting");
+        timer = setTimeout(open, Math.min(30_000, 1000 * 2 ** attempt++));
+      };
+    };
+    open();
+    return () =&gt; { closed = true; clearTimeout(timer); socket?.close(); };
+  }, []);
+
+  return { view, connection };
+}</code></pre>
+    <pre><code>jj commit -m "BOB-75: useSdlcEdge live hook"</code></pre>
+  </details>
+
+  <!-- ───────────────────────── Task 11 ───────────────────────── -->
+  <details class="task"><summary><span class="n">Task 11</span><h3>State graph component</h3><span class="chip area">web</span></summary>
+    <ul class="files"><li>Create: <code>apps/bob/src/components/sdlc/state-graph.tsx</code></li><li>Test: <code>apps/bob/src/components/sdlc/state-graph.test.tsx</code></li></ul>
+    <p class="step">Step 1: Failing test</p>
+<pre><code>import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { ITEM_STATES, STATE_PRESENTATION, type ItemState } from "@bob/sdlc-view";
+import { StateGraph } from "./state-graph";
+
+describe("StateGraph", () =&gt; {
+  it("draws every state with its count as an accessible button", () =&gt; {
+    const counts = Object.fromEntries(ITEM_STATES.map((s, i) =&gt; [s, i])) as Record&lt;ItemState, number&gt;;
+    const html = renderToStaticMarkup(&lt;StateGraph counts={counts} /&gt;);
+    ITEM_STATES.forEach((state, i) =&gt; expect(html).toContain(`aria-label="${STATE_PRESENTATION[state].label}: ${i}"`));
+  });
+});</code></pre>
+    <p class="step">Step 2: Implement</p>
+<pre><code>import { ITEM_STATES, STATE_EDGES, STATE_PRESENTATION, type ItemState, type Owner } from "@bob/sdlc-view";
+
+const W = 132, H = 44, DX = 150, DY = 78;
+const pos = (s: ItemState) =&gt; ({ x: 10 + STATE_PRESENTATION[s].col * DX, y: 14 + STATE_PRESENTATION[s].row * DY });
+const STROKE: Record&lt;Owner, string&gt; = { system: "#34d399", agent: "#38bdf8", human: "#f59e0b", terminal: "#fb7185" };
+
+export function StateGraph({ counts, selected, onSelect }: { counts: Record&lt;ItemState, number&gt;; selected?: ItemState | null; onSelect?: (s: ItemState) =&gt; void }) {
+  return (
+    &lt;svg viewBox="0 0 760 310" role="img" aria-label="Coordinator item states" className="w-full min-w-[620px]"&gt;
+      {STATE_EDGES.map((e) =&gt; {
+        const a = pos(e.from), b = pos(e.to);
+        return &lt;line key={`${e.from}-${e.to}`} x1={a.x + W / 2} y1={a.y + H / 2} x2={b.x + W / 2} y2={b.y + H / 2}
+          stroke="currentColor" strokeOpacity={0.3} strokeDasharray={e.loop ? "4 3" : undefined} /&gt;;
+      })}
+      {ITEM_STATES.map((state) =&gt; {
+        const p = pos(state), s = STATE_PRESENTATION[state], n = counts[state];
+        return (
+          &lt;g key={state} role="button" tabIndex={0} aria-label={`${s.label}: ${n}`} className="cursor-pointer"
+            onClick={() =&gt; onSelect?.(state)} onKeyDown={(ev) =&gt; { if (ev.key === "Enter") onSelect?.(state); }}&gt;
+            &lt;rect x={p.x} y={p.y} width={W} height={H} rx={8} className="fill-background" stroke={STROKE[s.owner]}
+              strokeWidth={selected === state ? 3 : 1.5} strokeDasharray={s.owner === "terminal" ? "4 3" : undefined} /&gt;
+            &lt;text x={p.x + 10} y={p.y + 19} fontSize={12} fontWeight={600} fill="currentColor"&gt;{s.label}&lt;/text&gt;
+            &lt;text x={p.x + 10} y={p.y + 35} fontSize={10} fill="currentColor" opacity={0.6}&gt;{s.hint}&lt;/text&gt;
+            &lt;text x={p.x + W - 10} y={p.y + 19} fontSize={14} fontWeight={700} textAnchor="end" fill="currentColor" opacity={n ? 1 : 0.3}&gt;{n}&lt;/text&gt;
+          &lt;/g&gt;
+        );
+      })}
+    &lt;/svg&gt;
+  );
+}</code></pre>
+    <pre><code>cd apps/bob &amp;&amp; pnpm exec vitest run src/components/sdlc   # Expected: passing
+jj commit -m "BOB-75: SDLC state graph component"</code></pre>
+  </details>
+
+  <!-- ───────────────────────── Task 12 ───────────────────────── -->
+  <details class="task"><summary><span class="n">Task 12</span><h3><code>/sdlc</code> page, item detail, plan view, nav entry</h3><span class="chip area">web</span></summary>
+    <ul class="files"><li>Create: <code>apps/bob/src/app/(dashboard)/sdlc/page.tsx</code> (the <code>(dashboard)</code> layout already redirects signed-out users)</li><li>Create: <code>apps/bob/src/components/sdlc/item-detail.tsx</code>, <code>plan-dag.tsx</code></li><li>Modify: <code>apps/bob/src/components/layout/sidebar-nav-model.ts</code> (lines 40–44, 152–161)</li><li>Test: <code>apps/bob/src/components/layout/__tests__/sidebar-nav-model.test.ts</code> (line 65)</li></ul>
+    <p class="step">Step 1: Failing nav test. Add <code>"SDLC"</code> after <code>"Pull Requests"</code> in the expected list at line 66</p>
+    <pre><code>pnpm exec vitest run src/components/layout/__tests__/sidebar-nav-model.test.ts   # Expected: FAIL</code></pre>
+    <p class="step">Step 2: Nav model</p>
+<pre><code>// SidebarUtilityItem: add "sdlc" to key, "SDLC" to label, "/sdlc" to href unions
+// UTILITY_ITEMS, after pull-requests:
+{ key: "sdlc", label: "SDLC", href: "/sdlc" },</code></pre>
+    <p class="step">Step 3: Page</p>
+<pre><code>"use client";
+import { useEffect, useMemo, useState } from "react";
+import { attentionRows, countsByState, groupRows, inScope, isOffline, rows as toRows, STATE_PRESENTATION, type ItemState, type Scope } from "@bob/sdlc-view";
+import { ItemDetail } from "~/components/sdlc/item-detail";
+import { PlanDag } from "~/components/sdlc/plan-dag";
+import { StateGraph } from "~/components/sdlc/state-graph";
+import { useSdlcEdge } from "~/components/sdlc/use-sdlc-edge";
+
+function useNow(ms: number) {
+  const [now, setNow] = useState(() =&gt; Date.now());
+  useEffect(() =&gt; { const t = setInterval(() =&gt; setNow(Date.now()), ms); return () =&gt; clearInterval(t); }, [ms]);
+  return now;
+}
+
+export default function SdlcPage() {
+  const { view, connection } = useSdlcEdge();
+  const now = useNow(15_000);
+  const [scope, setScope] = useState&lt;Scope &amp; { startupName?: string }&gt;({});
+  const [state, setState] = useState&lt;ItemState | null&gt;(null);
+  const [itemId, setItemId] = useState&lt;string | null&gt;(null);
+  const [planId, setPlanId] = useState&lt;string | null&gt;(null);
+
+  const all = useMemo(() =&gt; toRows(view), [view]);
+  const scoped = all.filter((row) =&gt; inScope(row, scope));
+  const listed = state ? scoped.filter((row) =&gt; row.item.state === state) : scoped;
+  const groups = scope.repositoryId ? [] : groupRows(scoped, scope.startupId ? "repo" : "project");
+  const attention = attentionRows(scoped);
+  const offline = connection !== "live" || isOffline(view, now);
+  const selectedRow = itemId ? all.find((r) =&gt; r.item.itemId === itemId) ?? null : null;
+  const plan = planId ? view.plans[planId] ?? null : null;
+
+  return (
+    &lt;div className="space-y-4 p-4"&gt;
+      &lt;nav aria-label="SDLC level" className="flex gap-2 text-sm"&gt;
+        &lt;button onClick={() =&gt; { setScope({}); setState(null); }}&gt;Fleet&lt;/button&gt;
+        {scope.startupId &amp;&amp; &lt;&gt;/ &lt;button onClick={() =&gt; setScope({ startupId: scope.startupId, startupName: scope.startupName })}&gt;{scope.startupName}&lt;/button&gt;&lt;/&gt;}
+        {scope.repositoryId &amp;&amp; &lt;&gt;/ &lt;span&gt;{scope.repositoryId}&lt;/span&gt;&lt;/&gt;}
+      &lt;/nav&gt;
+      {offline &amp;&amp; (
+        &lt;p role="status" className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"&gt;
+          {connection !== "live" ? "Reconnecting to the SDLC edge…" : `Coordinator offline${view.coordinatorSeenAt ? ` since ${new Date(view.coordinatorSeenAt).toLocaleTimeString()}` : ""}. Showing the last snapshot.`}
+        &lt;/p&gt;
+      )}
+      &lt;section className="overflow-x-auto rounded border p-2"&gt;
+        &lt;StateGraph counts={countsByState(scoped)} selected={state} onSelect={(s) =&gt; setState(state === s ? null : s)} /&gt;
+      &lt;/section&gt;
+      {groups.length &gt; 0 &amp;&amp; (
+        &lt;section aria-label={scope.startupId ? "Repositories" : "Projects"} className="grid gap-2 sm:grid-cols-3"&gt;
+          {groups.map((g) =&gt; (
+            &lt;button key={g.key} className="rounded border p-3 text-left" onClick={() =&gt; setScope(scope.startupId ? { ...scope, repositoryId: g.key } : { startupId: g.key, startupName: g.label })}&gt;
+              &lt;div className="font-medium"&gt;{g.label}&lt;/div&gt;
+              &lt;div className="text-xs opacity-70"&gt;{g.count} items{g.attention ? ` · ${g.attention} need attention` : ""}&lt;/div&gt;
+            &lt;/button&gt;
+          ))}
+        &lt;/section&gt;
+      )}
+      {attention.length &gt; 0 &amp;&amp; (
+        &lt;section aria-label="Needs attention"&gt;
+          &lt;h2 className="text-sm font-semibold"&gt;Needs attention&lt;/h2&gt;
+          &lt;ul&gt;{attention.map((r) =&gt; &lt;li key={r.item.itemId}&gt;&lt;button onClick={() =&gt; setItemId(r.item.itemId)}&gt;{r.issue.identifier ?? r.item.itemId} · {STATE_PRESENTATION[r.item.state].label}&lt;/button&gt;&lt;/li&gt;)}&lt;/ul&gt;
+        &lt;/section&gt;
+      )}
+      &lt;section aria-label="Items"&gt;
+        &lt;h2 className="text-sm font-semibold"&gt;{state ? STATE_PRESENTATION[state].label : "All items"} ({listed.length})&lt;/h2&gt;
+        &lt;ul className="divide-y"&gt;
+          {listed.map((r) =&gt; (
+            &lt;li key={r.item.itemId}&gt;&lt;button className="w-full py-2 text-left" onClick={() =&gt; setItemId(r.item.itemId)}&gt;
+              {r.issue.identifier ?? r.item.itemId} · {r.target.repository.repositoryId} · {STATE_PRESENTATION[r.item.state].label}
+            &lt;/button&gt;&lt;/li&gt;
+          ))}
+        &lt;/ul&gt;
+      &lt;/section&gt;
+      {selectedRow &amp;&amp; &lt;ItemDetail row={selectedRow} onClose={() =&gt; setItemId(null)} onOpenPlan={() =&gt; setPlanId(selectedRow.plan.planId)} /&gt;}
+      {plan &amp;&amp; &lt;PlanDag plan={plan} items={view.items} onSelect={setItemId} onClose={() =&gt; setPlanId(null)} /&gt;}
+    &lt;/div&gt;
+  );
+}</code></pre>
+    <p class="step">Step 4: Item detail and plan view</p>
+<pre><code>// item-detail.tsx
+import { MILESTONE_LABEL, MILESTONES, STATE_PRESENTATION, type Row } from "@bob/sdlc-view";
+
+export function ItemDetail({ row, onClose, onOpenPlan }: { row: Row; onClose: () =&gt; void; onOpenPlan: () =&gt; void }) {
+  const { item, issue, target } = row, thread = item.execution?.thread;
+  return (
+    &lt;aside aria-label="Item detail" className="rounded border p-3 text-sm"&gt;
+      &lt;div className="flex justify-between"&gt;
+        &lt;h2 className="font-semibold"&gt;{issue.url ? &lt;a href={issue.url}&gt;{issue.identifier ?? issue.issueId}&lt;/a&gt; : issue.identifier ?? issue.issueId}&lt;/h2&gt;
+        &lt;button onClick={onClose} aria-label="Close"&gt;×&lt;/button&gt;
+      &lt;/div&gt;
+      &lt;p&gt;{STATE_PRESENTATION[item.state].label} · {row.startupName} / {target.repository.repositoryId} · v{item.resourceVersion}&lt;/p&gt;
+      &lt;p&gt;Milestones: {MILESTONES.map((m) =&gt; &lt;span key={m} className={item.achievedMilestones.includes(m) ? "font-semibold" : "opacity-40"}&gt;{MILESTONE_LABEL[m]} &lt;/span&gt;)}&lt;/p&gt;
+      {item.currentAttemptId &amp;&amp; &lt;p&gt;Attempt {item.currentAttemptId}{thread ? ` · T3 ${thread.environmentId} / thread ${thread.threadId}` : ""}&lt;/p&gt;}
+      &lt;p className="opacity-70"&gt;{item.operationIds.length} operations · {item.evidenceRefs.length} evidence refs&lt;/p&gt;
+      &lt;button onClick={onOpenPlan}&gt;Open plan&lt;/button&gt;
+    &lt;/aside&gt;
+  );
+}
+
+// plan-dag.tsx
+import { planLayers, STATE_PRESENTATION, type ItemSnapshot, type PlanSnapshot } from "@bob/sdlc-view";
+
+export function PlanDag({ plan, items, onSelect, onClose }: { plan: PlanSnapshot; items: Record&lt;string, ItemSnapshot&gt;; onSelect: (id: string) =&gt; void; onClose: () =&gt; void }) {
+  const label = (id: string) =&gt; plan.definition.items.find((d) =&gt; d.itemId === id)?.issue.identifier ?? id;
+  return (
+    &lt;section aria-label="Plan dependencies" className="rounded border p-3 text-sm"&gt;
+      &lt;div className="flex justify-between"&gt;&lt;h2 className="font-semibold"&gt;Plan {plan.planId.slice(0, 8)} · {plan.state}&lt;/h2&gt;&lt;button onClick={onClose} aria-label="Close"&gt;×&lt;/button&gt;&lt;/div&gt;
+      &lt;div className="flex gap-4 overflow-x-auto py-2"&gt;
+        {planLayers(plan).map((layer, i) =&gt; (
+          &lt;ol key={i} className="space-y-1"&gt;
+            {layer.map((id) =&gt; &lt;li key={id}&gt;&lt;button className="rounded border px-2 py-1" onClick={() =&gt; onSelect(id)}&gt;{label(id)} · {items[id] ? STATE_PRESENTATION[items[id].state].label : "?"}&lt;/button&gt;&lt;/li&gt;)}
+          &lt;/ol&gt;
+        ))}
+      &lt;/div&gt;
+      &lt;ul className="opacity-70"&gt;{plan.definition.dependencies.map((d) =&gt; &lt;li key={`${d.upstreamItemId}-${d.downstreamItemId}`}&gt;{label(d.upstreamItemId)} → {label(d.downstreamItemId)} (waits for {d.requiredMilestone})&lt;/li&gt;)}&lt;/ul&gt;
+    &lt;/section&gt;
+  );
+}</code></pre>
+    <p class="step">Step 5: Verify locally and commit</p>
+    <pre><code>pnpm exec vitest run                      # whole apps/bob suite
+pnpm exec tsc --noEmit -p .
+pnpm dev                                  # open /sdlc: with no edge configured it shows "Reconnecting…" and an empty graph, without crashing
+jj commit -m "BOB-75: read-only /sdlc page with drill-down, item detail and plan view"</code></pre>
+  </details>
+
+  <!-- ───────────────────────── Task 13 ───────────────────────── -->
+  <details class="task"><summary><span class="n">Task 13</span><h3>Ship and verify in production</h3><span class="chip area">deploy</span></summary>
+    <ol>
+      <li><strong>Review and merge:</strong> push the bookmark (<code>jj bookmark create BOB-75-phase1 -r @-</code>, then <code>jj git push --bookmark BOB-75-phase1</code>). Open the PR with <code>tea --repo gmackie/bob</code>, title prefixed <code>BOB-75:</code>. Link it with <code>kanbanger issue link BOB-75 &lt;url&gt;</code> and the thread's <code>link_pull_request</code>, then move BOB-75 to In Review. Approve only after every required check is green on the head revision.</li>
+      <li><strong>Edge secret:</strong> generate a 48-character token. Run <code>wrangler secret put SDLC_EDGE_INGEST_TOKEN</code> for <code>blder-bot</code>, and put the same value in <code>/etc/bob/coordination/edge.env</code> on hetzner-bob as <code>BOB_SDLC_EDGE_TOKEN=…</code> (root:bob 0640, never committed).</li>
+      <li><strong>Worker deploy:</strong> follow <code>docs/ops/bob-production-runbook.md</code> (vinext deploy by hand). Check that the first deploy applies the <code>v1-sdlc-edge</code> migration.</li>
+      <li><strong>Coordinator release:</strong> follow <code>deploy/coordination/README.md</code>: package, <code>npm run verify</code>, switch <code>current</code>. Then create <code>/etc/bob/coordination/edge.json</code>:
+        <pre><code>{ "endpoint": "https://bob.blder.bot/api/sdlc/ingest", "checkpoint": "/home/bob/.bob/coordination/edge.sqlite", "tokenEnv": "BOB_SDLC_EDGE_TOKEN" }</code></pre>
+        Install the updated worker unit, run <code>systemd-analyze verify</code> and <code>daemon-reload</code>, then restart <strong>only</strong> <code>bob-coordinator-worker.service</code>.</li>
+      <li><strong>Evidence:</strong>
+        <ul>
+          <li><code>journalctl -u bob-coordinator-worker</code> shows <code>step: "edge", outcome: "exported"</code> once, then idle and heartbeats.</li>
+          <li><code>curl -i -X POST https://bob.blder.bot/api/sdlc/ingest</code> with no token returns <code>401</code>.</li>
+          <li><code>/sdlc</code> shows the pilot plan's items with correct state counts, and its repo under its BizPulse startup.</li>
+          <li>Start a pilot plan (<code>ControlPlan start</code> through the coordinator MCP). Within one worker interval, without reloading, <code>/sdlc</code> moves the item from <code>pending</code> to <code>ready</code>.</li>
+          <li>Stop the worker for two minutes: the offline banner appears. Restart it: the banner clears.</li>
+        </ul></li>
+      <li><strong>Record:</strong> comment on BOB-75 with the PR, commit, Worker deployment ID, coordinator release revision and the evidence above. BOB-75 stays open: Phases 2–4 remain.</li>
+    </ol>
+  </details>
+
+  <h2>Rollback</h2>
+  <ul>
+    <li><strong>Coordinator:</strong> remove <code>--edge</code> from the worker unit and restart. The exporter reads only and has its own checkpoint database, so the coordinator's state is untouched.</li>
+    <li><strong>Worker:</strong> redeploy the previous version. Keep the DO class and its migration in place, because deleting a DO class needs its own migration; an unused class costs nothing.</li>
+  </ul>
+
+  <h2>Risks specific to Phase 1</h2>
+  <div class="table-scroll"><table>
+    <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+    <tbody>
+      <tr><td>The DO stores the whole view as one storage value. SQLite-backed DO values are limited to about 2 MB.</td><td>Fine at today's plan sizes (≤ 100 items each). If needed, move to one key per plan and item; the controller interface doesn't change.</td></tr>
+      <tr><td>Production <code>repositoryId</code> values may not match BizPulse slugs.</td><td>Unmatched repos appear under “Unassigned” showing their raw id, so a mismatch is visible, not silent. Fix the data in BizPulse.</td></tr>
+      <tr><td><code>STATE_EDGES</code> may not match the real transitions.</td><td>Task 4 step 2 checks them against <code>execution.mjs</code>. States can't be missing, because a test enforces full coverage.</td></tr>
+      <tr><td>Restoring the coordinator database from a backup can leave the exporter's checkpoint ahead of the restored data. Events written after the restore, up to the old checkpoint position, would then be skipped (review of Task 1).</td><td>After any restore, delete <code>edge.sqlite</code> to force a snapshot; this is a runbook step. Later fix: store a database identity in the checkpoint.</td></tr>
+      <tr><td>Two coordinator owners pushing to one workspace's edge would overwrite each other's snapshots (review of Task 1).</td><td>Phase 1 has a single actor. Key the DO by workspace and owner before adding a second actor.</td></tr>
+      <tr><td>vinext's Worker build may not expose a named DO export.</td><td>Task 9 step 5 runs <code>pnpm build</code> and checks the export before anything ships.</td></tr>
+    </tbody>
+  </table></div>
+</main>
+</body>
+</html>

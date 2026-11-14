@@ -152,6 +152,18 @@ describe("Bob Effect-RPC migration guardrails", () => {
         text = text.replace("`${base}/api/trpc/tasks.todayBriefing`", "");
         text = text.replace("`GET /api/trpc/tasks.todayBriefing`", "");
       }
+      // BizPulse owns this endpoint too: the SDLC edge reads BizPulse's
+      // repos.list (startup -> repo topology) at the configured BizPulse apiUrl.
+      if (file === "apps/bob/worker/sdlc/topology.ts") {
+        expect(text).toContain("BizPulse serves tRPC");
+        text = text.replace("`${base}/api/trpc/repos.list?input=${input}`", "");
+      }
+      if (file === "apps/bob/worker/sdlc/topology.test.ts") {
+        text = text.replace(
+          '"https://pulse.test/api/trpc/repos.list?input=%7B%22json%22%3A%7B%7D%7D"',
+          "",
+        );
+      }
       return text.includes("/api/trpc");
     });
 

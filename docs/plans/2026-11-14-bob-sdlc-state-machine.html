@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bob SDLC state machine</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--foreground, #202124); font: 14px/1.55 var(--font-sans, system-ui, sans-serif); }
+  main { width: 100%; min-width: 0; }
+  h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.02rem; margin: 1.75rem 0 .5rem; padding-bottom: .3rem; border-bottom: 1px solid var(--border, #d8dce2); }
+  h3 { font-size: .9rem; margin: 0 0 .25rem; }
+  p { max-width: 78ch; margin: .45rem 0; }
+  a { color: var(--accent-surface-foreground, #2458ac); }
+  .meta, .muted { color: var(--muted-foreground, #606773); }
+  .meta { font-size: .82rem; }
+  :focus-visible { outline: 2px solid var(--ring, #2458ac); outline-offset: 3px; }
+  code { font-family: var(--font-mono, Menlo, Consolas, monospace); font-size: .84em; background: var(--code-background, #f1f3f5); color: var(--code-foreground, #202124); border-radius: 4px; padding: .05rem .3rem; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+  th, td { text-align: left; vertical-align: top; padding: .45rem .5rem; border-bottom: 1px solid var(--border, #d8dce2); }
+  th { font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted-foreground, #606773); }
+  svg { max-width: 100%; height: auto; display: block; }
+  ul { padding-left: 1.2rem; }
+
+  .badge, .chip { display: inline-block; border-radius: 999px; padding: .08rem .5rem; font-size: .72rem; font-weight: 600; white-space: nowrap; vertical-align: middle; }
+  .badge { background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #2458ac); }
+  .chip.done { background: color-mix(in srgb, var(--success, #1e8e3e) 18%, transparent); color: var(--success, #1e8e3e); }
+  .chip.todo { background: var(--muted, #f1f3f5); color: var(--muted-foreground, #606773); }
+  .chip.risk { background: var(--warning-surface, #fff4d6); color: var(--warning-foreground, #7a5200); }
+  .chip.high { background: var(--destructive-surface, #fde7e7); color: var(--destructive, #c5221f); }
+  .chip.info { background: color-mix(in srgb, var(--info, #1a73e8) 16%, transparent); color: var(--info, #1a73e8); }
+
+  .callout { border-left: 3px solid var(--accent, #2458ac); background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #1a2b4d); border-radius: 0 var(--radius, .5rem) var(--radius, .5rem) 0; padding: .65rem .85rem; margin: .75rem 0; }
+  .callout.warn { border-left-color: var(--warning, #e8a100); background: var(--warning-surface, #fff4d6); color: var(--warning-foreground, #7a5200); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: .65rem; }
+  .card { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .5rem); background: var(--card, #f7f8fa); color: var(--card-foreground, #202124); padding: .7rem .8rem; }
+  .card ul { margin: .35rem 0 0; padding-left: 1.1rem; }
+  .card p { margin: .3rem 0 0; font-size: .86rem; }
+  .card .k { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-foreground, #606773); }
+
+  .panel { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .5rem); background: var(--card, #f7f8fa); padding: .75rem; margin: .6rem 0; overflow-x: auto; }
+  .panel svg { min-width: 620px; }
+  .panel figcaption { font-size: .8rem; color: var(--muted-foreground, #606773); margin-top: .5rem; }
+  .sm .node rect { fill: var(--background, #fff); stroke: var(--border, #c7ccd4); stroke-width: 1.5; }
+  .sm .node.human rect { stroke: var(--warning, #e8a100); }
+  .sm .node.agent rect { stroke: var(--accent, #2458ac); }
+  .sm .node.system rect { stroke: var(--success, #1e8e3e); }
+  .sm .node.term rect { stroke: var(--destructive, #c5221f); stroke-dasharray: 4 3; }
+  .sm text { fill: var(--foreground, #202124); font: 600 11.5px var(--font-mono, Menlo, monospace); }
+  .sm text.sub { font: 9.5px var(--font-sans, system-ui); fill: var(--muted-foreground, #606773); font-weight: 400; }
+  .sm .edge { fill: none; stroke: var(--muted-foreground, #8a919c); stroke-width: 1.5; }
+  .sm .edge.back { stroke-dasharray: 4 3; }
+  .sm .pill rect { fill: var(--accent-surface, #eaf0ff); stroke: none; }
+  .sm .pill text { font: 600 9px var(--font-sans, system-ui); fill: var(--accent-surface-foreground, #2458ac); }
+  .sm .ms rect { fill: color-mix(in srgb, var(--success, #1e8e3e) 16%, var(--background, #fff)); stroke: var(--success, #1e8e3e); stroke-width: 1; }
+  .sm .ms text { font: 600 9px var(--font-sans, system-ui); fill: var(--success, #1e8e3e); }
+  .sm .attn rect { fill: var(--warning-surface, #fff4d6); stroke: var(--warning, #e8a100); stroke-width: 1; }
+  .sm .attn text { font: 600 9.5px var(--font-sans, system-ui); fill: var(--warning-foreground, #7a5200); }
+  .legend { display: flex; flex-wrap: wrap; gap: .4rem .9rem; font-size: .76rem; color: var(--muted-foreground, #606773); margin-top: .4rem; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 2px solid; vertical-align: -2px; margin-right: .3rem; }
+
+  .arch .box rect { fill: var(--background, #fff); stroke: var(--border, #c7ccd4); stroke-width: 1.4; }
+  .arch .box.hub rect { stroke: var(--success, #1e8e3e); stroke-width: 2; fill: color-mix(in srgb, var(--success, #1e8e3e) 10%, var(--background, #fff)); }
+  .arch .box.edge rect { stroke: var(--accent, #2458ac); stroke-width: 2; fill: var(--accent-surface, #eaf0ff); }
+  .arch .box.new rect { stroke-dasharray: 5 3; }
+  .arch text { fill: var(--foreground, #202124); font: 600 11px var(--font-sans, system-ui); }
+  .arch text.sub { font: 9.5px var(--font-sans, system-ui); fill: var(--muted-foreground, #606773); font-weight: 400; }
+  .arch .flow { fill: none; stroke: var(--accent, #2458ac); stroke-width: 1.6; stroke-dasharray: 5 4; }
+  .arch .flow.cmd { stroke: var(--warning, #e8a100); }
+  .arch .flow.ext { stroke: var(--success, #1e8e3e); }
+  .arch .flow.deco { stroke: var(--muted-foreground, #8a919c); }
+
+  .drill { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .4rem; margin: .6rem 0; }
+  @media (max-width: 560px) { .drill { grid-template-columns: 1fr; } }
+  .drill .step { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .5rem); background: var(--card, #f7f8fa); padding: .55rem .6rem; }
+  .drill .step b { display: block; font-size: .84rem; }
+  .drill .step .n { font: 700 .68rem var(--font-mono, monospace); color: var(--accent, #2458ac); }
+  .drill .step p { font-size: .76rem; margin: .2rem 0 0; color: var(--muted-foreground, #606773); }
+
+  .tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: .6rem; }
+  .tier { border-radius: var(--radius, .5rem); padding: .6rem .7rem; border: 1px solid var(--border, #d8dce2); background: var(--card, #f7f8fa); }
+  .tier h3 { display: flex; justify-content: space-between; align-items: baseline; gap: .4rem; }
+  .tier.t1 { border-top: 3px solid var(--success, #1e8e3e); }
+  .tier.t2 { border-top: 3px solid var(--warning, #e8a100); }
+  .tier.t3 { border-top: 3px solid var(--destructive, #c5221f); }
+  .tier p { font-size: .82rem; margin: .25rem 0 0; }
+
+  .progress { display: flex; gap: 3px; height: 8px; margin: .5rem 0 1rem; }
+  .progress span { flex: 1; border-radius: 3px; background: var(--muted, #e6e8eb); transform-origin: left; }
+  .progress span.active { background: var(--accent, #2458ac); }
+  .timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+  .timeline::before { content: ""; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: var(--border, #d8dce2); }
+  .timeline > li { position: relative; padding: 0 0 1rem 1.75rem; }
+  .timeline > li::before { content: ""; position: absolute; left: 0; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--background, #fff); border: 2px solid var(--border, #d8dce2); }
+  .timeline > li.active::before { background: var(--accent, #2458ac); border-color: var(--accent, #2458ac); }
+  .timeline .head { display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; }
+
+  .risk-grid { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 3px; font-size: .74rem; margin: .5rem 0; }
+  .risk-grid .ax { color: var(--muted-foreground, #606773); padding: .3rem; display: flex; align-items: center; }
+  .risk-grid .cell { min-height: 50px; border-radius: 4px; padding: .3rem; display: flex; flex-wrap: wrap; gap: .25rem; align-content: flex-start; background: var(--muted, #f1f3f5); }
+  .risk-grid .cell.h { background: color-mix(in srgb, var(--destructive, #c5221f) 12%, transparent); }
+  .risk-grid .cell.m { background: color-mix(in srgb, var(--warning, #e8a100) 14%, transparent); }
+  .risk-grid .r { background: var(--background, #fff); border: 1px solid var(--border, #d8dce2); border-radius: 999px; padding: 0 .4rem; font-weight: 600; }
+
+  .goals { display: grid; grid-template-columns: 1fr 1fr; gap: .65rem; }
+  @media (max-width: 560px) { .goals { grid-template-columns: 1fr; } }
+  .goals ul { list-style: none; padding: 0; margin: .3rem 0 0; }
+  .goals li { padding-left: 1.2rem; position: relative; margin: .2rem 0; font-size: .86rem; }
+  .goals .yes li::before { content: "✓"; position: absolute; left: 0; color: var(--success, #1e8e3e); font-weight: 700; }
+  .goals .no li::before { content: "✕"; position: absolute; left: 0; color: var(--destructive, #c5221f); font-weight: 700; }
+
+  details { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .5rem); background: var(--card, #f7f8fa); padding: .5rem .7rem; margin: .5rem 0; }
+  summary { cursor: pointer; font-weight: 600; font-size: .86rem; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal { animation: rise .45s cubic-bezier(.2,.7,.3,1) both; animation-delay: calc(var(--i, 0) * 60ms); }
+    .sm .edge { stroke-dasharray: 400; stroke-dashoffset: 400; animation: draw .7s ease-out forwards; animation-delay: calc(250ms + var(--d, 0) * 80ms); }
+    .sm .edge.back { animation: drawback .7s ease-out forwards; animation-delay: calc(250ms + var(--d, 0) * 80ms); }
+    .sm .node, .sm .ms { animation: pop .4s ease-out both; animation-delay: calc(var(--d, 0) * 80ms); }
+    .sm .node.live rect { animation: ring 1.8s ease-in-out 1.5s infinite; }
+    .arch .flow { animation: flow 1.4s linear infinite; }
+    .drill .step { animation: rise .4s ease-out both; animation-delay: calc(var(--i, 0) * 80ms); }
+    .progress span { animation: grow .5s ease-out both; animation-delay: calc(300ms + var(--i, 0) * 60ms); }
+    .timeline > li.active::before { animation: pulse 1.8s ease-in-out infinite; }
+    @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+    @keyframes pop { from { opacity: 0; } }
+    @keyframes draw { to { stroke-dashoffset: 0; } }
+    @keyframes drawback { from { stroke-dasharray: 400; stroke-dashoffset: 400; } 99% { stroke-dasharray: 400; stroke-dashoffset: 0; } to { stroke-dasharray: 4 3; stroke-dashoffset: 0; } }
+    @keyframes flow { to { stroke-dashoffset: -18; } }
+    @keyframes grow { from { transform: scaleX(0); } }
+    @keyframes ring { 50% { stroke-width: 3.5; } }
+    @keyframes pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent, #2458ac) 25%, transparent); } }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 class="reveal">Bob SDLC state machine: drill-down, monitoring, orchestration <span class="badge">Design · rev 2</span></h1>
+  <p class="meta reveal" style="--i:1">2026-11-14 · gmackie/bob @ master <code>4fe38915</code> · <a href="https://tasks.gmac.io/gmacko/issue/BOB-75">BOB-75</a> · Claude with Graham · companion: t3code thread “Explore Unified Orchestration TUI”</p>
+
+  <div class="callout reveal" style="--i:2"><strong>Decision:</strong> the <strong>durable factory coordinator</strong> (<code>packages/bob/coordination</code>) <em>is</em> the SDLC state machine and the orchestration API. This work adds what it lacks: a <strong>public live edge</strong> (a Durable Object fed by an outbound exporter) and four surfaces on top of it: <strong>web, mobile, an Ink TUI and the t3code plugin</strong>. The coordinator remains the only writer.</div>
+
+  <div class="callout warn reveal" style="--i:3"><strong>Revision note:</strong> rev 1 was explored on a stale seed (<code>3b40bf09</code>). It proposed a new spec, a single-writer DO and a t3 bridge, all of which BOB-41…68 already ship in the coordinator and ooda-runner. Rev 2 builds on those instead of duplicating them.</div>
+
+  <h2 class="reveal" style="--i:4">What already exists</h2>
+  <div class="table-scroll reveal" style="--i:5"><table>
+    <thead><tr><th>Piece</th><th>Today</th><th>Gap for this work</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Coordinator</strong> (BOB-41…55, 68)</td><td><code>contract.forge</code> (ForgeC → OpenAPI, IR, typed client); plans with dependency DAGs; <code>ItemState</code> / <code>PlanState</code>; milestones; idempotent commands; <code>resourceVersion</code>; snapshot + <code>ReadEvents</code> cursor; Kanbanger adapter; T3 durable admission and receipts; REST + MCP on hetzner-bob (Tailscale only); Flightdeck exporter</td><td>Not reachable from the public internet or phones; no push stream; no visual surface; principals are static tokens, not Bob users</td></tr>
+      <tr><td>ooda-runner T3 bridge (BOB-40, 66)</td><td>Protocol 2: <code>orchestration.launchThread</code>, <code>getThreadProjection</code>, <code>dispatchCommand</code></td><td>Serves the legacy loop; not involved here</td></tr>
+      <tr><td>Legacy loop</td><td>Auto-drain cron, work items, <code>/cockpit</code></td><td>Not drawn on the new graph; it moves onto plans as a separate track</td></tr>
+      <tr><td>ForgeGraph live events</td><td><code>bob-ws-gateway/src/fg-events.ts</code> SSE, used only to tell clients to refetch</td><td>Becomes display-only CI detail on the edge</td></tr>
+      <tr><td>t3code plugin</td><td><code>bob_workspace</code>, <code>bob_planning_review</code>; agents can already reach the coordinator through remote MCP</td><td>No state-machine view</td></tr>
+      <tr><td><code>bob-execution/…/t3DispatchClient.ts</code></td><td>Posts to <code>/api/orchestration/dispatch</code>, a route that doesn't exist in t3code</td><td>Dead code; delete</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2 class="reveal" style="--i:6">Goals and non-goals</h2>
+  <div class="goals reveal" style="--i:7">
+    <div class="card yes"><span class="k">Goals</span><ul>
+      <li>Draw the coordinator's machine on web, mobile, TUI and plugin, all from one presentation spec</li>
+      <li>Drill down Fleet → Project → Repo → Item → Attempt, plus a Plan DAG view</li>
+      <li>Orchestrate through the coordinator's own operations, with tiered confirmation</li>
+      <li>Live updates everywhere with one Bob login</li>
+    </ul></div>
+    <div class="card no"><span class="k">Non-goals</span><ul>
+      <li>A second state machine or a second writer</li>
+      <li>Drawing the legacy auto-drain loop (it migrates onto plans separately)</li>
+      <li>Changing <code>contract.forge</code> semantics. Additions only: an export stream and per-user principals</li>
+      <li>Replacing <code>/cockpit</code></li>
+    </ul></div>
+  </div>
+
+  <h2 class="reveal" style="--i:8">1 · The machine: coordinator <code>ItemState</code></h2>
+  <p>Each <strong>item</strong> is a Kanbanger issue with an execution target, inside a <strong>plan</strong>. The states come straight from <code>contract.forge</code>; the green tags are the milestones that downstream dependencies wait for. A presentation spec adds only layout, labels, owners and the attention mapping, and it's generated from the enums so the two can't drift apart.</p>
+  <figure class="panel sm" aria-label="Coordinator item state machine">
+    <svg viewBox="0 0 720 350" role="img" aria-labelledby="smT">
+      <title id="smT">pending, ready, reserved, running, validating, review, deploying, completed. running loops with waiting-input and can become execution-unknown. review can send work back to running as a new attempt. failed, cancelling and cancelled are terminal paths.</title>
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--muted-foreground, #8a919c)"/></marker></defs>
+      <path class="edge" style="--d:1" d="M110 60 H136" marker-end="url(#ah)"/>
+      <path class="edge" style="--d:2" d="M236 60 H262" marker-end="url(#ah)"/>
+      <path class="edge" style="--d:3" d="M362 60 H388" marker-end="url(#ah)"/>
+      <path class="edge" style="--d:4" d="M498 60 H566" marker-end="url(#ah)"/>
+      <path class="edge" style="--d:5" d="M430 80 V128" marker-end="url(#ah)"/>
+      <path class="edge back" style="--d:5" d="M462 128 V82" marker-end="url(#ah)"/>
+      <path class="edge" style="--d:6" d="M400 80 C380 110 330 130 306 136" marker-end="url(#ah)"/>
+      <path class="edge back" style="--d:6" d="M306 160 C360 168 395 120 410 82" marker-end="url(#ah)"/>
+      <path class="edge" style="--d:7" d="M640 80 V218" marker-end="url(#ah)"/>
+      <path class="edge back" style="--d:8" d="M590 220 C570 160 520 110 486 82" marker-end="url(#ah)"/>
+      <path class="edge" style="--d:9" d="M574 240 H544" marker-end="url(#ah)"/>
+      <path class="edge" style="--d:10" d="M314 240 H246" marker-end="url(#ah)"/>
+      <g class="node system" style="--d:0"><rect x="10" y="40" width="100" height="40" rx="8"/><text x="60" y="58" text-anchor="middle">pending</text><text class="sub" x="60" y="72" text-anchor="middle">deps unmet</text></g>
+      <g class="node system" style="--d:1"><rect x="136" y="40" width="100" height="40" rx="8"/><text x="186" y="58" text-anchor="middle">ready</text><text class="sub" x="186" y="72" text-anchor="middle">awaiting capacity</text></g>
+      <g class="node system" style="--d:2"><rect x="262" y="40" width="100" height="40" rx="8"/><text x="312" y="58" text-anchor="middle">reserved</text><text class="sub" x="312" y="72" text-anchor="middle">T3 admission</text></g>
+      <g class="node agent live" style="--d:3"><rect x="388" y="40" width="110" height="40" rx="8"/><text x="443" y="58" text-anchor="middle">running</text><text class="sub" x="443" y="72" text-anchor="middle">attempt ▸ thread</text></g>
+      <g class="node system" style="--d:4"><rect x="566" y="40" width="144" height="40" rx="8"/><text x="638" y="58" text-anchor="middle">validating</text><text class="sub" x="638" y="72" text-anchor="middle">CI · validation receipt</text></g>
+      <g class="node human" style="--d:5"><rect x="384" y="128" width="120" height="36" rx="8"/><text x="444" y="145" text-anchor="middle">waiting-input</text><text class="sub" x="444" y="158" text-anchor="middle">ResolveInput</text></g>
+      <g class="node term" style="--d:6"><rect x="176" y="128" width="130" height="36" rx="8" style="stroke:var(--warning,#e8a100)"/><text x="241" y="145" text-anchor="middle">execution-unknown</text><text class="sub" x="241" y="158" text-anchor="middle">ReconcileItem</text></g>
+      <g class="node human" style="--d:7"><rect x="574" y="220" width="136" height="40" rx="8"/><text x="642" y="238" text-anchor="middle">review</text><text class="sub" x="642" y="252" text-anchor="middle">open-pr · approve · merge</text></g>
+      <g class="node system" style="--d:9"><rect x="314" y="210" width="230" height="60" rx="8"/><text x="429" y="228" text-anchor="middle">deploying</text>
+        <g class="pill"><rect x="326" y="238" width="64" height="20" rx="10"/><text x="358" y="252" text-anchor="middle">deploy</text></g>
+        <g class="pill"><rect x="397" y="238" width="64" height="20" rx="10"/><text x="429" y="252" text-anchor="middle">promote</text></g>
+        <g class="pill"><rect x="468" y="238" width="64" height="20" rx="10"/><text x="500" y="252" text-anchor="middle">rollback</text></g></g>
+      <g class="node system" style="--d:10"><rect x="136" y="220" width="110" height="40" rx="8"/><text x="191" y="238" text-anchor="middle">completed</text><text class="sub" x="191" y="252" text-anchor="middle">completionTarget met</text></g>
+      <g class="ms" style="--d:4"><rect x="502" y="22" width="60" height="16" rx="8"/><text x="532" y="33" text-anchor="middle">exec ✓</text></g>
+      <g class="ms" style="--d:7"><rect x="646" y="140" width="66" height="16" rx="8"/><text x="679" y="151" text-anchor="middle">review-ready</text></g>
+      <g class="ms" style="--d:9"><rect x="546" y="270" width="54" height="16" rx="8"/><text x="573" y="281" text-anchor="middle">merged</text></g>
+      <g class="ms" style="--d:10"><rect x="230" y="270" width="80" height="16" rx="8"/><text x="270" y="281" text-anchor="middle">prod-verified</text></g>
+      <text class="sub" x="500" y="130" style="font-size:9px">new attempt</text>
+      <g class="node term" style="--d:11"><rect x="10" y="306" width="74" height="30" rx="8"/><text x="47" y="325" text-anchor="middle">failed</text></g>
+      <g class="node term" style="--d:11"><rect x="92" y="306" width="96" height="30" rx="8"/><text x="140" y="325" text-anchor="middle">cancelling</text></g>
+      <g class="node term" style="--d:11"><rect x="196" y="306" width="96" height="30" rx="8"/><text x="244" y="325" text-anchor="middle">cancelled</text></g>
+      <g class="attn"><rect x="330" y="306" width="380" height="30" rx="6"/><text x="520" y="325" text-anchor="middle">plan: draft · active · paused · cancelling · cancelled · completed</text></g>
+    </svg>
+    <div class="legend"><span><i style="border-color:var(--warning,#e8a100)"></i>needs a human</span><span><i style="border-color:var(--accent,#2458ac)"></i>agent working</span><span><i style="border-color:var(--success,#1e8e3e)"></i>system</span><span><i style="border-color:var(--destructive,#c5221f);border-style:dashed"></i>terminal</span><span>green tag = milestone</span><span>dashed = loop back</span></div>
+    <figcaption>Attention, as drawn: <strong>needs_human</strong> = <code>waiting-input</code>, or <code>review</code> waiting on approval; <strong>stalled</strong> = <code>execution-unknown</code>, or a state past its threshold; <strong>failed</strong> = <code>failed</code>. Attention is derived for display only; the coordinator's state is untouched.</figcaption>
+  </figure>
+
+  <h2 class="reveal" style="--i:9">2 · Drill-down</h2>
+  <div class="drill">
+    <div class="step" style="--i:0"><span class="n">L1</span><b>Fleet</b><p>Item counts per state, active plans, every attention item</p></div>
+    <div class="step" style="--i:1"><span class="n">L2</span><b>Project</b><p>A BizPulse startup and the ForgeGraph apps it owns; anything else goes under “Unassigned”</p></div>
+    <div class="step" style="--i:2"><span class="n">L3</span><b>Repo</b><p>From <code>ExecutionTarget</code> / <code>RepositoryRef</code></p></div>
+    <div class="step" style="--i:3"><span class="n">L4</span><b>Item</b><p>Path through the machine, milestones, operations, evidence, its issue</p></div>
+    <div class="step" style="--i:4"><span class="n">L5</span><b>Attempt</b><p><code>ThreadRef</code> → live t3 tail, pending input, CI phases</p></div>
+  </div>
+  <p class="muted"><strong>Plan view</strong> is a second way into the same data: one plan's dependency DAG, with each edge labelled by the milestone it waits on (<code>Dependency.requiredMilestone</code>) and each node coloured by its item's state. It's reachable from L1 and from any item.</p>
+
+  <h2 class="reveal" style="--i:10">3 · Architecture: the coordinator is the truth, the edge is public</h2>
+  <figure class="panel arch" aria-label="Architecture">
+    <svg viewBox="0 0 720 290" role="img" aria-labelledby="arT">
+      <title id="arT">Kanbanger, T3 environments and ForgeGraph talk to the coordinator on hetzner-bob. The coordinator's edge exporter dials out to the SdlcEdge Durable Object, which fans out to web, mobile, TUI and plugin and relays commands back. A tail relay forwards live thread output; ForgeGraph sends display-only CI detail to the edge.</title>
+      <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--accent, #2458ac)"/></marker></defs>
+      <g class="box"><rect x="6" y="14" width="150" height="44" rx="8"/><text x="16" y="33">Kanbanger</text><text class="sub" x="16" y="48">issues · effects</text></g>
+      <g class="box"><rect x="6" y="78" width="150" height="54" rx="8"/><text x="16" y="97">T3 environments</text><text class="sub" x="16" y="112">durable admission</text><text class="sub" x="16" y="125">execution receipts</text></g>
+      <g class="box"><rect x="6" y="152" width="150" height="44" rx="8"/><text x="16" y="171">ForgeGraph</text><text class="sub" x="16" y="186">validation · prod evidence</text></g>
+      <path class="flow" d="M156 36 C172 36 170 66 186 66" marker-end="url(#a2)"/>
+      <path class="flow" d="M156 100 H186" marker-end="url(#a2)"/>
+      <path class="flow" d="M156 170 C172 170 170 132 186 132" marker-end="url(#a2)"/>
+      <path class="flow" d="M156 124 C175 124 168 206 186 206" marker-end="url(#a2)"/>
+      <g class="box hub"><rect x="188" y="40" width="160" height="112" rx="10"/><text x="200" y="60">Coordinator</text><text class="sub" x="200" y="76">hetzner-bob · SQLite</text><text class="sub" x="200" y="90">only writer · contract.forge</text><text class="sub" x="200" y="104">plans · items · milestones</text><text class="sub" x="200" y="118">REST + MCP (Tailscale)</text><text class="sub" x="200" y="132">+ edge exporter (new)</text></g>
+      <g class="box new"><rect x="188" y="184" width="160" height="44" rx="8"/><text x="200" y="203">Tail relay (new)</text><text class="sub" x="200" y="218">t3 client facade · ThreadRef</text></g>
+      <path class="flow ext" d="M348 82 H386" marker-end="url(#a2)"/>
+      <text class="sub" x="350" y="74">dials out</text>
+      <path class="flow cmd" d="M386 122 H350" marker-end="url(#a2)"/>
+      <text class="sub" x="354" y="138">cmds</text>
+      <path class="flow ext" d="M348 206 C368 206 370 160 386 156" marker-end="url(#a2)"/>
+      <path class="flow deco" d="M156 188 C230 270 380 262 452 194" marker-end="url(#a2)"/>
+      <text class="sub" x="250" y="262">live CI detail (display only)</text>
+      <g class="box edge new"><rect x="388" y="54" width="150" height="138" rx="10"/><text x="400" y="74">SdlcEdge DO</text><text class="sub" x="400" y="90">Cloudflare · per workspace</text><text class="sub" x="400" y="104">snapshot cache + replay</text><text class="sub" x="400" y="118">Bob auth → principal</text><text class="sub" x="400" y="132">tiers · confirmations</text><text class="sub" x="400" y="146">hibernatable client ws</text><text class="sub" x="400" y="160">never writes state</text></g>
+      <g class="box"><rect x="566" y="14" width="148" height="40" rx="8"/><text x="576" y="31">Web /sdlc</text><text class="sub" x="576" y="45">graph · plan DAG</text></g>
+      <g class="box"><rect x="566" y="66" width="148" height="40" rx="8"/><text x="576" y="83">Mobile</text><text class="sub" x="576" y="97">Attention · push</text></g>
+      <g class="box"><rect x="566" y="118" width="148" height="40" rx="8"/><text x="576" y="135">TUI apps/bob-tui</text><text class="sub" x="576" y="149">Ink 6 · Node</text></g>
+      <g class="box"><rect x="566" y="170" width="148" height="40" rx="8"/><text x="576" y="187">t3code plugin</text><text class="sub" x="576" y="201">bob_sdlc view</text></g>
+      <path class="flow" d="M538 90 C552 90 550 34 564 34" marker-end="url(#a2)"/>
+      <path class="flow" d="M538 100 C552 100 550 86 564 86" marker-end="url(#a2)"/>
+      <path class="flow" d="M538 110 C552 110 550 138 564 138" marker-end="url(#a2)"/>
+      <path class="flow" d="M538 120 C552 120 550 190 564 190" marker-end="url(#a2)"/>
+      <path class="flow cmd" d="M564 202 C552 202 554 178 540 178" marker-end="url(#a2)"/>
+    </svg>
+    <figcaption>Green = coordinator data leaving hetzner-bob (always outbound, the same pattern as <code>runtime/flightdeck.mjs</code>) · amber = commands · grey = display-only CI detail. Dashed boxes are new. Agents in T3 keep talking to the coordinator's MCP directly; that path doesn't change.</figcaption>
+  </figure>
+  <div class="grid">
+    <div class="card"><span class="k">Edge exporter (coordinator, new)</span><p>Opens a websocket <em>out</em> to the DO. It sends the <code>CoordinationChange</code> pages with the changed plan and item snapshots, resumes from a checkpoint, and receives commands on the same socket. Commands go through the coordinator's existing handlers with <code>Idempotency-Key = commandId</code>.</p></div>
+    <div class="card"><span class="k">SdlcEdge DO (Bob Worker, new)</span><p>Caches the snapshot, keeps a replay buffer, and fans out to clients over hibernatable websockets. It maps a Bob user to a coordinator principal, enforces command tiers and confirmations, and <strong>never decides state</strong>. If the coordinator is offline, it serves the last snapshot read-only with a banner.</p></div>
+    <div class="card"><span class="k">Tail relay (new)</span><p>Runs next to the coordinator. It uses the t3 client to follow the threads of running attempts (<code>ExecutionAdmission.thread</code>) and forwards short tail frames and pending input to the DO. Frames are ephemeral and never stored.</p></div>
+  </div>
+
+  <h2 class="reveal" style="--i:11">4 · Orchestration: the coordinator's operations, tiered</h2>
+  <div class="tiers">
+    <div class="tier t1"><h3>Tier 1 <span class="chip done">no confirm</span></h3><p><code>ResolveInput</code> (answer an agent) · <code>ReconcileItem</code> · pause or resume via <code>ControlPlan</code></p></div>
+    <div class="tier t2"><h3>Tier 2 <span class="chip risk">confirm</span></h3><p><code>RetryItem</code> · <code>CancelItem</code> · <code>ControlPlan</code> start/cancel · <code>TriggerPlan</code> · <code>Create/UpdatePlan</code> · <code>RequestRelease</code> open-pr/approve/merge · <code>RequestValidation</code> · <code>RequestDeployment</code> deploy</p></div>
+    <div class="tier t3"><h3>Tier 3 <span class="chip high">typed confirm</span></h3><p><code>RequestDeployment</code> promote/rollback. You type the repo name to confirm.</p></div>
+  </div>
+  <p class="muted">Every command carries the item or plan's <code>resourceVersion</code>; the coordinator rejects stale ones after replaying its idempotency check. Agents propose tier 2 and 3 actions through MCP, and a human confirms them in a view. The coordinator's principal policy still applies on top of the tiers.</p>
+
+  <h2 class="reveal" style="--i:12">5 · Surfaces</h2>
+  <p>The shared <code>@bob/sdlc-view</code> package holds the presentation spec generated from <code>contract.forge</code> (layout, labels, owners, attention, tiers), level navigation, the delta reducer and which commands are allowed. Surfaces only draw.</p>
+  <div class="grid">
+    <div class="card"><h3>Web <code>/sdlc</code></h3><ul><li>State graph with counts and attention badges; edges animate on transitions</li><li>Plan DAG view; breadcrumb drill-down; evidence and actions side panel</li><li>Attempt level: live tail, pending input, CI phases</li></ul></div>
+    <div class="card"><h3>Mobile (Expo)</h3><ul><li>Graph at L1–L3 with <code>react-native-svg</code>; list-first at L4–L5</li><li><strong>Attention</strong> tab with push on new <code>waiting-input</code>, review gates and failures</li><li>Confirmation sheets for tiers 2 and 3</li></ul></div>
+    <div class="card"><h3>TUI <code>apps/bob-tui</code></h3><ul><li>Ink 6 on Node; one Bob device login</li><li>Panes: tree · box-drawn machine or plan DAG · evidence; inbox strip</li><li><code>enter/esc</code> drill · <code>:</code> palette · <code>a</code> answer · <code>r</code> retry · <code>m</code> merge · <code>p</code> promote (typed)</li></ul></div>
+    <div class="card"><h3>t3code plugin</h3><ul><li><code>bob_sdlc</code> MCP App view: shows the item behind the current thread (matched by <code>ThreadRef</code>), or Fleet for a project</li><li>Reads from the edge; agent tools keep using the coordinator's MCP</li></ul></div>
+  </div>
+
+  <h2 class="reveal" style="--i:13">6 · t3code coordination</h2>
+  <div class="table-scroll"><table>
+    <thead><tr><th>Item</th><th>Rev 2 position</th></tr></thead>
+    <tbody>
+      <tr><td>Who uses the client</td><td>The <strong>tail relay</strong> next to the coordinator: plain Node ESM with deliberately few dependencies and no Effect. Neither the TUI nor the DO uses it.</td></tr>
+      <tr><td>Client surface</td><td>Wrap <code>orchestration.subscribeThread</code> (tail) and <code>subscribeShell</code> (to spot <code>pendingRuntimeRequest</code>), and expose a <strong>Promise/AsyncIterable facade with Effect bundled inside</strong>. Starting runs and answering input stay with the coordinator's durable admission and <code>ResolveInput</code>.</td></tr>
+      <tr><td>Join key</td><td><code>ExecutionAdmission.thread</code> (<code>ThreadRef</code>) from the coordinator. <code>bob:item:&lt;id&gt;</code> tags are optional, useful only for filtering on the t3 side.</td></tr>
+      <tr><td>Effect</td><td>Bob → 4.1.3 is still worth doing, but it <strong>no longer blocks</strong> this work.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2 class="reveal" style="--i:14">Phases</h2>
+  <div class="progress" role="img" aria-label="4 phases; phase 1 can start now"><span class="active" style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span></div>
+  <ol class="timeline">
+    <li class="active reveal" style="--i:15"><div class="head"><h3>Phase 1: Edge and read-only web</h3><span class="chip todo">Todo</span></div>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Edge exporter: outbound ws, change pages and snapshots, checkpoint, command channel (read-only first)</td><td><code>packages/bob/coordination/runtime/edge.mjs</code>, <code>worker.mjs</code></td><td><code>node --test</code>: resume after restart, no duplicates, cursor expiry → fresh snapshot</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td><code>SdlcEdge</code> DO: authenticate the exporter, cache, replay, client fan-out, offline banner</td><td><code>apps/bob/worker/sdlc/*.ts</code>, <code>apps/bob/wrangler.jsonc</code></td><td><code>@cloudflare/vitest-pool-workers</code>: ordering, replay, reconnect</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Presentation spec generated from <code>contract.forge</code> enums; view model and reducer</td><td><code>packages/bob/src/sdlc-view/*</code>, generator script</td><td>CI fails if an enum value has no presentation entry</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Project mapping (startup → ForgeGraph apps → repos)</td><td><code>apps/bob/worker/sdlc/projects.ts</code></td><td>Every target maps to a project or “Unassigned”</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Read-only <code>/sdlc</code>: L1–L4 and the plan DAG</td><td><code>apps/bob/src/app/sdlc/*</code></td><td><code>/qa</code> against a staging coordinator with a pilot plan</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+    <li class="reveal" style="--i:16"><div class="head"><h3>Phase 2: Commands and TUI v1</h3><span class="chip todo">Todo</span></div>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Per-user principals in the coordinator; commands relayed through the edge with tiers</td><td><code>packages/bob/coordination/runtime/http.mjs</code>, <code>edge.mjs</code>; <code>apps/bob/worker/sdlc/commands.ts</code></td><td>Stale <code>resourceVersion</code> rejected; replay returns the same receipt; actor recorded</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Web actions panel with tier 2 and 3 confirmation</td><td><code>apps/bob/src/app/sdlc/*</code></td><td><code>/qa</code> on staging</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td><code>apps/bob-tui</code> v1</td><td><code>apps/bob-tui/**</code></td><td>Ink snapshot tests; manual run against staging</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+    <li class="reveal" style="--i:17"><div class="head"><h3>Phase 3: Attempt level</h3><span class="chip todo">Todo</span><span class="chip risk">needs t3 client facade</span></div>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Tail relay for running attempts</td><td><code>packages/bob/coordination/runtime/tail.mjs</code></td><td>Contract tests on recorded t3 frames; relay restart</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Display-only ForgeGraph CI detail on the edge</td><td><code>apps/bob/worker/sdlc/fg.ts</code></td><td>Never changes coordinator state; drops cleanly when FG is down</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>L5 on web and TUI; answer input through <code>ResolveInput</code></td><td><code>apps/bob/src/app/sdlc/*</code>, <code>apps/bob-tui/**</code></td><td>Manual: answer a pilot attempt's question from the TUI</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+    <li class="reveal" style="--i:18"><div class="head"><h3>Phase 4: Mobile and plugin</h3><span class="chip todo">Todo</span></div>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Attention tab with push, graph and confirmation sheets</td><td><code>apps/mobile-bob/src/app/attention.tsx</code>, <code>src/features/sdlc/*</code></td><td>iOS simulator QA through the device tools</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td><code>bob_sdlc</code> view in the plugin</td><td><code>t3code-bob-plugin/src/views/sdlc.client.ts</code></td><td><code>bun test</code>; dev host</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+  </ol>
+  <p class="muted">Separate tracks, each with its own issue: legacy loop → plans; Bob Effect → 4.1.3; delete <code>bob-execution</code>'s dead t3 dispatch.</p>
+
+  <h2 class="reveal" style="--i:19">Failure handling</h2>
+  <div class="table-scroll"><table>
+    <thead><tr><th>Failure</th><th>Behaviour</th></tr></thead>
+    <tbody>
+      <tr><td>Coordinator or exporter offline</td><td>The edge serves its last snapshot read-only with “coordinator offline since …”; commands are refused with a reason.</td></tr>
+      <tr><td>Exporter reconnects</td><td>It resumes from its checkpoint. If the cursor has expired, it sends a fresh snapshot, as the contract requires.</td></tr>
+      <tr><td>Command outcome unknown (socket dropped mid-command)</td><td>The client retries with the same <code>commandId</code>; the coordinator replays the stored receipt.</td></tr>
+      <tr><td><code>execution-unknown</code></td><td>Shown as stalled, with <code>ReconcileItem</code> offered. Never shown as failed.</td></tr>
+      <tr><td>Tail relay or ForgeGraph detail missing</td><td>That panel shows “live detail unavailable”; state and actions are unaffected.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2 class="reveal" style="--i:20">Risks</h2>
+  <div class="risk-grid" role="img" aria-label="Risk grid: likelihood rows, impact columns">
+    <div class="ax"></div><div class="ax">low impact</div><div class="ax">medium</div><div class="ax">high impact</div>
+    <div class="ax">likely</div><div class="cell m"><span class="r">R5</span></div><div class="cell m"><span class="r">R1</span></div><div class="cell h"></div>
+    <div class="ax">possible</div><div class="cell"></div><div class="cell m"><span class="r">R3</span></div><div class="cell m"><span class="r">R2</span><span class="r">R4</span></div>
+    <div class="ax">unlikely</div><div class="cell"></div><div class="cell"><span class="r">R6</span></div><div class="cell m"></div>
+  </div>
+  <details><summary>Risks and mitigations</summary><div class="table-scroll"><table>
+    <thead><tr><th>#</th><th>Risk</th><th>Mitigation</th></tr></thead>
+    <tbody>
+      <tr><td>R1</td><td>The legacy loop still carries most work, so the new graph looks empty at first</td><td>L1 shows a count of “legacy items” linking to <code>/cockpit</code>; migration is its own track</td></tr>
+      <tr><td>R2</td><td>Exposing coordinator commands publicly widens the attack surface</td><td>Bob auth, per-user principals, tiers, coordinator policy on top; the coordinator never opens an inbound port</td></tr>
+      <tr><td>R3</td><td>The coordinator is a single node on hetzner-bob</td><td>The edge degrades to read-only; durable state and recovery already exist (BOB-44)</td></tr>
+      <tr><td>R4</td><td>A tier 3 action is taken by mistake</td><td>Typed confirmation; every command logged with its actor; rollback is itself tier 3</td></tr>
+      <tr><td>R5</td><td>The presentation spec drifts from <code>contract.forge</code></td><td>Generated from the contract; CI fails on any unmapped value</td></tr>
+      <tr><td>R6</td><td>Ink can't draw a plan DAG legibly</td><td>Show the DAG as an indented dependency tree in the TUI; OpenTUI as a fallback</td></tr>
+    </tbody>
+  </table></div></details>
+
+  <h2 class="reveal" style="--i:21">Verification</h2>
+  <ul>
+    <li><strong>Coordinator additions:</strong> <code>npm run verify</code> (generated artifacts byte-identical) plus new edge and tail tests; durability pilot replayed across restarts.</li>
+    <li><strong>Edge DO:</strong> Workers vitest pool covering replay, reconnect, tiers and offline mode.</li>
+    <li><strong>Surfaces:</strong> view-model unit tests, Ink snapshots, <code>/qa</code> on web, iOS simulator on mobile.</li>
+    <li><strong>Production:</strong> BOB-75 closes only after a pilot plan's item is seen live on <code>/sdlc</code> from <code>ready</code> to <code>completed</code> with <code>production-verified</code>, and the edge deploy is verified healthy in ForgeGraph.</li>
+  </ul>
+
+  <h2 class="reveal" style="--i:22">Open questions</h2>
+  <div class="table-scroll"><table>
+    <thead><tr><th>Question</th><th>Recommendation</th></tr></thead>
+    <tbody>
+      <tr><td>Per-user principals: the coordinator's <code>principals.json</code> holds static tokens. How does a Bob user become an actor?</td><td><span class="chip done">Decided</span> The edge holds one service principal and passes a <em>verified</em> Bob user id as the actor. The coordinator records the actor and applies a per-user policy.</td></tr>
+      <tr><td>T3 approval requests (not just questions): does the contract cover them, or only <code>ResolveInput</code> prompts?</td><td>Show them read-only in v1; extend the contract only if they turn out to be common.</td></tr>
+      <tr><td>Where does the startup → ForgeGraph app mapping live?</td><td><span class="chip done">Decided</span> <strong>BizPulse owns it.</strong> The edge reads it from BizPulse and caches it; Bob never owns it.</td></tr>
+      <tr><td>Can ForgeGraph push CI detail straight to the edge?</td><td>Prefer push; fall back to an edge subscription.</td></tr>
+    </tbody>
+  </table></div>
+</main>
+</body>
+</html>
