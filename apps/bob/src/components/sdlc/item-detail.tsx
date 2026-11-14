@@ -51,9 +51,9 @@ export function ItemDetail({ row, onClose, onOpenPlan }: { row: Row; onClose: ()
                   "rounded-md border px-1.5 py-0.5 text-xs",
                   achieved ? "border-emerald-500/40 bg-emerald-500/10 text-foreground" : "border-border text-muted-foreground/60",
                 )}
-                aria-label={`${MILESTONE_LABEL[m]}: ${achieved ? "achieved" : "not yet"}`}
               >
                 {MILESTONE_LABEL[m]}
+                <span className="sr-only">: {achieved ? "achieved" : "not yet"}</span>
               </span>
             );
           })}

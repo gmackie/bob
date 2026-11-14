@@ -37,4 +37,14 @@ describe("StateGraph", () => {
     expect(nodeOf(html, "review")).toContain("opacity-50");
     expect(nodeOf(html, "running")).not.toContain("opacity-50");
   });
+
+  it("gives each graph its own arrow marker id, and points every edge at it", () => {
+    const html = renderToStaticMarkup(<><StateGraph counts={counts} /><StateGraph counts={counts} /></>);
+    const ids = [...html.matchAll(/<marker id="([^"]+)"/g)].map((m) => m[1]!);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    ids.forEach((id) => expect(id).toMatch(/^[A-Za-z0-9_-]+$/));
+    const refs = new Set([...html.matchAll(/marker-end="url\(#([^)]+)\)"/g)].map((m) => m[1]));
+    expect(refs).toEqual(new Set(ids));
+  });
 });

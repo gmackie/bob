@@ -145,7 +145,8 @@ describe("ItemDetail", () => {
     const row = rows(view).find((r) => r.item.itemId === "a")!;
     const html = renderToStaticMarkup(<ItemDetail row={row} onClose={() => {}} onOpenPlan={() => {}} />);
     expect(html).toContain('href="https://tasks.gmac.io/BOB-1"');
-    expect(html).toContain('aria-label="merged: not yet"');
+    expect(html).toMatch(/>merged<span class="sr-only">: not yet<\/span>/);
+    expect(html).not.toMatch(/<span[^>]*aria-label="merged/);
     expect(html).toContain("att-1");
     expect(html).toContain("env-1 / proj-1 / thr-9 · turn turn-2");
   });

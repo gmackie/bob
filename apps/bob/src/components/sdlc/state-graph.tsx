@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import { useId, type KeyboardEvent } from "react";
 import { ITEM_STATES, STATE_EDGES, STATE_PRESENTATION, type ItemState, type Owner, type StateEdge } from "@bob/sdlc-view";
 
 import { cn } from "@gmacko/core/ui";
@@ -61,6 +61,8 @@ export interface StateGraphProps {
  * States that need attention (stalled, waiting on a human) are tinted amber.
  */
 export function StateGraph({ counts, selected = null, onSelect, className }: StateGraphProps) {
+  // One marker per graph: two graphs on a page must not share (or fight over) an id.
+  const arrowId = `sdlc-arrow-${useId().replace(/[^A-Za-z0-9_-]/g, "")}`;
   const select = (state: ItemState) => onSelect?.(state);
   const onKey = (state: ItemState) => (event: KeyboardEvent) => {
     if (event.key === "Enter" || event.key === " ") { event.preventDefault(); select(state); }
@@ -74,7 +76,7 @@ export function StateGraph({ counts, selected = null, onSelect, className }: Sta
         className="w-full min-w-[640px] text-foreground"
       >
         <defs>
-          <marker id="sdlc-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <marker id={arrowId} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L8,4 L0,8 Z" className="fill-muted-foreground" />
           </marker>
         </defs>
@@ -88,7 +90,7 @@ export function StateGraph({ counts, selected = null, onSelect, className }: Sta
               className="stroke-muted-foreground/50"
               strokeWidth={1.25}
               strokeDasharray={edge.loop ? "5 4" : undefined}
-              markerEnd="url(#sdlc-arrow)"
+              markerEnd={`url(#${arrowId})`}
             />
           ))}
         </g>
