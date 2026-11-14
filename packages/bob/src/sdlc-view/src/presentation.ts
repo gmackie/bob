@@ -12,19 +12,22 @@ export interface StatePresentation {
 }
 
 export const STATE_PRESENTATION = {
+  // validating is "stalled" because nothing moves an item out of it yet: only
+  // execution.mjs receive() writes it, and no validation receipt is implemented.
+  // Flip it back to "ok" when RecordValidationReceipt lands in the coordinator.
   pending:             { label: "Pending",           owner: "system",   attention: "ok",          col: 0, row: 0, hint: "dependencies unmet or plan not active" },
   ready:               { label: "Ready",             owner: "system",   attention: "ok",          col: 1, row: 0, hint: "waiting for capacity" },
   reserved:            { label: "Reserved",          owner: "system",   attention: "ok",          col: 2, row: 0, hint: "T3 admission" },
   running:             { label: "Running",           owner: "agent",    attention: "ok",          col: 3, row: 0, hint: "attempt in a T3 thread" },
   "waiting-input":     { label: "Waiting for input", owner: "human",    attention: "needs_human", col: 3, row: 1, hint: "an agent asked a question" },
   "execution-unknown": { label: "Execution unknown", owner: "system",   attention: "stalled",     col: 2, row: 1, hint: "admission unconfirmed; dispatch retries after the lease" },
-  validating:          { label: "Validating",        owner: "system",   attention: "ok",          col: 4, row: 0, hint: "CI and validation receipt" },
+  validating:          { label: "Validating",        owner: "system",   attention: "stalled",     col: 4, row: 0, hint: "validation not yet automated" },
   review:              { label: "Review",            owner: "human",    attention: "needs_human", col: 4, row: 2, hint: "PR, approve, merge" },
   deploying:           { label: "Deploying",         owner: "system",   attention: "ok",          col: 3, row: 2, hint: "deploy and promote" },
   completed:           { label: "Completed",         owner: "system",   attention: "ok",          col: 2, row: 2, hint: "completion target met" },
   failed:              { label: "Failed",            owner: "terminal", attention: "failed",      col: 0, row: 3, hint: "retry starts a new attempt" },
-  cancelling:          { label: "Cancelling",        owner: "terminal", attention: "ok",          col: 1, row: 3, hint: "" },
-  cancelled:           { label: "Cancelled",         owner: "terminal", attention: "ok",          col: 2, row: 3, hint: "retry starts a new attempt" },
+  cancelling:          { label: "Cancelling",        owner: "system",   attention: "ok",          col: 1, row: 3, hint: "" },
+  cancelled:           { label: "Cancelled",         owner: "terminal", attention: "ok",          col: 2, row: 3, hint: "retry needs an active plan and a prior attempt" },
 } as const satisfies Record<ItemState, StatePresentation>;
 
 export interface StateEdge {

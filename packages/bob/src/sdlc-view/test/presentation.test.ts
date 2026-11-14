@@ -13,6 +13,12 @@ describe("presentation spec", () => {
     const cells = Object.values(STATE_PRESENTATION).map((s) => `${s.col}:${s.row}`);
     expect(new Set(cells).size).toBe(cells.length);
   });
+  it("marks validating as stalled until the coordinator automates it", () => {
+    expect(STATE_PRESENTATION.validating.attention).toBe("stalled");
+  });
+  it("treats cancelling as system-owned, not terminal", () => {
+    expect(STATE_PRESENTATION.cancelling.owner).toBe("system");
+  });
   it("draws edges only between known states", () => {
     for (const edge of STATE_EDGES) {
       expect(ITEM_STATES).toContain(edge.from);

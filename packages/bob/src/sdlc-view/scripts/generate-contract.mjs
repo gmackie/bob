@@ -19,7 +19,14 @@ const enumOf = (where, schema) => {
 
 const item = response('/api/v1/coordination/items/query').properties.item.properties;
 const plan = response('/api/v1/coordination/plans/query').properties;
-const list = (name, values) => `export const ${name} = ${JSON.stringify(values)} as const;\n`;
+// Emits Prettier-formatted source (default printWidth 80, double quotes, trailing
+// commas), so formatting the package never rewrites this generated file and --check stays stable.
+const PRINT_WIDTH = 80;
+const list = (name, values) => {
+  const quoted = values.map(value => JSON.stringify(value));
+  const line = `export const ${name} = [${quoted.join(', ')}] as const;`;
+  return line.length <= PRINT_WIDTH ? `${line}\n` : `export const ${name} = [\n${quoted.map(v => `  ${v},\n`).join('')}] as const;\n`;
+};
 const source = '// Generated from packages/bob/coordination/generated/openapi.json. Do not edit.\n'
   + '// Regenerate: pnpm --filter @bob/sdlc-view generate\n'
   + list('ITEM_STATES', enumOf('GetItem item.state', item.state))
