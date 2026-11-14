@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { emptyView, type EdgeView } from "@bob/sdlc-view";
 
-import { createEdgeClient, reconnectDelay, type EdgeConnection } from "./edge-client";
+import { createBackoff, createEdgeClient, type EdgeConnection } from "./edge-client";
 
 export type { EdgeConnection } from "./edge-client";
 
@@ -16,7 +16,7 @@ export function edgeSocketUrl(href: string): string {
 
 /**
  * The live SDLC view from the edge: connects to /api/sdlc/ws, says hello with the last
- * seq and epoch, folds messages through reduce(), and reconnects with capped backoff.
+ * seq and epoch, folds messages through reduce(), and reconnects with capped, jittered backoff.
  * The view survives reconnects, so a resumed socket only needs the deltas it missed.
  */
 export function useSdlcEdge(): { view: EdgeView; connection: EdgeConnection } {
@@ -25,7 +25,7 @@ export function useSdlcEdge(): { view: EdgeView; connection: EdgeConnection } {
 
   useEffect(() => {
     let socket: WebSocket | null = null;
-    let attempt = 0;
+    const backoff = createBackoff();
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const client = createEdgeClient({
@@ -37,16 +37,15 @@ export function useSdlcEdge(): { view: EdgeView; connection: EdgeConnection } {
       const current = new WebSocket(edgeSocketUrl(window.location.href));
       socket = current;
       current.onopen = () => {
-        attempt = 0;
         setConnection("live");
         client.opened();
       };
-      current.onmessage = (event) => client.received(event.data);
+      current.onmessage = (event) => { if (client.received(event.data)) backoff.heard(); };
       current.onclose = () => {
         if (disposed || socket !== current) return;
         socket = null;
         setConnection("reconnecting");
-        timer = setTimeout(open, reconnectDelay(attempt++));
+        timer = setTimeout(open, backoff.nextDelay());
       };
     };
     open();

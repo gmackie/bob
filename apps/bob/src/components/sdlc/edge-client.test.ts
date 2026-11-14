@@ -3,7 +3,7 @@ import type { EdgeMessage, ItemSnapshot, PlanSnapshot } from "@bob/sdlc-view";
 import { EdgeController } from "../../../worker/sdlc/controller";
 import type { IngestBatch } from "../../../worker/sdlc/store";
 import { nodeSqlitePort } from "../../../worker/sdlc/test-helpers/node-sqlite";
-import { createEdgeClient, helloFor, parseEdgeMessage, reconnectDelay } from "./edge-client";
+import { createBackoff, createEdgeClient, helloFor, parseEdgeMessage, reconnectDelay } from "./edge-client";
 import { edgeSocketUrl } from "./use-sdlc-edge";
 
 const target = { environmentId: "hetzner-bob", projectId: "bob", repository: { integrationId: "forgegraph", repositoryId: "bob" } };
@@ -78,6 +78,14 @@ describe("createEdgeClient", () => {
     ]);
   });
 
+  it("reports whether a message was a valid edge message, so the caller resets backoff only then", () => {
+    const h = harness();
+    h.client.opened();
+    expect(h.client.received("garbage")).toBe(false);
+    expect(h.client.received(wire(snapshot(1)))).toBe(true);
+    expect(h.client.received(wire({ type: "status", coordinatorSeenAt: 3 }))).toBe(true);
+  });
+
   it("ignores what is not an edge message", () => {
     const h = harness();
     for (const data of ["not json", "null", JSON.stringify({ type: "delta" }), JSON.stringify({ type: "snapshot", seq: 1, plans: [], items: [] }), new ArrayBuffer(2)]) h.client.received(data);
@@ -107,8 +115,24 @@ describe("createEdgeClient", () => {
 });
 
 describe("reconnectDelay and edgeSocketUrl", () => {
-  it("backs off exponentially up to 30 s", () => {
-    expect([0, 1, 2, 3, 4, 5, 6, 20].map(reconnectDelay)).toEqual([1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000, 30_000]);
+  it("backs off exponentially up to 30 s, with ±20% jitter", () => {
+    const mid = (attempt: number) => reconnectDelay(attempt, () => 0.5);
+    expect([0, 1, 2, 3, 4, 5, 6, 20].map(mid)).toEqual([1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000, 30_000]);
+    expect(reconnectDelay(2, () => 0)).toBe(3_200);
+    expect(reconnectDelay(2, () => 1)).toBe(4_800);
+    expect(reconnectDelay(9, () => 1)).toBe(36_000);
+    for (let i = 0; i < 50; i++) {
+      const d = reconnectDelay(3);
+      expect(d).toBeGreaterThanOrEqual(6_400);
+      expect(d).toBeLessThanOrEqual(9_600);
+    }
+  });
+  it("keeps backing off across sockets that open but never deliver, and resets after a valid message", () => {
+    const backoff = createBackoff(() => 0.5);
+    // Socket opens, closes without a message, three times: open alone does not reset.
+    expect([backoff.nextDelay(), backoff.nextDelay(), backoff.nextDelay()]).toEqual([1_000, 2_000, 4_000]);
+    backoff.heard();
+    expect(backoff.nextDelay()).toBe(1_000);
   });
   it("uses wss on https and ws on http, same origin", () => {
     expect(edgeSocketUrl("https://blder.bot/sdlc?x=1")).toBe("wss://blder.bot/api/sdlc/ws");

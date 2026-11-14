@@ -32,15 +32,40 @@ export function parseEdgeMessage(data: unknown): EdgeMessage | null {
 
 export const RECONNECT_BASE_MS = 1_000;
 export const RECONNECT_MAX_MS = 30_000;
-/** Capped exponential backoff: 1 s, 2 s, 4 s ... 30 s. */
-export const reconnectDelay = (attempt: number) => Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** Math.max(0, attempt));
+export const RECONNECT_JITTER = 0.2;
+/**
+ * Capped exponential backoff, 1 s, 2 s, 4 s ... 30 s, each ±20% so viewers that lost the
+ * edge together do not all reconnect in the same instant. `random` is injectable for tests.
+ */
+export function reconnectDelay(attempt: number, random: () => number = Math.random): number {
+  const base = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** Math.max(0, attempt));
+  return Math.round(base * (1 - RECONNECT_JITTER + 2 * RECONNECT_JITTER * random()));
+}
+
+/**
+ * The backoff across reconnects. A socket counts as healthy only once the edge has sent
+ * a valid message on it, not when it opens: a socket that opens and is closed at once
+ * (a failing Durable Object, say) keeps backing off.
+ */
+export function createBackoff(random: () => number = Math.random) {
+  let attempt = 0;
+  return {
+    /** A valid message arrived on the current socket. */
+    heard() { attempt = 0; },
+    /** The socket closed: how long to wait before the next one. */
+    nextDelay() { return reconnectDelay(attempt++, random); },
+  };
+}
 
 export interface EdgeClient {
   readonly view: EdgeView;
   /** The socket opened: say hello. */
   opened(): void;
-  /** One socket message: fold it into the view, and ask once for a snapshot after a seq gap. */
-  received(data: unknown): void;
+  /**
+   * One socket message: fold it into the view, and ask once for a snapshot after a seq gap.
+   * Returns whether it was a valid edge message; the hook resets its backoff on the first one.
+   */
+  received(data: unknown): boolean;
 }
 
 /**
@@ -61,7 +86,7 @@ export function createEdgeClient(options: { send: (data: string) => void; onView
     },
     received(data) {
       const message = parseEdgeMessage(data);
-      if (!message) return;
+      if (!message) return false;
       view = reduce(view, message);
       if (!view.needsResync) resyncRequested = false;
       else if (!resyncRequested) {
@@ -69,6 +94,7 @@ export function createEdgeClient(options: { send: (data: string) => void; onView
         hello({ type: "hello", cursor: null, epoch: null });
       }
       options.onView?.(view);
+      return true;
     },
   };
 }
