@@ -31,6 +31,12 @@ export interface ItemSnapshot {
 /** A BizPulse repos.list row reduced to what the join needs. */
 export interface TopologyRepo { startupId: string; startupName: string; repoSlug: string }
 export interface EdgeView {
+  /**
+   * Which edge history seq belongs to. The edge picks a random epoch when its storage is
+   * first created; a snapshot carries it. A client resumes with its (cursor, epoch) and is
+   * sent a snapshot when the edge's epoch differs, so a seq from a reset edge never matches.
+   */
+  epoch: string | null;
   /** The edge's message sequence. Deltas from one edge are contiguous (seq, seq + 1, ...). */
   seq: number;
   plans: Record<string, PlanSnapshot>;
@@ -45,12 +51,19 @@ export interface EdgeView {
   /** A delta skipped a seq: the view is applied but incomplete until the next snapshot. */
   needsResync: boolean;
 }
+/**
+ * Edge to client protocol. On connect the client sends hello { cursor, epoch }: its
+ * view.seq and view.epoch, or cursor null when it has no view or its view.needsResync is
+ * set. The edge answers with the deltas after cursor when it still holds every one of them
+ * and the epoch matches, otherwise a snapshot; then a status message. Later messages are
+ * broadcast as they happen.
+ */
 export type EdgeMessage =
-  | { type: "snapshot"; seq: number; plans: PlanSnapshot[]; items: ItemSnapshot[]; topology: TopologyRepo[]; coordinatorSeenAt: number | null }
+  | { type: "snapshot"; epoch: string; seq: number; plans: PlanSnapshot[]; items: ItemSnapshot[]; topology: TopologyRepo[]; coordinatorSeenAt: number | null }
   | { type: "delta"; seq: number; plans: PlanSnapshot[]; items: ItemSnapshot[]; coordinatorSeenAt: number | null }
   | { type: "status"; coordinatorSeenAt: number | null };
 
-export const emptyView = (): EdgeView => ({ seq: 0, plans: {}, items: {}, topology: [], coordinatorSeenAt: null, needsResync: false });
+export const emptyView = (): EdgeView => ({ epoch: null, seq: 0, plans: {}, items: {}, topology: [], coordinatorSeenAt: null, needsResync: false });
 const newer = <T extends { resourceVersion: number }>(current: T | undefined, next: T) => !current || next.resourceVersion > current.resourceVersion;
 const later = (a: number | null, b: number | null) => (a === null ? b : b === null ? a : Math.max(a, b));
 /** Plans in these states never live in the view. */
@@ -58,7 +71,7 @@ export const TERMINAL_PLAN_STATES: ReadonlySet<PlanState> = new Set<PlanState>([
 
 /**
  * Folds an edge message into the view.
- * - snapshot: always applies and replaces everything, including seq, and clears needsResync.
+ * - snapshot: always applies and replaces everything, including seq and epoch, and clears needsResync.
  * - delta: dropped when seq <= view.seq (a late or repeated delta), except that
  *   coordinatorSeenAt still moves forward. Otherwise it keeps the newest
  *   resourceVersion per resource. A seq jump past view.seq + 1 still applies but
@@ -73,7 +86,7 @@ export function reduce(view: EdgeView, message: EdgeMessage): EdgeView {
   if (message.type === "status") return { ...view, coordinatorSeenAt: later(view.coordinatorSeenAt, message.coordinatorSeenAt) };
   const snapshot = message.type === "snapshot";
   if (!snapshot && message.seq <= view.seq) return { ...view, coordinatorSeenAt: later(view.coordinatorSeenAt, message.coordinatorSeenAt) };
-  const base = snapshot ? { ...emptyView(), topology: message.topology } : view;
+  const base = snapshot ? { ...emptyView(), epoch: message.epoch, topology: message.topology } : view;
   const plans = { ...base.plans }, items = { ...base.items };
   const evicted = new Set<string>();
   for (const p of message.plans) {

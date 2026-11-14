@@ -28,24 +28,24 @@ const topology = [{ startupId: "s1", startupName: "Bob", repoSlug: "gmackie/bob"
 
 describe("reduce", () => {
   it("replaces everything on a snapshot and keeps only newer versions on a delta", () => {
-    let view = reduce(emptyView(), { type: "snapshot", seq: 1, plans: [plan("p1", ["a"])], items: [item("a", "p1", "ready", 2)], topology, coordinatorSeenAt: 10 });
+    let view = reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 1, plans: [plan("p1", ["a"])], items: [item("a", "p1", "ready", 2)], topology, coordinatorSeenAt: 10 });
     view = reduce(view, { type: "delta", seq: 2, plans: [], items: [item("a", "p1", "pending", 1)], coordinatorSeenAt: 20 });
     expect(view.items.a?.state).toBe("ready");
     view = reduce(view, { type: "delta", seq: 3, plans: [], items: [item("a", "p1", "running", 3)], coordinatorSeenAt: 30 });
     expect(view.items.a?.state).toBe("running");
     expect(view.seq).toBe(3);
-    view = reduce(view, { type: "snapshot", seq: 4, plans: [], items: [], topology: [], coordinatorSeenAt: 40 });
+    view = reduce(view, { type: "snapshot", epoch: "e1", seq: 4, plans: [], items: [], topology: [], coordinatorSeenAt: 40 });
     expect(view.items).toEqual({});
   });
   it("keeps topology across deltas and only touches liveness on a status message", () => {
-    let view = reduce(emptyView(), { type: "snapshot", seq: 5, plans: [plan("p1", ["a"])], items: [item("a", "p1", "ready")], topology, coordinatorSeenAt: 10 });
+    let view = reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 5, plans: [plan("p1", ["a"])], items: [item("a", "p1", "ready")], topology, coordinatorSeenAt: 10 });
     view = reduce(view, { type: "delta", seq: 6, plans: [], items: [], coordinatorSeenAt: 20 });
     expect(view.topology).toEqual(topology);
     const status = reduce(view, { type: "status", coordinatorSeenAt: 99 });
     expect(status).toEqual({ ...view, coordinatorSeenAt: 99 });
   });
   it("drops a late delta's contents but still records liveness", () => {
-    const view = reduce(emptyView(), { type: "snapshot", seq: 7, plans: [], items: [], topology, coordinatorSeenAt: 10 });
+    const view = reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 7, plans: [], items: [], topology, coordinatorSeenAt: 10 });
     for (const seq of [6, 7]) {
       const late = reduce(view, { type: "delta", seq, plans: [plan("gone", ["g"])], items: [item("g", "gone", "running")], coordinatorSeenAt: 20 });
       expect(late).toEqual({ ...view, coordinatorSeenAt: 20 });
@@ -54,20 +54,20 @@ describe("reduce", () => {
     expect(older).toEqual(view);
   });
   it("only moves coordinatorSeenAt forward on a status message", () => {
-    const view = reduce(emptyView(), { type: "snapshot", seq: 1, plans: [], items: [], topology, coordinatorSeenAt: 50 });
+    const view = reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 1, plans: [], items: [], topology, coordinatorSeenAt: 50 });
     expect(reduce(view, { type: "status", coordinatorSeenAt: 40 }).coordinatorSeenAt).toBe(50);
     expect(reduce(view, { type: "status", coordinatorSeenAt: null }).coordinatorSeenAt).toBe(50);
     expect(reduce(view, { type: "status", coordinatorSeenAt: 60 }).coordinatorSeenAt).toBe(60);
     expect(reduce(emptyView(), { type: "status", coordinatorSeenAt: null }).coordinatorSeenAt).toBeNull();
   });
   it("always applies a snapshot, resetting seq", () => {
-    let view = reduce(emptyView(), { type: "snapshot", seq: 9, plans: [], items: [], topology, coordinatorSeenAt: 10 });
-    view = reduce(view, { type: "snapshot", seq: 2, plans: [plan("p", ["a"])], items: [item("a", "p", "ready")], topology, coordinatorSeenAt: 11 });
+    let view = reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 9, plans: [], items: [], topology, coordinatorSeenAt: 10 });
+    view = reduce(view, { type: "snapshot", epoch: "e1", seq: 2, plans: [plan("p", ["a"])], items: [item("a", "p", "ready")], topology, coordinatorSeenAt: 11 });
     expect(view.seq).toBe(2);
     expect(Object.keys(view.plans)).toEqual(["p"]);
   });
   it("evicts a plan and its items when a delta carries it terminal", () => {
-    const start = reduce(emptyView(), { type: "snapshot", seq: 1, topology, coordinatorSeenAt: 0,
+    const start = reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 1, topology, coordinatorSeenAt: 0,
       plans: [plan("done", ["a", "b"]), plan("live", ["c", "d"])],
       items: [item("a", "done", "completed"), item("b", "done", "validating"), item("c", "live", "completed"), item("d", "live", "running")] });
     for (const state of ["completed", "cancelled"] as const) {
@@ -79,14 +79,25 @@ describe("reduce", () => {
     }
   });
   it("keeps terminal plans out of a snapshot too", () => {
-    const view = reduce(emptyView(), { type: "snapshot", seq: 1, topology, coordinatorSeenAt: 0,
+    const view = reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 1, topology, coordinatorSeenAt: 0,
       plans: [plan("done", ["a"], [], "bob", "cancelled"), plan("live", ["b"], [], "bob", "cancelling")],
       items: [item("a", "done", "cancelled"), item("b", "live", "running")] });
     expect(Object.keys(view.plans)).toEqual(["live"]);
     expect(Object.keys(view.items)).toEqual(["b"]);
   });
+  it("takes the edge epoch from a snapshot and keeps it across deltas and status", () => {
+    expect(emptyView().epoch).toBeNull();
+    let view = reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 1, plans: [], items: [], topology, coordinatorSeenAt: 0 });
+    expect(view.epoch).toBe("e1");
+    view = reduce(view, { type: "delta", seq: 2, plans: [], items: [], coordinatorSeenAt: 1 });
+    view = reduce(view, { type: "status", coordinatorSeenAt: 2 });
+    expect(view.epoch).toBe("e1");
+    // A new edge history (its storage was reset) replaces the epoch even at a lower seq.
+    view = reduce(view, { type: "snapshot", epoch: "e2", seq: 1, plans: [], items: [], topology, coordinatorSeenAt: 3 });
+    expect(view).toMatchObject({ epoch: "e2", seq: 1 });
+  });
   it("applies a delta after a seq gap but flags the view for resync until a snapshot", () => {
-    let view = reduce(emptyView(), { type: "snapshot", seq: 1, plans: [plan("p", ["a"])], items: [item("a", "p", "ready")], topology, coordinatorSeenAt: 0 });
+    let view = reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 1, plans: [plan("p", ["a"])], items: [item("a", "p", "ready")], topology, coordinatorSeenAt: 0 });
     expect(view.needsResync).toBe(false);
     view = reduce(view, { type: "delta", seq: 2, plans: [], items: [], coordinatorSeenAt: 1 });
     expect(view.needsResync).toBe(false);
@@ -96,7 +107,7 @@ describe("reduce", () => {
     expect(view.seq).toBe(4);
     view = reduce(view, { type: "delta", seq: 5, plans: [], items: [], coordinatorSeenAt: 3 });
     expect(view.needsResync).toBe(true);
-    view = reduce(view, { type: "snapshot", seq: 6, plans: [], items: [], topology, coordinatorSeenAt: 4 });
+    view = reduce(view, { type: "snapshot", epoch: "e1", seq: 6, plans: [], items: [], topology, coordinatorSeenAt: 4 });
     expect(view.needsResync).toBe(false);
   });
 });
@@ -119,7 +130,7 @@ describe("projectFor", () => {
 });
 
 describe("aggregations", () => {
-  const view = reduce(emptyView(), { type: "snapshot", seq: 1, topology, coordinatorSeenAt: 0,
+  const view = reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 1, topology, coordinatorSeenAt: 0,
     plans: [plan("p1", ["a", "b"]), plan("p2", ["c"], [], "other")],
     items: [item("a", "p1", "running"), item("b", "p1", "waiting-input"), item("c", "p2", "running")] });
   it("counts items per state, with zeros for empty states", () => {
@@ -135,7 +146,7 @@ describe("aggregations", () => {
     expect(groupRows(rows(view), "repo").map((g) => [g.key, g.label, g.count])).toEqual([["forgegraph:bob", "bob", 2], ["forgegraph:other", "other", 1]]);
   });
   it("keeps same-named repositories from different integrations apart", () => {
-    const mixed = reduce(emptyView(), { type: "snapshot", seq: 1, topology: [], coordinatorSeenAt: 0,
+    const mixed = reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 1, topology: [], coordinatorSeenAt: 0,
       plans: [plan("p1", ["a"]), { ...plan("p2", ["b"]), definition: { ...plan("p2", ["b"]).definition, items: [{ itemId: "b", issue, target: target("bob", "github"), completionTarget: "production" }] } }],
       items: [item("a", "p1", "running"), item("b", "p2", "running")] });
     const groups = groupRows(rows(mixed), "repo");
@@ -152,7 +163,7 @@ describe("aggregations", () => {
     expect(rows(view).filter((r) => inScope(r, {}))).toHaveLength(3);
   });
   it("lists rows that need attention, human first (validating counts as stalled)", () => {
-    const mixed = reduce(emptyView(), { type: "snapshot", seq: 1, topology, coordinatorSeenAt: 0,
+    const mixed = reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 1, topology, coordinatorSeenAt: 0,
       plans: [plan("p", ["ok", "unknown", "failed", "input", "validating"])],
       items: [item("ok", "p", "running"), item("unknown", "p", "execution-unknown"), item("failed", "p", "failed"), item("input", "p", "waiting-input"), item("validating", "p", "validating")] });
     expect(attentionRows(rows(mixed)).map((r) => [r.item.itemId, r.attention])).toEqual([
