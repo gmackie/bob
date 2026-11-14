@@ -15,6 +15,7 @@ export interface IngestBatch { contractVersion: "1"; kind: "snapshot" | "changes
 export interface EdgeState { watermark: number; view: EdgeView; topologyAt?: number }
 export type IngestResult = { accepted: true; watermark: number } | { accepted: false; resync: true };
 type Delta = Extract<EdgeMessage, { type: "delta" }>;
+type Snapshot = Extract<EdgeMessage, { type: "snapshot" }>;
 
 export const emptyEdge = (): EdgeState => ({ watermark: 0, view: emptyView() });
 
@@ -88,7 +89,7 @@ export class DeltaLog {
   }
 }
 
-export function snapshotOf(state: EdgeState): EdgeMessage {
+export function snapshotOf(state: EdgeState): Snapshot {
   const { view } = state;
   return { type: "snapshot", seq: view.seq, plans: Object.values(view.plans), items: Object.values(view.items), topology: view.topology, coordinatorSeenAt: view.coordinatorSeenAt };
 }
