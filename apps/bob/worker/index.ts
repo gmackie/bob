@@ -35,6 +35,7 @@ import {
   validateHermesNativeApiMutation,
 } from "../src/lib/hermes-proxy";
 import { wrapFetch } from "./lib/otel";
+import { handleSdlcRoute } from "./sdlc/routes";
 import {
   applyRuntimeAuthEnv,
   applyRuntimeIntegrationEnv,
@@ -42,6 +43,9 @@ import {
   getHyperdriveConnectionString,
   getSentryOptions,
 } from "./runtime-env";
+
+// The SDLC edge Durable Object class must be exported from the worker entry.
+export { SdlcEdge } from "./sdlc/edge-do";
 
 interface Env {
   ASSETS: Fetcher;
@@ -78,6 +82,12 @@ interface Env {
   HERMES_ORIGIN_URL?: string;
   HERMES_OPERATOR_USER_IDS?: string;
   HERMES_BOB_WORKSPACE_ID?: string;
+  // SDLC edge (worker/sdlc): the DO binding, the coordinator workspace that names its
+  // one instance, the exporter's bearer token (a secret), and the viewer allow-list.
+  SDLC_EDGE?: DurableObjectNamespace;
+  SDLC_EDGE_WORKSPACE_ID?: string;
+  SDLC_EDGE_INGEST_TOKEN?: string;
+  SDLC_VIEWER_USER_IDS?: string;
   [key: string]: unknown;
 }
 
@@ -688,6 +698,24 @@ export default Sentry.withSentry(
               isAuthorizedHermesOperator(session.user.id, operatorUserIds)
                 ? 204
                 : 401,
+          });
+        }
+
+        // SDLC edge: the coordinator exporter's ingest (bearer token) and the viewers'
+        // websocket (session + SDLC_VIEWER_USER_IDS), both to the SdlcEdge DO.
+        if (url.pathname === "/api/sdlc/ingest" || url.pathname === "/api/sdlc/ws") {
+          return handleSdlcRoute(request, runtimeEnv, async () => {
+            const { connectionString, isHyperdrive } =
+              getHyperdriveConnectionString(runtimeEnv);
+            const session = await runWithDb(
+              connectionString,
+              isHyperdrive,
+              async () => {
+                const { auth } = await import("../src/auth/server");
+                return auth.api.getSession({ headers: request.headers });
+              },
+            );
+            return session?.user?.id ?? null;
           });
         }
 
