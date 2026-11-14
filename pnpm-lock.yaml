@@ -264,6 +264,9 @@ importers:
       '@bob/observability':
         specifier: workspace:*
         version: link:../../packages/bob/src/observability
+      '@bob/sdlc-view':
+        specifier: workspace:*
+        version: link:../../packages/bob/src/sdlc-view
       '@bob/ws':
         specifier: workspace:*
         version: link:../../packages/bob/src/ws
