@@ -138,3 +138,17 @@ describe("UsageLedger robustness and retention", () => {
     expect(restored.sessions()).toEqual(l.sessions());
   });
 });
+
+describe("UsageLedger session links", () => {
+  it("records a native → Bob session link once, reports it after a cursor and survives restore", () => {
+    const l = ledger();
+    const cursor = l.revision();
+    l.linkSession("4743021e-110b-4f42-8f50-530699139927", "bob-run-1", new Date("2026-11-14T20:00:00Z"));
+    l.linkSession("4743021e-110b-4f42-8f50-530699139927", "bob-run-1");
+    expect(l.links({ since: cursor })).toEqual([
+      { nativeSessionId: "4743021e-110b-4f42-8f50-530699139927", bobSessionId: "bob-run-1", linkedAt: "2026-11-14T20:00:00.000Z" },
+    ]);
+    const restored = UsageLedger.restore({ bobApiKeys: [BOB_KEY] }, JSON.parse(JSON.stringify(l.toJSON())));
+    expect(restored.links()).toEqual(l.links());
+  });
+});

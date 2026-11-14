@@ -147,3 +147,26 @@ describe("UsagePoller", () => {
     expect(existsSync(join(dir, "usage-ledger.json"))).toBe(false);
   });
 });
+
+describe("UsagePoller session links", () => {
+  it("ships links with the next budget_usage message even when no usage changed", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "bob-usage-links-"));
+    const sent: Array<Record<string, unknown>> = [];
+    const proxy = fakeProxy();
+    const poller = new UsagePoller({
+      baseUrl: "http://proxy.test",
+      managementKey: MGMT_KEY,
+      bobApiKeys: [BOB_KEY],
+      spoolPath: join(dir, "ledger.json"),
+      send: (m) => sent.push(m),
+      isConnected: () => true,
+      fetch: proxy.fetch,
+      now: () => new Date("2026-11-14T20:30:00Z"),
+    });
+    await poller.tick();
+    poller.linkSession("native-1234", "bob-run-1");
+    await poller.tick();
+    expect(sent.at(-1)).toMatchObject({ type: "budget_usage", links: [{ nativeSessionId: "native-1234", bobSessionId: "bob-run-1" }] });
+    rmSync(dir, { recursive: true, force: true });
+  });
+});

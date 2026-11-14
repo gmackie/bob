@@ -132,22 +132,35 @@ export class UsagePoller {
     const full = now.getTime() - this.lastFullResendAt >= resendEvery;
     let buckets;
     let sessions;
+    let links;
     if (full) {
       const cutoff = now.getTime() - (this.options.resendWindowMs ?? 3 * 3_600_000);
       buckets = this.ledger.buckets().filter((bucket) => Date.parse(bucket.hour) + 3_600_000 > cutoff);
       sessions = this.ledger.sessions().filter((session) => Date.parse(session.lastAt) > cutoff);
+      links = this.ledger.links().filter((link) => Date.parse(link.linkedAt) > cutoff);
     } else {
       buckets = this.ledger.buckets({ since: this.sentRevision });
       sessions = this.ledger.sessions({ since: this.sentRevision });
+      links = this.ledger.links({ since: this.sentRevision });
     }
     const revision = this.ledger.revision();
     if (full) this.lastFullResendAt = now.getTime();
-    if (buckets.length === 0 && sessions.length === 0) {
+    if (buckets.length === 0 && sessions.length === 0 && links.length === 0) {
       this.sentRevision = revision;
       return;
     }
-    this.options.send({ type: "budget_usage", buckets, sessions });
+    this.options.send({ type: "budget_usage", buckets, sessions, ...(links.length ? { links } : {}) });
     this.sentRevision = revision;
+  }
+
+  /** Link an agent CLI session to its Bob run; shipped with the next budget_usage. */
+  linkSession(nativeSessionId: string, bobSessionId: string): void {
+    this.ledger.linkSession(nativeSessionId, bobSessionId, this.now());
+    try {
+      this.writeSpool();
+    } catch {
+      // The link is still in memory and goes out with the next flush.
+    }
   }
 
   status(): { lastDrainAt?: string; lastError?: string; gapsOver45s: number } {

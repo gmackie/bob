@@ -21,13 +21,14 @@
 import {
   parseQuotaMeters,
   type BobSessionUsageWire,
+  type BudgetSessionLinkWire,
   type BudgetMeterWire,
   type LedgerTokens,
   type UsageBucketWire,
   type UsageSource,
 } from "@bob/ws";
 
-export type { BobSessionUsageWire, LedgerTokens, UsageBucketWire, UsageSource };
+export type { BobSessionUsageWire, BudgetSessionLinkWire, LedgerTokens, UsageBucketWire, UsageSource };
 
 /** The fields of a usage-queue record this ledger reads. */
 export interface UsageQueueRecord {
@@ -68,6 +69,7 @@ export interface UsageLedgerState {
   rev: number;
   buckets: Array<Stamped<UsageBucketWire>>;
   sessions: Array<Stamped<BobSessionUsageWire>>;
+  links?: Array<Stamped<BudgetSessionLinkWire>>;
 }
 
 const PROVIDER_ALIASES: Record<string, string> = { anthropic: "claude", openai: "codex", xai: "grok" };
@@ -121,6 +123,7 @@ export class UsageLedger {
   private rev = 0;
   private readonly bucketMap = new Map<string, Stamped<UsageBucketWire>>();
   private readonly sessionMap = new Map<string, Stamped<BobSessionUsageWire>>();
+  private readonly linkMap = new Map<string, Stamped<BudgetSessionLinkWire>>();
 
   constructor(options: UsageLedgerOptions) {
     this.bobKeys = new Set(options.bobApiKeys.filter((key) => key.length > 0));
@@ -135,6 +138,7 @@ export class UsageLedger {
       ledger.bucketMap.set(UsageLedger.bucketKey(b.hour, b.authIndex, b.model, b.source), entry);
     }
     for (const entry of state?.sessions ?? []) ledger.sessionMap.set(entry.value.sessionId, entry);
+    for (const entry of state?.links ?? []) ledger.linkMap.set(entry.value.nativeSessionId, entry);
     return ledger;
   }
 
@@ -215,6 +219,16 @@ export class UsageLedger {
     if (meters.length && !session.metersFirst) session.metersFirst = meters;
   }
 
+  /** Record which Bob run an agent CLI session belongs to. */
+  linkSession(nativeSessionId: string, bobSessionId: string, at = new Date()): void {
+    if (!nativeSessionId || !bobSessionId || this.linkMap.get(nativeSessionId)?.value.bobSessionId === bobSessionId) return;
+    this.linkMap.set(nativeSessionId, { rev: ++this.rev, value: { nativeSessionId, bobSessionId, linkedAt: at.toISOString() } });
+  }
+
+  links({ since = 0 }: { since?: number } = {}): BudgetSessionLinkWire[] {
+    return [...this.linkMap.values()].filter((entry) => entry.rev > since).map((entry) => entry.value);
+  }
+
   /** Current revision; pass it back as `since` to get only later changes. */
   revision(): number {
     return this.rev;
@@ -243,10 +257,13 @@ export class UsageLedger {
     for (const [key, entry] of this.sessionMap) {
       if (Date.parse(entry.value.lastAt) <= cutoff) this.sessionMap.delete(key);
     }
+    for (const [key, entry] of this.linkMap) {
+      if (Date.parse(entry.value.linkedAt) <= cutoff) this.linkMap.delete(key);
+    }
   }
 
   /** Serializable state for the on-disk spool. Holds no keys. */
   toJSON(): UsageLedgerState {
-    return { rev: this.rev, buckets: [...this.bucketMap.values()], sessions: [...this.sessionMap.values()] };
+    return { rev: this.rev, buckets: [...this.bucketMap.values()], sessions: [...this.sessionMap.values()], links: [...this.linkMap.values()] };
   }
 }

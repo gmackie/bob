@@ -11,5 +11,6 @@ export * from "./budget-meters.js";
 export * from "./budget-governor.js";
 export * from "./budget-forecast.js";
 export * from "./budget-state.js";
+export * from "./budget-cost.js";
 export * from "./proxy-panel-model.js";
 export * from "./proxy-alerts.js";

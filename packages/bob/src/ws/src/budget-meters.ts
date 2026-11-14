@@ -173,6 +173,13 @@ export interface UsageBucketWire {
   tokens: LedgerTokens;
 }
 
+/** Links the agent CLI's own session id (the proxy's session_id) to the Bob run session. */
+export interface BudgetSessionLinkWire {
+  nativeSessionId: string;
+  bobSessionId: string;
+  linkedAt: string;
+}
+
 /** Running totals for one Bob agent session (the proxy's session id). */
 export interface BobSessionUsageWire {
   sessionId: string;

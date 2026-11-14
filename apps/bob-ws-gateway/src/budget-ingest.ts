@@ -6,7 +6,7 @@
  * (or a forged frame) can neither store a stray field such as an API key nor
  * write a partial oversized batch.
  */
-import type { BobSessionInput, BudgetAccountInput, MeterAccountInput, UsageBucketInput, upsertUsageBuckets } from "@bob/db";
+import type { BobSessionInput, BudgetAccountInput, MeterAccountInput, SessionLinkInput, UsageBucketInput, upsertUsageBuckets } from "@bob/db";
 
 /** The database handle the @bob/db budget store writes through. */
 export type BudgetDb = Parameters<typeof upsertUsageBuckets>[0];
@@ -17,6 +17,7 @@ export interface BudgetStore {
   upsertBobSessions(db: BudgetDb, input: { workspaceId: string; hostId: string; sessions: BobSessionInput[] }): Promise<number>;
   recordMeterSamples(db: BudgetDb, input: { workspaceId: string; hostId: string; accounts: MeterAccountInput[] }): Promise<number>;
   upsertBudgetAccounts(db: BudgetDb, input: { workspaceId: string; hostId: string; accounts: BudgetAccountInput[] }): Promise<number>;
+  upsertSessionLinks(db: BudgetDb, input: { workspaceId: string; links: SessionLinkInput[] }): Promise<number>;
 }
 
 interface Scope {
@@ -93,14 +94,23 @@ function sessionOf(value: unknown): BobSessionInput | undefined {
   return { sessionId, authIndex, provider, model, requests, failed, tokens: t, firstAt, lastAt, ...(metersFirst ? { metersFirst } : {}), ...(metersLast ? { metersLast } : {}) };
 }
 
-export async function ingestBudgetUsage(db: BudgetDb, store: BudgetStore, scope: Scope, message: { buckets?: unknown; sessions?: unknown }): Promise<void> {
+export async function ingestBudgetUsage(db: BudgetDb, store: BudgetStore, scope: Scope, message: { buckets?: unknown; sessions?: unknown; links?: unknown }): Promise<void> {
   const rawBuckets = Array.isArray(message.buckets) ? message.buckets : [];
   const rawSessions = Array.isArray(message.sessions) ? message.sessions : [];
-  if (rawBuckets.length > MAX_ROWS || rawSessions.length > MAX_ROWS) throw new Error("budget_usage has too many rows");
+  const rawLinks = Array.isArray(message.links) ? message.links : [];
+  if (rawBuckets.length > MAX_ROWS || rawSessions.length > MAX_ROWS || rawLinks.length > MAX_ROWS) throw new Error("budget_usage has too many rows");
   const buckets = rawBuckets.map(bucketOf).filter((b): b is UsageBucketInput => b !== undefined);
   const sessions = rawSessions.map(sessionOf).filter((s): s is BobSessionInput => s !== undefined);
   if (buckets.length) await store.upsertUsageBuckets(db, { ...scope, buckets });
   if (sessions.length) await store.upsertBobSessions(db, { ...scope, sessions });
+  const links = rawLinks.flatMap((value): SessionLinkInput[] => {
+    if (!isRecord(value)) return [];
+    const nativeSessionId = text(value.nativeSessionId, 128);
+    const bobSessionId = text(value.bobSessionId, 128);
+    const linkedAt = time(value.linkedAt);
+    return nativeSessionId && bobSessionId && linkedAt ? [{ nativeSessionId, bobSessionId, linkedAt }] : [];
+  });
+  if (links.length) await store.upsertSessionLinks(db, { workspaceId: scope.workspaceId, links });
 }
 
 export async function ingestMeterSamples(db: BudgetDb, store: BudgetStore, scope: Scope, snapshot: HostSnapshotWire): Promise<void> {

@@ -6,8 +6,8 @@
  * resending is harmless and a runner that restarted with an empty spool can
  * never shrink a total already recorded.
  */
-import { sql } from "drizzle-orm";
-import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import { and, eq, gte, sql } from "drizzle-orm";
+import type { AnyPgColumn, PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 
 import {
   budgetAccounts,
@@ -15,10 +15,12 @@ import {
   budgetMeterSamples,
   budgetPolicy,
   budgetPolicyChanges,
+  budgetSessionLinks,
   budgetSessionUsage,
   budgetUsageLedger
   
 } from "./budget-schema.js";
+import { chatConversations, workItems } from "./schema.js";
 import type {BudgetMeterJson} from "./budget-schema.js";
 
 // Structural inputs: the gateway passes @bob/ws wire objects straight through.
@@ -370,4 +372,103 @@ export async function readRecentBudgetDecisions(db: Db, limit = 48): Promise<Bud
       reasons: (verdict.accounts ?? []).map((a) => ({ accountId: a.accountId, reasons: a.reasons ?? [], slots: a.slots ?? 0 })),
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: run links and per-work-item cost rows.
+// ---------------------------------------------------------------------------
+
+export interface SessionLinkInput {
+  nativeSessionId: string;
+  bobSessionId: string;
+  linkedAt: string;
+}
+
+export async function upsertSessionLinks(db: Db, input: { workspaceId: string; links: readonly SessionLinkInput[] }): Promise<number> {
+  const rows = input.links.slice(0, MAX_ROWS).flatMap((link) => {
+    const linkedAt = validTime(link.linkedAt);
+    return linkedAt && link.nativeSessionId && link.bobSessionId
+      ? [{ workspaceId: input.workspaceId, nativeSessionId: link.nativeSessionId, bobSessionId: link.bobSessionId, linkedAt }]
+      : [];
+  });
+  if (rows.length === 0) return 0;
+  await db
+    .insert(budgetSessionLinks)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: [budgetSessionLinks.workspaceId, budgetSessionLinks.nativeSessionId],
+      set: { bobSessionId: sql.raw("excluded.bob_session_id"), linkedAt: sql.raw("excluded.linked_at") },
+    });
+  return rows.length;
+}
+
+/** One row per (work item, serving account): the tokens its runs spent, with the item's facts. */
+export interface WorkItemCostRow {
+  workItemId: string;
+  projectId: string | null;
+  title: string;
+  status: string;
+  externalProvider: string | null;
+  updatedAt: Date;
+  authIndex: string;
+  sessions: number;
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  totalTokens: number;
+  firstAt: Date;
+  lastAt: Date;
+}
+
+/** Spend joined proxy session → link → Bob run session → work item, for runs active since `since`. */
+export async function readWorkItemCostRows(db: Db, input: { since: Date }): Promise<WorkItemCostRow[]> {
+  const sum = (column: AnyPgColumn) => sql<string>`sum(${column})::bigint`;
+  const rows = await db
+    .select({
+      workItemId: workItems.id,
+      projectId: workItems.projectId,
+      title: workItems.title,
+      status: workItems.status,
+      externalProvider: workItems.externalProvider,
+      updatedAt: workItems.updatedAt,
+      authIndex: budgetSessionUsage.authIndex,
+      sessions: sql<number>`count(*)::int`,
+      inputTokens: sum(budgetSessionUsage.inputTokens),
+      outputTokens: sum(budgetSessionUsage.outputTokens),
+      reasoningTokens: sum(budgetSessionUsage.reasoningTokens),
+      cacheReadTokens: sum(budgetSessionUsage.cacheReadTokens),
+      cacheCreationTokens: sum(budgetSessionUsage.cacheCreationTokens),
+      totalTokens: sum(budgetSessionUsage.totalTokens),
+      firstAt: sql<string>`min(${budgetSessionUsage.firstAt})`,
+      lastAt: sql<string>`max(${budgetSessionUsage.lastAt})`,
+    })
+    .from(budgetSessionUsage)
+    .innerJoin(
+      budgetSessionLinks,
+      and(eq(budgetSessionLinks.workspaceId, budgetSessionUsage.workspaceId), eq(budgetSessionLinks.nativeSessionId, budgetSessionUsage.sessionId)),
+    )
+    .innerJoin(chatConversations, sql`${chatConversations.id}::text = ${budgetSessionLinks.bobSessionId}`)
+    .innerJoin(workItems, eq(workItems.id, chatConversations.workItemId))
+    .where(gte(budgetSessionUsage.lastAt, input.since))
+    .groupBy(workItems.id, workItems.projectId, workItems.title, workItems.status, workItems.externalProvider, workItems.updatedAt, budgetSessionUsage.authIndex);
+  return rows.map((r) => ({
+    workItemId: r.workItemId,
+    projectId: r.projectId ?? null,
+    title: r.title,
+    status: r.status,
+    externalProvider: r.externalProvider ?? null,
+    updatedAt: new Date(r.updatedAt ?? 0),
+    authIndex: r.authIndex,
+    sessions: Number(r.sessions),
+    inputTokens: Number(r.inputTokens),
+    outputTokens: Number(r.outputTokens),
+    reasoningTokens: Number(r.reasoningTokens),
+    cacheReadTokens: Number(r.cacheReadTokens),
+    cacheCreationTokens: Number(r.cacheCreationTokens),
+    totalTokens: Number(r.totalTokens),
+    firstAt: new Date(r.firstAt),
+    lastAt: new Date(r.lastAt),
+  }));
 }

@@ -1,7 +1,7 @@
 // Shared WebSocket protocol types for client and server.
 // This is the single source of truth — both gateway and clients import from here.
 
-import type { BobSessionUsageWire, BudgetMeterWire, UsageBucketWire } from "./budget-meters";
+import type { BobSessionUsageWire, BudgetMeterWire, BudgetSessionLinkWire, UsageBucketWire } from "./budget-meters";
 
 export type SessionStatus =
   | "provisioning"
@@ -233,6 +233,8 @@ export interface ClientBudgetUsage {
   type: "budget_usage";
   buckets: UsageBucketWire[];
   sessions: BobSessionUsageWire[];
+  /** Agent CLI session id → Bob run session, for per-run and per-item cost. */
+  links?: BudgetSessionLinkWire[];
 }
 
 /**

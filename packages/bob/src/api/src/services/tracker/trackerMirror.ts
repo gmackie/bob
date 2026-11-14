@@ -58,7 +58,9 @@ export type MirrorEvent =
   | { kind: "requeued"; reason: string; attempt: number }
   | { kind: "blocked"; reason: string }
   | { kind: "deployed"; summary: string }
-  | { kind: "deploy_failed"; summary: string };
+  | { kind: "deploy_failed"; summary: string }
+  /** BOB-76: what the item cost, posted once when it finishes. Comment only. */
+  | { kind: "cost"; summary: string };
 
 export interface TrackerState {
   id: string;
@@ -102,6 +104,7 @@ export function pickTrackerState(
     case "blocked":
     case "deployed":
     case "deploy_failed":
+    case "cost":
       // Evidence-only: the card already sits in Done after the merge.
       return null;
   }
@@ -147,6 +150,8 @@ export function commentFor(event: MirrorEvent): string {
       return `⛔ Bob could not complete this: ${event.reason}\nNeeds a human look.`;
     case "deployed":
       return `🚀 Deployed: ${event.summary}`;
+    case "cost":
+      return `📊 ${event.summary}`;
     case "deploy_failed":
       return `💥 Deploy FAILED after merge: ${event.summary}\nThe change is on the default branch but is not (fully) live — needs a human look.`;
   }

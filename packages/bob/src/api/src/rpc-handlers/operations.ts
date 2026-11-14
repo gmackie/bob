@@ -18,7 +18,7 @@ import {
 import { cockpitStatus } from "../handlers/cockpitStatus.js";
 import { dispatchControlSet } from "../handlers/dispatchControl.js";
 import { proxyControlSet } from "../handlers/proxyControl.js";
-import { budgetSetPolicy, budgetState } from "../handlers/budget.js";
+import { budgetSetPolicy, budgetState, budgetThroughput } from "../handlers/budget.js";
 import { forgegraphImportAllApps } from "../handlers/forgegraph.js";
 import {
   planSessionCommitAsChecklist,
@@ -87,6 +87,7 @@ export const makeOperationsHandlers = (ctx: HandlerContext) => {
         ),
     ),
     "budget.state": bind((ctx) => budgetState(ctx as unknown as Parameters<typeof budgetState>[0])),
+    "budget.throughput": bind((ctx) => budgetThroughput(ctx as unknown as Parameters<typeof budgetThroughput>[0])),
     "budget.setPolicy": bind((ctx, input: Parameters<typeof budgetSetPolicy>[1]) =>
       budgetSetPolicy(ctx as unknown as Parameters<typeof budgetSetPolicy>[0], input),
     ),

@@ -8,13 +8,14 @@ const bucket = { hour: "2026-11-14T20:00:00.000Z", authIndex: "a1", provider: "c
 const session = { sessionId: "s", authIndex: "a1", provider: "claude", model: "m", requests: 1, failed: 0, tokens, firstAt: bucket.hour, lastAt: bucket.hour };
 
 function store(): BudgetStore & { calls: Record<string, unknown[]> } {
-  const calls: Record<string, unknown[]> = { buckets: [], sessions: [], meters: [], accounts: [] };
+  const calls: Record<string, unknown[]> = { buckets: [], sessions: [], meters: [], accounts: [], links: [] };
   return {
     calls,
     upsertUsageBuckets: vi.fn(async (_db, input) => (calls.buckets!.push(input), input.buckets.length)),
     upsertBobSessions: vi.fn(async (_db, input) => (calls.sessions!.push(input), input.sessions.length)),
     recordMeterSamples: vi.fn(async (_db, input) => (calls.meters!.push(input), input.accounts.length)),
     upsertBudgetAccounts: vi.fn(async (_db, input) => (calls.accounts!.push(input), input.accounts.length)),
+    upsertSessionLinks: vi.fn(async (_db, input) => (calls.links!.push(input), input.links.length)),
   };
 }
 
@@ -84,5 +85,17 @@ describe("ingestAccountStates", () => {
         ],
       },
     ]);
+  });
+});
+
+describe("ingestBudgetUsage links", () => {
+  it("stores valid native → Bob session links under the workspace and drops malformed ones", async () => {
+    const s = store();
+    await ingestBudgetUsage({} as never, s, { workspaceId: WS, hostId: "h" }, {
+      buckets: [],
+      sessions: [],
+      links: [{ nativeSessionId: "n-1", bobSessionId: "b-1", linkedAt: "2026-11-14T20:00:00Z", extra: "x" }, { nativeSessionId: "n-2" }],
+    });
+    expect(s.calls.links).toEqual([{ workspaceId: WS, links: [{ nativeSessionId: "n-1", bobSessionId: "b-1", linkedAt: "2026-11-14T20:00:00Z" }] }]);
   });
 });

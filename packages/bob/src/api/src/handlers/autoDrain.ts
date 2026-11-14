@@ -169,6 +169,12 @@ export async function autoDrainBacklog(
   const legacyBudget = Math.min(freeSlots, remainingToday, pacing.allowance);
   const budget = enforce && budgetEval ? Math.min(freeSlots, budgetEval.verdict.totalSlots) : legacyBudget;
   if (budgetEval) await recordDecision(budgetEval, legacyBudget);
+  // Post finished items' cost to their Kanbanger issues: bounded and
+  // best-effort, and placed here so it runs on every tick, not only on ticks
+  // that dispatch.
+  await import("../services/budget/cost.js")
+    .then(({ reportFinishedItemCosts }) => reportFinishedItemCosts())
+    .catch((err: unknown) => console.warn("[auto-drain] cost report skipped:", err));
   const remainingByProvider = new Map(
     Object.entries(budgetEval?.verdict.byProvider ?? {}).map(([provider, entry]) => [provider, entry.slots]),
   );

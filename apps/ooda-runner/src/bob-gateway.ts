@@ -33,6 +33,7 @@ import {
 } from "@bob/execution/planning/extractPlanDrafts";
 import { ProxyControl } from "./proxy-control";
 import { UsagePoller } from "./budget/usage-poller";
+import { NativeSessionTracker } from "./budget/native-session";
 import { releaseBranchFromStaleWorktrees } from "./worktree-prepare.js";
 import {
   commitTrailer,
@@ -311,6 +312,10 @@ export class BobGatewayConnector {
   private readonly proxyControl: ProxyControl | undefined;
   /** Token ledger from the proxy usage queue (BOB-76); absent without a route and management key. */
   private readonly usagePoller: UsagePoller | undefined;
+  /** Finds each run's agent CLI session id so its proxy usage joins to the run (BOB-76). */
+  private readonly nativeSessions = new NativeSessionTracker((runSessionId, nativeSessionId) =>
+    this.usagePoller?.linkSession(nativeSessionId, runSessionId),
+  );
   /**
    * Last few KB of each run's output, kept only until the run ends. Needed
    * because a provider's billing error (the 402 that went undetected for
@@ -827,6 +832,7 @@ export class BobGatewayConnector {
 
   /** Bounded append; only the tail matters for classifying a failure. */
   private captureOutput(sessionId: string, chunk: string): void {
+    this.nativeSessions.feed(sessionId, chunk);
     const next = `${this.runOutputTail.get(sessionId) ?? ""}${chunk}`;
     this.runOutputTail.set(sessionId, next.slice(-8_000));
   }
@@ -835,6 +841,7 @@ export class BobGatewayConnector {
   private finishRunOutcome(sessionId: string, agentType: string, exitCode: number | null): void {
     this.credentials.noteRunOutcome(agentType, exitCode, this.runOutputTail.get(sessionId) ?? "");
     this.runOutputTail.delete(sessionId);
+    this.nativeSessions.forget(sessionId);
   }
 
   private startHeartbeat(): void {

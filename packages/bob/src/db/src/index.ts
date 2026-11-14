@@ -31,11 +31,13 @@ export {
   readBudgetPolicy,
   readBudgetStateRows,
   readRecentBudgetDecisions,
+  readWorkItemCostRows,
   recordBudgetDecision,
   recordMeterSamples,
   upsertBobSessions,
   upsertBudgetAccounts,
+  upsertSessionLinks,
   upsertUsageBuckets,
   writeBudgetPolicy,
 } from "./budget-store.js";
-export type { BobSessionInput, BudgetAccountInput, BudgetDecisionSummary, BudgetStateRows, MeterAccountInput, UsageBucketInput } from "./budget-store.js";
+export type { BobSessionInput, BudgetAccountInput, BudgetDecisionSummary, BudgetStateRows, MeterAccountInput, SessionLinkInput, UsageBucketInput, WorkItemCostRow } from "./budget-store.js";

@@ -15,6 +15,7 @@ import {
   recordMeterSamples,
   upsertBobSessions,
   upsertBudgetAccounts,
+  upsertSessionLinks,
   upsertUsageBuckets,
   writeBudgetPolicy
   
@@ -48,7 +49,7 @@ describe("budget telemetry store", () => {
   beforeEach(async () => {
     handle = await makePgliteDb({ dataDir: ":memory:", bootstrap: false });
     dir = mkdtempSync(join(tmpdir(), "bob-budget-migration-"));
-    for (const filename of ["0038_budget_telemetry.sql", "0039_budget_governor.sql"]) {
+    for (const filename of ["0038_budget_telemetry.sql", "0039_budget_governor.sql", "0040_budget_session_links.sql"]) {
       writeFileSync(join(dir, filename), readFileSync(join(DRIZZLE_DIR, filename), "utf8"));
     }
     await applyMigrations({ client: handle.client, migrationsDir: dir, log: noop });
@@ -181,5 +182,12 @@ describe("budget telemetry store", () => {
     expect(state.ledger.map((l) => l.hour.toISOString())).toEqual(["2026-11-14T20:00:00.000Z"]);
     const decisions = await handle.db.execute(sql`select total_slots, legacy_budget from budget_decisions`);
     expect(decisions.rows).toEqual([{ total_slots: 3, legacy_budget: 2 }]);
+  });
+
+  it("links native sessions to Bob runs idempotently, last link wins", async () => {
+    await upsertSessionLinks(handle.db, { workspaceId: WS, links: [{ nativeSessionId: "n-1", bobSessionId: "bob-1", linkedAt: "2026-11-14T20:00:00Z" }] });
+    await upsertSessionLinks(handle.db, { workspaceId: WS, links: [{ nativeSessionId: "n-1", bobSessionId: "bob-2", linkedAt: "2026-11-14T20:05:00Z" }, { nativeSessionId: "", bobSessionId: "x", linkedAt: "bad" }] });
+    const rows = await handle.db.execute(sql`select native_session_id, bob_session_id from budget_session_links`);
+    expect(rows.rows).toEqual([{ native_session_id: "n-1", bob_session_id: "bob-2" }]);
   });
 });

@@ -133,3 +133,15 @@ export const budgetDecisions = pgTable(
   }),
   (t) => [index("budget_decisions_decided_at_idx").on(t.decidedAt)],
 );
+
+// BOB-76 Phase 6. DDL: drizzle/0040_budget_session_links.sql.
+export const budgetSessionLinks = pgTable(
+  "budget_session_links",
+  (t) => ({
+    workspaceId: t.uuid().notNull(),
+    nativeSessionId: t.text().notNull(),
+    bobSessionId: t.text().notNull(),
+    linkedAt: t.timestamp({ withTimezone: true }).notNull(),
+  }),
+  (t) => [primaryKey({ columns: [t.workspaceId, t.nativeSessionId] }), index("budget_session_links_bob_idx").on(t.bobSessionId)],
+);

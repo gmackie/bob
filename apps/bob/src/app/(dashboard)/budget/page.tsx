@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { governState, normalizeBudgetPolicy, type BudgetPolicy, type BudgetStateWire, type BudgetVerdict } from "@bob/ws";
 
 import { BudgetGauge, GaugeLegend } from "~/components/budget/budget-gauge";
+import { PlannerPanel, ThroughputPanel, type ThroughputResponse } from "~/components/budget/budget-plan";
 import { DecisionFeed, LeversPanel, ModeControl, SurplusLadder } from "~/components/budget/budget-levers";
 import { buildGauges, buildRiver, decisionLines, impactOf, policyChanges, providerLabel, type DecisionLine } from "~/components/budget/budget-model";
 import { WeekRiver } from "~/components/budget/week-river";
@@ -36,6 +37,8 @@ export default function BudgetPage() {
   const now = useNow();
   const stateQuery = useQuery(bobQuery("budget.state").queryOptions({}, { refetchInterval: 30_000, staleTime: 10_000 }));
   const data = stateQuery.data as unknown as BudgetStateResponse | undefined;
+  const throughputQuery = useQuery(bobQuery("budget.throughput").queryOptions({}, { refetchInterval: 300_000, staleTime: 120_000 }));
+  const throughput = throughputQuery.data as unknown as ThroughputResponse | undefined;
 
   const livePolicy = data?.state.policy;
   const [draft, setDraft] = useState<BudgetPolicy | null>(null);
@@ -204,6 +207,14 @@ export default function BudgetPage() {
               )}
             </section>
 
+            {throughput ? (
+              <>
+                <ThroughputPanel data={throughput} />
+                <PlannerPanel data={throughput} />
+              </>
+            ) : throughputQuery.isLoading ? (
+              <div className="h-40 animate-pulse rounded-2xl bg-muted/60" />
+            ) : null}
             <SurplusLadder tiers={draftPolicy.tiers} live={livePolicy!.tiers} onChange={(tiers) => patch({ tiers })} />
             <DecisionFeed lines={lines} />
           </div>

@@ -38,7 +38,7 @@ import { pushToUser } from "./push.js";
 import { workspaceOwnerId } from "./auth.js";
 import { ProxyAlertNotifier } from "./proxy-alert-notifier.js";
 import { ingestAccountStates, ingestBudgetUsage, ingestMeterSamples, type BudgetStore } from "./budget-ingest.js";
-import { recordMeterSamples, upsertBobSessions, upsertBudgetAccounts, upsertUsageBuckets } from "@bob/db";
+import { recordMeterSamples, upsertBobSessions, upsertBudgetAccounts, upsertSessionLinks, upsertUsageBuckets } from "@bob/db";
 import { enqueueTransition } from "./outbox.js";
 import { parsePrUrl } from "./pr-url.js";
 import { orphanReapCutoffs } from "./reap-orphans.js";
@@ -163,7 +163,7 @@ export interface RelayConfig {
 
 
 
-const budgetStore: BudgetStore = { recordMeterSamples, upsertBobSessions, upsertBudgetAccounts, upsertUsageBuckets };
+const budgetStore: BudgetStore = { recordMeterSamples, upsertBobSessions, upsertBudgetAccounts, upsertSessionLinks, upsertUsageBuckets };
 
 export class Relay {
   private readonly cfg: RelayConfig;

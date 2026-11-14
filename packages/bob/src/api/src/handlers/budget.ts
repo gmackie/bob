@@ -13,6 +13,7 @@ import { db } from "@bob/db/client";
 import { normalizeBudgetPolicy  } from "@bob/ws";
 import type {BudgetPolicy} from "@bob/ws";
 
+import { budgetThroughput as loadThroughput } from "../services/budget/cost.js";
 import { evaluateBudget } from "../services/budget/state.js";
 import { assertOwner, audit } from "./cockpitControls.js";
 
@@ -51,4 +52,9 @@ export async function budgetSetPolicy(ctx: BudgetCtx, input: { policy: Record<st
   });
   await audit(ctx.userId, "set_budget_policy", null, { changed, ...(input.note ? { note: input.note } : {}) });
   return after as unknown as Record<string, unknown>;
+}
+
+export async function budgetThroughput(ctx: BudgetCtx) {
+  await assertOwner(ctx.userId);
+  return (await loadThroughput()) as unknown as Record<string, unknown>;
 }

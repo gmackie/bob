@@ -136,6 +136,11 @@ export const OperationsRpc = RpcGroup.make(
     success: Schema.Record(Schema.String, Schema.Unknown),
     error,
   }),
+  Rpc.make("budget.throughput", {
+    payload: Schema.Struct({}),
+    success: Schema.Record(Schema.String, Schema.Unknown),
+    error,
+  }),
   Rpc.make("budget.setPolicy", {
     payload: Schema.Struct({
       policy: Schema.Record(Schema.String, Schema.Unknown),
