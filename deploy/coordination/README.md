@@ -50,6 +50,30 @@ receipt endpoints, project/issue-project bindings and explicit execution
 profiles. See T3's `docs/operations/bob-coordination.md`. Never substitute the
 legacy thread-launch route when capability negotiation fails.
 
+## SDLC edge exporter (BOB-75)
+
+The worker pushes plan and work-item changes to the SDLC edge with
+`--edge /etc/bob/coordination/edge.json`. It needs two private files in
+`/etc/bob/coordination`, both root:bob, mode 0640, never committed:
+
+- `edge.env`: `BOB_SDLC_EDGE_TOKEN=<token>`, the edge ingest bearer token. The
+  worker unit loads it with `EnvironmentFile=-/etc/bob/coordination/edge.env`.
+  The leading dash keeps the unit starting when the file is absent; without the
+  dash, systemd refuses to start the worker at all.
+- `edge.json`: `{ "endpoint", "checkpoint", "tokenEnv" }`, with `endpoint` the
+  edge's `https://…/api/sdlc/ingest` URL, `checkpoint` set to
+  `/home/bob/.bob/coordination/edge.sqlite`, and `tokenEnv` set to
+  `BOB_SDLC_EDGE_TOKEN`. The token never goes in this file.
+
+If either file is missing or invalid, the worker logs `step: "edge"`,
+`outcome: "configuration-unavailable"` once and keeps dispatching without the
+exporter. Edge outages log `outcome: "unavailable"` and back off; they never
+stop dispatch.
+
+After any restore of the coordinator database, delete `edge.sqlite` before
+starting the worker. The exporter then sends a fresh snapshot instead of changes
+from a checkpoint that no longer matches the restored database.
+
 ## Start and connect
 
 Install these two unit files under `/etc/systemd/system`. Run

@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Coordinator } from '../runtime/coordinator.mjs';
 import { ExecutionCoordinator } from '../runtime/execution.mjs';
-import { edgeExporter } from '../runtime/edge.mjs';
+import { edgeExporter, loadEdgeConfig } from '../runtime/edge.mjs';
 
 const target = { environmentId: 'hetzner-bob', projectId: 'bob', repository: { integrationId: 'forgegraph', repositoryId: 'bob' } };
 const retired = { environmentId: 'hetzner-old', projectId: 'old', repository: { integrationId: 'forgegraph', repositoryId: 'old' } };
@@ -225,4 +225,16 @@ test('a failed or mismatched acknowledgement keeps the checkpoint', async t => {
   assert.deepEqual(f.batches[2], f.batches[3]);
   assert.equal(f.batches[3].fromSequence, f.batches[1].watermark);
   exporter.close();
+});
+
+test('edge configuration needs a valid tokenEnv and reads the token from the environment', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'bob-edge-config-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const write = (name, config) => { const path = join(dir, name); writeFileSync(path, JSON.stringify(config)); return path; };
+  const base = { endpoint: 'https://edge.example/api/sdlc/ingest', checkpoint: '/tmp/edge.sqlite' };
+  assert.throws(() => loadEdgeConfig(write('missing.json', base), {}), /tokenEnv/);
+  assert.throws(() => loadEdgeConfig(write('invalid.json', { ...base, tokenEnv: 'bob-token' }), {}), /tokenEnv/);
+  assert.throws(() => loadEdgeConfig(write('number.json', { ...base, tokenEnv: 42 }), {}), /tokenEnv/);
+  assert.deepEqual(loadEdgeConfig(write('valid.json', { ...base, tokenEnv: 'BOB_SDLC_EDGE_TOKEN' }), { BOB_SDLC_EDGE_TOKEN: 'secret-token' }),
+    { ...base, token: 'secret-token' });
 });

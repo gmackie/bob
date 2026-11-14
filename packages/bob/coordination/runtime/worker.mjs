@@ -4,6 +4,7 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { flightdeckExporter, loadFlightdeckConfig } from './flightdeck.mjs';
+import { edgeExporter, loadEdgeConfig } from './edge.mjs';
 import { ExecutionCoordinator } from './execution.mjs';
 import { executionPort } from './execution-port.mjs';
 import { kanbangerClient, loadKanbangerConfig } from './kanbanger.mjs';
@@ -11,12 +12,31 @@ import { drainIssueEffects, backoffMs } from './issue-effects.mjs';
 
 const errorOf = error => ({ code: error?.code ?? 'InternalError', message: String(error?.message ?? error).slice(0, 500) });
 
+const exporterState = () => ({ failures: 0, retryAt: 0 });
+
+/** Flushes one best-effort exporter with its own capped backoff. A failure is logged
+ * without its message (it may carry endpoint or token detail) and never stops dispatch.
+ * Flightdeck reports `{ exported }`, the edge `{ kind, sent }`; only a non-zero count logs,
+ * so idle flushes and edge heartbeats stay quiet. */
+async function flushExporter(step, exporter, state, log) {
+  if (!exporter || Date.now() < state.retryAt) return;
+  try {
+    const result = await exporter.flush();
+    state.failures = 0; state.retryAt = 0;
+    const count = result?.exported ?? result?.sent ?? 0;
+    if (count) log({ at: new Date().toISOString(), step, outcome: 'exported', count });
+  } catch {
+    state.retryAt = Date.now() + Math.min(1000 * 2 ** Math.min(state.failures++, 6), 60000);
+    log({ at: new Date().toISOString(), step, outcome: 'unavailable' });
+  }
+}
+
 /** One loop: DispatchOnce (the unchanged lease/FindExecution path), then drain the
  * Kanbanger effect outbox. A stop signal is honoured between steps, so a step in
  * flight finishes and settles its lease normally. */
-export async function runWorker({ coordinator, port, kanbanger, flightdeck, intervalMs = 5000, signal, log = line => console.log(JSON.stringify(line)), random = Math.random, inProgressStateName, drainLimit = 10 }) {
+export async function runWorker({ coordinator, port, kanbanger, flightdeck, edge, intervalMs = 5000, signal, log = line => console.log(JSON.stringify(line)), random = Math.random, inProgressStateName, drainLimit = 10 }) {
   if (!Number.isInteger(intervalMs) || intervalMs < 10 || intervalMs > 3600000) throw new Error('Invalid interval');
-  let failures = 0, analyticsFailures = 0, analyticsRetryAt = 0;
+  let failures = 0; const analytics = exporterState(), edgeState = exporterState();
   log({ at: new Date().toISOString(), step: 'start', intervalMs });
   while (!signal?.aborted) {
     let worked = false, failed = false;
@@ -36,16 +56,8 @@ export async function runWorker({ coordinator, port, kanbanger, flightdeck, inte
           effects: summary.results.map(({ effectId, fact, outcome, action, error }) => ({ effectId, fact, outcome, ...(action ? { action } : {}), ...(error ? { error: errorOf(error) } : {}) })) });
       } catch (error) { failed = true; log({ at: new Date().toISOString(), step: 'drain', outcome: 'error', error: errorOf(error) }); }
     }
-    if (flightdeck && Date.now() >= analyticsRetryAt) {
-      try {
-        const result = await flightdeck.flush();
-        analyticsFailures = 0; analyticsRetryAt = 0;
-        if (result.exported) log({ at: new Date().toISOString(), step: 'flightdeck', outcome: 'exported', count: result.exported });
-      } catch {
-        analyticsRetryAt = Date.now() + Math.min(1000 * 2 ** Math.min(analyticsFailures++, 6), 60000);
-        log({ at: new Date().toISOString(), step: 'flightdeck', outcome: 'unavailable' });
-      }
-    }
+    await flushExporter('flightdeck', flightdeck, analytics, log);
+    await flushExporter('edge', edge, edgeState, log);
     failures = failed ? failures + 1 : 0;
     // Jittered: errors back off exponentially; idle waits ~intervalMs; work continues promptly.
     const delay = failed ? Math.min(backoffMs(failures - 1, random) / 5, 60000) : worked ? 0 : Math.round(intervalMs * (0.8 + 0.4 * random()));
@@ -56,8 +68,8 @@ export async function runWorker({ coordinator, port, kanbanger, flightdeck, inte
 }
 
 async function main() {
-  const { values } = parseArgs({ options: { database: { type: 'string' }, context: { type: 'string' }, bindings: { type: 'string' }, kanbanger: { type: 'string' }, flightdeck: { type: 'string' }, 'interval-ms': { type: 'string', default: '5000' }, help: { type: 'boolean' } } });
-  if (values.help) { console.log('bob-coordinate-worker --database <sqlite-file> --context <policy.json> --bindings <environment-bindings.json> --kanbanger <kanbanger.json> [--interval-ms <ms>] [--flightdeck <analytics.json>]'); return; }
+  const { values } = parseArgs({ options: { database: { type: 'string' }, context: { type: 'string' }, bindings: { type: 'string' }, kanbanger: { type: 'string' }, flightdeck: { type: 'string' }, edge: { type: 'string' }, 'interval-ms': { type: 'string', default: '5000' }, help: { type: 'boolean' } } });
+  if (values.help) { console.log('bob-coordinate-worker --database <sqlite-file> --context <policy.json> --bindings <environment-bindings.json> --kanbanger <kanbanger.json> [--interval-ms <ms>] [--flightdeck <analytics.json>] [--edge <edge.json>]'); return; }
   if (!values.database || !values.context || !values.bindings || !values.kanbanger) throw Object.assign(new Error('Use --help for required arguments'), { code: 'InvalidRequest' });
   const intervalMs = Number(values['interval-ms']);
   const config = loadKanbangerConfig(values.kanbanger);
@@ -69,10 +81,15 @@ async function main() {
     try { flightdeck = flightdeckExporter({ coordinator, ...loadFlightdeckConfig(values.flightdeck) }); }
     catch { console.error(JSON.stringify({ at: new Date().toISOString(), step: 'flightdeck', outcome: 'configuration-unavailable' })); }
   }
+  let edge;
+  if (values.edge) {
+    try { edge = edgeExporter({ coordinator, ...loadEdgeConfig(values.edge) }); }
+    catch { console.error(JSON.stringify({ at: new Date().toISOString(), step: 'edge', outcome: 'configuration-unavailable' })); }
+  }
   const controller = new AbortController();
   for (const name of ['SIGINT', 'SIGTERM']) process.once(name, () => controller.abort());
-  try { await runWorker({ coordinator, port, kanbanger, flightdeck, intervalMs, signal: controller.signal, inProgressStateName: config.inProgressStateName }); }
-  finally { flightdeck?.close(); coordinator.close(); }
+  try { await runWorker({ coordinator, port, kanbanger, flightdeck, edge, intervalMs, signal: controller.signal, inProgressStateName: config.inProgressStateName }); }
+  finally { flightdeck?.close(); edge?.close(); coordinator.close(); }
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {

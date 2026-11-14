@@ -89,3 +89,12 @@ test('bob-coordinate-worker logs JSON per step and exits cleanly on SIGTERM', as
   assert.equal(c.attempt(body.attemptId).state, 'admitted');
   assert.equal(c.db.prepare("SELECT status FROM coordination_issue_effect").get().status, 'delivered');
 });
+
+test('edge failure does not stop dispatch or leak its exception', async () => {
+  const controller = new AbortController(), lines = []; let calls = 0;
+  await runWorker({ coordinator: { dispatchOne: async () => { calls++; return { dispatched: false }; } }, port: {}, intervalMs: 10, signal: controller.signal,
+    edge: { flush: async () => { controller.abort(); throw new Error('SECRET'); } }, log: line => lines.push(line) });
+  assert.equal(calls, 1);
+  assert(lines.some(line => line.step === 'edge' && line.outcome === 'unavailable'));
+  assert(!JSON.stringify(lines).includes('SECRET'));
+});
