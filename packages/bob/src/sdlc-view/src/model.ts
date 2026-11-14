@@ -71,7 +71,8 @@ export const TERMINAL_PLAN_STATES: ReadonlySet<PlanState> = new Set<PlanState>([
 
 /**
  * Folds an edge message into the view.
- * - snapshot: always applies and replaces everything, including seq and epoch, and clears needsResync.
+ * - snapshot: always applies and replaces everything, including seq and epoch, and clears
+ *   needsResync; except coordinatorSeenAt, which only moves forward (null never erases a known time).
  * - delta: dropped when seq <= view.seq (a late or repeated delta), except that
  *   coordinatorSeenAt still moves forward. Otherwise it keeps the newest
  *   resourceVersion per resource. A seq jump past view.seq + 1 still applies but
@@ -100,7 +101,9 @@ export function reduce(view: EdgeView, message: EdgeMessage): EdgeView {
     seq: message.seq,
     plans,
     items,
-    coordinatorSeenAt: snapshot ? message.coordinatorSeenAt : later(view.coordinatorSeenAt, message.coordinatorSeenAt),
+    // Liveness never moves backwards, not even on a snapshot: an edge that was evicted
+    // has not heard from the coordinator yet, and must not make a live coordinator look offline.
+    coordinatorSeenAt: later(view.coordinatorSeenAt, message.coordinatorSeenAt),
     needsResync: snapshot ? false : view.needsResync || message.seq > view.seq + 1,
   };
 }

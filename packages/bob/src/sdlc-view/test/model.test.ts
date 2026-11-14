@@ -60,6 +60,17 @@ describe("reduce", () => {
     expect(reduce(view, { type: "status", coordinatorSeenAt: 60 }).coordinatorSeenAt).toBe(60);
     expect(reduce(emptyView(), { type: "status", coordinatorSeenAt: null }).coordinatorSeenAt).toBeNull();
   });
+  it("never moves coordinatorSeenAt backwards on a snapshot, so a reconnect to an evicted edge does not flash offline", () => {
+    const view = reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 3, plans: [], items: [], topology, coordinatorSeenAt: 50 });
+    // The evicted DO has not heard from the coordinator since it woke: null, or an older time.
+    const evicted = reduce(view, { type: "snapshot", epoch: "e2", seq: 1, plans: [plan("p", ["a"])], items: [], topology, coordinatorSeenAt: null });
+    expect(evicted.coordinatorSeenAt).toBe(50);
+    expect(evicted).toMatchObject({ epoch: "e2", seq: 1 });
+    expect(Object.keys(evicted.plans)).toEqual(["p"]);
+    expect(reduce(view, { type: "snapshot", epoch: "e2", seq: 1, plans: [], items: [], topology, coordinatorSeenAt: 40 }).coordinatorSeenAt).toBe(50);
+    expect(reduce(view, { type: "snapshot", epoch: "e2", seq: 1, plans: [], items: [], topology, coordinatorSeenAt: 60 }).coordinatorSeenAt).toBe(60);
+    expect(reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 1, plans: [], items: [], topology, coordinatorSeenAt: null }).coordinatorSeenAt).toBeNull();
+  });
   it("always applies a snapshot, resetting seq", () => {
     let view = reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 9, plans: [], items: [], topology, coordinatorSeenAt: 10 });
     view = reduce(view, { type: "snapshot", epoch: "e1", seq: 2, plans: [plan("p", ["a"])], items: [item("a", "p", "ready")], topology, coordinatorSeenAt: 11 });
