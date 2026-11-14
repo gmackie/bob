@@ -110,12 +110,11 @@
     // deployment artifact on the work item. Needs BOB_FORGEJO_TOKEN; uses the
     // FG_API_TOKEN secret when present. Same on/off lever as the other drivers.
     "BOB_DEPLOY_TRACKING_ENABLED": "true",
-    // SDLC edge. Filled in at deploy (BOB-75 Task 13): the coordinator's
-    // context.json workspaceId, and the user ids allowed to watch. While the
-    // workspace id is empty, /api/sdlc/* answers 503; an empty viewer list
-    // lets nobody watch. The exporter's token is the secret
-    // SDLC_EDGE_INGEST_TOKEN (wrangler secret put), NOT a var here.
-    "SDLC_EDGE_WORKSPACE_ID": "",
-    "SDLC_VIEWER_USER_IDS": ""
+    // SDLC edge (BOB-75): the hetzner-bob coordinator's context.json workspaceId,
+    // and the user ids allowed to watch /sdlc (the Hermes operators). Emptying
+    // the workspace id is the kill switch: /api/sdlc/* then answers 503. The
+    // exporter's token is the secret SDLC_EDGE_INGEST_TOKEN, NOT a var here.
+    "SDLC_EDGE_WORKSPACE_ID": "e3d5ca9f-afaa-4276-8b8b-494eeaa80457",
+    "SDLC_VIEWER_USER_IDS": "tkE66fMc4mevdYYjtq78ALErJ7QnhAge"
   }
 }
