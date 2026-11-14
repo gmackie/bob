@@ -84,3 +84,52 @@ export const budgetSessionUsage = pgTable(
     index("budget_session_usage_last_idx").on(t.workspaceId, t.lastAt),
   ],
 );
+
+// BOB-76 Phase 2. DDL: drizzle/0039_budget_governor.sql.
+export const budgetAccounts = pgTable(
+  "budget_accounts",
+  (t) => ({
+    workspaceId: t.uuid().notNull(),
+    accountId: t.text().notNull(),
+    hostId: t.text().notNull(),
+    authIndex: t.text(),
+    provider: t.text().notNull(),
+    label: t.text().notNull(),
+    status: t.text().notNull(),
+    detail: t.text(),
+    updatedAt: t.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  }),
+  (t) => [primaryKey({ columns: [t.workspaceId, t.accountId] })],
+);
+
+export const budgetPolicy = pgTable("budget_policy", (t) => ({
+  id: t.text().primaryKey(),
+  policy: t.jsonb().$type<Record<string, unknown>>().notNull(),
+  updatedBy: t.text(),
+  updatedAt: t.timestamp({ withTimezone: true }).defaultNow().notNull(),
+}));
+
+export const budgetPolicyChanges = pgTable("budget_policy_changes", (t) => ({
+  id: t.bigserial({ mode: "number" }).primaryKey(),
+  changedBy: t.text(),
+  before: t.jsonb().$type<Record<string, unknown>>().notNull(),
+  after: t.jsonb().$type<Record<string, unknown>>().notNull(),
+  note: t.text(),
+  changedAt: t.timestamp({ withTimezone: true }).defaultNow().notNull(),
+}));
+
+export const budgetDecisions = pgTable(
+  "budget_decisions",
+  (t) => ({
+    id: t.bigserial({ mode: "number" }).primaryKey(),
+    decidedAt: t.timestamp({ withTimezone: true }).defaultNow().notNull(),
+    enforce: t.boolean().notNull(),
+    mode: t.text().notNull(),
+    totalSlots: t.integer().notNull(),
+    legacyBudget: t.integer(),
+    dispatched: t.integer(),
+    verdict: t.jsonb().$type<Record<string, unknown>>().notNull(),
+    inputs: t.jsonb().$type<Record<string, unknown>>().notNull(),
+  }),
+  (t) => [index("budget_decisions_decided_at_idx").on(t.decidedAt)],
+);

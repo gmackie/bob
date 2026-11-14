@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ingestBudgetUsage, ingestMeterSamples, type BudgetStore } from "./budget-ingest";
+import { ingestAccountStates, ingestBudgetUsage, ingestMeterSamples, type BudgetStore } from "./budget-ingest";
 
 const WS = "4b0f8e5e-3a5c-4a52-9a7a-5d1d6c0b9f01";
 const tokens = { input: 1, output: 2, reasoning: 0, cacheRead: 3, cacheCreation: 4, total: 10 };
@@ -8,12 +8,13 @@ const bucket = { hour: "2026-11-14T20:00:00.000Z", authIndex: "a1", provider: "c
 const session = { sessionId: "s", authIndex: "a1", provider: "claude", model: "m", requests: 1, failed: 0, tokens, firstAt: bucket.hour, lastAt: bucket.hour };
 
 function store(): BudgetStore & { calls: Record<string, unknown[]> } {
-  const calls: Record<string, unknown[]> = { buckets: [], sessions: [], meters: [] };
+  const calls: Record<string, unknown[]> = { buckets: [], sessions: [], meters: [], accounts: [] };
   return {
     calls,
     upsertUsageBuckets: vi.fn(async (_db, input) => (calls.buckets!.push(input), input.buckets.length)),
     upsertBobSessions: vi.fn(async (_db, input) => (calls.sessions!.push(input), input.sessions.length)),
     recordMeterSamples: vi.fn(async (_db, input) => (calls.meters!.push(input), input.accounts.length)),
+    upsertBudgetAccounts: vi.fn(async (_db, input) => (calls.accounts!.push(input), input.accounts.length)),
   };
 }
 
@@ -58,5 +59,30 @@ describe("ingestMeterSamples", () => {
     await ingestMeterSamples({} as never, s, { workspaceId: WS, hostId: "h" }, {} as never);
     expect(s.calls.meters).toHaveLength(1);
     expect(s.calls.meters![0]).toMatchObject({ accounts: [{ id: "auth-0" }] });
+  });
+});
+
+describe("ingestAccountStates", () => {
+  it("records every account's status, including unmetered ones, and drops unknown statuses", async () => {
+    const s = store();
+    await ingestAccountStates({} as never, s, { workspaceId: WS, hostId: "h" }, {
+      proxy: {
+        accounts: [
+          { id: "auth-1", provider: "claude", label: "m…@x.com", status: "error", detail: "invalid grant", ref: { authIndex: "a2" } },
+          { id: "kimi", provider: "kimi", label: "k…@x.com", status: "ready" },
+          { id: "odd", provider: "grok", label: "x", status: "sideways" },
+        ],
+      },
+    } as never);
+    expect(s.calls.accounts).toEqual([
+      {
+        workspaceId: WS,
+        hostId: "h",
+        accounts: [
+          { id: "auth-1", provider: "claude", label: "m…@x.com", status: "error", detail: "invalid grant", ref: { authIndex: "a2" } },
+          { id: "kimi", provider: "kimi", label: "k…@x.com", status: "ready" },
+        ],
+      },
+    ]);
   });
 });
