@@ -145,6 +145,12 @@ jobs:
 
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
 
+      # apps/bob/worker/sdlc/exporter.e2e.test.ts runs the real coordinator runtime,
+      # a standalone npm package (own lockfile) outside the pnpm workspace.
+      - name: Install coordination runtime dependencies
+        working-directory: packages/bob/coordination
+        run: npm ci --ignore-scripts --registry=https://registry.npmjs.org
+
       - name: Install PostgreSQL tools for owned observability test
         run: |
           sudo apt-get update -qq
