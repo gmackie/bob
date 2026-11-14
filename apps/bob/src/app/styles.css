@@ -45,3 +45,56 @@
     letter-spacing: var(--tracking-normal);
   }
 }
+
+/* BOB-76 budget cockpit ---------------------------------------------------- */
+/* Bob's chart tokens are all amber; the cockpit needs hues that read apart
+   from the primary amber for "you", "target" and the 5-hour window. */
+:root {
+  --budget-you: oklch(0.62 0.12 232);
+  --budget-target: oklch(0.6 0.19 340);
+  --budget-short: oklch(0.62 0.13 165);
+}
+.dark {
+  --budget-you: oklch(0.76 0.11 225);
+  --budget-target: oklch(0.74 0.16 340);
+  --budget-short: oklch(0.78 0.13 165);
+}
+.budget-range.budget-range-track::-webkit-slider-runnable-track { height: 4px; border-radius: 9999px; background: var(--muted); }
+.budget-range.budget-range-track::-webkit-slider-thumb { margin-top: -6px; }
+.budget-range.budget-range-track::-moz-range-track { height: 4px; border-radius: 9999px; background: var(--muted); }
+.budget-hero {
+  background:
+    radial-gradient(900px 260px at 0% 0%, color-mix(in oklab, var(--primary) 16%, transparent), transparent 70%),
+    radial-gradient(700px 220px at 100% 120%, color-mix(in oklab, var(--chart-2) 14%, transparent), transparent 70%),
+    var(--card);
+}
+.budget-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--card);
+  border: 2px solid var(--primary);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+  transition: transform 120ms ease-out;
+}
+.budget-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--card);
+  border: 2px solid var(--primary);
+}
+.budget-range:active::-webkit-slider-thumb { transform: scale(1.15); }
+.budget-range:focus-visible { outline: none; }
+.budget-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 45%, transparent); }
+.budget-range::-webkit-slider-runnable-track { background: transparent; }
+@media (prefers-reduced-motion: no-preference) {
+  .budget-rise { animation: budget-rise 420ms cubic-bezier(.2, .7, .3, 1) both; }
+  .budget-arc { animation: budget-fade 600ms ease-out both; }
+  .budget-ghost { transition: d 180ms ease-out; }
+  .budget-now { animation: budget-pulse 1.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes budget-rise { from { opacity: 0; transform: translateY(8px); } }
+  @keyframes budget-fade { from { opacity: 0; } }
+  @keyframes budget-pulse { 50% { transform: scale(1.5); opacity: .55; } }
+}

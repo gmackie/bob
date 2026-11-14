@@ -3,10 +3,12 @@
  * governor on it. Used by autoDrain (every tick) and the budget RPC (the
  * dashboard), so both see the same snapshot and the same verdict.
  */
-import { inArray, readBudgetPolicy, readBudgetStateRows, recordBudgetDecision, sql, type BudgetStateRows } from "@bob/db";
+import { inArray, readBudgetPolicy, readBudgetStateRows, recordBudgetDecision, sql  } from "@bob/db";
+import type {BudgetStateRows} from "@bob/db";
 import { db } from "@bob/db/client";
 import { chatConversations } from "@bob/db/schema";
-import { governState, normalizeBudgetPolicy, type BudgetPolicy, type BudgetStateWire, type BudgetVerdict } from "@bob/ws";
+import { governState, normalizeBudgetPolicy    } from "@bob/ws";
+import type {BudgetPolicy, BudgetStateWire, BudgetVerdict} from "@bob/ws";
 
 import { ACTIVE_SESSION_STATUSES } from "../automation/activeSessions.js";
 

@@ -30,6 +30,7 @@ export { registerSessionAgentRun } from "./session-agent-run.js";
 export {
   readBudgetPolicy,
   readBudgetStateRows,
+  readRecentBudgetDecisions,
   recordBudgetDecision,
   recordMeterSamples,
   upsertBobSessions,
@@ -37,4 +38,4 @@ export {
   upsertUsageBuckets,
   writeBudgetPolicy,
 } from "./budget-store.js";
-export type { BobSessionInput, BudgetAccountInput, BudgetStateRows, MeterAccountInput, UsageBucketInput } from "./budget-store.js";
+export type { BobSessionInput, BudgetAccountInput, BudgetDecisionSummary, BudgetStateRows, MeterAccountInput, UsageBucketInput } from "./budget-store.js";

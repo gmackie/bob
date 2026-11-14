@@ -27,8 +27,8 @@ export interface ControlCtx {
   userId: string;
 }
 
-/** Owner gate: the caller must own at least one workspace. */
-async function assertOwner(userId: string): Promise<void> {
+/** Owner gate: the caller must own at least one workspace. Shared by the budget levers (BOB-76). */
+export async function assertOwner(userId: string): Promise<void> {
   const m = await db.query.workspaceMembers.findFirst({
     where: and(eq(workspaceMembers.userId, userId), eq(workspaceMembers.role, "owner")),
     columns: { id: true },
@@ -38,7 +38,7 @@ async function assertOwner(userId: string): Promise<void> {
   }
 }
 
-async function audit(userId: string, action: string, target: string | null, payload: Record<string, unknown> = {}): Promise<void> {
+export async function audit(userId: string, action: string, target: string | null, payload: Record<string, unknown> = {}): Promise<void> {
   await db.insert(cockpitAudit).values({ userId, action, target, payload }).catch((err) => {
     console.error(`[cockpit] audit write failed for ${action}:`, err);
   });

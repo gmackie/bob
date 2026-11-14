@@ -31,7 +31,8 @@ import type { AgentHealthVerdict } from "../services/automation/agentHealthRoute
 import { assessAgentHealth, chooseAgent } from "../services/automation/agentHealthRouter.js";
 import { paceDailyBudget } from "../services/health/pacing.js";
 import { ACTIVE_SESSION_STATUSES } from "../services/automation/activeSessions.js";
-import { AGENT_PROVIDER, evaluateBudget, nextBudgetedAgent, recordDecision, type BudgetEvaluation } from "../services/budget/state.js";
+import { AGENT_PROVIDER, evaluateBudget, nextBudgetedAgent, recordDecision  } from "../services/budget/state.js";
+import type {BudgetEvaluation} from "../services/budget/state.js";
 
 // Work-item statuses the driver will pick up and dispatch. "ready" is the
 // explicit/promoted queue; "todo" is planned work — included so the driver

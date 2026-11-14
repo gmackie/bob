@@ -39,7 +39,7 @@ describe("rowsToBudgetState", () => {
       observedAt: NOW.toISOString(),
     });
     expect(state.ledger).toHaveLength(1);
-    expect(state.ledger[0]!.tokens).toEqual({ input: 10, output: 1, reasoning: 0, cacheRead: 100, cacheCreation: 2, total: 113 });
+    expect(state.ledger[0]?.tokens).toEqual({ input: 10, output: 1, reasoning: 0, cacheRead: 100, cacheCreation: 2, total: 113 });
     expect(state.activeByProvider).toEqual({ claude: 1 });
   });
 
