@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Coordinator } from '../runtime/coordinator.mjs';
 import { ExecutionCoordinator } from '../runtime/execution.mjs';
-import { edgeExporter, loadEdgeConfig } from '../runtime/edge.mjs';
+import { edgeExporter, loadEdgeConfig, MAX_BATCH_BYTES } from '../runtime/edge.mjs';
 
 const target = { environmentId: 'hetzner-bob', projectId: 'bob', repository: { integrationId: 'forgegraph', repositoryId: 'bob' } };
 const retired = { environmentId: 'hetzner-old', projectId: 'old', repository: { integrationId: 'forgegraph', repositoryId: 'old' } };
@@ -145,6 +145,10 @@ test('snapshots leave out terminal plans and their items', async t => {
   assert.deepEqual(batch.items.map(item => item.itemId), ['item-live']);
   assert(!batch.plans.some(plan => plan.planId === cancelled.resourceId));
   exporter.close();
+});
+
+test('batches are capped at the edge ingest limit of 1,000,000 bytes', () => {
+  assert.equal(MAX_BATCH_BYTES, 1_000_000);
 });
 
 test('an oversized batch is refused before it is sent and keeps the checkpoint', async t => {

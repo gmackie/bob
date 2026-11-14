@@ -3,7 +3,8 @@ import { readFileSync, realpathSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const HEARTBEAT_MS = 30_000;
-const MAX_BATCH_BYTES = 3_500_000;
+// The edge refuses larger ingest bodies (413): keep in step with MAX_INGEST_BYTES in apps/bob/worker/sdlc/store.ts.
+export const MAX_BATCH_BYTES = 1_000_000;
 const PAGE = 50, EVENTS = 100;
 // Terminal plans (completed, cancelled) reach the edge through change batches when
 // they finish; snapshots carry only the plans that can still move.
