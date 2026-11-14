@@ -256,6 +256,8 @@ export async function planSessionStart(
         sizeLabel: string;
         content?: string;
       }[];
+      /** Set when the budget governor launched this session (BOB-76): its drafts wait for a human. */
+      budgetTier?: string;
     };
   },
 ) {

@@ -31,6 +31,7 @@ import type { AgentHealthVerdict } from "../services/automation/agentHealthRoute
 import { assessAgentHealth, chooseAgent } from "../services/automation/agentHealthRouter.js";
 import { paceDailyBudget } from "../services/health/pacing.js";
 import { ACTIVE_SESSION_STATUSES } from "../services/automation/activeSessions.js";
+import { allocateSurplus } from "@bob/ws";
 import { AGENT_PROVIDER, evaluateBudget, nextBudgetedAgent, recordDecision  } from "../services/budget/state.js";
 import type {BudgetEvaluation} from "../services/budget/state.js";
 
@@ -178,6 +179,26 @@ export async function autoDrainBacklog(
   const remainingByProvider = new Map(
     Object.entries(budgetEval?.verdict.byProvider ?? {}).map(([provider, entry]) => [provider, entry.slots]),
   );
+  // Surplus ladder (enforcement only): slots delivery could not use flow to
+  // grooming, pull-forward, discovery and BizPulse. Planning tiers run on
+  // Claude, so they are capped by Claude's remaining slots.
+  const spendSurplus = async (leftover: number) => {
+    if (!enforce || !budgetEval || leftover <= 0) return;
+    try {
+      const { runSurplusTiers, surplusDemand } = await import("../services/budget/surplus.js");
+      const demand = await surplusDemand();
+      const allocation = allocateSurplus(leftover, { delivery: 0, ...demand }, budgetEval.state.policy.tiers);
+      let claude = remainingByProvider.get("claude") ?? 0;
+      for (const tier of ["groom", "discovery", "bizpulse"] as const) {
+        allocation[tier] = Math.min(allocation[tier], claude);
+        claude -= allocation[tier];
+      }
+      const started = await runSurplusTiers(allocation);
+      if (started.length) console.log(`[auto-drain] surplus: ${started.map((s) => s.tier).join(", ")}`);
+    } catch (err) {
+      console.warn("[auto-drain] surplus tiers skipped:", err);
+    }
+  };
 
   const base = { running, dispatchedToday: today, items: [] as AutoDrainResult["items"] };
   if (budget <= 0) {
@@ -217,6 +238,7 @@ export async function autoDrainBacklog(
     limit: budget * 4,
   });
   if (ready.length === 0) {
+    await spendSurplus(budget);
     return { ...base, dispatched: 0, reason: "no dispatchable items" };
   }
 
@@ -372,6 +394,8 @@ export async function autoDrainBacklog(
       console.error(`[auto-drain] dispatch failed for ${wi.id}:`, err);
     }
   }
+
+  await spendSurplus(budget - dispatchedItems.length);
 
   return {
     running,

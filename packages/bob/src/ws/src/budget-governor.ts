@@ -365,3 +365,29 @@ export function normalizeBudgetPolicy(stored: unknown): BudgetPolicy {
     projectWeights: typeof raw.projectWeights === "object" && raw.projectWeights !== null ? raw.projectWeights : {},
   };
 }
+
+/**
+ * Split a tick's run slots down the surplus ladder (BOB-76 Phase 5).
+ * Delivery takes what its queue can use; whatever is left flows through the
+ * enabled tiers in order, each capped by its share of that leftover and by
+ * how much work it actually has. Anything still unallocated lapses.
+ */
+export function allocateSurplus(
+  totalSlots: number,
+  demand: Partial<Record<BudgetTier, number>>,
+  tiers: readonly TierPolicy[],
+): Record<BudgetTier, number> {
+  const out: Record<BudgetTier, number> = { delivery: 0, groom: 0, "pull-forward": 0, discovery: 0, bizpulse: 0 };
+  const total = Math.max(0, Math.floor(totalSlots));
+  out.delivery = Math.min(total, Math.max(0, Math.floor(demand.delivery ?? 0)));
+  const surplus = total - out.delivery;
+  let remaining = surplus;
+  for (const tier of tiers) {
+    if (tier.tier === "delivery" || !tier.enabled || remaining <= 0 || tier.maxShare <= 0) continue;
+    const cap = Math.max(1, Math.floor(surplus * tier.maxShare));
+    const n = Math.min(cap, Math.max(0, Math.floor(demand[tier.tier] ?? 0)), remaining);
+    out[tier.tier] = n;
+    remaining -= n;
+  }
+  return out;
+}

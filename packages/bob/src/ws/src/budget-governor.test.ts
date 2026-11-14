@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  allocateSurplus,
   DEFAULT_BUDGET_POLICY,
   governBudget,
   normalizeBudgetPolicy,
@@ -207,5 +208,19 @@ describe("normalizeBudgetPolicy", () => {
 
   it("treats garbage as the defaults", () => {
     expect(normalizeBudgetPolicy("nope")).toEqual(DEFAULT_BUDGET_POLICY);
+  });
+});
+
+describe("allocateSurplus", () => {
+  it("feeds delivery first, then the ladder in order within each tier's share", () => {
+    const a = allocateSurplus(10, { delivery: 2, groom: 9, "pull-forward": 9, discovery: 9, bizpulse: 9 }, DEFAULT_BUDGET_POLICY.tiers);
+    // surplus 8: groom ≤ 3 (40%), pull-forward ≤ 2 (30%), discovery ≤ 1, bizpulse ≤ 1.
+    expect(a).toEqual({ delivery: 2, groom: 3, "pull-forward": 2, discovery: 1, bizpulse: 1 });
+  });
+
+  it("gives nothing to the ladder when delivery can use every slot, and skips disabled or idle tiers", () => {
+    expect(allocateSurplus(3, { delivery: 5, groom: 5 }, DEFAULT_BUDGET_POLICY.tiers)).toMatchObject({ delivery: 3, groom: 0 });
+    const tiers = DEFAULT_BUDGET_POLICY.tiers.map((t) => (t.tier === "groom" ? { ...t, enabled: false } : t));
+    expect(allocateSurplus(4, { delivery: 0, groom: 5, "pull-forward": 0, discovery: 5 }, tiers)).toMatchObject({ groom: 0, "pull-forward": 0, discovery: 1 });
   });
 });
