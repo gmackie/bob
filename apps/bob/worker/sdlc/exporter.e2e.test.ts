@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { emptyView, reduce, type EdgeMessage, type EdgeView } from "@bob/sdlc-view";
+import { emptyView, reduce, rows, type EdgeMessage, type EdgeView } from "@bob/sdlc-view";
 import { EdgeController } from "./controller";
 import { MAX_INGEST_BYTES, parseBatch } from "./store";
 import { nodeSqlitePort } from "./test-helpers/node-sqlite";
@@ -42,7 +42,7 @@ function fixture() {
   };
   const exporter = edgeExporter({ coordinator, endpoint: ENDPOINT, token: TOKEN, checkpoint: join(dir, "edge.sqlite"), fetch, now: () => clock });
   cleanups.push(() => { exporter.close(); coordinator.close(); rmSync(dir, { recursive: true, force: true }); });
-  const create = (commandId: string, itemId: string): string => coordinator.call("CreatePlan", { contractVersion: "1", commandId, plan: { items: [{ itemId, issue: { ...project, issueId: `issue-${itemId}` }, target, issueSnapshotRef: `snap-${itemId}`, completionTarget: "production" }], dependencies: [], concurrencyLimit: 2 } }, { idempotencyKey: commandId }).resourceId;
+  const create = (commandId: string, itemId: string): string => coordinator.call("CreatePlan", { contractVersion: "1", commandId, plan: { items: [{ itemId, issue: { ...project, issueId: `issue-${itemId}`, identifier: `BOB-${itemId}`, url: `https://tasks.gmac.io/gmacko/issue/BOB-${itemId}` }, target, issueSnapshotRef: `snap-${itemId}`, completionTarget: "production" }], dependencies: [], concurrencyLimit: 2 } }, { idempotencyKey: commandId }).resourceId;
   const cancel = (commandId: string, planId: string, expectedVersion: number) => coordinator.call("ControlPlan", { contractVersion: "1", commandId, planId, expectedVersion, action: "cancel" }, { idempotencyKey: commandId });
   return {
     coordinator, exporter, client, responses, create, cancel,
@@ -65,6 +65,10 @@ describe("coordinator exporter → SDLC edge", () => {
     expect(await f.exporter.flush()).toEqual({ kind: "snapshot", sent: 2 });
     expect(f.ids(f.client.view)).toEqual({ plans: [first], items: ["item-1"] });
     expect(f.edge.store.meta().watermark).toBe(f.coordinator.watermark());
+    // The issue's identifier and link survive coordinator → exporter → edge → client.
+    expect(rows(f.client.view).map((r) => r.issue)).toEqual([
+      expect.objectContaining({ issueId: "issue-item-1", identifier: "BOB-item-1", url: "https://tasks.gmac.io/gmacko/issue/BOB-item-1" }),
+    ]);
 
     const second = f.create("c2", "item-2");
     expect(await f.exporter.flush()).toMatchObject({ kind: "changes" });
