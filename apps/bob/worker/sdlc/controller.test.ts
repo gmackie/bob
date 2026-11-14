@@ -1,108 +1,168 @@
 import { describe, expect, it } from "vitest";
 import type { TopologyRepo } from "@bob/sdlc-view";
-import { EdgeController } from "./controller";
-import type { EdgeState, IngestBatch } from "./store";
+import { EdgeController, type EdgeControllerOptions } from "./controller";
+import type { IngestBatch } from "./store";
+import { nodeSqlitePort } from "./test-helpers/node-sqlite";
 
-function harness(now = () => 1_000, topology = async (): Promise<TopologyRepo[]> => [{ startupId: "s1", startupName: "Bob", repoSlug: "gmackie/bob" }]) {
-  let stored: EdgeState | undefined;
+const bob: TopologyRepo = { startupId: "s1", startupName: "Bob", repoSlug: "gmackie/bob" };
+const pulse: TopologyRepo = { startupId: "s2", startupName: "Pulse", repoSlug: "gmackie/pulse" };
+const item = (itemId: string, resourceVersion: number) =>
+  ({ itemId, planId: "p", resourceVersion, state: "ready", currentAttemptId: null, execution: null, achievedMilestones: [], operationIds: [], evidenceRefs: [] }) as IngestBatch["items"][number];
+
+function harness(options: Partial<EdgeControllerOptions> = {}) {
+  const sql = nodeSqlitePort();
+  let clock = 1_000;
   const sockets: Array<{ sent: string[]; send(d: string): void }> = [];
   const socket = () => { const s = { sent: [] as string[], send(d: string) { s.sent.push(d); } }; sockets.push(s); return s; };
-  const storage = { get: async () => stored, put: async (s: EdgeState) => { stored = structuredClone(s); } };
-  const make = () => new EdgeController(storage, () => sockets, now, topology);
-  return { make, socket, sockets, stored: () => stored };
+  const background: Array<Promise<unknown>> = [];
+  const make = (extra: Partial<EdgeControllerOptions> = {}) => new EdgeController({
+    sql, sockets: () => sockets, now: () => clock, newEpoch: () => "epoch-1",
+    loadTopology: async () => [bob], schedule: (work) => { background.push(work); },
+    ...options, ...extra,
+  });
+  return { sql, make, socket, sockets, background, settle: () => Promise.all(background.splice(0)), tick: (ms: number) => { clock += ms; }, get clock() { return clock; } };
 }
 const batch = (b: Partial<IngestBatch>): IngestBatch => ({ contractVersion: "1", kind: "changes", watermark: 0, plans: [], items: [], ...b });
-const types = (s: { sent: string[] }) => s.sent.map((d) => JSON.parse(d).type);
-const last = (s: { sent: string[] }) => JSON.parse(s.sent.at(-1)!);
+const parsed = (s: { sent: string[] }) => s.sent.map((d) => JSON.parse(d));
+const types = (s: { sent: string[] }) => parsed(s).map((m) => m.type);
+const WRITES = /^\s*(INSERT|UPDATE|DELETE|REPLACE)/i;
 
-describe("EdgeController", () => {
-  it("persists accepted batches and broadcasts them to connected clients", async () => {
+describe("EdgeController.ingest", () => {
+  it("stores accepted batches and broadcasts them to connected clients", () => {
     const h = harness(), edge = h.make(), client = h.socket();
-    expect(await edge.ingest(batch({ kind: "snapshot", watermark: 2 }))).toEqual({ accepted: true, watermark: 2 });
+    expect(edge.ingest(batch({ kind: "snapshot", watermark: 2 }))).toEqual({ accepted: true, watermark: 2 });
     expect(types(client)).toEqual(["snapshot"]);
-    expect(h.stored()?.watermark).toBe(2);
+    expect(edge.store.meta().watermark).toBe(2);
   });
-  it("does not persist or broadcast a batch it must resync", async () => {
+  it("neither stores nor broadcasts a batch it must resync", () => {
     const h = harness(), edge = h.make(), client = h.socket();
-    expect(await edge.ingest(batch({ fromSequence: 5, watermark: 6 }))).toEqual({ accepted: false, resync: true });
-    expect(client.sent).toEqual([]); expect(h.stored()).toBeUndefined();
+    expect(edge.ingest(batch({ fromSequence: 5, watermark: 6 }))).toEqual({ accepted: false, resync: true });
+    expect(client.sent).toEqual([]); expect(edge.store.meta()).toMatchObject({ watermark: 0, seq: 0 });
   });
-  it("greets a new client with a snapshot that includes BizPulse topology", async () => {
-    const h = harness(), edge = h.make();
-    await edge.ingest(batch({ kind: "snapshot", watermark: 1 }));
-    const client = h.socket(); await edge.hello(client, null);
-    const hello = JSON.parse(client.sent.at(-1)!);
-    expect(hello.type).toBe("snapshot"); expect(hello.topology[0].startupName).toBe("Bob");
+  it("answers a heartbeat with a status broadcast and writes nothing", () => {
+    const h = harness(), edge = h.make(), client = h.socket();
+    edge.ingest(batch({ kind: "snapshot", watermark: 2 }));
+    const writes = h.sql.statements.length;
+    h.tick(500);
+    expect(edge.ingest(batch({ kind: "heartbeat", watermark: 2 }))).toEqual({ accepted: true, watermark: 2 });
+    expect(parsed(client).at(-1)).toEqual({ type: "status", coordinatorSeenAt: 1_500 });
+    expect(h.sql.statements.slice(writes).filter((q) => WRITES.test(q))).toEqual([]);
   });
-  it("still serves the stored state after a restart (no delta log, so a snapshot)", async () => {
-    const h = harness();
-    await h.make().ingest(batch({ kind: "snapshot", watermark: 3 }));
-    const client = h.socket(); await h.make().hello(client, 1);
-    expect(types(client)).toEqual(["snapshot"]);
+  it("sends a status for an accepted batch with nothing to apply, but nothing for a covered replay", () => {
+    const h = harness(), edge = h.make(), client = h.socket();
+    edge.ingest(batch({ kind: "snapshot", watermark: 2 }));
+    edge.ingest(batch({ fromSequence: 2, watermark: 4 }));
+    expect(types(client)).toEqual(["snapshot", "status"]);
+    edge.ingest(batch({ fromSequence: 2, watermark: 3, items: [item("a", 1)] }));
+    expect(types(client)).toEqual(["snapshot", "status"]);
   });
-  it("keeps the last topology if BizPulse fails", async () => {
-    let fail = false, t = 0;
-    const h = harness(() => t, async () => { if (fail) throw new Error("down"); return [{ startupId: "s1", startupName: "Bob", repoSlug: "bob" }]; });
-    const edge = h.make(); await edge.hello(h.socket(), null);
-    fail = true; t = 400_000;
-    const client = h.socket(); await edge.hello(client, null);
-    expect(JSON.parse(client.sent[0]!).topology).toHaveLength(1);
+  it("leaves memory, log and storage as they were when storage fails, so the retry continues the same history", () => {
+    const h = harness(), edge = h.make(), watcher = h.socket();
+    edge.ingest(batch({ kind: "snapshot", watermark: 1 }));
+    edge.ingest(batch({ fromSequence: 1, watermark: 2, items: [item("a", 1)] }));
+    const seq = edge.store.meta().seq;
+    h.sql.failNext(/INTO items/);
+    const change = batch({ fromSequence: 2, watermark: 3, items: [item("a", 2)] });
+    expect(() => edge.ingest(change)).toThrow(/injected/);
+    expect(edge.store.meta()).toMatchObject({ watermark: 2, seq });
+    expect(types(watcher)).toEqual(["snapshot", "delta"]);
+    // A client at seq is still told it is current, and that is true.
+    const resumer = h.socket(); edge.hello(resumer, { cursor: seq, epoch: "epoch-1" });
+    expect(types(resumer)).toEqual(["status"]);
+    expect(edge.ingest(change)).toEqual({ accepted: true, watermark: 3 });
+    expect(parsed(resumer).at(-1)).toMatchObject({ type: "delta", seq: seq + 1 });
   });
+});
 
-  it("resumes a client from its cursor when a refresh finds the same topology", async () => {
-    let t = 0;
-    const h = harness(() => t);
-    const edge = h.make();
-    await edge.ingest(batch({ kind: "snapshot", watermark: 1 }));
-    const first = h.socket(); await edge.hello(first, null);
-    const cursor = last(first).seq;
-    t = 400_000; // past the topology TTL; BizPulse answers with the same list
-    const again = h.socket(); await edge.hello(again, cursor);
-    expect(again.sent).toEqual([]);
-  });
-  it("pushes a changed topology to connected clients, and a client resuming from before it gets a snapshot", async () => {
-    let t = 0, repos: TopologyRepo[] = [{ startupId: "s1", startupName: "Bob", repoSlug: "bob" }];
-    const h = harness(() => t, async () => repos);
-    const edge = h.make();
-    await edge.ingest(batch({ kind: "snapshot", watermark: 1 }));
-    const watcher = h.socket(); await edge.hello(watcher, null);
-    const cursor = last(watcher).seq;
-    repos = [...repos, { startupId: "s2", startupName: "Pulse", repoSlug: "pulse" }]; t = 400_000;
-    const late = h.socket(); await edge.hello(late, cursor);
-    expect(last(watcher)).toMatchObject({ type: "snapshot", topology: [{ startupId: "s1" }, { startupId: "s2" }] });
-    expect(last(watcher).seq).toBeGreaterThan(cursor);
-    expect(types(late)).toEqual(["snapshot"]);
-    expect(last(late).topology).toHaveLength(2);
-    expect(h.stored()?.view.topology).toHaveLength(2);
-  });
-  it("does not lose a batch ingested while BizPulse is still answering", async () => {
+describe("EdgeController.hello", () => {
+  it("replies before BizPulse answers, then broadcasts the new topology to every client", async () => {
     let release!: (repos: TopologyRepo[]) => void;
-    const h = harness(() => 1_000, () => new Promise<TopologyRepo[]>((resolve) => { release = resolve; }));
+    const h = harness({ loadTopology: () => new Promise((resolve) => { release = resolve; }) });
     const edge = h.make();
-    await edge.ingest(batch({ kind: "snapshot", watermark: 1 }));
-    const greeting = edge.hello(h.socket(), null);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(await edge.ingest(batch({ fromSequence: 1, watermark: 2, items: [{ itemId: "a", planId: "p", resourceVersion: 1, state: "ready", currentAttemptId: null, execution: null, achievedMilestones: [], operationIds: [], evidenceRefs: [] }] }))).toEqual({ accepted: true, watermark: 2 });
-    release([{ startupId: "s1", startupName: "Bob", repoSlug: "bob" }]);
-    await greeting;
-    expect(h.stored()?.watermark).toBe(2);
-    expect(h.stored()?.view.items.a).toBeDefined();
-    expect(h.stored()?.view.topology).toHaveLength(1);
+    edge.ingest(batch({ kind: "snapshot", watermark: 1 }));
+    const other = h.socket(), client = h.socket();
+    edge.hello(client, { cursor: null, epoch: null });
+    expect(parsed(client)).toEqual([
+      expect.objectContaining({ type: "snapshot", epoch: "epoch-1", seq: 1, topology: [] }),
+      { type: "status", coordinatorSeenAt: 1_000 },
+    ]);
+    release([bob]);
+    await h.settle();
+    for (const s of [client, other]) expect(parsed(s).at(-1)).toMatchObject({ type: "snapshot", seq: 2, topology: [bob] });
+  });
+  it("resumes a client from its cursor with only the deltas it missed, then a status", () => {
+    const h = harness(), edge = h.make();
+    edge.ingest(batch({ kind: "snapshot", watermark: 1 }));
+    edge.ingest(batch({ fromSequence: 1, watermark: 2, items: [item("a", 1)] }));
+    edge.ingest(batch({ fromSequence: 2, watermark: 3, items: [item("a", 2)] }));
+    const client = h.socket(); edge.hello(client, { cursor: 2, epoch: "epoch-1" });
+    expect(parsed(client).map((m) => [m.type, m.seq])).toEqual([["delta", 3], ["status", undefined]]);
+  });
+  it("sends a snapshot when the client's epoch is from another edge history", () => {
+    const h = harness(), edge = h.make();
+    edge.ingest(batch({ kind: "snapshot", watermark: 1 }));
+    const client = h.socket(); edge.hello(client, { cursor: 1, epoch: "epoch-0" });
+    expect(types(client)).toEqual(["snapshot", "status"]);
+  });
+  it("still serves the stored state after a restart (no delta log, so a snapshot)", () => {
+    const h = harness();
+    h.make().ingest(batch({ kind: "snapshot", watermark: 3 }));
+    h.make().ingest(batch({ fromSequence: 3, watermark: 4, items: [item("a", 1)] }));
+    const client = h.socket(); h.make().hello(client, { cursor: 1, epoch: "epoch-1" });
+    expect(types(client)).toEqual(["snapshot", "status"]);
+    expect(parsed(client)[0]).toMatchObject({ seq: 2, items: [{ itemId: "a" }] });
+  });
+  it("keeps the last topology when BizPulse fails, and waits a minute before asking again", async () => {
+    let fail = false, calls = 0;
+    const h = harness({ loadTopology: async () => { calls++; if (fail) throw new Error("down"); return [bob]; } });
+    const edge = h.make();
+    edge.hello(h.socket(), { cursor: null, epoch: null }); await h.settle();
+    fail = true; h.tick(5 * 60_000);
+    edge.hello(h.socket(), { cursor: null, epoch: null }); await h.settle();
+    expect(calls).toBe(2);
+    h.tick(30_000);
+    const client = h.socket(); edge.hello(client, { cursor: null, epoch: null }); await h.settle();
+    expect(calls).toBe(2);
+    expect(parsed(client)[0].topology).toEqual([bob]);
+    h.tick(31_000); fail = false;
+    edge.hello(h.socket(), { cursor: null, epoch: null }); await h.settle();
+    expect(calls).toBe(3);
+  });
+  it("does not ask BizPulse again within five minutes of a good answer", async () => {
+    let calls = 0;
+    const h = harness({ loadTopology: async () => { calls++; return [bob]; } });
+    const edge = h.make();
+    edge.hello(h.socket(), { cursor: null, epoch: null }); await h.settle();
+    h.tick(4 * 60_000);
+    edge.hello(h.socket(), { cursor: null, epoch: null }); await h.settle();
+    expect(calls).toBe(1);
+  });
+  it("does not resend a snapshot when BizPulse returns the same repos in another order", async () => {
+    let repos = [bob, pulse];
+    const h = harness({ loadTopology: async () => repos });
+    const edge = h.make();
+    edge.hello(h.socket(), { cursor: null, epoch: null }); await h.settle();
+    const watcher = h.socket(), seq = edge.store.meta().seq;
+    repos = [pulse, bob]; h.tick(5 * 60_000);
+    edge.hello(h.socket(), { cursor: null, epoch: null }); await h.settle();
+    expect(watcher.sent).toEqual([]);
+    expect(edge.store.meta().seq).toBe(seq);
   });
   it("asks BizPulse once when several clients connect at the same time", async () => {
     let calls = 0;
-    const h = harness(() => 1_000, async () => { calls++; return [{ startupId: "s1", startupName: "Bob", repoSlug: "bob" }]; });
+    const h = harness({ loadTopology: async () => { calls++; return [bob]; } });
     const edge = h.make();
-    await Promise.all([edge.hello(h.socket(), null), edge.hello(h.socket(), null)]);
+    edge.hello(h.socket(), { cursor: null, epoch: null });
+    edge.hello(h.socket(), { cursor: null, epoch: null });
+    await h.settle();
     expect(calls).toBe(1);
   });
-  it("loads stored state once even when calls race on a cold start", async () => {
-    let gets = 0;
-    let stored: EdgeState | undefined;
-    const storage = { get: async () => { gets++; return stored; }, put: async (s: EdgeState) => { stored = structuredClone(s); } };
-    const edge = new EdgeController(storage, () => [], () => 1);
-    await Promise.all([edge.ingest(batch({ kind: "snapshot", watermark: 1 })), edge.ingest(batch({ kind: "heartbeat", watermark: 0 }))]);
-    expect(gets).toBe(1);
-    expect(stored?.watermark).toBe(1);
+  it("ends every reply with a status carrying when the coordinator was last heard from", () => {
+    const h = harness(), edge = h.make();
+    const fresh = h.socket(); edge.hello(fresh, { cursor: null, epoch: null });
+    expect(parsed(fresh).at(-1)).toEqual({ type: "status", coordinatorSeenAt: null });
+    h.tick(10); edge.ingest(batch({ kind: "snapshot", watermark: 1 }));
+    const current = h.socket(); edge.hello(current, { cursor: 1, epoch: "epoch-1" });
+    expect(parsed(current)).toEqual([{ type: "status", coordinatorSeenAt: 1_010 }]);
   });
 });

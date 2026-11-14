@@ -1,85 +1,107 @@
-import { reduce, type TopologyRepo } from "@bob/sdlc-view";
-import { applyBatch, DeltaLog, emptyEdge, helloReply, snapshotOf, type EdgeState, type IngestBatch, type IngestResult } from "./store";
+import type { EdgeMessage, TopologyRepo } from "@bob/sdlc-view";
+import type { SqlPort } from "./sql";
+import { DeltaLog, EdgeStore, type IngestBatch, type IngestResult } from "./store";
 
-export interface EdgeStorage { get(): Promise<EdgeState | undefined>; put(state: EdgeState): Promise<void> }
 export interface EdgeSocket { send(data: string): void }
+/**
+ * What a client sends on connect: its view's seq and epoch. A client with no view, or
+ * whose view has needsResync set (it applied a delta after a seq gap), sends cursor null
+ * and gets a snapshot. See the protocol note on EdgeMessage in @bob/sdlc-view.
+ */
+export interface Hello { cursor: number | null; epoch: string | null }
+export interface EdgeControllerOptions {
+  sql: SqlPort;
+  sockets: () => EdgeSocket[];
+  now?: () => number;
+  loadTopology?: () => Promise<TopologyRepo[]>;
+  /** Keeps background work running after a reply: ctx.waitUntil in the Durable Object. */
+  schedule?: (work: Promise<unknown>) => void;
+  newEpoch?: () => string;
+}
+
 const TOPOLOGY_TTL_MS = 5 * 60_000;
+const TOPOLOGY_RETRY_MS = 60_000;
 
 /**
  * The SDLC edge's behaviour, with storage, sockets, clock and BizPulse injected so it
  * runs under node. The Durable Object only delegates to it.
  *
- * Every state change reads this.state and writes it back in one synchronous step, so
- * an await in between (a BizPulse fetch, which a DO's input gate does not cover) cannot
- * make one change overwrite another.
+ * Storage is synchronous SQLite: each change commits in one transaction before anything
+ * is logged or broadcast, so memory, the delta log and storage cannot disagree. If the
+ * transaction throws, ingest throws, nothing changes, and the exporter retries.
+ * When the coordinator was last heard from is kept in memory only (heartbeats write nothing).
  */
 export class EdgeController {
-  private state: EdgeState | null = null;
-  private loading: Promise<EdgeState> | null = null;
-  private topologyLoad: Promise<void> | null = null;
+  readonly store: EdgeStore;
   private readonly log = new DeltaLog();
-  constructor(
-    private readonly storage: EdgeStorage,
-    private readonly sockets: () => EdgeSocket[],
-    private readonly now: () => number = Date.now,
-    private readonly loadTopology?: () => Promise<TopologyRepo[]>,
-  ) {}
+  private readonly sockets: () => EdgeSocket[];
+  private readonly now: () => number;
+  private readonly loadTopology?: () => Promise<TopologyRepo[]>;
+  private readonly schedule: (work: Promise<unknown>) => void;
+  private coordinatorSeenAt: number | null = null;
+  private topologyLoad: Promise<void> | null = null;
 
-  private async current(): Promise<EdgeState> {
-    if (this.state) return this.state;
-    this.loading ??= this.storage.get().then((stored) => (this.state ??= stored ?? emptyEdge()));
-    return this.loading;
+  constructor(options: EdgeControllerOptions) {
+    this.store = new EdgeStore(options.sql, options.newEpoch);
+    this.sockets = options.sockets;
+    this.now = options.now ?? Date.now;
+    this.loadTopology = options.loadTopology;
+    this.schedule = options.schedule ?? ((work) => { work.catch(() => {}); });
   }
 
-  async ingest(batch: IngestBatch): Promise<IngestResult> {
-    await this.current();
-    const { state, result, message } = applyBatch(this.state!, batch, this.now());
+  /** Throws when storage fails; the route answers 5xx so the exporter retries the batch. */
+  ingest(batch: IngestBatch): IngestResult {
+    const now = this.now();
+    const { result, message, covered } = this.store.apply(batch, now);
     if (!result.accepted) return result;
-    this.state = state;
-    await this.storage.put(state);
-    if (message) { this.log.push(message); this.broadcast(JSON.stringify(message)); }
+    this.coordinatorSeenAt = Math.max(this.coordinatorSeenAt ?? now, now);
+    if (message) this.publish(message);
+    else if (!covered) this.broadcast({ type: "status", coordinatorSeenAt: this.coordinatorSeenAt });
     return result;
   }
 
-  async hello(socket: EdgeSocket, cursor: number | null): Promise<void> {
-    await this.current();
-    await this.refreshTopology(socket);
-    // A topology change bumped seq and cleared the log, so an older cursor gets a snapshot.
-    for (const message of helloReply(this.state!, this.log, cursor)) socket.send(JSON.stringify(message));
+  /**
+   * Replies at once, before any await: the deltas after the client's cursor when the log
+   * holds all of them and the epoch matches, otherwise a snapshot; then a status. A stale
+   * topology is refreshed afterwards, and a change reaches every client as a snapshot.
+   */
+  hello(socket: EdgeSocket, hello: Hello): void {
+    const { epoch, seq } = this.store.meta();
+    const deltas = hello.cursor === null || hello.epoch !== epoch ? null : this.log.since(hello.cursor, seq);
+    const reply: EdgeMessage[] = deltas ?? [this.store.snapshot(this.coordinatorSeenAt)];
+    reply.push({ type: "status", coordinatorSeenAt: this.coordinatorSeenAt });
+    for (const message of reply) socket.send(JSON.stringify(message));
+    const work = this.refreshTopology();
+    if (work) this.schedule(work);
   }
 
-  /** Refreshes the BizPulse topology when stale; one request at a time. */
-  private refreshTopology(requester: EdgeSocket): Promise<void> {
-    const at = this.state!.topologyAt;
-    if (!this.loadTopology || (at !== undefined && this.now() - at < TOPOLOGY_TTL_MS)) return Promise.resolve();
-    this.topologyLoad ??= this.applyTopology(this.loadTopology, requester).finally(() => { this.topologyLoad = null; });
+  /** Starts a BizPulse refresh when the topology is stale and no failure is recent; one at a time. */
+  refreshTopology(): Promise<void> | null {
+    if (!this.loadTopology || this.topologyLoad) return this.topologyLoad;
+    const { topologyAt, topologyFailedAt } = this.store.meta();
+    const now = this.now();
+    if (topologyAt !== null && now - topologyAt < TOPOLOGY_TTL_MS) return null;
+    if (topologyFailedAt !== null && now - topologyFailedAt < TOPOLOGY_RETRY_MS) return null;
+    const load = this.loadTopology;
+    this.topologyLoad = (async () => {
+      let topology: TopologyRepo[];
+      try { topology = await load(); }
+      catch { this.store.markTopologyFailed(this.now()); return; } // keep the last good topology
+      const message = this.store.setTopology(topology, this.now(), this.coordinatorSeenAt);
+      if (message) this.publish(message);
+    })().finally(() => { this.topologyLoad = null; });
     return this.topologyLoad;
   }
 
-  private async applyTopology(load: () => Promise<TopologyRepo[]>, requester: EdgeSocket): Promise<void> {
-    let topology: TopologyRepo[];
-    try { topology = await load(); }
-    catch { return; } // keep the last good topology; the next hello retries
-    const state = this.state!; // re-read: batches may have landed during the fetch
-    const topologyAt = this.now();
-    if (JSON.stringify(topology) === JSON.stringify(state.view.topology)) {
-      this.state = { ...state, topologyAt };
-      await this.storage.put(this.state);
-      return;
-    }
-    // A changed topology is a new snapshot: it takes the next seq, so clients that
-    // resume from an older cursor are sent a snapshot rather than nothing.
-    const message = { ...snapshotOf(state), seq: state.view.seq + 1, topology };
-    this.state = { ...state, topologyAt, view: reduce(state.view, message) };
-    await this.storage.put(this.state);
+  /** Call only after the change has committed. */
+  private publish(message: EdgeMessage) {
     this.log.push(message);
-    // The requester gets its own reply from hello().
-    this.broadcast(JSON.stringify(message), requester);
+    this.broadcast(message);
   }
 
-  private broadcast(data: string, except?: EdgeSocket) {
+  private broadcast(message: EdgeMessage) {
+    const data = JSON.stringify(message);
     for (const socket of this.sockets()) {
-      if (socket === except) continue;
       try { socket.send(data); } catch { /* closed socket */ }
     }
   }
