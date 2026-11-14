@@ -70,6 +70,42 @@ If either file is missing or invalid, the worker logs `step: "edge"`,
 exporter. Edge outages log `outcome: "unavailable"` and back off; they never
 stop dispatch.
 
+### Rollout and rollback order
+
+`--edge` only exists from the BOB-75 release on. Before that release,
+`worker.mjs` parses its flags with strict `parseArgs`, so an older worker
+started with `--edge` exits at once on the unknown option. `Restart=on-failure`
+then keeps restarting it, and nothing is dispatched until the unit or the
+release is fixed. Order every change so the unit file never passes `--edge` to
+a release that does not know it:
+
+1. **Rollout:** install the new coordinator release, verify it (see
+   "Verification and rollback"), point `current` at it and restart both units
+   with the *previous* worker unit file. Only then install the worker unit
+   that passes `--edge`, run `systemctl daemon-reload` and restart the worker.
+2. **Rollback:** first restore the previous worker unit file (without
+   `--edge`) and run `systemctl daemon-reload`. Only then point `current` back
+   at the older release and restart.
+
+To turn the edge off without touching releases or unit files, use a kill
+switch. Both leave dispatch running:
+
+- **Exporter side:** remove `/etc/bob/coordination/edge.json` and restart the
+  worker. `worker.mjs` wraps `loadEdgeConfig` and `edgeExporter` in one
+  try/catch, so a missing file logs `step: "edge"`,
+  `outcome: "configuration-unavailable"` and the worker runs with no exporter.
+  Leave `--edge` in the unit; only the file goes.
+- **Cloudflare side:** set `SDLC_EDGE_WORKSPACE_ID` to `""` in the Bob
+  Worker's vars and redeploy. `/api/sdlc/ingest` and `/api/sdlc/ws` then
+  answer 503 before they check anything else. The exporter logs
+  `outcome: "unavailable"` and backs off, and `/sdlc` shows "Reconnecting".
+
+Once the `v1-sdlc-edge` Durable Object migration has been applied, every
+later Bob Worker build, rollback builds included, must keep exporting the
+`SdlcEdge` class and keep the migration in `wrangler.jsonc`. Removing the class
+needs a `deleted_classes` migration, which destroys the edge's stored state.
+Use the vars kill switch above instead of removing the class.
+
 After any restore of the coordinator database, delete `edge.sqlite` before
 starting the worker. The exporter then sends a fresh snapshot instead of changes
 from a checkpoint that no longer matches the restored database.
@@ -104,9 +140,19 @@ dependency/replay/recovery pilot. Capture original request IDs and receipts;
 one durable attempt must survive replay and restart. Agent execution success
 does not establish review readiness or production delivery.
 
-To roll back, stop the worker first, then the coordinator. Point `current` back
-to its previous release and restart both units after checking storage
-compatibility. Preserve the database and unknown attempts; never delete durable
+For a release that adds the SDLC edge exporter, also check that the new
+release accepts `--edge` (`node runtime/worker.mjs --help` lists it) *before*
+installing the worker unit that passes it. After the new unit is in, check that
+the worker logs no `step: "edge"` `configuration-unavailable` line and that
+`/sdlc` shows the coordinator as live.
+
+To roll back, stop the worker first, then the coordinator. If the release you
+are leaving added `--edge` and the target release does not have it, restore the
+previous worker unit file (without `--edge`) and run `systemctl daemon-reload`
+*before* pointing `current` back. Otherwise the older worker refuses the
+unknown flag and restarts in a loop, which stops dispatch (see "Rollout and
+rollback order" above). Then point `current` back to its previous release and
+restart both units after checking storage compatibility. Preserve the database and unknown attempts; never delete durable
 state to make a retry succeed. For a first install, disable the two units and
 remove only the newly added Tailscale Serve port with
 `tailscale serve --https=8444 off`. Leave port 8443 intact.
