@@ -104,6 +104,19 @@ const UTILITY_ICON: Record<SidebarUtilityItem["key"], NavItem["icon"]> = {
       <path d="M10.5 5v2.5a2 2 0 0 1-2 2H7V8.5h1.5a1 1 0 0 0 1-1V5h1Z" />
     </svg>
   ),
+  sdlc: () => (
+    <svg
+      className="size-[15px]"
+      viewBox="0 0 15 15"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect x="1.5" y="2" width="4" height="3" rx="0.75" stroke="currentColor" />
+      <rect x="9.5" y="2" width="4" height="3" rx="0.75" stroke="currentColor" />
+      <rect x="5.5" y="10" width="4" height="3" rx="0.75" stroke="currentColor" />
+      <path d="M5.5 3.5h4M11.5 5v2.5H7.5V10" stroke="currentColor" />
+    </svg>
+  ),
   nodes: () => (
     <svg
       className="size-[15px]"

@@ -38,9 +38,9 @@ export interface SidebarTabItem {
 }
 
 export interface SidebarUtilityItem {
-  key: "onboarding" | "discovery" | "executions" | "pull-requests" | "nodes" | "hermes" | "settings";
-  label: "Onboarding" | "Discovery" | "Executions" | "Pull Requests" | "Nodes" | "Hermes" | "Settings";
-  href: "/onboarding" | "/discovery" | "/executions" | "/pull-requests" | "/nodes" | "/hermes-console" | "/settings";
+  key: "onboarding" | "discovery" | "executions" | "pull-requests" | "sdlc" | "nodes" | "hermes" | "settings";
+  label: "Onboarding" | "Discovery" | "Executions" | "Pull Requests" | "SDLC" | "Nodes" | "Hermes" | "Settings";
+  href: "/onboarding" | "/discovery" | "/executions" | "/pull-requests" | "/sdlc" | "/nodes" | "/hermes-console" | "/settings";
 }
 
 export interface SidebarProjectSummary {
@@ -155,6 +155,7 @@ const UTILITY_ITEMS: SidebarUtilityItem[] = [
   { key: "discovery", label: "Discovery", href: "/discovery" },
   { key: "executions", label: "Executions", href: "/executions" },
   { key: "pull-requests", label: "Pull Requests", href: "/pull-requests" },
+  { key: "sdlc", label: "SDLC", href: "/sdlc" },
   { key: "nodes", label: "Nodes", href: "/nodes" },
   { key: "hermes", label: "Hermes", href: "/hermes-console" },
   { key: "settings", label: "Settings", href: "/settings" },
