@@ -103,6 +103,18 @@ describe("PlanDag", () => {
 });
 
 describe("ItemDetail", () => {
+  it("renders a coordinator issue url as a link only when it is http(s)", () => {
+    const base = rows(view).find((r) => r.item.itemId === "a")!;
+    const render = (url: string) => renderToStaticMarkup(<ItemDetail row={{ ...base, issue: { ...base.issue, url } }} onClose={() => {}} onOpenPlan={() => {}} />);
+    for (const url of ["javascript:alert(1)", "data:text/html,<b>x</b>", "vbscript:msgbox(1)"]) {
+      const html = render(url);
+      expect(html).not.toContain("<a ");
+      expect(html).not.toContain(url.slice(0, 8));
+      expect(html).toContain("BOB-1");
+    }
+    expect(render("https://tasks.gmac.io/BOB-1")).toContain('<a href="https://tasks.gmac.io/BOB-1"');
+  });
+
   it("links the issue and shows milestones, the attempt and the T3 thread", () => {
     const row = rows(view).find((r) => r.item.itemId === "a")!;
     const html = renderToStaticMarkup(<ItemDetail row={row} onClose={() => {}} onOpenPlan={() => {}} />);

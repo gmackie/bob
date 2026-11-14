@@ -1,6 +1,7 @@
 import {
   ITEM_STATES,
   PLAN_STATES,
+  safeHref,
   TERMINAL_PLAN_STATES,
   type EdgeMessage,
   type ItemSnapshot,
@@ -35,6 +36,16 @@ const isPlan = (p: unknown) =>
 const isItem = (i: unknown) =>
   isRecord(i) && isId(i.itemId) && isId(i.planId) && isSeq(i.resourceVersion) && ITEM_STATE_SET.has(i.state as string);
 
+/**
+ * An issue url is shown as a link, so only http(s) is kept. Any other value is removed
+ * from the (freshly parsed) batch rather than refusing it, so the item still shows, as text.
+ */
+function stripUnsafeIssueUrls(plan: PlanSnapshot) {
+  for (const def of plan.definition.items) {
+    if ("url" in def.issue && def.issue.url !== null && safeHref(def.issue.url) === null) delete def.issue.url;
+  }
+}
+
 /** Validates an ingest body. Accepted resources are stored and broadcast, so malformed ones are refused whole. */
 export function parseBatch(value: unknown): IngestBatch | null {
   if (!isRecord(value) || value.contractVersion !== "1" || !KINDS.has(value.kind as string)) return null;
@@ -45,6 +56,7 @@ export function parseBatch(value: unknown): IngestBatch | null {
   } else if (value.fromSequence !== undefined && !isSeq(value.fromSequence)) return null;
   if (value.kind === "heartbeat" && (value.plans.length > 0 || value.items.length > 0)) return null;
   if (!value.plans.every(isPlan) || !value.items.every(isItem)) return null;
+  for (const plan of value.plans as PlanSnapshot[]) stripUnsafeIssueUrls(plan);
   return value as unknown as IngestBatch;
 }
 

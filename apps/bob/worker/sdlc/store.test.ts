@@ -229,6 +229,22 @@ describe("parseBatch", () => {
     expect(parseBatch({ contractVersion: "1", kind: "heartbeat", watermark: 3, plans: [plan("p", 1)], items: [] })).toBeNull();
     expect(parseBatch({ contractVersion: "1", kind: "heartbeat", watermark: 3, plans: [], items: [item("a", 1)] })).toBeNull();
   });
+  it("strips an issue url that is not http(s), keeping the item, and keeps an https one", () => {
+    const withUrl = (url: unknown) => ({ ...plan("p", 1, "active", ["a"]), definition: { items: [{ itemId: "a", issue: { ...issue, identifier: "BOB-1", url }, target, completionTarget: "production" }], dependencies: [], concurrencyLimit: 1 } });
+    const urlOf = (url: unknown) => {
+      const parsed = parseBatch({ contractVersion: "1", kind: "snapshot", watermark: 1, plans: [withUrl(url)], items: [item("a", 1)] });
+      expect(parsed).not.toBeNull();
+      const def = parsed!.plans[0]!.definition.items[0]!;
+      expect(def.issue.identifier).toBe("BOB-1");
+      return "url" in def.issue ? def.issue.url : "absent";
+    };
+    expect(urlOf("https://tasks.gmac.io/BOB-1")).toBe("https://tasks.gmac.io/BOB-1");
+    expect(urlOf(null)).toBeNull();
+    expect(urlOf("javascript:alert(1)")).toBe("absent");
+    expect(urlOf("data:text/html,x")).toBe("absent");
+    expect(urlOf("vbscript:msgbox(1)")).toBe("absent");
+    expect(urlOf(42)).toBe("absent");
+  });
   it("rejects plans and items the view could not index", () => {
     const ok = { contractVersion: "1", kind: "snapshot", watermark: 1 };
     expect(parseBatch({ ...ok, plans: [plan("p", 1, "active", ["a"])], items: [item("a", 1)] })).not.toBeNull();

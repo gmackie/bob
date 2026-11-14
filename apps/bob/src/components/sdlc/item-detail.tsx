@@ -1,4 +1,4 @@
-import { MILESTONE_LABEL, MILESTONES, STATE_PRESENTATION, type Row } from "@bob/sdlc-view";
+import { MILESTONE_LABEL, MILESTONES, safeHref, STATE_PRESENTATION, type Row } from "@bob/sdlc-view";
 
 import { cn } from "@gmacko/core/ui";
 
@@ -8,14 +8,15 @@ export function ItemDetail({ row, onClose, onOpenPlan }: { row: Row; onClose: ()
   const { item, issue, target, plan } = row;
   const thread = item.execution?.thread;
   const title = issue.identifier ?? issue.issueId;
+  const issueHref = safeHref(issue.url);
   const presentation = STATE_PRESENTATION[item.state];
   return (
     <aside aria-label="Item detail" className="rounded-xl border border-border bg-card px-5 py-4 text-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold text-foreground">
-            {issue.url ? (
-              <a href={issue.url} target="_blank" rel="noreferrer" className="hover:underline">{title}</a>
+            {issueHref ? (
+              <a href={issueHref} target="_blank" rel="noreferrer" className="hover:underline">{title}</a>
             ) : title}
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
