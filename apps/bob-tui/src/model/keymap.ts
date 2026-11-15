@@ -87,7 +87,7 @@ export function choicesFor(view: EdgeView, ui: UiState): Choice[] {
     const pending = answerablePending(sel.item);
     // Answering is what the agent is blocked on, so it comes first.
     if (pending) out.unshift({ option: { ...resolveInputOption(sel.item.itemId, pending, {}), label: "Answer pending input" }, target, answer: true });
-    for (const option of itemCommands(sel.item)) out.push({ option, target });
+    for (const option of itemCommands(sel.item, sel.plan ?? undefined)) out.push({ option, target });
   }
   return out;
 }
@@ -116,6 +116,7 @@ export function begin(ui: UiState, choice: Choice, ctx: KeyContext): KeyResult {
 
 const find = (choices: Choice[], pred: (c: Choice) => boolean) => choices.find(pred);
 const isPlanAction = (c: Choice, ...actions: string[]) => c.option.command.operation === "ControlPlan" && actions.includes(c.option.command.input.action);
+const isReleaseAction = (c: Choice, action: string) => c.option.command.operation === "RequestRelease" && c.option.command.input.action === action;
 
 function browse(ui: UiState, input: string, key: KeyInfo, ctx: KeyContext): KeyResult {
   const { view } = ctx;
@@ -177,7 +178,19 @@ function browse(ui: UiState, input: string, key: KeyInfo, ctx: KeyContext): KeyR
   }
   if (input === "r") {
     const c = find(choices, (c) => c.option.command.operation === "RetryItem");
-    return c ? begin(ui, c, ctx) : say(ui, "Retry needs a failed or execution-unknown item with a previous attempt.");
+    return c ? begin(ui, c, ctx) : say(ui, "Retry needs a failed or cancelled item with a previous attempt.");
+  }
+  if (input === "m") {
+    const c = find(choices, (c) => isReleaseAction(c, "merge"));
+    return c ? begin(ui, c, ctx) : say(ui, "Merge needs an item in review whose PR is review-ready.");
+  }
+  if (input === "o") {
+    const c = find(choices, (c) => isReleaseAction(c, "open-pr"));
+    return c ? begin(ui, c, ctx) : say(ui, "Retry publish needs a blocked or unpublished release with a commit.");
+  }
+  if (input === "R") {
+    const c = find(choices, (c) => c.option.command.operation === "RequestDeployment" && c.option.command.input.action === "rollback");
+    return c ? begin(ui, c, ctx) : say(ui, "Rollback needs a deploying or production-verified release with a deployment.");
   }
   return done(ui);
 }

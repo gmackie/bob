@@ -89,6 +89,41 @@ export default function SdlcItemScreen() {
           </Section>
         ) : null}
 
+        {detail.release ? (
+          <Section title="Release">
+            <View className="flex-row flex-wrap items-center gap-2">
+              <View className="rounded-full border px-2.5 py-1" style={{ borderColor: ATTENTION_COLOR[detail.release.attention] }}>
+                <Text testID="sdlc-release-stage" className="text-xs font-semibold" style={{ color: ATTENTION_COLOR[detail.release.attention] }}>{detail.release.label}</Text>
+              </View>
+              <Text className="text-muted flex-1 text-xs">{detail.release.hint} · auto-merge {detail.release.autoMerge ? "on" : "off"}</Text>
+            </View>
+            {detail.release.note ? (
+              <View
+                className="mt-2 rounded-xl px-3 py-2"
+                style={{ backgroundColor: colors.card, borderColor: detail.release.alarm ? colors.danger : colors.border, borderWidth: 1 }}
+              >
+                <Text className="text-sm" style={{ color: detail.release.alarm ? colors.danger : colors.secondaryForeground }}>{detail.release.note}</Text>
+              </View>
+            ) : null}
+            {detail.release.pullRequest ? (
+              detail.release.pullRequest.href ? (
+                <Pressable onPress={() => detail.release?.pullRequest?.href && void Linking.openURL(detail.release.pullRequest.href)} accessibilityRole="link" className="mt-2">
+                  <Text className="text-accent text-xs font-semibold">Pull request #{detail.release.pullRequest.number} ↗</Text>
+                </Pressable>
+              ) : (
+                <Text className="text-secondary-foreground mt-2 text-xs">Pull request #{detail.release.pullRequest.number}</Text>
+              )
+            ) : null}
+            {detail.release.branch ? <Text selectable className="text-secondary-foreground mt-1 text-xs">branch {detail.release.branch}</Text> : null}
+            {detail.release.head || detail.release.approved || detail.release.merged ? (
+              <Text selectable className="text-muted mt-1 font-mono text-[11px]">
+                {[detail.release.head && `head ${detail.release.head}`, detail.release.approved && `approved ${detail.release.approved}`, detail.release.merged && `merged ${detail.release.merged}`].filter(Boolean).join(" · ")}
+              </Text>
+            ) : null}
+            {detail.release.deployment ? <Text selectable className="text-muted mt-1 text-xs">deploy {detail.release.deployment}</Text> : null}
+          </Section>
+        ) : null}
+
         <Section title="Milestones">
           <View className="flex-row flex-wrap gap-2">
             {detail.milestones.map((m) => (

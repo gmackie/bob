@@ -1,4 +1,4 @@
-import type { ItemState, Milestone } from "./generated/contract";
+import type { ItemState, Milestone, ReleaseStage } from "./generated/contract";
 
 export type Owner = "system" | "agent" | "human" | "terminal";
 export type Attention = "ok" | "needs_human" | "stalled" | "failed";
@@ -12,18 +12,17 @@ export interface StatePresentation {
 }
 
 export const STATE_PRESENTATION = {
-  // validating is "stalled" because nothing moves an item out of it yet: only
-  // execution.mjs receive() writes it, and no validation receipt is implemented.
-  // Flip it back to "ok" when RecordValidationReceipt lands in the coordinator.
+  // validating, review and deploying are driven by the coordinator's release driver
+  // (BOB-82): publish → CI → review-ready → merge → deploy → production-verified.
   pending:             { label: "Pending",           owner: "system",   attention: "ok",          col: 0, row: 0, hint: "dependencies unmet or plan not active" },
   ready:               { label: "Ready",             owner: "system",   attention: "ok",          col: 1, row: 0, hint: "waiting for capacity" },
   reserved:            { label: "Reserved",          owner: "system",   attention: "ok",          col: 2, row: 0, hint: "T3 admission" },
   running:             { label: "Running",           owner: "agent",    attention: "ok",          col: 3, row: 0, hint: "attempt in a T3 thread" },
   "waiting-input":     { label: "Waiting for input", owner: "human",    attention: "needs_human", col: 3, row: 1, hint: "an agent asked a question" },
   "execution-unknown": { label: "Execution unknown", owner: "system",   attention: "stalled",     col: 2, row: 1, hint: "admission unconfirmed; dispatch retries after the lease" },
-  validating:          { label: "Validating",        owner: "system",   attention: "stalled",     col: 4, row: 0, hint: "validation not yet automated" },
-  review:              { label: "Review",            owner: "human",    attention: "needs_human", col: 4, row: 2, hint: "PR, approve, merge" },
-  deploying:           { label: "Deploying",         owner: "system",   attention: "ok",          col: 3, row: 2, hint: "deploy and promote" },
+  validating:          { label: "Validating",        owner: "system",   attention: "ok",          col: 4, row: 0, hint: "publishing the branch and running CI" },
+  review:              { label: "Review",            owner: "human",    attention: "needs_human", col: 4, row: 2, hint: "PR ready: approve and merge" },
+  deploying:           { label: "Deploying",         owner: "system",   attention: "ok",          col: 3, row: 2, hint: "merged; deploying to production" },
   completed:           { label: "Completed",         owner: "system",   attention: "ok",          col: 2, row: 2, hint: "completion target met" },
   failed:              { label: "Failed",            owner: "terminal", attention: "failed",      col: 0, row: 3, hint: "retry starts a new attempt" },
   cancelling:          { label: "Cancelling",        owner: "system",   attention: "ok",          col: 1, row: 3, hint: "" },
@@ -40,7 +39,7 @@ export interface StateEdge {
 /**
  * Only the item transitions the coordinator performs today, checked against
  * packages/bob/coordination/runtime. States the contract declares but nothing
- * writes yet (waiting-input, review, deploying, cancelling) have no edges.
+ * writes yet (waiting-input, cancelling) have no edges.
  */
 export const STATE_EDGES: ReadonlyArray<StateEdge> = [
   // coordinator.mjs writeItems: a plan start/resume makes dependency-free items ready;
@@ -62,10 +61,48 @@ export const STATE_EDGES: ReadonlyArray<StateEdge> = [
   { from: "running", to: "completed" },
   { from: "running", to: "failed" },
   { from: "running", to: "cancelled" },
+  // The release driver (BOB-82): CI green opens review; a merge starts the deploy
+  // (or completes a merged-target item); production verification completes it.
+  { from: "validating", to: "review" },
+  { from: "review", to: "deploying" },
+  { from: "review", to: "completed" },
+  { from: "deploying", to: "completed" },
+  // CI failed (release.stage checks-failed); Retry starts a new attempt.
+  { from: "validating", to: "failed" },
+  // The PR head moved: checks run again.
+  { from: "review", to: "validating", loop: true },
   // execution.mjs RetryItem: an unversioned ready write, then reserve, so observers see a jump to reserved.
   { from: "failed", to: "reserved", loop: true },
   { from: "cancelled", to: "reserved", loop: true },
 ];
+
+export interface ReleaseStagePresentation { label: string; attention: Attention; hint: string }
+
+/** Every ReleaseStage (contract.forge, generated into RELEASE_STAGES). blocked always carries a note. */
+export const RELEASE_STAGE_PRESENTATION = {
+  "awaiting-publish":    { label: "Awaiting publish", attention: "ok",          hint: "the branch is not pushed yet" },
+  "checks-running":      { label: "Checks running",   attention: "ok",          hint: "CI is running on the head" },
+  "checks-failed":       { label: "Checks failed",    attention: "failed",      hint: "CI failed; retry starts a new attempt" },
+  "review-ready":        { label: "Review ready",     attention: "needs_human", hint: "CI green; approve and merge" },
+  merged:                { label: "Merged",           attention: "ok",          hint: "waiting for the production deploy" },
+  deploying:             { label: "Deploying",        attention: "ok",          hint: "deploying to production" },
+  "production-verified": { label: "Prod verified",    attention: "ok",          hint: "deployed and healthy in production" },
+  blocked:               { label: "Blocked",          attention: "needs_human", hint: "the release needs attention" },
+} as const satisfies Record<ReleaseStage, ReleaseStagePresentation>;
+
+/**
+ * An item's attention, refined by its release: a blocked release needs a human in any
+ * state, and a review-ready release that will auto-merge does not.
+ */
+export function itemAttention(item: { state: ItemState; release?: { stage: ReleaseStage; autoMerge: boolean } | null }): Attention {
+  const base = STATE_PRESENTATION[item.state].attention;
+  const release = item.release;
+  if (!release) return base;
+  if (release.stage === "blocked") return item.state === "failed" ? "failed" : "needs_human";
+  if (release.stage === "checks-failed") return "failed";
+  if (item.state === "review" && release.stage === "review-ready" && release.autoMerge) return "ok";
+  return base;
+}
 
 export const MILESTONE_LABEL = {
   "execution-succeeded": "exec ✓",

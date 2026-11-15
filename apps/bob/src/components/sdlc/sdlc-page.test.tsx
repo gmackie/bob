@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { emptyView, reduce, rows, type EdgeView, type ItemSnapshot, type PlanSnapshot, type TopologyRepo } from "@bob/sdlc-view";
+import { emptyView, reduce, rows, type EdgeView, type ItemSnapshot, type PlanSnapshot, type ReleaseStatus, type TopologyRepo } from "@bob/sdlc-view";
 import { ItemDetail } from "./item-detail";
 import { PlanDag } from "./plan-dag";
 import { bannerFor, breadcrumbs, drillInto, itemFromParams, scopeFromParams, sdlcHref, sdlcPageModel, selectionForItemParam, stateFromParams } from "./sdlc-page-model";
@@ -46,7 +46,7 @@ describe("sdlc page model", () => {
   it("drills Fleet → Project → Repo through the URL, keyed by repoKey and labelled with the repo id", () => {
     const fleet = sdlcPageModel(view, scopeFromParams(params("")), null);
     expect(fleet.groupLevel).toBe("project");
-    expect(fleet.groups.map((g) => [g.key, g.label, g.count, g.attention])).toEqual([["s-bob", "Bob", 2, 1], ["unassigned", "Unassigned", 2, 1]]);
+    expect(fleet.groups.map((g) => [g.key, g.label, g.count, g.attention])).toEqual([["s-bob", "Bob", 2, 0], ["unassigned", "Unassigned", 2, 1]]);
     expect(fleet.breadcrumbs).toEqual([{ label: "Fleet" }]);
 
     const projectScope = drillInto({}, "project", fleet.groups[1]!);
@@ -72,7 +72,8 @@ describe("sdlc page model", () => {
     const model = sdlcPageModel(view, {}, "validating");
     expect(model.counts).toMatchObject({ running: 1, validating: 1, pending: 1, failed: 1 });
     expect(model.listed.map((r) => r.item.itemId)).toEqual(["b"]);
-    expect(model.attention.map((r) => r.item.itemId)).toEqual(["d", "b"]);
+    // validating is moving (the release driver runs it), so only the failed item needs attention.
+    expect(model.attention.map((r) => r.item.itemId)).toEqual(["d"]);
   });
 
   it("selects the item ?item= names, and follows it when it changes", () => {
@@ -159,5 +160,31 @@ describe("ItemDetail", () => {
     expect(html).not.toMatch(/<span[^>]*aria-label="merged/);
     expect(html).toContain("att-1");
     expect(html).toContain("env-1 / proj-1 / thr-9 · turn turn-2");
+    expect(html).not.toContain('aria-label="Release"');
+  });
+
+  it("shows the release: stage, PR link, branch, shas, deployment, auto-merge and a blocked note", () => {
+    const base = rows(view).find((r) => r.item.itemId === "a")!;
+    const release: ReleaseStatus = {
+      attemptId: "att-1", stage: "blocked", autoMerge: true, branch: "bob/BOB-1", headSha: "a".repeat(40), approvedSha: "b".repeat(40), mergeSha: "c".repeat(40),
+      pullRequest: { repository: base.target.repository, number: 42, url: "https://git.forgegraf.com/gmackie/bob/pulls/42" },
+      appSlug: "bob", deploymentId: "dep-9", note: "push rejected: protected branch", updatedAt: "2026-11-15T00:00:00Z",
+    };
+    const render = (r: ReleaseStatus) => renderToStaticMarkup(<ItemDetail row={{ ...base, item: { ...base.item, state: "validating", release: r } }} onClose={() => {}} onOpenPlan={() => {}} />);
+    const html = render(release);
+    expect(html).toContain('data-release-stage="blocked"');
+    expect(html).toContain(">Blocked<");
+    expect(html).toContain('<a href="https://git.forgegraf.com/gmackie/bob/pulls/42" target="_blank" rel="noreferrer"');
+    expect(html).toContain("bob/BOB-1");
+    expect(html).toContain(">aaaaaaaa<");
+    expect(html).toContain(">bbbbbbbb<");
+    expect(html).toContain(">cccccccc<");
+    expect(html).toContain("bob · dep-9");
+    expect(html).toMatch(/Auto-merge<\/dt><dd>on</);
+    expect(html).toMatch(/role="alert"[^>]*>push rejected: protected branch</);
+    const quiet = render({ ...release, stage: "deploying", note: "rolling out", pullRequest: { ...release.pullRequest!, url: "javascript:alert(1)" } });
+    expect(quiet).not.toContain('role="alert"');
+    expect(quiet).toContain("#42");
+    expect(quiet).not.toContain("javascript:");
   });
 });

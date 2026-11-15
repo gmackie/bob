@@ -1,8 +1,8 @@
 // Test-only builders for edge views. Not imported by app code.
 import { emptyView, reduce       } from "@bob/sdlc-view";
-import type {EdgeView, ItemSnapshot, ItemState, PendingInput, PlanSnapshot, TopologyRepo} from "@bob/sdlc-view";
+import type {EdgeView, ItemSnapshot, ItemState, PendingInput, PlanSnapshot, ReleaseStatus, TopologyRepo} from "@bob/sdlc-view";
 
-export interface ItemSpec { itemId: string; state: ItemState; repo?: string; identifier?: string; pendingInput?: PendingInput; attemptId?: string }
+export interface ItemSpec { itemId: string; state: ItemState; repo?: string; identifier?: string; pendingInput?: PendingInput; attemptId?: string; release?: ReleaseStatus }
 
 export function plan(planId: string, items: ItemSpec[], state: PlanSnapshot["state"] = "active"): PlanSnapshot {
   return {
@@ -32,6 +32,7 @@ export function item(planId: string, spec: ItemSpec): ItemSnapshot {
       ? { attemptId: spec.attemptId, target: { environmentId: "env", projectId: "proj", repository: { integrationId: "forgegraph", repositoryId: spec.repo ?? "bob" } }, thread: { environmentId: "env", projectId: "proj", threadId: `th-${spec.itemId}` } }
       : null,
     pendingInput: spec.pendingInput ?? null,
+    ...(spec.release ? { release: spec.release } : {}),
     achievedMilestones: [],
     operationIds: [],
     evidenceRefs: [],

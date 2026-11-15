@@ -33,7 +33,7 @@ export interface EdgeControllerOptions {
   /** Keeps background work running after a reply: ctx.waitUntil in the Durable Object. */
   schedule?: (work: Promise<unknown>) => void;
   newEpoch?: () => string;
-  /** Tests only: no operation is tier 3 yet, so the typed-confirmation path needs an override. */
+  /** Tests only: overrides the tier of an operation (RequestDeployment is the only tier 3). */
   tierOf?: (command: CommandInput) => Tier;
   /**
    * SDLC push alerts (BOB-81). Who is told (SDLC_VIEWER_USER_IDS, as it is now), and what

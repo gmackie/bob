@@ -3,6 +3,7 @@ import { MILESTONE_LABEL, MILESTONES, safeHref, STATE_PRESENTATION, type Row } f
 
 import { cn } from "@gmacko/core/ui";
 
+import { ReleaseSection } from "./release-section";
 import { AttentionBadge } from "./state-badge";
 
 /** `attempt` is the L5 attempt view; when given it shows the T3 thread, so the row here is left out. */
@@ -38,7 +39,7 @@ export function ItemDetail({ row, onClose, onOpenPlan, actions, attempt }: { row
       <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
         <dt className="text-muted-foreground">State</dt>
         <dd className="flex flex-wrap items-center gap-2">
-          <AttentionBadge state={item.state} />
+          <AttentionBadge state={item.state} attention={row.attention} />
           {presentation.hint && <span className="text-xs text-muted-foreground">{presentation.hint}</span>}
         </dd>
 
@@ -88,6 +89,8 @@ export function ItemDetail({ row, onClose, onOpenPlan, actions, attempt }: { row
           v{item.resourceVersion} · {item.operationIds.length} operations · {item.evidenceRefs.length} evidence refs
         </dd>
       </dl>
+
+      {item.release && <ReleaseSection release={item.release} />}
 
       <button
         type="button"

@@ -40,11 +40,13 @@ describe("navigation", () => {
 
   it("i jumps through the inbox, wrapping", () => {
     let ui = press(initialUi(), "i").ui;
+    expect(ui.path.itemId).toBe("item-a1"); // its release is blocked
+    ui = press(ui, "i").ui;
     expect(ui.path.itemId).toBe("item-p1");
     ui = press(ui, "i").ui;
     expect(ui.path.itemId).toBe("item-a2");
-    for (let n = 0; n < 3; n++) ui = press(ui, "i").ui;
-    expect(ui.path.itemId).toBe("item-p1");
+    for (let n = 0; n < 2; n++) ui = press(ui, "i").ui;
+    expect(ui.path.itemId).toBe("item-a1");
   });
 
   it("q quits and ? toggles help", () => {
@@ -103,7 +105,7 @@ describe("commands", () => {
   it("the palette lists plan then item commands and runs one by number", () => {
     const ui = at({ ...bob, planId: PLAN_ACTIVE, itemId: "item-a3" });
     const open = press(ui, ":");
-    expect(open.ui.mode.kind === "palette" && open.ui.mode.choices.map((c) => c.option.label)).toEqual(["Pause plan", "Cancel plan", "Reconcile", "Retry", "Cancel item"]);
+    expect(open.ui.mode.kind === "palette" && open.ui.mode.choices.map((c) => c.option.label)).toEqual(["Pause plan", "Cancel plan", "Reconcile", "Cancel item"]);
     expect(press(open.ui, "3").effects).toEqual([expect.objectContaining({ type: "send", label: "Reconcile BOB-73" })]);
     const moved = press(open.ui, "j").ui;
     expect(press(moved, "", { return: true }).ui.mode.kind).toBe("confirm");
@@ -147,5 +149,37 @@ describe("commands", () => {
     const asked = press(open.ui, "1");
     expect(asked.ui.mode).toMatchObject({ kind: "confirm", choice: { option: { command: { input: { planId: PLAN_DRAFT, action: "start" } } } } });
     expect(press(asked.ui, "y").effects[0]).toMatchObject({ type: "send", confirm: { confirmed: true } });
+  });
+});
+
+describe("release keys (BOB-82)", () => {
+  const a1 = { ...bob, planId: PLAN_ACTIVE, itemId: "item-a1" };
+  const base = view.items["item-a1"]!;
+  const withItem = (patch: Partial<typeof base>) => ({ ...view, items: { ...view.items, "item-a1": { ...base, ...patch } } });
+  const head = base.release!.headSha!;
+
+  it("o retries publishing a blocked release at its head, confirmed", () => {
+    const r = press(at(a1), "o");
+    expect(r.ui.mode).toMatchObject({ kind: "confirm", choice: { option: { tier: 2, command: { operation: "RequestRelease", input: { itemId: "item-a1", attemptId: "att-a1", action: "open-pr", sourceRevision: head, pullRequestRef: "292" } } } } });
+    expect(press(at({ ...bob, planId: PLAN_ACTIVE, itemId: "item-a2" }), "o").ui.message).toMatch(/Retry publish needs/);
+  });
+
+  it("m merges a review-ready PR, confirmed", () => {
+    const review = withItem({ state: "review", release: { ...base.release!, stage: "review-ready", note: null } });
+    const r = press(at(a1), "m", {}, ctx({ view: review }));
+    expect(r.ui.mode).toMatchObject({ kind: "confirm", choice: { option: { label: "Merge", command: { operation: "RequestRelease", input: { action: "merge", sourceRevision: head } } } } });
+    const sent = press(r.ui, "y", {}, ctx({ view: review }));
+    expect(sent.effects).toEqual([expect.objectContaining({ type: "send", confirm: { confirmed: true } })]);
+    expect(press(at(a1), "m").ui.message).toMatch(/Merge needs/);
+  });
+
+  it("R rolls back a deployment only after the repository is typed", () => {
+    const deployed = withItem({ state: "completed", release: { ...base.release!, stage: "production-verified", deploymentId: "dep-9", note: null } });
+    let r = press(at(a1), "R", {}, ctx({ view: deployed }));
+    expect(r.ui.mode).toMatchObject({ kind: "typed", expected: "gmackie/bob", choice: { option: { tier: 3, command: { operation: "RequestDeployment", input: { action: "rollback", artifactRef: "dep-9", stageRef: "production", deploymentRef: "dep-9" } } } } });
+    for (const ch of "gmackie/bob") r = press(r.ui, ch, {}, ctx({ view: deployed }));
+    r = press(r.ui, "", { return: true }, ctx({ view: deployed }));
+    expect(r.effects).toEqual([expect.objectContaining({ type: "send", confirm: { confirmed: true, typed: "gmackie/bob" } })]);
+    expect(press(at(a1), "R").ui.message).toMatch(/Rollback needs/);
   });
 });

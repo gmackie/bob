@@ -133,6 +133,23 @@ describe("checks before queueing", () => {
     const unknown = { type: "command", operation: "ReconcileItem", input: { itemId: "nope" } };
     expect(h.send(s, { ...unknown, commandId: "g", confirm: { confirmed: true, typed: "" } })).toMatchObject({ code: "confirmation-required" });
   });
+  it("relays release actions at tier 2 and a rollback at tier 3, typed as the item's repository (BOB-82)", () => {
+    const h = harness();
+    const target = { environmentId: "env", projectId: "bob", repository: { integrationId: "forgegraph", repositoryId: "gmackie-bob" } };
+    const issue = { integrationId: "k", workspaceId: "w", teamId: "t", projectId: "p", issueId: "x" };
+    const plan: PlanSnapshot = { planId: "p1", resourceVersion: 1, state: "active", definition: { items: [{ itemId: "i1", issue, target, completionTarget: "production" }], dependencies: [], concurrencyLimit: 1 } };
+    const item: ItemSnapshot = { itemId: "i1", planId: "p1", resourceVersion: 2, state: "deploying", currentAttemptId: "a", execution: null, achievedMilestones: [], operationIds: [], evidenceRefs: [] };
+    h.ingest({ kind: "snapshot", watermark: 1, plans: [plan], items: [item] });
+    const s = h.connect("u1");
+    const merge = { type: "command", operation: "RequestRelease", input: { itemId: "i1", attemptId: "a", action: "merge", sourceRevision: "a".repeat(40), pullRequestRef: "4" } };
+    expect(h.send(s, { ...merge, commandId: "m1" })).toMatchObject({ code: "confirmation-required" });
+    expect(h.send(s, { ...merge, commandId: "m2", confirm: { confirmed: true } })).toMatchObject({ type: "commandAccepted" });
+    expect(h.send(s, { ...merge, commandId: "m3", input: { ...merge.input, sourceRevision: "HEAD" }, confirm: { confirmed: true } })).toMatchObject({ code: "invalid" });
+    const rollback = { type: "command", operation: "RequestDeployment", input: { itemId: "i1", action: "rollback", artifactRef: "d9", stageRef: "production", deploymentRef: "d9" } };
+    expect(h.send(s, { ...rollback, commandId: "r1", confirm: { confirmed: true } })).toMatchObject({ code: "confirmation-required" });
+    expect(h.send(s, { ...rollback, commandId: "r2", confirm: { confirmed: true, typed: "gmackie-bob" } })).toMatchObject({ type: "commandAccepted" });
+    expect(rows(h)).toEqual(["m2", "r2"]);
+  });
   it("limits each user to maxPerUserPerMinute across all of their sockets, surviving hibernation and eviction", () => {
     const h = harness(); h.ingest();
     let s = h.connect("u1");

@@ -154,7 +154,7 @@ export default function SdlcPage() {
                   <li key={r.item.itemId}>
                     <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm hover:bg-muted/50" onClick={() => setItemId(r.item.itemId)}>
                       <span className="truncate">{itemTitle(r)} <span className="text-muted-foreground">· {r.target.repository.repositoryId}</span></span>
-                      <AttentionBadge state={r.item.state} />
+                      <AttentionBadge state={r.item.state} attention={r.attention} />
                     </button>
                   </li>
                 ))}
@@ -192,7 +192,7 @@ export default function SdlcPage() {
                           {itemTitle(r)}
                           <span className="text-muted-foreground"> · {r.startupName} / {r.target.repository.repositoryId}</span>
                         </span>
-                        <AttentionBadge state={r.item.state} />
+                        <AttentionBadge state={r.item.state} attention={r.attention} />
                       </button>
                     </li>
                   ))}
@@ -221,7 +221,7 @@ export default function SdlcPage() {
                     <ActionsPanel
                       label="Item actions"
                       resourceId={selectedRow.item.itemId}
-                      options={itemCommands(selectedRow.item)}
+                      options={itemCommands(selectedRow.item, selectedRow.plan)}
                       target={itemTarget(itemTitle(selectedRow), selectedRow.plan.planId)}
                       context={actionContext}
                       send={send}

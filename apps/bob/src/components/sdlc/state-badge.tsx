@@ -9,11 +9,12 @@ const TONE: Record<Attention, string> = {
   failed: "border-destructive/40 bg-destructive/10 text-destructive",
 };
 
-/** An item state, tinted by how much it needs attention. */
-export function AttentionBadge({ state, className }: { state: ItemState; className?: string }) {
+/** An item state, tinted by how much it needs attention (the row's, refined by its release, when given). */
+export function AttentionBadge({ state, attention, className }: { state: ItemState; attention?: Attention; className?: string }) {
   const s = STATE_PRESENTATION[state];
+  const tone = attention ?? s.attention;
   return (
-    <span data-attention={s.attention} className={cn("inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs font-medium", TONE[s.attention], className)}>
+    <span data-attention={tone} className={cn("inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs font-medium", TONE[tone], className)}>
       {s.label}
     </span>
   );

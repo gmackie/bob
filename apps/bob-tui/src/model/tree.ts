@@ -12,7 +12,7 @@ import {
   projectFor,
   repoKey,
   rows as toRows,
-  STATE_PRESENTATION,
+  itemAttention,
   type EdgeView,
   type ExecutionTarget,
   type IssueRef,
@@ -92,7 +92,7 @@ function definitionRows(view: EdgeView): Array<Pick<Row, "startupId" | "startupN
   for (const plan of Object.values(view.plans)) {
     for (const d of plan.definition.items) {
       const item = view.items[d.itemId];
-      out.push({ target: d.target, ...projectFor(view.topology, d.target.repository), attention: item ? STATE_PRESENTATION[item.state].attention : "ok" });
+      out.push({ target: d.target, ...projectFor(view.topology, d.target.repository), attention: item ? itemAttention(item) : "ok" });
     }
   }
   return out;
@@ -113,7 +113,7 @@ export function childrenOf(view: EdgeView, path: TreePath): TreeNode[] {
       const entries = planEntries(view, plan);
       return {
         kind: "plan", key: plan.planId, label: planLabel(plan), state: plan.state, count: entries.length,
-        attention: entries.filter((e) => e.item && STATE_PRESENTATION[e.item.state].attention !== "ok").length,
+        attention: entries.filter((e) => e.item && itemAttention(e.item) !== "ok").length,
       };
     });
   }
@@ -121,7 +121,7 @@ export function childrenOf(view: EdgeView, path: TreePath): TreeNode[] {
   if (!plan) return [];
   return planEntries(view, plan).map((e) => ({
     kind: "item", key: e.itemId, label: itemLabel(e.issue), count: 1,
-    attention: e.item && STATE_PRESENTATION[e.item.state].attention !== "ok" ? 1 : 0,
+    attention: e.item && itemAttention(e.item) !== "ok" ? 1 : 0,
     ...(e.item ? { state: e.item.state } : {}),
   }));
 }

@@ -2,7 +2,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 
 import { attentionEntries, bannerFor, browseHref, itemHref } from "~/features/sdlc/attention-model";
-import { AttentionDot, OfflineBanner } from "~/features/sdlc/components";
+import { ATTENTION_COLOR, AttentionDot, OfflineBanner } from "~/features/sdlc/components";
 import { useNow, useSdlcEdge } from "~/features/sdlc/use-sdlc-edge";
 import { colors } from "~/lib/colors";
 
@@ -62,6 +62,9 @@ export default function AttentionScreen() {
             </Text>
             {entry.question ? (
               <Text className="text-foreground mt-2 text-sm" numberOfLines={2}>“{entry.question}”</Text>
+            ) : null}
+            {entry.releaseReason ? (
+              <Text className="mt-2 text-sm" numberOfLines={2} style={{ color: ATTENTION_COLOR[entry.attention] }}>{entry.releaseReason}</Text>
             ) : null}
           </Pressable>
         ))

@@ -12,12 +12,15 @@ import {
   type CommandInput,
   type ItemSnapshot,
   type PlanSnapshot,
+  type ReleaseStatus,
 } from "../src";
 
 const plan = (state: PlanSnapshot["state"]): PlanSnapshot => ({
   planId: "p1", resourceVersion: 4, state, definition: { items: [], dependencies: [], concurrencyLimit: 1 },
 });
 const target = { environmentId: "e", projectId: "bob", repository: { integrationId: "forgegraph", repositoryId: "bob" } };
+const SHA = "a".repeat(40);
+const SHA2 = "b".repeat(40);
 const item = (state: ItemSnapshot["state"], attemptId?: string): ItemSnapshot => ({
   itemId: "i1", planId: "p1", resourceVersion: 7, state, currentAttemptId: attemptId ?? null,
   execution: attemptId ? { attemptId, target, thread: { environmentId: "e", projectId: "bob", threadId: "t" } } : null,
@@ -34,6 +37,12 @@ describe("tierOf", () => {
     expect(tierOf({ operation: "ReconcileItem", input: { itemId: "i" } })).toBe(1);
     expect(tierOf({ operation: "RetryItem", input: { itemId: "i", expectedVersion: 1, previousAttemptId: "a", reason: "r" } })).toBe(2);
     expect(tierOf({ operation: "CancelItem", input: { itemId: "i", expectedVersion: 1 } })).toBe(2);
+  });
+  it("release actions are tier 2; deployments are tier 3", () => {
+    for (const action of ["merge", "approve", "open-pr"] as const) {
+      expect(tierOf({ operation: "RequestRelease", input: { itemId: "i", attemptId: "a", action, sourceRevision: SHA } })).toBe(2);
+    }
+    expect(tierOf({ operation: "RequestDeployment", input: { itemId: "i", action: "rollback", artifactRef: "d", stageRef: "production", deploymentRef: "d" } })).toBe(3);
   });
 });
 
@@ -60,6 +69,12 @@ describe("parseCommandInput / parseClientCommand", () => {
     expect(parseCommandInput("RetryItem", { itemId: "i", expectedVersion: 1, previousAttemptId: "a", reason: "x" })).toEqual({ operation: "RetryItem", input: { itemId: "i", expectedVersion: 1, previousAttemptId: "a", reason: "x" } });
     expect(parseCommandInput("CancelItem", { itemId: "i", expectedVersion: 3 })).toEqual({ operation: "CancelItem", input: { itemId: "i", expectedVersion: 3 } });
     expect(parseCommandInput("ReconcileItem", { itemId: "i" })).toEqual({ operation: "ReconcileItem", input: { itemId: "i" } });
+    expect(parseCommandInput("RequestRelease", { itemId: "i", attemptId: "a", action: "merge", sourceRevision: SHA, pullRequestRef: "12", junk: 1 }))
+      .toEqual({ operation: "RequestRelease", input: { itemId: "i", attemptId: "a", action: "merge", sourceRevision: SHA, pullRequestRef: "12" } });
+    expect(parseCommandInput("RequestRelease", { itemId: "i", attemptId: "a", action: "open-pr", sourceRevision: SHA }))
+      .toEqual({ operation: "RequestRelease", input: { itemId: "i", attemptId: "a", action: "open-pr", sourceRevision: SHA } });
+    expect(parseCommandInput("RequestDeployment", { itemId: "i", action: "rollback", artifactRef: "d1", stageRef: "production", deploymentRef: "d1" }))
+      .toEqual({ operation: "RequestDeployment", input: { itemId: "i", action: "rollback", artifactRef: "d1", stageRef: "production", deploymentRef: "d1" } });
   });
   it("keeps a confirmation only when confirmed is exactly true, and typed only when it is a string", () => {
     const base = { type: "command", commandId: "c", operation: "CancelItem", input: { itemId: "i", expectedVersion: 1 } };
@@ -81,6 +96,14 @@ describe("parseCommandInput / parseClientCommand", () => {
       { type: "command", commandId: "c", operation: "RetryItem", input: { itemId: "i", expectedVersion: 1, previousAttemptId: "a", reason: "" } },
       { type: "command", commandId: "c", operation: "RetryItem", input: { itemId: "i", expectedVersion: 1, previousAttemptId: "a", reason: "r".repeat(2001) } },
       { type: "command", commandId: "c", operation: "CancelItem", input: { itemId: "i" } },
+      { type: "command", commandId: "c", operation: "RequestRelease", input: { itemId: "i", attemptId: "a", action: "close", sourceRevision: SHA } },
+      { type: "command", commandId: "c", operation: "RequestRelease", input: { itemId: "i", attemptId: "a", action: "merge", sourceRevision: "abc123" } },
+      { type: "command", commandId: "c", operation: "RequestRelease", input: { itemId: "i", attemptId: "a", action: "merge", sourceRevision: SHA.toUpperCase() } },
+      { type: "command", commandId: "c", operation: "RequestRelease", input: { attemptId: "a", action: "merge", sourceRevision: SHA } },
+      { type: "command", commandId: "c", operation: "RequestRelease", input: { itemId: "i", attemptId: "a", action: "merge", sourceRevision: SHA, pullRequestRef: 12 } },
+      { type: "command", commandId: "c", operation: "RequestDeployment", input: { itemId: "i", action: "destroy", artifactRef: "d", stageRef: "production" } },
+      { type: "command", commandId: "c", operation: "RequestDeployment", input: { itemId: "i", action: "rollback", artifactRef: "", stageRef: "production" } },
+      { type: "command", commandId: "c", operation: "RequestDeployment", input: { itemId: "i", action: "rollback", artifactRef: "d", stageRef: "production", deploymentRef: 3 } },
     ];
     for (const raw of bad) expect(parseClientCommand(raw)).toBeNull();
   });
@@ -130,11 +153,13 @@ describe("commandFingerprint", () => {
   });
 });
 
+const ops = (i: ItemSnapshot) => itemCommands(i).map((o) => o.command.operation);
 describe("itemCommands", () => {
-  const ops = (i: ItemSnapshot) => itemCommands(i).map((o) => o.command.operation);
   it("offers reconcile, retry and cancel by state", () => {
-    expect(ops(item("execution-unknown", "a1"))).toEqual(["ReconcileItem", "RetryItem", "CancelItem"]);
+    // The coordinator only retries failed/cancelled work; execution-unknown is reconciled.
+    expect(ops(item("execution-unknown", "a1"))).toEqual(["ReconcileItem", "CancelItem"]);
     expect(ops(item("failed", "a1"))).toEqual(["RetryItem"]);
+    expect(ops(item("cancelled", "a1"))).toEqual(["RetryItem"]);
     expect(ops(item("running", "a1"))).toEqual(["CancelItem"]);
     expect(ops(item("completed", "a1"))).toEqual([]);
     expect(ops(item("deploying", "a1"))).toEqual(["CancelItem"]); // the coordinator's cancellableStates include it
@@ -143,5 +168,49 @@ describe("itemCommands", () => {
   it("retries only with a previous attempt id, at the item's version", () => {
     expect(ops(item("failed"))).toEqual([]);
     expect(itemCommands(item("failed", "a1"))[0]!.command).toEqual({ operation: "RetryItem", input: { itemId: "i1", expectedVersion: 7, previousAttemptId: "a1", reason: "Retried from Bob" } });
+  });
+});
+
+describe("itemCommands: release (BOB-82)", () => {
+  const release = (stage: ReleaseStatus["stage"], extra: Partial<ReleaseStatus> = {}): ReleaseStatus => ({ attemptId: "a1", stage, autoMerge: false, updatedAt: "2026-11-15T00:00:00Z", ...extra });
+  const withRelease = (state: ItemSnapshot["state"], r: ReleaseStatus, evidenceRefs: string[] = []): ItemSnapshot => ({ ...item(state, "a1"), release: r, evidenceRefs });
+  const pr = { repository: target.repository, number: 42, url: "https://git.example/pr/42" };
+  const view = (i: ItemSnapshot, p?: PlanSnapshot) => itemCommands(i, p).map((o) => [o.label, o.tier, o.command.operation, (o.command.input as { action?: string }).action]);
+
+  it("offers Merge and Approve at the release head on a review-ready review, with the PR number", () => {
+    const i = withRelease("review", release("review-ready", { headSha: SHA, pullRequest: pr }));
+    expect(view(i)).toEqual([["Merge", 2, "RequestRelease", "merge"], ["Approve", 2, "RequestRelease", "approve"], ["Cancel item", 2, "CancelItem", undefined]]);
+    expect(itemCommands(i)[0]!.command).toEqual({ operation: "RequestRelease", input: { itemId: "i1", attemptId: "a1", action: "merge", sourceRevision: SHA, pullRequestRef: "42" } });
+  });
+  it("still offers a manual merge nudge when autoMerge is on", () => {
+    expect(view(withRelease("review", release("review-ready", { headSha: SHA, autoMerge: true })))[0]).toEqual(["Merge now", 2, "RequestRelease", "merge"]);
+  });
+  it("offers no merge without a head, outside review, or before review-ready", () => {
+    expect(ops(withRelease("review", release("review-ready")))).toEqual(["CancelItem"]);
+    expect(ops(withRelease("validating", release("checks-running", { headSha: SHA })))).toEqual(["CancelItem"]);
+    expect(ops(withRelease("review", release("checks-running", { headSha: SHA })))).toEqual(["CancelItem"]);
+  });
+  it("offers Retry publish on a blocked or awaiting-publish release, at the head or else the latest commit evidence", () => {
+    const blocked = withRelease("validating", release("blocked", { headSha: SHA, note: "push failed" }));
+    expect(view(blocked)[0]).toEqual(["Retry publish", 2, "RequestRelease", "open-pr"]);
+    expect((itemCommands(blocked)[0]!.command.input as { sourceRevision: string }).sourceRevision).toBe(SHA);
+    const awaiting = withRelease("validating", release("awaiting-publish"), [`commit:${SHA}`, "thread:x", `commit:${SHA2}`]);
+    expect((itemCommands(awaiting)[0]!.command.input as { sourceRevision: string }).sourceRevision).toBe(SHA2);
+    expect(ops(withRelease("validating", release("awaiting-publish"), ["thread:x", "commit:nope"]))).toEqual(["CancelItem"]);
+  });
+  it("offers Roll back (tier 3, type the repository) once a deployment exists", () => {
+    const deployed = withRelease("completed", release("production-verified", { deploymentId: "dep-9" }));
+    const [rollback] = itemCommands(deployed);
+    expect(rollback).toMatchObject({ label: "Roll back", tier: 3, expected: "bob", destructive: true });
+    expect(rollback!.command).toEqual({ operation: "RequestDeployment", input: { itemId: "i1", action: "rollback", artifactRef: "dep-9", stageRef: "production", deploymentRef: "dep-9" } });
+    expect(ops(withRelease("deploying", release("deploying", { deploymentId: "dep-9" })))).toEqual(["RequestDeployment", "CancelItem"]);
+    expect(ops(withRelease("deploying", release("merged", { deploymentId: "dep-9" })))).toEqual(["CancelItem"]);
+    expect(ops(withRelease("deploying", release("deploying")))).toEqual(["CancelItem"]);
+  });
+  it("takes the rollback repository from the plan when the item has no execution target", () => {
+    const p: PlanSnapshot = { ...plan("active"), definition: { items: [{ itemId: "i1", issue: { integrationId: "k", workspaceId: "w", teamId: "t", projectId: "p", issueId: "x" }, target, completionTarget: "production-verified" }], dependencies: [], concurrencyLimit: 1 } };
+    const bare: ItemSnapshot = { ...item("completed"), release: release("production-verified", { deploymentId: "dep-9" }) };
+    expect(itemCommands(bare)[0]!.expected).toBeUndefined();
+    expect(itemCommands(bare, p)[0]!.expected).toBe("bob");
   });
 });

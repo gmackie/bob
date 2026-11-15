@@ -32,6 +32,12 @@ describe("commitShaOf", () => {
     expect(commitShaOf(item([`commit:${"a".repeat(40)}`, "log", `commit:${SHA}`]))).toBe(SHA);
     expect(commitShaOf(item([SHA]))).toBe(SHA);
   });
+  it("prefers the release's published head over the (never pushed) checkpoint evidence", () => {
+    const release = { attemptId: "a1", stage: "checks-running" as const, autoMerge: false, updatedAt: "2026-11-15T00:00:00Z" };
+    const head = "c".repeat(40);
+    expect(commitShaOf({ ...item([`commit:${SHA}`]), release: { ...release, headSha: head } })).toBe(head);
+    expect(commitShaOf({ ...item([`commit:${SHA}`]), release })).toBe(SHA);
+  });
 });
 
 describe("fullRepoSlug", () => {

@@ -28,12 +28,13 @@ export interface FgGate {
 
 const SHA = /^[a-f0-9]{40}$/;
 /**
- * The commit to read CI for. ItemSnapshot carries no commit today (the execution receipt's
- * sourceSnapshot.commitSha is not projected onto it), so this only recognises an evidence
- * ref of the form `commit:<40 hex>` (or a bare 40-hex ref), the most recent one winning.
- * Until the coordinator exposes one, every item reads "no commit yet".
+ * The commit to read CI for: the release's published head (BOB-82) when there is one.
+ * The `commit:<40 hex>` evidence ref (or a bare 40-hex ref, the most recent winning) is
+ * only a fallback: it is the T3 checkpoint, which is never pushed, so CI never ran on it.
  */
 export function commitShaOf(item: ItemSnapshot): string | null {
+  const head = item.release?.headSha;
+  if (head && SHA.test(head)) return head;
   for (const ref of [...(item.evidenceRefs ?? [])].reverse()) {
     const sha = ref.startsWith("commit:") ? ref.slice(7) : ref;
     if (SHA.test(sha)) return sha;

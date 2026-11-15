@@ -1,5 +1,5 @@
 // Generates src/generated/contract.ts from the coordinator's OpenAPI, so the
-// state, plan-state and milestone enums can't drift from the contract.
+// state, plan-state, milestone and release-stage enums can't drift from the contract.
 //   node scripts/generate-contract.mjs --write   regenerate
 //   node scripts/generate-contract.mjs --check   fail if the checked-in file is stale
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -32,9 +32,11 @@ const source = '// Generated from packages/bob/coordination/generated/openapi.js
   + list('ITEM_STATES', enumOf('GetItem item.state', item.state))
   + list('PLAN_STATES', enumOf('GetPlan state', plan.state))
   + list('MILESTONES', enumOf('GetItem item.achievedMilestones[]', item.achievedMilestones?.items))
+  + list('RELEASE_STAGES', enumOf('GetItem item.release.stage', item.release?.properties?.stage))
   + 'export type ItemState = (typeof ITEM_STATES)[number];\n'
   + 'export type PlanState = (typeof PLAN_STATES)[number];\n'
-  + 'export type Milestone = (typeof MILESTONES)[number];\n';
+  + 'export type Milestone = (typeof MILESTONES)[number];\n'
+  + 'export type ReleaseStage = (typeof RELEASE_STAGES)[number];\n';
 
 if (process.argv.includes('--write')) {
   mkdirSync(new URL('.', out), { recursive: true });

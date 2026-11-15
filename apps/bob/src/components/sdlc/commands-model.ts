@@ -201,8 +201,12 @@ export function globalDisabledReason(ctx: Omit<ActionContext, "commands">): stri
   return null;
 }
 
-const keyOf = (option: CommandOption) =>
-  option.command.operation === "ControlPlan" ? `ControlPlan:${option.command.input.action}` : option.command.operation;
+const keyOf = (option: CommandOption) => {
+  const { command } = option;
+  // Operations that carry an action (Merge and Approve are both RequestRelease) key on it too.
+  return command.operation === "ControlPlan" || command.operation === "RequestRelease" || command.operation === "RequestDeployment"
+    ? `${command.operation}:${command.input.action}` : command.operation;
+};
 
 /** The buttons for a resource's options, each disabled with a reason when it cannot run. */
 export function actionButtons(options: CommandOption[], ctx: ActionContext): ActionButton[] {

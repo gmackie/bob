@@ -106,8 +106,9 @@ describe("dependency tree", () => {
 describe("inbox and header", () => {
   it("lists attention items worst first and opens them by path", () => {
     const rows = inbox(view);
-    expect(rows.map((r) => r.item.state)).toEqual(["waiting-input", "failed", "validating", "execution-unknown"]);
-    expect(pathForRow(rows[0]!)).toEqual({ startupId: "s-forge", repoKey: "forgegraph:gmackie/forgegraph", planId: PLAN_PAUSED, itemId: "item-p1" });
+    expect(rows.map((r) => r.item.state)).toEqual(["validating", "waiting-input", "failed", "execution-unknown"]);
+    // item-a1's release is blocked: it needs a human, like the waiting-input item.
+    expect(pathForRow(rows[1]!)).toEqual({ startupId: "s-forge", repoKey: "forgegraph:gmackie/forgegraph", planId: PLAN_PAUSED, itemId: "item-p1" });
   });
 
   it("counts plans, items and attention", () => {

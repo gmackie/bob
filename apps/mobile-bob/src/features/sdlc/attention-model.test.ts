@@ -1,8 +1,13 @@
 import { emptyView, OFFLINE_AFTER_MS } from "@bob/sdlc-view";
 import { describe, expect, it } from "vitest";
 
-import { attentionEntries, bannerFor, bannerText, browseHref, browseModel, drillParams, itemDetail, itemHref, stateTiles } from "./attention-model";
-import { must, PENDING, viewOf } from "./test-fixtures";
+import { attentionEntries, bannerFor, bannerText, browseHref, browseModel, drillParams, itemDetail, itemHref, releaseReason, stateTiles } from "./attention-model";
+import type { ItemState, ReleaseStatus } from "@bob/sdlc-view";
+import { item, must, PENDING, viewOf } from "./test-fixtures";
+
+const SHA = "a".repeat(40);
+const release = (stage: ReleaseStatus["stage"], extra: Partial<ReleaseStatus> = {}): ReleaseStatus =>
+  ({ attemptId: "att-s", stage, autoMerge: false, updatedAt: "2026-11-15T00:00:00Z", ...extra });
 
 const fleet = () =>
   viewOf([
@@ -18,17 +23,32 @@ const fleet = () =>
     {
       planId: "plan-bbbbbbbb2",
       items: [
-        { itemId: "b-stall", state: "validating", repo: "forgegraph", identifier: "FG-1" },
+        { itemId: "b-stall", state: "validating", repo: "forgegraph", identifier: "FG-1", release: release("blocked", { headSha: SHA, note: "push rejected" }) },
+        { itemId: "b-ci", state: "validating", repo: "forgegraph", identifier: "FG-3", release: release("checks-running", { headSha: SHA }) },
         { itemId: "b-wait", state: "waiting-input", repo: "forgegraph", identifier: "FG-2", pendingInput: PENDING },
       ],
     },
   ]);
 
 describe("attentionEntries", () => {
-  it("lists waiting-for-input first, then review, failed, stalled; never ok items", () => {
+  it("lists waiting-for-input first, then review and blocked releases, failed; never ok items", () => {
     const entries = attentionEntries(fleet());
-    expect(entries.map((e) => e.itemId)).toEqual(["a-wait", "b-wait", "a-review", "a-fail", "b-stall"]);
+    expect(entries.map((e) => e.itemId)).toEqual(["a-wait", "b-wait", "a-review", "b-stall", "a-fail"]);
     expect(entries.some((e) => e.itemId === "a-run")).toBe(false);
+    expect(entries.some((e) => e.itemId === "b-ci")).toBe(false); // validating with CI running is moving
+    expect(entries.find((e) => e.itemId === "b-stall")).toMatchObject({ attention: "needs_human", releaseReason: "push rejected" });
+  });
+
+  it("treats blocked and checks-failed releases, and a review-ready PR without auto-merge, as needing attention", () => {
+    const one = (state: ItemState, r: ReleaseStatus) =>
+      attentionEntries(viewOf([{ planId: "plan-c", items: [{ itemId: "x", state, release: r }] }]));
+    expect(one("deploying", release("blocked"))[0]).toMatchObject({ attention: "needs_human", releaseReason: "Release blocked" });
+    expect(one("failed", release("checks-failed", { note: "test failed" }))[0]).toMatchObject({ attention: "failed", releaseReason: "test failed" });
+    const pr = { repository: { integrationId: "forgegraph", repositoryId: "bob" }, number: 7 };
+    expect(one("review", release("review-ready", { pullRequest: pr }))[0]).toMatchObject({ attention: "needs_human", releaseReason: "PR #7 is ready to merge" });
+    expect(one("review", release("review-ready", { pullRequest: pr, autoMerge: true }))).toEqual([]);
+    expect(one("deploying", release("deploying"))).toEqual([]);
+    expect(releaseReason(item("p", { itemId: "y", state: "running" }))).toBeNull();
   });
 
   it("carries the project, repo and plan, and the first pending question", () => {
@@ -115,6 +135,21 @@ describe("itemDetail", () => {
     expect(d.planActions.length).toBeGreaterThan(0);
     expect(d.planHref).toBe("/attention/browse?project=s-bob&repo=forgegraph%3Abob&plan=plan-aaaaaaaa1");
     expect(itemDetail(fleet(), "nope")).toBeNull();
+    expect(d.release).toBeNull();
+  });
+
+  it("shows the release and offers its actions: retry publish when blocked, a typed rollback once deployed", () => {
+    const blocked = must(itemDetail(fleet(), "b-stall"));
+    expect(blocked.attention).toBe("needs_human");
+    expect(blocked.release).toMatchObject({ stage: "blocked", label: "Blocked", alarm: true, note: "push rejected", head: "aaaaaaaa", autoMerge: false });
+    expect(blocked.actions.map((a) => [a.label, a.tier])).toEqual([["Retry publish", 2], ["Cancel item", 2]]);
+    const deployed = viewOf([{ planId: "plan-d", items: [{ itemId: "d", state: "completed", repo: "bob", release: release("production-verified", {
+      deploymentId: "dep-9", appSlug: "bob", pullRequest: { repository: { integrationId: "forgegraph", repositoryId: "bob" }, number: 4, url: "javascript:alert(1)" },
+    }) }] }]);
+    const d = must(itemDetail(deployed, "d"));
+    expect(d.release).toMatchObject({ alarm: false, deployment: "bob · dep-9", pullRequest: { number: 4, href: null } });
+    // No execution target here: the repository to type comes from the plan definition.
+    expect(d.actions).toEqual([expect.objectContaining({ label: "Roll back", tier: 3, expected: "bob", destructive: true })]);
   });
 });
 

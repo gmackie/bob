@@ -2,11 +2,13 @@ import { Box, Text } from "ink";
 import {
   MILESTONE_LABEL,
   MILESTONES,
+  RELEASE_STAGE_PRESENTATION,
   safeHref,
   STATE_PRESENTATION,
   type CommandOption,
   type EdgeView,
   type ItemState,
+  type ReleaseStatus,
   type Row,
 } from "@bob/sdlc-view";
 
@@ -59,7 +61,10 @@ function Actions({ options, latest }: { options: CommandOption[]; latest: Comman
   const keyFor = (o: CommandOption) =>
     o.command.operation === "ControlPlan"
       ? o.command.input.action === "pause" || o.command.input.action === "resume" ? "p" : o.command.input.action === "cancel" ? "c" : ":"
-      : o.command.operation === "RetryItem" ? "r" : o.command.operation === "CancelItem" ? "c" : o.command.operation === "ResolveInput" ? "a" : ":";
+      : o.command.operation === "RequestRelease"
+        ? o.command.input.action === "merge" ? "m" : o.command.input.action === "open-pr" ? "o" : ":"
+        : o.command.operation === "RequestDeployment" ? (o.command.input.action === "rollback" ? "R" : ":")
+          : o.command.operation === "RetryItem" ? "r" : o.command.operation === "CancelItem" ? "c" : o.command.operation === "ResolveInput" ? "a" : ":";
   return (
     <Box flexDirection="column" marginTop={1}>
       {options.length ? (
@@ -68,6 +73,34 @@ function Actions({ options, latest }: { options: CommandOption[]; latest: Comman
         </Text>
       ) : <Text dimColor>No commands in this state.</Text>}
       <CommandLine entry={latest} />
+    </Box>
+  );
+}
+
+const RELEASE_ALARM = new Set<ReleaseStatus["stage"]>(["blocked", "checks-failed"]);
+const short = (sha: string | null | undefined) => (sha ? sha.slice(0, 8) : null);
+
+/** The item's release (BOB-82): stage, PR, branch, shas, deployment, note. */
+function ReleaseLines({ release }: { release: ReleaseStatus }) {
+  const stage = RELEASE_STAGE_PRESENTATION[release.stage];
+  const alarm = RELEASE_ALARM.has(release.stage);
+  const color = stage.attention === "failed" ? "red" : stage.attention === "needs_human" ? "yellow" : undefined;
+  const pr = release.pullRequest;
+  const prHref = safeHref(pr?.url);
+  const shas = [["head", release.headSha], ["approved", release.approvedSha], ["merged", release.mergeSha]]
+    .filter(([, sha]) => sha).map(([label, sha]) => `${label} ${short(sha)}`).join(" · ");
+  const deploy = [release.appSlug, release.deploymentId].filter(Boolean).join(" · ");
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      <Text wrap="truncate-end">
+        Release <Text color={color} bold>{stage.label}</Text>
+        <Text dimColor> · {stage.hint} · auto-merge {release.autoMerge ? "on" : "off"}</Text>
+      </Text>
+      {pr ? <Text wrap="truncate-end">  PR #{pr.number}{prHref ? <Text color="blue" underline> {clean(prHref)}</Text> : null}</Text> : null}
+      {release.branch ? <Text wrap="truncate-end">  branch {clean(release.branch)}</Text> : null}
+      {shas ? <Text wrap="truncate-end">  {shas}</Text> : null}
+      {deploy ? <Text wrap="truncate-end">  deploy {clean(deploy)}</Text> : null}
+      {release.note ? <Text color={alarm ? "red" : undefined} dimColor={!alarm} wrap="truncate-end">  {alarm ? "! " : ""}{clean(release.note)}</Text> : null}
     </Box>
   );
 }
@@ -158,6 +191,7 @@ function CenterBody({ view, focus, commands, planOptions, itemOptions, attempt, 
             const href = safeHref(ref);
             return <Text key={ref} wrap="truncate-end" color={href ? "blue" : undefined} underline={!!href}>  {clean(ref)}</Text>;
           })}
+          {item?.release ? <ReleaseLines release={item.release} /> : null}
           <Actions options={itemOptions} latest={latestFor(commands, entry.itemId)} />
           <Box flexDirection="column" marginTop={1}>
             {item ? <AttemptPane item={item} attempt={attempt} maxTail={maxTail} /> : <Text dimColor>No execution admitted yet.</Text>}
@@ -176,7 +210,7 @@ export function InboxPane({ rows, width, max, horizontal }: { rows: Row[]; width
       <Text bold>Inbox <Text color={rows.length ? "yellow" : "green"}>{rows.length}</Text><Text dimColor> · i to jump</Text></Text>
       {rows.length === 0 ? <Text dimColor>Nothing needs you.</Text> : null}
       {shown.map((row) => {
-        const a = STATE_PRESENTATION[row.item.state].attention;
+        const a = row.attention;
         return (
           <Text key={row.item.itemId} wrap="truncate-end">
             <Text color={ATTENTION_COLOR[a]}>{ATTENTION_MARK[a]} </Text>
@@ -193,7 +227,9 @@ export function InboxPane({ rows, width, max, horizontal }: { rows: Row[]; width
 const HELP: Array<[string, string]> = [
   ["↑↓ / j k", "move"], ["enter / → / l", "drill in"], ["esc / ← / h", "back out"], ["g / G", "top / bottom"],
   ["i / tab", "next inbox item"], [":", "command palette"], ["p", "pause or resume the plan"], ["c", "cancel item or plan (confirm)"],
-  ["r", "retry a failed item (confirm)"], ["a", "answer the agent's pending question"], ["?", "this help"], ["q", "quit"],
+  ["r", "retry a failed item (confirm)"], ["a", "answer the agent's pending question"],
+  ["m", "merge a review-ready PR (confirm)"], ["o", "retry publishing a blocked release (confirm)"], ["R", "roll back the deployment (type the repo)"],
+  ["?", "this help"], ["q", "quit"],
 ];
 
 /** The bottom area: the active prompt or palette, the last message, recent commands, key hints. */
@@ -204,7 +240,7 @@ export function Footer({ mode, message, commands, error }: { mode: Mode; message
       {error ? <Text color="red" wrap="truncate-end">{clean(error)}</Text> : null}
       {message ? <Text color="yellow" wrap="truncate-end">{clean(message)}</Text> : null}
       {recent(commands, 2).map((e) => <CommandLine key={e.command.commandId} entry={e} />)}
-      <Text dimColor wrap="truncate-end">↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit</Text>
+      <Text dimColor wrap="truncate-end">↑↓ move · enter/esc drill · : commands · p pause · c cancel · r retry · a answer · m/o/R release · i inbox · ? help · q quit</Text>
     </Box>
   );
 }
