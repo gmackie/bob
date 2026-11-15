@@ -19,7 +19,10 @@ export class CoordinationError extends Error {
   constructor(code, message, status = 409) { super(message); this.code = code; this.status = status; }
 }
 export const fail = (code, message, status) => { throw new CoordinationError(code, message, status); };
-export const storageVersion = 3;
+export const storageVersion = 4;
+/** Commands that change coordination state; each is written to coordination_command_log. */
+export const commandOperations = Object.freeze(['CreatePlan', 'UpdatePlan', 'ControlPlan', 'RequestExecution', 'RetryItem', 'CancelItem', 'ReconcileItem']);
+const commandKey = (name, body) => name === 'RequestExecution' ? body?.requestId : body?.commandId;
 const milestones = ['execution-succeeded', 'review-ready', 'merged', 'production-verified'];
 const completionTargets = ['execution', 'review-ready', 'merged', 'production'];
 
@@ -33,19 +36,21 @@ export class Coordinator {
     this.fault = fault;
     this.db = new DatabaseSync(database);
     this.db.exec('PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
-    // Version 3 is current. Older local stores upgrade transactionally with the
+    // Version 4 is current. Older local stores upgrade transactionally with the
     // exact generated table migrations; any other version is refused.
     const sql = file => readFileSync(new URL(`../storage/generated/${file}`, import.meta.url), 'utf8');
     const version = this.db.prepare('PRAGMA user_version').get().user_version;
-    if (![0, 1, 2, storageVersion].includes(version)) { this.db.close(); fail('StorageVersion', 'Unsupported coordination database version', 500); }
+    if (![0, 1, 2, 3, storageVersion].includes(version)) { this.db.close(); fail('StorageVersion', 'Unsupported coordination database version', 500); }
     if (version !== storageVersion) try {
       this.transaction(() => {
         const current = this.db.prepare('PRAGMA user_version').get().user_version;
         if (current === storageVersion) return;
         if (current === 0) this.db.exec(sql('d1.sql'));
-        else if (current === 1) { this.db.exec(sql('0002_attempts.sql')); this.db.exec(sql('0003_issue_effects.sql')); }
-        else if (current === 2) this.db.exec(sql('0003_issue_effects.sql'));
-        else fail('StorageVersion', 'Unsupported coordination database version', 500);
+        else {
+          if (current <= 1) this.db.exec(sql('0002_attempts.sql'));
+          if (current <= 2) this.db.exec(sql('0003_issue_effects.sql'));
+          if (current <= 3) this.db.exec(sql('0004_command_log.sql'));
+        }
         this.db.exec(`PRAGMA user_version = ${storageVersion}`);
       });
     } catch (error) { this.db.close(); throw error; }
@@ -128,7 +133,31 @@ export class Coordinator {
       this.event(item.itemId, snapshot.resourceVersion, operationId);
     }
   }
+  /** Public command/query entry point. options.actor is the human a trusted
+   * relaying host (the SDLC edge) verified; it is recorded, never authorizing.
+   * Refused mutating commands are logged after their transaction rolls back. */
   call(name, input, options = {}) {
+    if (options.actor !== undefined && (typeof options.actor !== 'string' || options.actor.length < 1 || options.actor.length > 200)) fail('InvalidRequest', 'Actor must be 1..200 characters', 400);
+    try { return this.execute(name, input, options); }
+    catch (error) {
+      if (error instanceof CoordinationError && commandOperations.includes(name)) this.logRefusal(name, input, options, error.code);
+      throw error;
+    }
+  }
+  /** Appends a command log row inside the caller's transaction. The log is append-only:
+   * a refusal, the acceptance and a later completion of one commandId are separate rows,
+   * and nothing is ever overwritten. A replay writes nothing (it returns before this). */
+  logCommand(name, key, options, { resourceId = null, operationId = null, outcome, owner = this.owner, actor = options.actor ?? null }) {
+    this.db.prepare('INSERT INTO coordination_command_log (tenant,id,command_id,owner,operation,actor,resource_id,operation_id,outcome,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+      .run(this.tenant, randomUUID(), key, owner, name, actor, resourceId, operationId, outcome, new Date().toISOString());
+  }
+  logRefusal(name, input, options, code) {
+    const key = commandKey(name, input);
+    if (typeof key !== 'string' || key.length < 1 || key.length > 128 || this.db.isTransaction) return;
+    const resourceId = [input.itemId, input.planId].find(id => typeof id === 'string' && id.length >= 1 && id.length <= 128) ?? null;
+    try { this.transaction(() => this.logCommand(name, key, options, { resourceId, outcome: String(code).slice(0, 128) })); } catch { /* the audit row never masks the refusal */ }
+  }
+  execute(name, input, options = {}) {
     const { idempotencyKey } = options;
     if (!supportedOperations.includes(name)) fail('CapabilityUnavailable', 'Operation is not implemented in this slice', 501);
     // Normalize to actual JSON before hashing/validation; reject non-JSON input.
@@ -181,6 +210,7 @@ export class Coordinator {
       const operation = { contractVersion: '1', operationId, commandId: body.commandId, state: 'succeeded', resourceId: planId, resourceVersion: version, error: null };
       this.db.prepare('INSERT INTO coordination_operation VALUES (?,?,?,?)').run(this.tenant, operationId, this.owner, canonical(operation));
       this.db.prepare('INSERT INTO forge_receipt VALUES (?,?,?,?,?,?,?)').run(this.tenant, namespace, body.commandId, fingerprint, 200, canonical({ operation, definition, origin: body.origin ?? null }), new Date().toISOString());
+      this.logCommand(name, body.commandId, options, { resourceId: planId, operationId, outcome: operation.state });
       this.fault('before-commit');
       return operation;
     });

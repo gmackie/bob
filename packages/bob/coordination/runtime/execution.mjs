@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Coordinator, supportedOperations, validators, outputValidators, canonical, digest, fail } from './coordinator.mjs';
-const executionOperations = ['RequestExecution', 'RetryItem', 'RecordExecutionReceipt'];
+const executionOperations = ['RequestExecution', 'RetryItem', 'CancelItem', 'ReconcileItem', 'RecordExecutionReceipt'];
+// Item states CancelItem accepts. Terminal states and `cancelling` refuse it.
+const cancellableStates = new Set(['pending', 'ready', 'reserved', 'running', 'waiting-input', 'execution-unknown', 'validating', 'review', 'deploying']);
 /** Operations that admit issue scope and therefore need a resolved issue when an
  * issue resolver is configured. */
 export const issueAdmissionOperations = Object.freeze(['CreatePlan', 'UpdatePlan', 'RequestExecution', 'RetryItem']);
@@ -88,8 +90,8 @@ export class ExecutionCoordinator extends Coordinator {
     this.db.prepare('INSERT INTO coordination_operation VALUES (?,?,?,?)').run(this.tenant, operationId, this.owner, canonical(operation));
     return operation;
   }
-  call(name, input, options = {}) {
-    if (!executionOperations.includes(name)) return super.call(name, input, options);
+  execute(name, input, options = {}) {
+    if (!executionOperations.includes(name)) return super.execute(name, input, options);
     let body;
     try { body = JSON.parse(JSON.stringify(input)); } catch { fail('InvalidRequest', 'Input must be JSON', 400); }
     if (!validators.get(name)(body)) fail('InvalidRequest', 'Input does not match the ForgeC schema', 400);
@@ -119,12 +121,80 @@ export class ExecutionCoordinator extends Coordinator {
         const request = { ...JSON.parse(previousAttempt.request), requestId: randomUUID(), attemptId: randomUUID(), planVersion: plan.version };
         this.db.prepare('UPDATE coordination_item SET snapshot=? WHERE tenant=? AND owner=? AND id=?').run(canonical({ ...snapshot, state: 'ready' }), this.tenant, this.owner, itemId);
         value = this.reserve(request, body.commandId);
+      } else if (name === 'CancelItem') {
+        itemId = body.itemId; value = this.cancelItem(body);
+      } else if (name === 'ReconcileItem') {
+        itemId = body.itemId; value = this.reconcileItem(body);
       } else { itemId = body.itemId; this.verifyAdmission(name, body, options); value = this.reserve(body, body.requestId); }
       this.fault('after-execution-state');
       this.db.prepare('INSERT INTO forge_receipt VALUES (?,?,?,?,?,?,?)').run(this.tenant, namespace, key, hash, 200, canonical({ itemId, value }), new Date().toISOString());
+      if (name !== 'RecordExecutionReceipt') this.logCommand(name, key, options, { resourceId: itemId, operationId: value.operationId, outcome: value.state });
       this.fault('before-execution-commit');
       return value;
     });
+  }
+  operation(commandId, state, snapshot) {
+    const operation = { contractVersion: '1', operationId: randomUUID(), commandId, state, resourceId: snapshot.itemId, resourceVersion: snapshot.resourceVersion, error: null };
+    this.db.prepare('INSERT INTO coordination_operation VALUES (?,?,?,?)').run(this.tenant, operation.operationId, this.owner, canonical(operation));
+    return operation;
+  }
+  /** Ends a never-submitted attempt as cancelled, releasing its capacity. */
+  closeCancelled(attempt, reason) {
+    this.db.prepare("UPDATE coordination_attempt SET state='terminal',terminal=?,lease_owner=NULL,lease_until=NULL WHERE tenant=? AND id=?")
+      .run(canonical({ outcome: 'cancelled', reason }), this.tenant, attempt.id);
+    const op = JSON.parse(this.db.prepare('SELECT receipt FROM coordination_operation WHERE tenant=? AND id=?').get(this.tenant, attempt.operation_id).receipt);
+    this.db.prepare('UPDATE coordination_operation SET receipt=? WHERE tenant=? AND id=?').run(canonical({ ...op, state: 'cancelled' }), this.tenant, attempt.operation_id);
+  }
+  /** cancelling → cancelled, and the CancelItem operation that asked for it succeeds.
+   * Milestones already achieved stay true, as on the immediate cancel path. The log is
+   * append-only: completion is a new 'succeeded' row beside the 'accepted' one. */
+  finishCancel(snapshot, extra = {}) {
+    const next = { ...snapshot, ...extra, resourceVersion: snapshot.resourceVersion + 1, state: 'cancelled' };
+    this.storeSnapshot(next, randomUUID());
+    const pending = this.db.prepare(`SELECT a.command_id,a.owner,a.actor,a.operation_id FROM coordination_command_log a WHERE a.tenant=? AND a.owner=? AND a.operation='CancelItem' AND a.resource_id=? AND a.outcome='accepted'
+      AND NOT EXISTS (SELECT 1 FROM coordination_command_log b WHERE b.tenant=a.tenant AND b.command_id=a.command_id AND b.operation='CancelItem' AND b.outcome='succeeded')`).all(this.tenant, this.owner, snapshot.itemId);
+    for (const row of pending) {
+      const op = this.db.prepare('SELECT receipt FROM coordination_operation WHERE tenant=? AND id=?').get(this.tenant, row.operation_id);
+      if (op) this.db.prepare('UPDATE coordination_operation SET receipt=? WHERE tenant=? AND id=?').run(canonical({ ...JSON.parse(op.receipt), state: 'succeeded', resourceVersion: next.resourceVersion }), this.tenant, row.operation_id);
+      this.logCommand('CancelItem', row.command_id, {}, { resourceId: snapshot.itemId, operationId: row.operation_id, outcome: 'succeeded', owner: row.owner, actor: row.actor });
+    }
+    return next;
+  }
+  /** CancelItem. No environment cancellation port exists yet (CancelExecution is
+   * contract-only), so an execution that may already exist is never abandoned:
+   * the item moves to `cancelling` and the worker settles it. A never-submitted
+   * (queued) attempt and items without a live attempt cancel at once. */
+  cancelItem(body) {
+    const { snapshot } = this.item(body.itemId);
+    if (snapshot.resourceVersion !== body.expectedVersion) fail('VersionConflict', 'Item version changed');
+    if (!cancellableStates.has(snapshot.state)) fail('InvalidTransition', 'Item cannot be cancelled in this state');
+    const attempt = snapshot.currentAttemptId ? this.attempt(snapshot.currentAttemptId) : null;
+    if (attempt && attempt.state !== 'terminal' && attempt.state !== 'queued') {
+      const next = { ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state: 'cancelling' };
+      const operation = this.operation(body.commandId, 'accepted', next);
+      next.operationIds = [...snapshot.operationIds.slice(-99), operation.operationId];
+      this.storeSnapshot(next, operation.operationId);
+      return operation;
+    }
+    if (attempt?.state === 'queued') this.closeCancelled(attempt, `CancelItem ${body.commandId}`);
+    // Milestones already achieved stay true; dependents they readied are unaffected.
+    const next = { ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state: 'cancelled' };
+    const operation = this.operation(body.commandId, 'succeeded', next);
+    next.operationIds = [...snapshot.operationIds.slice(-99), operation.operationId];
+    this.storeSnapshot(next, operation.operationId);
+    return operation;
+  }
+  /** ReconcileItem: only for execution-unknown. Reuses the worker's existing
+   * recovery (dispatchOne: FindExecution, then replay of the identical request
+   * if the environment has none) by expiring the unknown attempt's back-off
+   * lease so the next worker tick re-checks it. Item state is unchanged until the
+   * worker learns the outcome, so repeating the command is harmless. */
+  reconcileItem(body) {
+    const { snapshot } = this.item(body.itemId);
+    if (snapshot.state !== 'execution-unknown') fail('InvalidTransition', 'Only execution-unknown items can be reconciled');
+    const attempt = this.attempt(snapshot.currentAttemptId);
+    if (attempt.state === 'unknown') this.db.prepare('UPDATE coordination_attempt SET lease_until=NULL WHERE tenant=? AND id=? AND lease_owner IS NULL').run(this.tenant, attempt.id);
+    return this.operation(body.commandId, 'accepted', snapshot);
   }
   afterPlanWrite(planId) { this.readyDependents(planId); }
   query(name, body) {
@@ -145,7 +215,11 @@ export class ExecutionCoordinator extends Coordinator {
     this.issueEffect(attempt.id, `execution-${receipt.outcome}`, { issue: definition.items.find(item => item.itemId === attempt.item_id).issue, planId: attempt.plan_id, itemId: attempt.item_id, requestId: attempt.request_id, attemptId: attempt.id,
       environmentId: receipt.environmentId, executionId: receipt.executionId, thread: receipt.thread, commitSha: source.commitSha, treeDigest: source.treeDigest, dirty: source.dirty, patchArtifactRef: source.patchArtifactRef ?? null,
       occurredAt: receipt.occurredAt, evidenceRefs: receipt.evidenceRefs, currentAttempt: snapshot.currentAttemptId === attempt.id });
-    if (snapshot.currentAttemptId === attempt.id) {
+    if (snapshot.currentAttemptId === attempt.id && snapshot.state === 'cancelling') {
+      const next = this.finishCancel(snapshot, { evidenceRefs: receipt.evidenceRefs });
+      const op = JSON.parse(this.db.prepare('SELECT receipt FROM coordination_operation WHERE tenant=? AND id=?').get(this.tenant, attempt.operation_id).receipt);
+      this.db.prepare('UPDATE coordination_operation SET receipt=? WHERE tenant=? AND id=?').run(canonical({ ...op, state: receipt.outcome, resourceVersion: next.resourceVersion }), this.tenant, attempt.operation_id);
+    } else if (snapshot.currentAttemptId === attempt.id) {
       const completeAtExecution = definition.items.find(item => item.itemId === attempt.item_id).completionTarget === 'execution';
       const state = receipt.outcome === 'succeeded' ? (completeAtExecution ? 'completed' : 'validating') : receipt.outcome;
       const next = { ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state, achievedMilestones: receipt.outcome === 'succeeded' ? ['execution-succeeded'] : [], evidenceRefs: receipt.evidenceRefs };
@@ -169,6 +243,12 @@ export class ExecutionCoordinator extends Coordinator {
   }
   /** Network work is deliberately outside the SQLite transaction. Expired leases
    * reconcile admission before replaying the exact request, never a new attempt. */
+  /** Whether the worker may take up an attempt: its plan is active, or its item is
+   * cancelling. A cancelling item settles even in a paused plan; that path only
+   * looks the execution up and never submits one, so a paused plan starts no work. */
+  dispatchable(attempt) {
+    return this.plan(attempt.plan_id).state === 'active' || this.item(attempt.item_id).snapshot.state === 'cancelling';
+  }
   async dispatchOne(port, { now = Date.now(), leaseMs = 60000, admit } = {}) {
     if (!Number.isSafeInteger(now) || !Number.isInteger(leaseMs) || leaseMs < 1000 || leaseMs > 300000) fail('InvalidRequest', 'Invalid dispatch lease', 400);
     // Optional admission gate (BOB-76 budget governor): asked only before a
@@ -176,14 +256,14 @@ export class ExecutionCoordinator extends Coordinator {
     // since that execution already holds capacity.
     if (admit) {
       const next = this.db.prepare("SELECT * FROM coordination_attempt WHERE tenant=? AND owner=? AND state IN ('queued','dispatching','unknown') AND (lease_until IS NULL OR lease_until<=?) ORDER BY rowid LIMIT 100")
-        .all(this.tenant, this.owner, now).find(candidate => this.plan(candidate.plan_id).state === 'active');
+        .all(this.tenant, this.owner, now).find(candidate => this.dispatchable(candidate));
       if (next && next.state === 'queued' && !(await admit(JSON.parse(next.request)))) return { dispatched: false, state: 'budget-held' };
     }
     const token = randomUUID();
     const attempt = this.transaction(() => {
       const candidates = this.db.prepare("SELECT * FROM coordination_attempt WHERE tenant=? AND owner=? AND state IN ('queued','dispatching','unknown') AND (lease_until IS NULL OR lease_until<=?) ORDER BY rowid LIMIT 100")
         .all(this.tenant, this.owner, now);
-      const row = candidates.find(candidate => this.plan(candidate.plan_id).state === 'active');
+      const row = candidates.find(candidate => this.dispatchable(candidate));
       if (!row) return null;
       this.item(row.item_id);
       this.db.prepare("UPDATE coordination_attempt SET state='dispatching',lease_owner=?,lease_until=? WHERE tenant=? AND id=?").run(token, now + leaseMs, this.tenant, row.id);
@@ -193,8 +273,18 @@ export class ExecutionCoordinator extends Coordinator {
     const request = JSON.parse(attempt.request);
     let admission;
     try {
-      await port.requireCapabilities(request);
+      const cancelling = this.item(attempt.item_id).snapshot.state === 'cancelling';
+      if (!cancelling) await port.requireCapabilities(request);
       if (attempt.state !== 'queued') admission = await port.find(request);
+      // A cancelled item never starts a new execution: absent one, cancel settles here.
+      if (!admission && cancelling) return this.transaction(() => {
+        const current = this.attempt(attempt.id);
+        if (current.lease_owner !== token || current.state === 'terminal') return { dispatched: false, attemptId: attempt.id, state: 'lease-lost' };
+        this.closeCancelled(current, 'No execution exists for a cancelled item');
+        this.finishCancel(this.item(attempt.item_id).snapshot);
+        this.readyDependents(attempt.plan_id);
+        return { dispatched: false, attemptId: attempt.id, state: 'cancelled' };
+      });
       if (!admission) admission = await port.submit(request);
       if (!validators.get('SubmitExecution')(request) || !outputValidators.get('SubmitExecution')(admission)) fail('TargetMismatch', 'Admission does not match the ForgeC schema');
       if (admission.requestId !== request.requestId || admission.attemptId !== request.attemptId || canonical(admission.target) !== canonical(request.target) || admission.thread.environmentId !== request.target.environmentId || admission.thread.projectId !== request.target.projectId) fail('TargetMismatch', 'Environment admission identity mismatch');
@@ -203,7 +293,7 @@ export class ExecutionCoordinator extends Coordinator {
         const current = this.attempt(attempt.id); if (current.lease_owner !== token || current.state === 'terminal') return;
         this.db.prepare("UPDATE coordination_attempt SET state='unknown',lease_owner=NULL,lease_until=? WHERE tenant=? AND id=?").run(now + leaseMs, this.tenant, attempt.id);
         const { snapshot } = this.item(attempt.item_id);
-        this.storeSnapshot({ ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state: 'execution-unknown' }, randomUUID());
+        this.storeSnapshot({ ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state: snapshot.state === 'cancelling' ? 'cancelling' : 'execution-unknown' }, randomUUID());
       });
       return { dispatched: false, attemptId: attempt.id, state: 'unknown', error: { code: error.code ?? 'EnvironmentUnavailable', message: error.message } };
     }
@@ -212,7 +302,7 @@ export class ExecutionCoordinator extends Coordinator {
       if (current.lease_owner !== token || current.state === 'terminal') return { dispatched: false, attemptId: attempt.id, state: 'lease-lost' };
       this.db.prepare("UPDATE coordination_attempt SET state='admitted',admission=?,lease_owner=NULL,lease_until=NULL WHERE tenant=? AND id=?").run(canonical(admission), this.tenant, attempt.id);
       const { snapshot } = this.item(attempt.item_id);
-      this.storeSnapshot({ ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state: 'running', execution: admission }, randomUUID());
+      this.storeSnapshot({ ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state: snapshot.state === 'cancelling' ? 'cancelling' : 'running', execution: admission }, randomUUID());
       const operation = JSON.parse(this.db.prepare('SELECT receipt FROM coordination_operation WHERE tenant=? AND id=?').get(this.tenant, attempt.operation_id).receipt);
       this.db.prepare('UPDATE coordination_operation SET receipt=? WHERE tenant=? AND id=?').run(canonical({ ...operation, state: 'running' }), this.tenant, attempt.operation_id);
       return { dispatched: true, attemptId: attempt.id, admission };

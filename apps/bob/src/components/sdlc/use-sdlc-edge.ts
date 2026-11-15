@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { emptyView, type EdgeView } from "@bob/sdlc-view";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { emptyView, type CommandInput, type Confirmation, type EdgeView } from "@bob/sdlc-view";
 
-import { createBackoff, createEdgeClient, type EdgeConnection } from "./edge-client";
+import { emptyCommands, type CommandsState } from "./commands-model";
+import { createBackoff, createEdgeClient, type EdgeClient, type EdgeConnection } from "./edge-client";
 
 export type { EdgeConnection } from "./edge-client";
 
@@ -19,9 +20,13 @@ export function edgeSocketUrl(href: string): string {
  * seq and epoch, folds messages through reduce(), and reconnects with capped, jittered backoff.
  * The view survives reconnects, so a resumed socket only needs the deltas it missed.
  */
-export function useSdlcEdge(): { view: EdgeView; connection: EdgeConnection } {
+export type SendCommand = (command: CommandInput, label: string, confirm?: Confirmation) => string | null;
+
+export function useSdlcEdge(): { view: EdgeView; connection: EdgeConnection; commands: CommandsState; send: SendCommand } {
   const [view, setView] = useState<EdgeView>(emptyView);
   const [connection, setConnection] = useState<EdgeConnection>("connecting");
+  const [commands, setCommands] = useState<CommandsState>(emptyCommands);
+  const clientRef = useRef<EdgeClient | null>(null);
 
   useEffect(() => {
     let socket: WebSocket | null = null;
@@ -31,7 +36,9 @@ export function useSdlcEdge(): { view: EdgeView; connection: EdgeConnection } {
     const client = createEdgeClient({
       send: (data) => { if (socket?.readyState === WebSocket.OPEN) socket.send(data); },
       onView: setView,
+      onCommands: setCommands,
     });
+    clientRef.current = client;
 
     const open = () => {
       const current = new WebSocket(edgeSocketUrl(window.location.href));
@@ -52,10 +59,13 @@ export function useSdlcEdge(): { view: EdgeView; connection: EdgeConnection } {
 
     return () => {
       disposed = true;
+      clientRef.current = null;
       clearTimeout(timer);
       socket?.close();
     };
   }, []);
 
-  return { view, connection };
+  const send = useCallback<SendCommand>((command, label, confirm) => clientRef.current?.send(command, label, confirm) ?? null, []);
+
+  return { view, connection, commands, send };
 }

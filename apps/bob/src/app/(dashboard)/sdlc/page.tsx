@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { STATE_PRESENTATION } from "@bob/sdlc-view";
+import { itemCommands, planCommands, STATE_PRESENTATION } from "@bob/sdlc-view";
 
 import { cn } from "@gmacko/core/ui";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
+import { ActionsPanel } from "~/components/sdlc/actions-panel";
+import { itemTarget, planTarget, type ActionContext } from "~/components/sdlc/commands-model";
 import { ItemDetail } from "~/components/sdlc/item-detail";
 import { PlanDag } from "~/components/sdlc/plan-dag";
 import {
@@ -47,7 +49,7 @@ function bannerText(banner: Banner): string {
 }
 
 export default function SdlcPage() {
-  const { view, connection } = useSdlcEdge();
+  const { view, connection, commands, send } = useSdlcEdge();
   const now = useNow(15_000);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -62,6 +64,7 @@ export default function SdlcPage() {
   const banner = bannerFor(view, connection, now);
   const selectedRow = model.selected;
   const plan = model.plan;
+  const actionContext: ActionContext = { connection, banner, hasView: view.epoch !== null, commands };
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-6 py-10">
@@ -70,7 +73,7 @@ export default function SdlcPage() {
       <div>
         <h1 className="font-display text-3xl font-semibold text-foreground">SDLC</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Live item states from the durable coordinator, read-only.
+          Live item states from the durable coordinator. Plan and item actions run through the coordinator as you.
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
           Review and deploy aren&apos;t automated yet: the coordinator doesn&apos;t move items into those states, so items stop at Validating or Completed.
@@ -184,12 +187,43 @@ export default function SdlcPage() {
 
             <div className="space-y-4">
               {selectedRow && (
-                <ItemDetail row={selectedRow} onClose={() => setItemId(null)} onOpenPlan={() => setPlanId(selectedRow.plan.planId)} />
+                <ItemDetail
+                  row={selectedRow}
+                  onClose={() => setItemId(null)}
+                  onOpenPlan={() => setPlanId(selectedRow.plan.planId)}
+                  actions={
+                    <ActionsPanel
+                      label="Item actions"
+                      resourceId={selectedRow.item.itemId}
+                      options={itemCommands(selectedRow.item)}
+                      target={itemTarget(itemTitle(selectedRow), selectedRow.plan.planId)}
+                      context={actionContext}
+                      send={send}
+                    />
+                  }
+                />
               )}
             </div>
           </div>
 
-          {plan && <PlanDag plan={plan} items={view.items} onSelect={setItemId} onClose={() => setPlanId(null)} />}
+          {plan && (
+            <PlanDag
+              plan={plan}
+              items={view.items}
+              onSelect={setItemId}
+              onClose={() => setPlanId(null)}
+              actions={
+                <ActionsPanel
+                  label="Plan actions"
+                  resourceId={plan.planId}
+                  options={planCommands(plan)}
+                  target={planTarget(plan.planId)}
+                  context={actionContext}
+                  send={send}
+                />
+              }
+            />
+          )}
         </>
       )}
     </main>
