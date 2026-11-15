@@ -21,6 +21,7 @@ const approvedMigrations = new Set([
   "0038_budget_telemetry.sql",
   "0039_budget_governor.sql",
   "0040_budget_session_links.sql",
+  "0041_budget_notification_types.sql",
 ]);
 interface MigrationHash {
   filename: string;
@@ -32,7 +33,7 @@ export function validateProductionMigrationLedger(
   ledger: MigrationHash[],
 ): void {
   const applied = new Map(ledger.map((entry) => [entry.filename, entry.hash]));
-  if (files.length !== 49 || files.at(-1)?.filename !== "0040_budget_session_links.sql") {
+  if (files.length !== 50 || files.at(-1)?.filename !== "0041_budget_notification_types.sql") {
     throw new Error(
       "Production migration roster changed; review the deployment migration guard",
     );

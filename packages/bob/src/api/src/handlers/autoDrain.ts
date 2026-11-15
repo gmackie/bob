@@ -31,7 +31,7 @@ import type { AgentHealthVerdict } from "../services/automation/agentHealthRoute
 import { assessAgentHealth, chooseAgent } from "../services/automation/agentHealthRouter.js";
 import { paceDailyBudget } from "../services/health/pacing.js";
 import { ACTIVE_SESSION_STATUSES } from "../services/automation/activeSessions.js";
-import { allocateSurplus } from "@bob/ws";
+import { allocateSurplus, governState } from "@bob/ws";
 import { AGENT_PROVIDER, evaluateBudget, nextBudgetedAgent, recordDecision  } from "../services/budget/state.js";
 import type {BudgetEvaluation} from "../services/budget/state.js";
 
@@ -170,6 +170,15 @@ export async function autoDrainBacklog(
   const legacyBudget = Math.min(freeSlots, remainingToday, pacing.allowance);
   const budget = enforce && budgetEval ? Math.min(freeSlots, budgetEval.verdict.totalSlots) : legacyBudget;
   if (budgetEval) await recordDecision(budgetEval, legacyBudget);
+  if (budgetEval) {
+    const evaluation = budgetEval;
+    await import("../services/budget/alerts.js")
+      .then(async ({ budgetAlerts, sendBudgetAlerts }) => {
+        const { assembled } = governState(evaluation.state, new Date(evaluation.state.at));
+        await sendBudgetAlerts(budgetAlerts(evaluation.state, evaluation.verdict, assembled));
+      })
+      .catch((err: unknown) => console.warn("[auto-drain] budget alerts skipped:", err));
+  }
   // Post finished items' cost to their Kanbanger issues: bounded and
   // best-effort, and placed here so it runs on every tick, not only on ticks
   // that dispatch.
