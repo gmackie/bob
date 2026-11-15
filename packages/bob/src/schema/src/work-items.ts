@@ -128,6 +128,10 @@ export const workItemNotificationType = [
   // is ready to read. Added by migration 0034.
   "daily_plan_ready",
   "daily_review_ready",
+  // Subscription budget (BOB-76): a week about to be wasted, or Bob eating
+  // the interactive reserve. Added by migration 0041.
+  "budget_projected_miss",
+  "budget_reserve_breach",
 ] as const;
 export type WorkItemNotificationType =
   (typeof workItemNotificationType)[number];

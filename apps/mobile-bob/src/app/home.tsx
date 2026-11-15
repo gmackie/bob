@@ -8,6 +8,7 @@ import { buildHomeTriage } from "~/features/home/home-model";
 import type { HomeTone } from "~/features/home/home-model";
 import { buildSessionList } from "~/features/sessions/session-list-model";
 import { buildNodeLights } from "~/features/nodes/node-lights-model";
+import { BudgetGlanceCard } from "~/features/budget/BudgetGlanceCard";
 import { useGateway } from "~/hooks/use-gateway";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { rpc } from "~/utils/api";
@@ -116,6 +117,8 @@ export default function HomeScreen() {
               </Text>
             </Pressable>
           </Card>
+
+          <BudgetGlanceCard />
 
           {workItemsQuery.isLoading ? (
             <ActivityIndicator className="mt-8" />
