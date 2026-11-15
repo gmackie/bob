@@ -83,6 +83,10 @@
       "types": "./dist/api/src/services/integrations/commitPlanningDrafts.d.ts",
       "default": "./src/services/integrations/commitPlanningDrafts.ts"
     },
+    "./services/notifications/sdlcAlerts": {
+      "types": "./dist/api/src/services/notifications/sdlcAlerts.d.ts",
+      "default": "./src/services/notifications/sdlcAlerts.ts"
+    },
     "./services/push/pushService": {
       "types": "./dist/api/src/services/push/pushService.d.ts",
       "default": "./src/services/push/pushService.ts"

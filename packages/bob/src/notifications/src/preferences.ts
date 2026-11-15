@@ -62,6 +62,11 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationDefaults = {
   // Subscription budget (BOB-76): budget about to lapse, or Bob in your reserve.
   budget_projected_miss: { push: true, email: false, in_app: true },
   budget_reserve_breach: { push: true, email: false, in_app: true },
+  // SDLC (BOB-81): an item waiting on your answer, ready for your review, or
+  // failed. Each needs a person, so they push like a blocked agent does.
+  sdlc_waiting_input: { push: true, email: false, in_app: true },
+  sdlc_review: { push: true, email: false, in_app: true },
+  sdlc_failed: { push: true, email: false, in_app: true },
 };
 
 /** Sparse per-type overrides; absent entries fall back to the defaults. */

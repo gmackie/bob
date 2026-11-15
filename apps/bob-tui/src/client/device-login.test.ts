@@ -55,6 +55,18 @@ describe("pollForApiKey", () => {
     expect(c.sleeps).toEqual([5000, 10000, 15000]);
   });
 
+  it("keeps polling through a network error", async () => {
+    const f = fakeFetch([{ body: { status: "complete", apiKey: KEY } }]);
+    let failed = false;
+    const flaky: FetchLike = async (url, init) => {
+      if (!failed) { failed = true; throw new TypeError("fetch failed"); }
+      return f.fetchImpl(url, init);
+    };
+    const c = clock();
+    expect(await pollForApiKey(flaky, "b", code, c)).toBe(KEY);
+    expect(c.sleeps).toEqual([5000, 10000]);
+  });
+
   it("stops on expired, an unknown code, or the deadline", async () => {
     await expect(pollForApiKey(fakeFetch([{ body: { status: "expired" } }]).fetchImpl, "b", code, clock())).rejects.toThrow(/expired/);
     await expect(pollForApiKey(fakeFetch([{ status: 404 }]).fetchImpl, "b", code, clock())).rejects.toThrow(/no longer knows/);

@@ -772,6 +772,9 @@ importers:
       '@bob/notifications':
         specifier: workspace:*
         version: link:../../packages/bob/src/notifications
+      '@bob/sdlc-view':
+        specifier: workspace:*
+        version: link:../../packages/bob/src/sdlc-view
       '@bob/ws':
         specifier: workspace:*
         version: link:../../packages/bob/src/ws

@@ -51,7 +51,7 @@ const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(r
 /**
  * Polls the token endpoint every `interval` seconds until the code is approved (returns
  * the key), expires, or the deadline passes. A 429 (the route is rate limited) or a 5xx
- * slows the poll down by 5 s and keeps going, as RFC 8628's slow_down does; other errors stop.
+ * and network errors slow the poll down by 5 s and keep going, as RFC 8628's slow_down does; other errors stop.
  */
 export async function pollForApiKey(fetchImpl: FetchLike, baseUrl: string, code: DeviceCode, options: PollOptions = {}): Promise<string> {
   const sleep = options.sleep ?? defaultSleep;
@@ -62,7 +62,14 @@ export async function pollForApiKey(fetchImpl: FetchLike, baseUrl: string, code:
     if (options.signal?.aborted) throw new LoginError("Login cancelled.");
     if (now() >= deadline) throw new LoginError("The device code expired before it was approved. Run bob-tui login again.");
     await sleep(interval);
-    const res = await fetchImpl(`${baseUrl}/api/v1/device/token?device_code=${encodeURIComponent(code.deviceCode)}`);
+    let res: Awaited<ReturnType<FetchLike>>;
+    try {
+      res = await fetchImpl(`${baseUrl}/api/v1/device/token?device_code=${encodeURIComponent(code.deviceCode)}`);
+    } catch {
+      // A dropped connection or DNS blip: keep polling (slower) until the deadline.
+      interval += 5_000;
+      continue;
+    }
     if (res.status === 429 || res.status >= 500) { interval += 5_000; continue; }
     if (res.status === 404) throw new LoginError("The server no longer knows this device code. Run bob-tui login again.");
     if (!res.ok) throw new LoginError(`Polling for approval failed: HTTP ${res.status}`);

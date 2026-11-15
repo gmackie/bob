@@ -24,6 +24,7 @@
     "@better-auth/expo": "catalog:",
     "@bob/config": "workspace:*",
     "@bob/notifications": "workspace:*",
+    "@bob/sdlc-view": "workspace:*",
     "@bob/ws": "workspace:*",
     "@expo/metro-runtime": "~55.0.9",
     "@gmacko/bob-client": "workspace:*",

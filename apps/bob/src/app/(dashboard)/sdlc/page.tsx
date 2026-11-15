@@ -18,10 +18,12 @@ import { PlanDag } from "~/components/sdlc/plan-dag";
 import {
   bannerFor,
   drillInto,
+  itemFromParams,
   itemTitle,
   scopeFromParams,
   sdlcHref,
   sdlcPageModel,
+  selectionForItemParam,
   stateFromParams,
   type Banner,
 } from "~/components/sdlc/sdlc-page-model";
@@ -59,8 +61,14 @@ export default function SdlcPage() {
   const scope = useMemo(() => scopeFromParams(searchParams), [searchParams]);
   const state = stateFromParams(searchParams);
   const setState = (next: typeof state) => router.replace(sdlcHref(scope, next), { scroll: false });
-  const [itemId, setItemId] = useState<string | null>(null);
+  // ?item= is where an SDLC push or inbox row points (BOB-81). It seeds the selection and,
+  // when it changes while the page is open (another notification tapped), moves it.
+  const itemParam = itemFromParams(searchParams);
+  const [itemId, setItemId] = useState<string | null>(itemParam);
   const [planId, setPlanId] = useState<string | null>(null);
+  useEffect(() => {
+    setItemId((current) => selectionForItemParam(current, itemParam));
+  }, [itemParam]);
 
   // The selection is looked up within the scope, so drilling elsewhere hides it.
   const model = useMemo(() => sdlcPageModel(view, scope, state, { itemId, planId }), [view, scope, state, itemId, planId]);
