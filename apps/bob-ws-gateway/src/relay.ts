@@ -37,6 +37,8 @@ import type { SessionEventRecord } from "./persistence.js";
 import { pushToUser } from "./push.js";
 import { workspaceOwnerId } from "./auth.js";
 import { ProxyAlertNotifier } from "./proxy-alert-notifier.js";
+import { ingestAccountStates, ingestBudgetUsage, ingestMeterSamples, type BudgetStore } from "./budget-ingest.js";
+import { recordMeterSamples, upsertBobSessions, upsertBudgetAccounts, upsertSessionLinks, upsertUsageBuckets } from "@bob/db";
 import { enqueueTransition } from "./outbox.js";
 import { parsePrUrl } from "./pr-url.js";
 import { orphanReapCutoffs } from "./reap-orphans.js";
@@ -159,6 +161,9 @@ export interface RelayConfig {
   validateDaemonAuth: (token: string, workspaceId: string) => Promise<string | null>;
 }
 
+
+
+const budgetStore: BudgetStore = { recordMeterSamples, upsertBobSessions, upsertBudgetAccounts, upsertSessionLinks, upsertUsageBuckets };
 
 export class Relay {
   private readonly cfg: RelayConfig;
@@ -860,6 +865,14 @@ export class Relay {
           });
         }
         return;
+      // BOB-76 token ledger. Daemon-only: the totals decide how much budget the
+      // governor believes is left, so a browser must not be able to write them.
+      case "budget_usage":
+        if (conn.kind === "daemon" && conn.workspaceId) {
+          await ingestBudgetUsage(db, budgetStore, { workspaceId: conn.workspaceId, hostId: conn.hostId ?? "unknown" }, msg)
+            .catch((error) => console.error("[relay] budget_usage failed:", error instanceof Error ? error.message : error));
+        }
+        return;
       case "ping":
         this.send(conn, { type: "pong", ts: new Date().toISOString() });
         // Daemon pings double as liveness. The runner LEASE is the
@@ -873,6 +886,12 @@ export class Relay {
             // One push to the owner when the proxy stops serving; nothing per
             // heartbeat and nothing on recovery. Never blocks the heartbeat.
             void this.proxyAlerts.observe(conn.workspaceId, msg.hostSnapshot);
+            // BOB-76: keep each distinct subscription meter reading. Never
+            // blocks or fails the heartbeat.
+            void ingestMeterSamples(db, budgetStore, { workspaceId: conn.workspaceId, hostId: conn.hostId ?? "unknown" }, msg.hostSnapshot)
+              .catch((error) => console.error("[relay] budget meter samples failed:", error instanceof Error ? error.message : error));
+            void ingestAccountStates(db, budgetStore, { workspaceId: conn.workspaceId, hostId: conn.hostId ?? "unknown" }, msg.hostSnapshot)
+              .catch((error) => console.error("[relay] budget account states failed:", error instanceof Error ? error.message : error));
           }
           await db
             .update(runnerLeases)

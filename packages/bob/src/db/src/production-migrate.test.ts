@@ -20,6 +20,9 @@ const historical = files.filter(
       "0034_plan_draft_kanbanger_issue.sql",
       "0036_canonical_auth_foreign_keys.sql",
       "0037_mcp_oauth.sql",
+      "0038_budget_telemetry.sql",
+      "0039_budget_governor.sql",
+      "0040_budget_session_links.sql",
     ].includes(entry.filename),
 );
 
@@ -46,7 +49,7 @@ describe("production migration deployment guard", () => {
     ).toThrow("mismatch");
     expect(() =>
       validateProductionMigrationLedger(
-        [...files, { filename: "0038_unreviewed.sql", hash: "new" }],
+        [...files, { filename: "0041_unreviewed.sql", hash: "new" }],
         historical,
       ),
     ).toThrow("roster");

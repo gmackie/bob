@@ -26,3 +26,18 @@ export { createHermesUsageStore } from "./hermes-usage-store.js";
 export type { HermesUsageEvent } from "./hermes-usage-store.js";
 
 export { registerSessionAgentRun } from "./session-agent-run.js";
+
+export {
+  readBudgetPolicy,
+  readBudgetStateRows,
+  readRecentBudgetDecisions,
+  readWorkItemCostRows,
+  recordBudgetDecision,
+  recordMeterSamples,
+  upsertBobSessions,
+  upsertBudgetAccounts,
+  upsertSessionLinks,
+  upsertUsageBuckets,
+  writeBudgetPolicy,
+} from "./budget-store.js";
+export type { BobSessionInput, BudgetAccountInput, BudgetDecisionSummary, BudgetStateRows, MeterAccountInput, SessionLinkInput, UsageBucketInput, WorkItemCostRow } from "./budget-store.js";
