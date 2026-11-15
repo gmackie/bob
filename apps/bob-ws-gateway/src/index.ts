@@ -11,7 +11,9 @@ import {
 
 import { EventPersistence, type SessionEventRecord } from "./persistence.js";
 import { OutboxWorker } from "./outbox.js";
-import { Relay } from "./relay.js";
+import { Relay, budgetStore } from "./relay.js";
+import { createBudgetUsageHandler } from "./budget-http.js";
+import { ingestBudgetUsage } from "./budget-ingest.js";
 import {
   createNudgeHandler,
   createWorkspaceEventHandler,
@@ -175,6 +177,14 @@ const workspaceEventHandler = createWorkspaceEventHandler({
   onEvent: (body) => relay.notifyWorkspaceEvent(body),
 });
 
+// BOB-76: token-ledger totals from the budget collector on the proxy host.
+const budgetUsageHandler = createBudgetUsageHandler({
+  authorize: validateInternalBearer,
+  resolveWorkspaceOwner: workspaceOwnerId,
+  onAudit: auditInternal,
+  ingest: (scope, message) => ingestBudgetUsage(db, budgetStore, scope, message),
+});
+
 initTelemetry({ serviceName: "bob-ws-gateway" });
 
 // HTTP server (handles /health and /internal/nudge)
@@ -201,6 +211,11 @@ const server = createServer(traceHttpRequest(async (req, res) => {
 
   if (req.method === "POST" && req.url === "/internal/nudge") {
     await nudgeHandler(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/internal/budget-usage") {
+    await budgetUsageHandler(req, res);
     return;
   }
 

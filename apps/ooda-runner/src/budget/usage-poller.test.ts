@@ -60,7 +60,9 @@ describe("UsagePoller", () => {
       managementKey: MGMT_KEY,
       bobApiKeys: [BOB_KEY],
       spoolPath: join(dir, "usage-ledger.json"),
-      send: (message) => sent.push(message),
+      send: (message) => {
+        sent.push(message);
+      },
       isConnected: () => connected,
       fetch: proxy.fetch,
       now: () => clock,
@@ -158,7 +160,9 @@ describe("UsagePoller session links", () => {
       managementKey: MGMT_KEY,
       bobApiKeys: [BOB_KEY],
       spoolPath: join(dir, "ledger.json"),
-      send: (m) => sent.push(m),
+      send: (m) => {
+        sent.push(m);
+      },
       isConnected: () => true,
       fetch: proxy.fetch,
       now: () => new Date("2026-11-14T20:30:00Z"),
@@ -195,5 +199,89 @@ describe("UsagePoller runaway guard", () => {
     // Each record weighs 10 input + 5×5 output = 35; two records pass 50.
     expect(flagged).toEqual(["bob-run-1"]);
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("UsagePoller delivery and links-only mode", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "bob-usage-delivery-"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("keeps changes queued when send reports failure and delivers them on the next tick", async () => {
+    const proxy = fakeProxy([record("2026-11-14T20:01:00Z")]);
+    const sent: Array<Record<string, unknown>> = [];
+    let up = false;
+    const poller = new UsagePoller({
+      baseUrl: "http://proxy.test",
+      managementKey: MGMT_KEY,
+      bobApiKeys: [BOB_KEY],
+      spoolPath: join(dir, "ledger.json"),
+      send: async (message) => {
+        if (!up) return false;
+        sent.push(message);
+        return true;
+      },
+      isConnected: () => true,
+      fetch: proxy.fetch,
+      now: () => new Date("2026-11-14T20:30:00Z"),
+    });
+    await poller.tick();
+    expect(sent).toEqual([]);
+    expect(poller.status().sendFailures).toBe(1);
+    up = true;
+    await poller.tick();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ buckets: [{ requests: 1, source: "bob" }] });
+    await poller.tick();
+    expect(sent).toHaveLength(1);
+    expect(poller.status().lastSentAt).toBe("2026-11-14T20:30:00.000Z");
+  });
+
+  it("treats a throwing send as undelivered", async () => {
+    const proxy = fakeProxy([record("2026-11-14T20:01:00Z")]);
+    let calls = 0;
+    const poller = new UsagePoller({
+      baseUrl: "http://proxy.test",
+      managementKey: MGMT_KEY,
+      bobApiKeys: [BOB_KEY],
+      spoolPath: join(dir, "ledger.json"),
+      send: () => {
+        calls += 1;
+        if (calls === 1) throw new Error("socket closed");
+      },
+      isConnected: () => true,
+      fetch: proxy.fetch,
+      now: () => new Date("2026-11-14T20:30:00Z"),
+    });
+    await poller.tick();
+    await poller.tick();
+    expect(calls).toBe(2);
+    expect(poller.status().sendFailures).toBe(1);
+  });
+
+  it("never touches the queue when another process drains it, but still ships session links", async () => {
+    const proxy = fakeProxy([record("2026-11-14T20:01:00Z")]);
+    const sent: Array<Record<string, unknown>> = [];
+    const poller = new UsagePoller({
+      baseUrl: "http://proxy.test",
+      bobApiKeys: [],
+      drainQueue: false,
+      spoolPath: join(dir, "ledger.json"),
+      send: (message) => {
+        sent.push(message);
+      },
+      isConnected: () => true,
+      fetch: proxy.fetch,
+      now: () => new Date("2026-11-14T20:30:00Z"),
+    });
+    poller.start();
+    poller.linkSession("native-1", "bob-run-1");
+    await poller.tick();
+    poller.stop();
+    expect(proxy.calls).toEqual([]);
+    expect(proxy.queue).toHaveLength(1);
+    expect(sent.at(-1)).toMatchObject({ type: "budget_usage", buckets: [], sessions: [], links: [{ nativeSessionId: "native-1", bobSessionId: "bob-run-1" }] });
   });
 });
