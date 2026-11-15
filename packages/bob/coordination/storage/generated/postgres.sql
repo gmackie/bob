@@ -174,6 +174,23 @@ CREATE TABLE coordination_plan (
   PRIMARY KEY ("tenant", "id")
 );
 
+CREATE TABLE coordination_release (
+  "tenant" TEXT COLLATE "C" NOT NULL,
+  "id" TEXT COLLATE "C" NOT NULL,
+  "owner" TEXT COLLATE "C" NOT NULL,
+  "item_id" TEXT COLLATE "C" NOT NULL,
+  "plan_id" TEXT COLLATE "C" NOT NULL,
+  "stage" TEXT COLLATE "C" NOT NULL,
+  "data" TEXT COLLATE "C" NOT NULL,
+  "check_attempts" BIGINT NOT NULL,
+  "next_check_at" BIGINT NOT NULL,
+  "lease_owner" TEXT COLLATE "C",
+  "lease_until" BIGINT,
+  "created_at" TEXT COLLATE "C" NOT NULL,
+  "updated_at" TEXT COLLATE "C" NOT NULL,
+  PRIMARY KEY ("tenant", "id")
+);
+
 CREATE INDEX forge_outbox_pending ON forge_outbox (status, lease_until);
 CREATE UNIQUE INDEX coordination_attempt_uq_requestId ON coordination_attempt ("tenant", "request_id");
 CREATE INDEX coordination_attempt_ix_by_owner_plan_id_state ON coordination_attempt ("tenant", "owner", "plan_id", "state", "id");
@@ -188,3 +205,4 @@ CREATE INDEX coordination_issue_effect_ix_by_owner_status_next_attempt_at ON coo
 CREATE INDEX coordination_item_ix_by_owner_plan_id ON coordination_item ("tenant", "owner", "plan_id", "id");
 CREATE INDEX coordination_operation_ix_by_owner ON coordination_operation ("tenant", "owner", "id");
 CREATE INDEX coordination_plan_ix_by_owner ON coordination_plan ("tenant", "owner", "id");
+CREATE INDEX coordination_release_ix_by_owner_stage_next_check_at ON coordination_release ("tenant", "owner", "stage", "next_check_at", "id");

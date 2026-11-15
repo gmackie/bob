@@ -46,6 +46,19 @@ export enum DeploymentAction {
   Rollback = "rollback"
 }
 export enum OverlapPolicy { Skip = "skip" }
+/// Where a succeeded attempt's change is on its way to production (BOB-82).
+/// awaiting-publish → checks-running → review-ready → merged → deploying →
+/// production-verified; checks-failed and blocked stop the release.
+export enum ReleaseStage {
+  AwaitingPublish = "awaiting-publish"
+  ChecksRunning = "checks-running"
+  ChecksFailed = "checks-failed"
+  ReviewReady = "review-ready"
+  Merged = "merged"
+  Deploying = "deploying"
+  ProductionVerified = "production-verified"
+  Blocked = "blocked"
+}
 
 export shape IssueRef {
   integrationId : OpaqueId
@@ -92,6 +105,9 @@ export shape PlanDefinition {
   items : list<PlanItem> length 1..100
   dependencies : list<Dependency> length <= 500
   concurrencyLimit : integer >= 1 <= 32
+  /// Merge on green CI at the exact head without a confirm (BOB-82). Absent: the
+  /// coordinator's policy default.
+  autoMerge : boolean?
 }
 export shape CreatePlanRequest {
   contractVersion : ContractVersion
@@ -232,6 +248,19 @@ export shape DeploymentRequest {
   stageRef : OpaqueId
   deploymentRef : OpaqueId?
 }
+/// A Forgejo pull request (BOB-82).
+export shape PullRequestRef {
+  repository : RepositoryRef
+  number : integer >= 1
+  url : url?
+}
+/// What the environment pushed for a succeeded run (BOB-82): the branch, its head
+/// and the PR it opened or reused.
+export shape PublishedHead {
+  branch : text length 1..240
+  commitSha : CommitSha
+  pullRequest : PullRequestRef?
+}
 export shape ExecutionReceipt {
   contractVersion : ContractVersion
   eventId : OpaqueId
@@ -244,6 +273,10 @@ export shape ExecutionReceipt {
   thread : ThreadRef
   sourceSnapshot : SourceSnapshot
   evidenceRefs : list<OpaqueId> length <= 100
+  /// Present when the environment published the work (BOB-82).
+  publishedHead : PublishedHead?
+  /// Why nothing was published, e.g. no changes or a push failure.
+  publishSkippedReason : text? length 1..500
 }
 export shape ValidationReceipt {
   contractVersion : ContractVersion
@@ -354,6 +387,22 @@ export shape PendingInput {
   questions : list<PendingQuestion> length 1..20
   createdAt : datetime
 }
+/// The release of the item's current attempt (BOB-82). note explains a blocked or
+/// failed stage. approvedSha and mergeSha are set once approved and merged.
+export shape ReleaseStatus {
+  attemptId : OpaqueId
+  stage : ReleaseStage
+  autoMerge : boolean
+  branch : text? length 1..240
+  headSha : CommitSha?
+  pullRequest : PullRequestRef?
+  approvedSha : CommitSha?
+  mergeSha : CommitSha?
+  appSlug : text? length 1..128
+  deploymentId : OpaqueId?
+  note : text? length 1..500
+  updatedAt : datetime
+}
 export shape ItemSnapshot {
   itemId : OpaqueId
   planId : OpaqueId
@@ -362,6 +411,7 @@ export shape ItemSnapshot {
   currentAttemptId : OpaqueId?
   execution : ExecutionAdmission?
   pendingInput : PendingInput?
+  release : ReleaseStatus?
   achievedMilestones : list<Milestone> length <= 4
   operationIds : list<OpaqueId> length <= 100
   evidenceRefs : list<OpaqueId> length <= 100
