@@ -36,6 +36,9 @@ export const NotificationTypeEnum = Schema.Literals([
   "daily_review_ready",
   "budget_projected_miss",
   "budget_reserve_breach",
+  "sdlc_waiting_input",
+  "sdlc_review",
+  "sdlc_failed",
 ]);
 
 export const PushPlatformEnum = Schema.Literals(["ios", "android", "web"]);

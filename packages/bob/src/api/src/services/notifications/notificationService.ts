@@ -26,6 +26,13 @@ export interface CreateInAppNotificationInput {
   type: WorkItemNotificationType;
   title: string;
   body?: string | null;
+  /**
+   * The push body, when it must differ from the inbox `body`. A push transits
+   * Expo and shows on the lock screen, so a surface whose inbox body carries
+   * free text (an agent's question, say) passes a generic one here. Defaults
+   * to `body`, then `title`.
+   */
+  pushBody?: string | null;
   url?: string | null;
   /**
    * When true (default), also attempt an Expo push to the user's registered
@@ -33,6 +40,11 @@ export interface CreateInAppNotificationInput {
    * defaults to true, matching the column default).
    */
   push?: boolean;
+  /**
+   * Extra push `data`, merged over the defaults. A surface's own routing keys
+   * (SDLC pushes send {type:"sdlc", itemId}) go here; the inbox row keeps `type`.
+   */
+  pushData?: Record<string, unknown>;
 }
 
 async function pushEnabledForUser(db: Db, userId: string): Promise<boolean> {
@@ -72,12 +84,13 @@ export async function createInAppNotification(
         const { sendPushNotification } = await import("../push/pushService.js");
         await sendPushNotification(input.userId, {
           title: input.title,
-          body: input.body ?? input.title,
+          body: input.pushBody ?? input.body ?? input.title,
           data: {
             type: input.type,
             notificationId: notification.id,
             workItemId: input.workItemId ?? undefined,
             url: input.url ?? undefined,
+            ...input.pushData,
           },
           channelId: "tasks",
           priority: "default",

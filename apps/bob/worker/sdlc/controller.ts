@@ -13,6 +13,7 @@ import {
   type Tier,
   type TopologyRepo,
 } from "@bob/sdlc-view";
+import { describeAlert, type SdlcAlertDelivery } from "./alerts";
 import { CommandOutbox, commandHash } from "./outbox";
 import type { SqlPort } from "./sql";
 import { DeltaLog, EdgeStore, type IngestBatch, type IngestResult } from "./store";
@@ -34,6 +35,13 @@ export interface EdgeControllerOptions {
   newEpoch?: () => string;
   /** Tests only: no operation is tier 3 yet, so the typed-confirmation path needs an override. */
   tierOf?: (command: CommandInput) => Tier;
+  /**
+   * SDLC push alerts (BOB-81). Who is told (SDLC_VIEWER_USER_IDS, as it is now), and what
+   * sends the planned deliveries; the DO sends them through Bob's notification service in
+   * ctx.waitUntil, so it must not block. Without `notify`, nothing is planned or rate-counted.
+   */
+  alertRecipients?: () => string[];
+  notify?: (deliveries: SdlcAlertDelivery[]) => void;
 }
 
 /** The exporter polls this often while commands are queued, or for ACTIVE_POLL_WINDOW_MS after one was sent or answered. */
@@ -82,6 +90,8 @@ export class EdgeController {
   private topologyLoad: Promise<void> | null = null;
   readonly outbox: CommandOutbox;
   private readonly tierOf: (command: CommandInput) => Tier;
+  private readonly alertRecipients: () => string[];
+  private readonly notify?: (deliveries: SdlcAlertDelivery[]) => void;
 
   constructor(options: EdgeControllerOptions) {
     this.store = new EdgeStore(options.sql, options.newEpoch);
@@ -92,6 +102,8 @@ export class EdgeController {
     this.outbox = new CommandOutbox(options.sql);
     this.coordinatorSeenAt = this.persistedSeenAt = this.store.coordinatorSeenAt();
     this.tierOf = options.tierOf ?? defaultTierOf;
+    this.alertRecipients = options.alertRecipients ?? (() => []);
+    this.notify = options.notify;
   }
 
   /**
@@ -102,7 +114,8 @@ export class EdgeController {
    */
   ingest(batch: IngestBatch): IngestResult {
     const now = this.now();
-    const { result, message, covered } = this.store.apply(batch, now);
+    const { result, message, covered, alerts } = this.store.apply(batch, now);
+    if (alerts.length > 0) this.sendAlerts(alerts, now);
     if (result.accepted) {
       this.coordinatorSeenAt = Math.max(this.coordinatorSeenAt ?? now, now);
       if (this.persistedSeenAt === null || this.coordinatorSeenAt - this.persistedSeenAt >= SEEN_PERSIST_MS) {
@@ -116,6 +129,21 @@ export class EdgeController {
     for (const finishedResult of finished) this.broadcastResult(finishedResult);
     const active = pending > 0 || this.outbox.answeredSince(now - ACTIVE_POLL_WINDOW_MS);
     return { ...result, commands, ...(active ? { pollMs: FAST_POLL_MS } : {}) };
+  }
+
+  /**
+   * After the state committed: plans per-user deliveries within the push limit and hands
+   * them off. A failure here is logged and never fails the ingest (the state is stored).
+   */
+  private sendAlerts(alerts: Parameters<typeof describeAlert>[0][], now: number) {
+    if (!this.notify) return;
+    try {
+      const contents = alerts.map((alert) => describeAlert(alert, this.store.item(alert.itemId), this.store.plan(alert.planId)));
+      const deliveries = this.store.alerts.plan(contents, this.alertRecipients(), now);
+      if (deliveries.length > 0) this.notify(deliveries);
+    } catch (error) {
+      console.error(JSON.stringify({ event: "sdlc_edge_alert_failed", error: error instanceof Error ? error.message : String(error) }));
+    }
   }
 
   /** Whether the coordinator was heard from within the offline banner's window. */

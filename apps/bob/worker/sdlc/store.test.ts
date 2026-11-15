@@ -41,7 +41,7 @@ describe("EdgeStore.apply", () => {
     const s = store();
     s.apply(batch({ kind: "snapshot", watermark: 4 }), 100);
     const next = s.apply(batch({ fromSequence: 4, watermark: 7 }), 200);
-    expect(next).toEqual({ result: { accepted: true, watermark: 7 }, message: null, covered: false });
+    expect(next).toEqual({ result: { accepted: true, watermark: 7 }, message: null, covered: false, alerts: [] });
     expect(s.meta()).toMatchObject({ watermark: 7, seq: 1 });
   });
   it("answers a covered replay with that batch's watermark and applies nothing", () => {
@@ -50,7 +50,7 @@ describe("EdgeStore.apply", () => {
     s.apply(batch({ fromSequence: 4, watermark: 6, items: [item("a", 3, "running")] }), 200);
     const writes = sql.statements.length;
     const replay = s.apply(batch({ fromSequence: 4, watermark: 5, items: [item("a", 2, "reserved"), item("b", 1)] }), 300);
-    expect(replay).toEqual({ result: { accepted: true, watermark: 5 }, message: null, covered: true }); // the exporter checks result.watermark === batch.watermark
+    expect(replay).toEqual({ result: { accepted: true, watermark: 5 }, message: null, covered: true, alerts: [] }); // the exporter checks result.watermark === batch.watermark
     expect(sql.statements.slice(writes).filter((q) => WRITES.test(q))).toEqual([]);
     expect(s.meta()).toMatchObject({ watermark: 6, seq: 2 });
     expect(s.snapshot(null).items).toEqual([item("a", 3, "running")]);
@@ -77,7 +77,7 @@ describe("EdgeStore.apply", () => {
     const sql = nodeSqlitePort(), s = store(sql);
     s.apply(batch({ kind: "snapshot", watermark: 3 }), 1);
     const writes = sql.statements.length;
-    expect(s.apply(batch({ kind: "heartbeat", watermark: 3 }), 2)).toEqual({ result: { accepted: true, watermark: 3 }, message: null, covered: false });
+    expect(s.apply(batch({ kind: "heartbeat", watermark: 3 }), 2)).toEqual({ result: { accepted: true, watermark: 3 }, message: null, covered: false, alerts: [] });
     expect(sql.statements.slice(writes).filter((q) => WRITES.test(q))).toEqual([]);
   });
   it("rolls back every write when storage fails part way through", () => {

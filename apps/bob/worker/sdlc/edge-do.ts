@@ -1,10 +1,11 @@
 /// <reference types="@cloudflare/workers-types" />
 import { DurableObject } from "cloudflare:workers";
 import { EdgeController } from "./controller";
+import { sendAlertsThroughBob } from "./alert-send";
 import { AttemptEdge, tailResponse } from "./attempt-edge";
 import { attachUser, greet, greetedSockets, handleCommand, ingestResponse, parseCommandMessage, parseHello, parseWatchMessage } from "./edge-sockets";
 import { CI_POLL_MS, fgCiSourceFromEnv, type FgEnv } from "./fg";
-import { SDLC_USER_HEADER } from "./routes";
+import { SDLC_USER_HEADER, viewerList } from "./routes";
 import { durableObjectSql } from "./sql";
 import { fetchBizPulseRepos } from "./topology";
 
@@ -13,6 +14,8 @@ interface SdlcEdgeEnv extends FgEnv {
   BOB_BIZPULSE_API_KEY?: string;
   /** Re-checked on every command: the list can change while a socket is open. */
   SDLC_VIEWER_USER_IDS?: string;
+  /** Bob's Postgres, for SDLC alerts (BOB-81): the same binding the worker's cron uses. */
+  HYPERDRIVE?: { connectionString: string };
 }
 
 /**
@@ -34,6 +37,9 @@ export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
       sockets: () => greetedSockets(ctx.getWebSockets()),
       schedule: (work) => ctx.waitUntil(work),
       loadTopology: apiUrl && apiKey ? () => fetchBizPulseRepos({ apiUrl, apiKey }) : undefined,
+      // SDLC push alerts go to every viewer, sent in the background so ingest never waits on them.
+      alertRecipients: () => viewerList(this.env.SDLC_VIEWER_USER_IDS),
+      notify: (deliveries) => ctx.waitUntil(sendAlertsThroughBob(this.env, deliveries)),
     });
     const store = this.controller.store;
     this.attempt = new AttemptEdge({

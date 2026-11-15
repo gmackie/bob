@@ -50,6 +50,15 @@ describe("planning navigation", () => {
     expect(getNotificationTargetHref({})).toBeNull();
   });
 
+  it("routes SDLC pushes to the Attention item, ahead of any other field", () => {
+    expect(getNotificationTargetHref({ type: "sdlc", itemId: "item-1" })).toBe("/attention/item-1");
+    expect(getNotificationTargetHref({ type: "sdlc", itemId: "a/b?c" })).toBe("/attention"); // not a plain id
+    expect(getNotificationTargetHref({ type: "sdlc" })).toBe("/attention");
+    expect(getNotificationTargetHref({ type: "sdlc", itemId: "i", workItemId: "w" })).toBe("/attention/i");
+    // Other types still route as before.
+    expect(getNotificationTargetHref({ type: "run", itemId: "i", sessionId: "s" })).toBe("/sessions/s");
+  });
+
   it("keeps route identifiers within one encoded path segment", () => {
     expect(getSessionHref("run/one?other=true")).toBe(
       "/sessions/run%2Fone%3Fother%3Dtrue",

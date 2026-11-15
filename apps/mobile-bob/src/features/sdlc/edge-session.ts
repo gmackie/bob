@@ -1,0 +1,284 @@
+// The live session with the SdlcEdge on the phone: one socket at a time, the view folded
+// through reduce(), command statuses routed to the command model, attempt detail (tail,
+// CI) for the one watched item, reconnects with capped jittered backoff, and in-flight
+// commands plus the watch re-sent on every new socket. The socket is injected, so node
+// tests drive it without a network. Ported from the web edge-client and bob-tui session.
+import { emptyView, reduce, stripTerminalControls } from "@bob/sdlc-view";
+import type {CiMessage, ClientCommand, CommandInput, Confirmation, EdgeMessage, EdgeView, TailFrame, WatchMessage} from "@bob/sdlc-view";
+
+import {
+  asCommandStatus,
+  commandsToResend,
+  emptyCommands,
+  reduceCommands
+  
+  
+} from "./commands-model";
+import type {CommandsState, EdgeConnection} from "./commands-model";
+
+export interface HelloMessage { type: "hello"; cursor: number | null; epoch: string | null }
+
+/** Resume from the view's seq and epoch, or ask for a snapshot when there is no view or it needs a resync. */
+export function helloFor(view: EdgeView): HelloMessage {
+  if (view.epoch === null || view.needsResync) return { type: "hello", cursor: null, epoch: null };
+  return { type: "hello", cursor: view.seq, epoch: view.epoch };
+}
+
+/** One already-parsed socket message as an edge message, else null. */
+export function asEdgeMessage(value: unknown): EdgeMessage | null {
+  if (typeof value !== "object" || value === null) return null;
+  const message = value as Partial<EdgeMessage> & Record<string, unknown>;
+  if (message.type === "status") return message as EdgeMessage;
+  if (message.type !== "snapshot" && message.type !== "delta") return null;
+  if (!Number.isSafeInteger(message.seq) || !Array.isArray(message.plans) || !Array.isArray(message.items)) return null;
+  if (message.type === "snapshot" && (typeof message.epoch !== "string" || !Array.isArray(message.topology))) return null;
+  return message as EdgeMessage;
+}
+
+export type AttemptEvent =
+  | { type: "tail"; frame: TailFrame }
+  | CiMessage
+  | { type: "tailUnavailable"; itemId: string; reason: string };
+
+/** Agent- or CI-sourced text for one line of UI: terminal escapes and control characters removed. */
+const clean = (value: unknown): string => (typeof value === "string" ? stripTerminalControls(value) : "");
+
+/**
+ * One already-parsed socket message as attempt detail (tail, ci, tailUnavailable), else null.
+ * Text from the agent or CI (tail lines, statuses, reasons, phase names) is stripped of
+ * terminal controls here, once, the same as the web and TUI surfaces.
+ */
+export function asAttemptMessage(value: unknown): AttemptEvent | null {
+  if (typeof value !== "object" || value === null) return null;
+  const m = value as Record<string, unknown>;
+  if (m.type === "tail") {
+    const f = m.frame as Record<string, unknown> | undefined;
+    if (!f || typeof f.itemId !== "string" || !Array.isArray(f.lines)) return null;
+    const frame = { ...f, lines: f.lines.map(clean), threadStatus: clean(f.threadStatus) } as unknown as TailFrame;
+    return { type: "tail", frame };
+  }
+  if (m.type === "ci") {
+    if (typeof m.itemId !== "string" || typeof m.available !== "boolean") return null;
+    if (m.available) {
+      if (!Array.isArray(m.phases)) return null;
+      const phases = (m.phases as unknown[])
+        .filter((p): p is Record<string, unknown> => typeof p === "object" && p !== null)
+        .map((p) => ({ ...p, name: clean(p.name) }));
+      return { ...m, summary: clean(m.summary), phases } as unknown as AttemptEvent;
+    }
+    return { ...m, reason: clean(m.reason) } as unknown as AttemptEvent;
+  }
+  if (m.type === "tailUnavailable") {
+    return typeof m.itemId === "string" ? { type: "tailUnavailable", itemId: m.itemId, reason: clean(m.reason) } : null;
+  }
+  return null;
+}
+
+export const RECONNECT_BASE_MS = 1_000;
+export const RECONNECT_MAX_MS = 30_000;
+export const RECONNECT_JITTER = 0.2;
+
+/** Capped exponential backoff, 1 s … 30 s, ±20%. */
+export function reconnectDelay(attempt: number, random: () => number = Math.random): number {
+  const base = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** Math.max(0, attempt));
+  return Math.round(base * (1 - RECONNECT_JITTER + 2 * RECONNECT_JITTER * random()));
+}
+
+/** A socket counts as healthy once the edge sent a valid message on it, not when it opens. */
+export function createBackoff(random: () => number = Math.random) {
+  let attempt = 0;
+  return {
+    heard() { attempt = 0; },
+    nextDelay() { return reconnectDelay(attempt++, random); },
+  };
+}
+
+/** Live detail for the watched item. Cleared when the watch moves to another item. */
+export interface AttemptDetail {
+  itemId: string;
+  tail: TailFrame | null;
+  ci: CiMessage | null;
+  /** Why the tail is unavailable, when the edge said so. */
+  tailUnavailable: string | null;
+}
+
+export interface SessionState {
+  view: EdgeView;
+  commands: CommandsState;
+  connection: EdgeConnection;
+  /** Why the session stopped reconnecting (auth), or the last refusal. */
+  error: string | null;
+  attempt: AttemptDetail | null;
+}
+
+export interface SocketHandlers {
+  onOpen(): void;
+  onMessage(data: string): void;
+  onClose(): void;
+  /** The upgrade was refused with an HTTP status, when the platform reports it. */
+  onRejected(status: number): void;
+}
+
+export interface SocketLike { send(data: string): void; close(): void }
+export type OpenSocket = (handlers: SocketHandlers) => SocketLike;
+
+export interface SessionOptions {
+  open: OpenSocket;
+  newId: () => string;
+  random?: () => number;
+  setTimer?: (fn: () => void, ms: number) => unknown;
+  clearTimer?: (handle: unknown) => void;
+}
+
+export interface Session {
+  readonly state: SessionState;
+  start(): void;
+  stop(): void;
+  /**
+   * Reconnect now (app came to the foreground, device woke), skipping any backoff wait. An
+   * open socket is closed and replaced too: after a sleep it may be half dead (no close
+   * event yet), and it must not keep showing a stale view as live.
+   */
+  wake(): void;
+  /** Records and sends a command; while disconnected it is sent on the next socket. Returns the commandId. */
+  send(command: CommandInput, label: string, confirm?: Confirmation): string;
+  /** Watch one item's attempt detail; null stops. Re-sent on every new socket. */
+  watch(itemId: string | null): void;
+  subscribe(listener: (state: SessionState) => void): () => void;
+}
+
+export function createSession(options: SessionOptions): Session {
+  const setTimer = options.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
+  const clearTimer = options.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
+  const backoff = createBackoff(options.random);
+  const listeners = new Set<(s: SessionState) => void>();
+  let state: SessionState = { view: emptyView(), commands: emptyCommands(), connection: "connecting", error: null, attempt: null };
+  let socket: SocketLike | null = null;
+  let isOpen = false;
+  let stopped = true;
+  let timer: unknown;
+  let resyncRequested = false;
+  let watched: string | null = null;
+
+  const set = (patch: Partial<SessionState>) => {
+    state = { ...state, ...patch };
+    for (const l of listeners) l(state);
+  };
+  const write = (message: unknown) => { if (socket && isOpen) socket.send(JSON.stringify(message)); };
+
+  const onAttempt = (event: AttemptEvent) => {
+    const itemId = event.type === "tail" ? event.frame.itemId : event.itemId;
+    if (itemId !== watched) return;
+    const base: AttemptDetail = state.attempt?.itemId === itemId ? state.attempt : { itemId, tail: null, ci: null, tailUnavailable: null };
+    if (event.type === "tail") set({ attempt: { ...base, tail: event.frame, tailUnavailable: null } });
+    else if (event.type === "ci") set({ attempt: { ...base, ci: event } });
+    else set({ attempt: { ...base, tailUnavailable: event.reason } });
+  };
+
+  /** Closes the current socket (its late events are ignored) and cancels a pending reconnect. */
+  const dropSocket = () => {
+    clearTimer(timer);
+    timer = undefined;
+    const s = socket;
+    socket = null;
+    isOpen = false;
+    s?.close();
+  };
+
+  const connect = () => {
+    if (stopped) return;
+    timer = undefined;
+    isOpen = false;
+    let current: SocketLike | null = null;
+    const mine = () => socket === current && current !== null;
+    current = options.open({
+      onOpen() {
+        if (!mine()) return;
+        isOpen = true;
+        resyncRequested = state.view.needsResync;
+        set({ connection: "live", error: null });
+        write(helloFor(state.view));
+        for (const command of commandsToResend(state.commands)) write(command);
+        if (watched) write({ type: "watch", itemId: watched } satisfies WatchMessage);
+      },
+      onMessage(data) {
+        if (!mine()) return;
+        let value: unknown;
+        try { value = JSON.parse(data); } catch { return; }
+        const status = asCommandStatus(value);
+        if (status) { backoff.heard(); set({ commands: reduceCommands(state.commands, status) }); return; }
+        const attempt = asAttemptMessage(value);
+        if (attempt) { backoff.heard(); onAttempt(attempt); return; }
+        const message = asEdgeMessage(value);
+        if (!message) return;
+        backoff.heard();
+        const view = reduce(state.view, message);
+        if (!view.needsResync) resyncRequested = false;
+        else if (!resyncRequested) {
+          resyncRequested = true;
+          write({ type: "hello", cursor: null, epoch: null } satisfies HelloMessage);
+        }
+        set({ view });
+      },
+      onClose() {
+        if (!mine()) return;
+        socket = null;
+        isOpen = false;
+        if (stopped || state.connection === "auth-failed") return;
+        set({ connection: "reconnecting" });
+        timer = setTimer(connect, backoff.nextDelay());
+      },
+      onRejected(status) {
+        if (!mine()) return;
+        if (status === 401 || status === 403) {
+          stopped = true;
+          set({
+            connection: "auth-failed",
+            error: status === 401
+              ? "The SDLC edge did not accept your session (401). Sign in again."
+              : "This account cannot open the SDLC view (403). Ask for it to be added to SDLC_VIEWER_USER_IDS.",
+          });
+        } else set({ error: `The SDLC edge refused the socket: HTTP ${status}` });
+      },
+    });
+    socket = current;
+  };
+
+  return {
+    get state() { return state; },
+    start() {
+      if (!stopped) return;
+      stopped = false;
+      if (state.connection === "auth-failed") set({ connection: "connecting", error: null });
+      connect();
+    },
+    stop() {
+      stopped = true;
+      dropSocket();
+      // No socket, so not live: a later start() reconnects and the banner says so meanwhile.
+      if (state.connection === "live") set({ connection: "reconnecting" });
+    },
+    wake() {
+      if (stopped) return;
+      dropSocket();
+      set({ connection: "reconnecting" });
+      connect();
+    },
+    send(command, label, confirm) {
+      const message = { type: "command", commandId: options.newId(), ...command, ...(confirm ? { confirm } : {}) } as ClientCommand;
+      set({ commands: reduceCommands(state.commands, { type: "sent", command: message, label }) });
+      write(message);
+      return message.commandId;
+    },
+    watch(itemId) {
+      if (itemId === watched) return;
+      watched = itemId;
+      set({ attempt: itemId ? { itemId, tail: null, ci: null, tailUnavailable: null } : null });
+      write({ type: "watch", itemId } satisfies WatchMessage);
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+  };
+}

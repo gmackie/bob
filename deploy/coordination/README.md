@@ -167,6 +167,38 @@ If either file is missing or invalid, the worker logs `step: "edge"`,
 exporter. Edge outages log `outcome: "unavailable"` and back off; they never
 stop dispatch.
 
+### Push alerts (BOB-81)
+
+The SDLC edge (the Bob Cloudflare Worker's `SdlcEdge` Durable Object) pushes an
+alert when an item enters waiting-input (once its prompt is set), review or
+failed, and writes an inbox row for it. Those rows use three new
+`work_item_notification_type` values from migration
+`packages/bob/src/db/drizzle/0042_sdlc_notification_types.sql`.
+
+**Apply migration 0042 to production before deploying the Worker that carries
+BOB-81.** A Worker deployed first fails every alert insert on the unknown enum
+value: ingest is unaffected (alerts are sent in the background), but those
+alerts are lost and still count against the per-user push limit (below). Apply
+it with `pnpm --filter @bob/db migrate:production` (as for BOB-76's 0041),
+then confirm:
+
+```sh
+psql "$DATABASE_URL" -c "SELECT unnest(enum_range(NULL::work_item_notification_type))" | grep sdlc_
+```
+
+All three values (`sdlc_waiting_input`, `sdlc_review`, `sdlc_failed`) must be
+listed before the Worker deploy. The migration only adds enum values, so it is
+safe to apply ahead of the Worker and needs no rollback when the Worker is
+rolled back.
+
+The push body is generic (repository and a call to action, never the agent's
+question or plan internals); the inbox row keeps the question. Each user gets
+at most 10 SDLC pushes per 10 minutes; the slot is recorded when the delivery
+is planned, not when it is sent, so a failed send (database or Expo down)
+still uses its slot until the window passes. Recording after the send would
+let two batches in flight both see free room and overshoot the limit, so the
+limit errs toward fewer pushes; the Attention tab still lists every item.
+
 ### Rollout and rollback order
 
 `--edge` only exists from the BOB-75 release on. Before that release,

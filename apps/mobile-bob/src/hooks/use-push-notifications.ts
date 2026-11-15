@@ -153,6 +153,7 @@ function handleNotificationResponse(
     sessionId?: string;
     url?: string;
     type?: string;
+    itemId?: string;
   };
 
   const targetHref = getNotificationTargetHref(data);

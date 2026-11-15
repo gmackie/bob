@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { AppState } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 
+import { setSdlcEdgeAccount } from "~/features/sdlc/use-sdlc-edge";
 import { hasSeenOnboarding } from "~/lib/storage";
 import { authClient } from "~/utils/auth";
 import { shouldSkipOnboardingForDevAuth } from "~/utils/dev-auth-bypass";
@@ -35,6 +36,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
     errorPresent: error !== null,
     errorStatus: error?.status ?? null,
   });
+
+  // A settled session only: a pending or failed lookup is not a sign-out.
+  const accountId = isPending || error ? undefined : (session?.user.id ?? null);
+  useEffect(() => {
+    if (accountId !== undefined) setSdlcEdgeAccount(accountId);
+  }, [accountId]);
 
   useEffect(() => {
     if (phase !== "recovering") return;

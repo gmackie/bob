@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { emptyView, reduce, rows, type EdgeView, type ItemSnapshot, type PlanSnapshot, type TopologyRepo } from "@bob/sdlc-view";
 import { ItemDetail } from "./item-detail";
 import { PlanDag } from "./plan-dag";
-import { bannerFor, breadcrumbs, drillInto, scopeFromParams, sdlcHref, sdlcPageModel, stateFromParams } from "./sdlc-page-model";
+import { bannerFor, breadcrumbs, drillInto, itemFromParams, scopeFromParams, sdlcHref, sdlcPageModel, selectionForItemParam, stateFromParams } from "./sdlc-page-model";
 
 const repo = (repositoryId: string, integrationId = "forgegraph") => ({ environmentId: "hetzner-bob", projectId: "p", repository: { integrationId, repositoryId } });
 const issue = (id: string) => ({ integrationId: "kanbanger", workspaceId: "gmacko", teamId: "BOB", projectId: "bob", issueId: id, identifier: `BOB-${id}`, url: `https://tasks.gmac.io/BOB-${id}` });
@@ -73,6 +73,16 @@ describe("sdlc page model", () => {
     expect(model.counts).toMatchObject({ running: 1, validating: 1, pending: 1, failed: 1 });
     expect(model.listed.map((r) => r.item.itemId)).toEqual(["b"]);
     expect(model.attention.map((r) => r.item.itemId)).toEqual(["d", "b"]);
+  });
+
+  it("selects the item ?item= names, and follows it when it changes", () => {
+    expect(itemFromParams(params("item=a"))).toBe("a");
+    expect(itemFromParams(params("item="))).toBeNull();
+    expect(itemFromParams(params("state=failed"))).toBeNull();
+    expect(selectionForItemParam(null, "a")).toBe("a");
+    expect(selectionForItemParam("a", "b")).toBe("b"); // a second notification while open
+    expect(selectionForItemParam("c", null)).toBe("c"); // the URL dropped ?item=: keep the page's pick
+    expect(sdlcPageModel(view, {}, null, { itemId: selectionForItemParam("a", itemFromParams(params("item=b"))), planId: null }).selected?.item.itemId).toBe("b");
   });
 
   it("keeps the state filter in the URL, through drill-down and breadcrumbs, ignoring unknown states", () => {

@@ -22,6 +22,8 @@ const approvedMigrations = new Set([
   "0039_budget_governor.sql",
   "0040_budget_session_links.sql",
   "0041_budget_notification_types.sql",
+  // BOB-81: additive ADD VALUE on work_item_notification_type only.
+  "0042_sdlc_notification_types.sql",
 ]);
 interface MigrationHash {
   filename: string;
@@ -33,7 +35,7 @@ export function validateProductionMigrationLedger(
   ledger: MigrationHash[],
 ): void {
   const applied = new Map(ledger.map((entry) => [entry.filename, entry.hash]));
-  if (files.length !== 50 || files.at(-1)?.filename !== "0041_budget_notification_types.sql") {
+  if (files.length !== 51 || files.at(-1)?.filename !== "0042_sdlc_notification_types.sql") {
     throw new Error(
       "Production migration roster changed; review the deployment migration guard",
     );

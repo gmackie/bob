@@ -36,6 +36,20 @@ export function stateFromParams(params: Params): ItemState | null {
   return state && STATE_SET.has(state) ? (state as ItemState) : null;
 }
 
+/** The item ?item= points at (an SDLC push or inbox row, BOB-81), or null when absent or empty. */
+export function itemFromParams(params: Params): string | null {
+  return params?.get("item") || null;
+}
+
+/**
+ * The selection after ?item= changed: a new item from the URL replaces the selection (a
+ * second notification tapped while the page is open); no item in the URL keeps what the
+ * person picked on the page.
+ */
+export function selectionForItemParam(current: string | null, fromUrl: string | null): string | null {
+  return fromUrl ?? current;
+}
+
 export function sdlcHref(scope: Scope, state: ItemState | null = null): string {
   const params = new URLSearchParams();
   if (scope.startupId) params.set("project", scope.startupId);
