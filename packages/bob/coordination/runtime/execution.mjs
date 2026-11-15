@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Coordinator, supportedOperations, validators, outputValidators, pendingInputValidator, canonical, digest, fail } from './coordinator.mjs';
 import { decodeAnswers, t3Answers, inputCommandId } from './input.mjs';
-const executionOperations = ['RequestExecution', 'RetryItem', 'CancelItem', 'ReconcileItem', 'ResolveInput', 'RecordExecutionReceipt'];
+import { openRelease, requestRelease, requestDeployment } from './release.mjs';
+const executionOperations = ['RequestExecution', 'RetryItem', 'CancelItem', 'ReconcileItem', 'ResolveInput', 'RecordExecutionReceipt', 'RequestRelease', 'RequestDeployment'];
 /** The receipt's evidence plus `commit:<sha>` (BOB-80: the edge reads the attempt's commit
  * for CI detail), deduplicated, appended last, within the contract's 100-entry limit. */
 export function evidenceWithCommit(refs, commitSha) {
@@ -93,7 +94,7 @@ export class ExecutionCoordinator extends Coordinator {
     const collision = this.db.prepare('SELECT id FROM coordination_attempt WHERE tenant=? AND (id=? OR request_id=?)').get(this.tenant, request.attemptId, request.requestId);
     if (collision) fail('IdempotencyConflict', 'Attempt or request ID is already admitted');
     const operationId = randomUUID();
-    const next = { ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state: 'reserved', currentAttemptId: request.attemptId, execution: null, achievedMilestones: [], operationIds: [...snapshot.operationIds.slice(-99), operationId], evidenceRefs: [] };
+    const next = { ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state: 'reserved', currentAttemptId: request.attemptId, execution: null, release: null, achievedMilestones: [], operationIds: [...snapshot.operationIds.slice(-99), operationId], evidenceRefs: [] };
     this.db.prepare('INSERT INTO coordination_attempt (tenant,id,owner,plan_id,item_id,request_id,operation_id,request,state,last_sequence) VALUES (?,?,?,?,?,?,?,?,?,?)')
       .run(this.tenant, request.attemptId, this.owner, plan.id, request.itemId, request.requestId, operationId, canonical(request), 'queued', 0);
     this.storeSnapshot(next, operationId);
@@ -139,6 +140,10 @@ export class ExecutionCoordinator extends Coordinator {
         itemId = body.itemId; value = this.reconcileItem(body);
       } else if (name === 'ResolveInput') {
         ({ itemId, value } = this.resolveInput(body, options));
+      } else if (name === 'RequestRelease') {
+        ({ itemId, value } = requestRelease(this, body, options));
+      } else if (name === 'RequestDeployment') {
+        itemId = body.itemId; value = requestDeployment(this, body, options);
       } else { itemId = body.itemId; this.verifyAdmission(name, body, options); value = this.reserve(body, body.requestId); }
       this.fault('after-execution-state');
       this.db.prepare('INSERT INTO forge_receipt VALUES (?,?,?,?,?,?,?)').run(this.tenant, namespace, key, hash, 200, canonical({ itemId, value }), new Date().toISOString());
@@ -343,7 +348,9 @@ export class ExecutionCoordinator extends Coordinator {
     } else if (snapshot.currentAttemptId === attempt.id) {
       const completeAtExecution = definition.items.find(item => item.itemId === attempt.item_id).completionTarget === 'execution';
       const state = receipt.outcome === 'succeeded' ? (completeAtExecution ? 'completed' : 'validating') : receipt.outcome;
-      const next = { ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state, achievedMilestones: receipt.outcome === 'succeeded' ? ['execution-succeeded'] : [], evidenceRefs: evidenceWithCommit(receipt.evidenceRefs, source.commitSha) };
+      // BOB-82: a succeeded attempt that must reach review, merge or production gets a release.
+      const release = receipt.outcome === 'succeeded' && !completeAtExecution ? openRelease(this, { attempt, request, receipt, definition }) : null;
+      const next = { ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state, release, achievedMilestones: receipt.outcome === 'succeeded' ? ['execution-succeeded'] : [], evidenceRefs: evidenceWithCommit(receipt.evidenceRefs, release?.headSha ?? source.commitSha) };
       this.storeSnapshot(next, randomUUID());
       const op = JSON.parse(this.db.prepare('SELECT receipt FROM coordination_operation WHERE tenant=? AND id=?').get(this.tenant, attempt.operation_id).receipt);
       this.db.prepare('UPDATE coordination_operation SET receipt=? WHERE tenant=? AND id=?').run(canonical({ ...op, state: receipt.outcome, resourceVersion: next.resourceVersion }), this.tenant, attempt.operation_id);

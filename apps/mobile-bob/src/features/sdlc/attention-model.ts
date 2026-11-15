@@ -12,12 +12,14 @@ import {
   ITEM_STATES,
   MILESTONE_LABEL,
   planCommands,
+  RELEASE_STAGE_PRESENTATION,
   repoKey,
   rows as toRows,
+  safeHref,
   STATE_PRESENTATION,
   stripTerminalControls,
 } from "@bob/sdlc-view";
-import type {Attention, CommandOption, EdgeView, Group, ItemState, PlanSnapshot, Row, Scope} from "@bob/sdlc-view";
+import type {Attention, CommandOption, EdgeView, Group, ItemState, PlanSnapshot, ReleaseStatus, Row, Scope} from "@bob/sdlc-view";
 
 import type { Banner, EdgeConnection } from "./commands-model";
 
@@ -63,6 +65,25 @@ export interface AttentionEntry {
   projectName: string;
   /** The first pending question, for waiting-input items. */
   question: string | null;
+  /** Why the release needs a human (blocked, CI failed, awaiting merge), else null. */
+  releaseReason: string | null;
+}
+
+/**
+ * The release side of attention (BOB-82). Blocked and checks-failed releases need a human
+ * in any state; a review-ready PR needs one unless it will auto-merge. The row's attention
+ * (itemAttention in @bob/sdlc-view) already ranks them; this says why, in one line.
+ */
+export function releaseReason(item: Row["item"]): string | null {
+  const release = item.release;
+  if (!release) return null;
+  const note = release.note ? stripTerminalControls(release.note) : null;
+  if (release.stage === "blocked") return note ?? "Release blocked";
+  if (release.stage === "checks-failed") return note ?? "CI failed on the head";
+  if (release.stage === "review-ready" && item.state === "review" && !release.autoMerge) {
+    return release.pullRequest ? `PR #${release.pullRequest.number} is ready to merge` : "Ready to merge";
+  }
+  return null;
 }
 
 /** Waiting-for-input first, then the rest of needs_human, failed, stalled; ties by title. */
@@ -82,6 +103,7 @@ export function attentionEntries(view: EdgeView, scope: Scope = {}): AttentionEn
       context: `${row.target.repository.repositoryId} · plan ${shortPlan(row.plan.planId)}`,
       projectName: row.startupName,
       question: firstQuestion(row),
+      releaseReason: releaseReason(row.item),
     }));
 }
 
@@ -225,10 +247,51 @@ export interface ItemDetail {
   hint: string;
   attention: Attention;
   milestones: { key: string; label: string; achieved: boolean }[];
+  release: ReleaseDetail | null;
   thread: { environmentId: string; projectId: string; threadId: string; attemptId: string } | null;
   actions: CommandOption[];
   planActions: CommandOption[];
   planHref: string;
+}
+
+export interface ReleaseDetail {
+  stage: ReleaseStatus["stage"];
+  label: string;
+  hint: string;
+  attention: Attention;
+  /** blocked or checks-failed: show the note as a problem. */
+  alarm: boolean;
+  note: string | null;
+  pullRequest: { number: number; href: string | null } | null;
+  branch: string | null;
+  head: string | null;
+  approved: string | null;
+  merged: string | null;
+  deployment: string | null;
+  autoMerge: boolean;
+}
+
+const short = (sha: string | null | undefined) => (sha ? sha.slice(0, 8) : null);
+
+export function releaseDetail(release: ReleaseStatus | null | undefined): ReleaseDetail | null {
+  if (!release) return null;
+  const p = RELEASE_STAGE_PRESENTATION[release.stage];
+  const deployment = [release.appSlug, release.deploymentId].filter(Boolean).join(" · ");
+  return {
+    stage: release.stage,
+    label: p.label,
+    hint: p.hint,
+    attention: p.attention,
+    alarm: release.stage === "blocked" || release.stage === "checks-failed",
+    note: release.note ? stripTerminalControls(release.note) : null,
+    pullRequest: release.pullRequest ? { number: release.pullRequest.number, href: safeHref(release.pullRequest.url) } : null,
+    branch: release.branch ?? null,
+    head: short(release.headSha),
+    approved: short(release.approvedSha),
+    merged: short(release.mergeSha),
+    deployment: deployment || null,
+    autoMerge: release.autoMerge,
+  };
 }
 
 export function itemDetail(view: EdgeView, itemId: string): ItemDetail | null {
@@ -242,12 +305,14 @@ export function itemDetail(view: EdgeView, itemId: string): ItemDetail | null {
     title: itemTitle(row),
     stateLabel: p.label,
     hint: p.hint,
-    attention: p.attention,
+    attention: row.attention,
     milestones: (Object.keys(MILESTONE_LABEL) as (keyof typeof MILESTONE_LABEL)[]).map((key) => ({ key, label: MILESTONE_LABEL[key], achieved: achieved.has(key) })),
+    release: releaseDetail(row.item.release),
     thread: execution
       ? { environmentId: execution.thread.environmentId, projectId: execution.thread.projectId, threadId: execution.thread.threadId, attemptId: execution.attemptId }
       : null,
-    actions: itemCommands(row.item),
+    // Rollback is tier 3: the confirm sheet asks for the repository to be typed.
+    actions: itemCommands(row.item, row.plan),
     planActions: planCommands(row.plan),
     planHref: browseHref({ project: row.startupId, repo: repoKey(row.target.repository), plan: row.plan.planId }),
   };

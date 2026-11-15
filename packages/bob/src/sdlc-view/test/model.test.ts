@@ -173,12 +173,14 @@ describe("aggregations", () => {
     expect(rows(view).filter((r) => inScope(r, { startupId: "unassigned", repoKey: "forgegraph:other" })).map((r) => r.item.itemId)).toEqual(["c"]);
     expect(rows(view).filter((r) => inScope(r, {}))).toHaveLength(3);
   });
-  it("lists rows that need attention, human first (validating counts as stalled)", () => {
+  it("lists rows that need attention, human first (a blocked release needs a human; plain validating is ok)", () => {
     const mixed = reduce(emptyView(), { type: "snapshot", epoch: "e1", seq: 1, topology, coordinatorSeenAt: 0,
       plans: [plan("p", ["ok", "unknown", "failed", "input", "validating"])],
-      items: [item("ok", "p", "running"), item("unknown", "p", "execution-unknown"), item("failed", "p", "failed"), item("input", "p", "waiting-input"), item("validating", "p", "validating")] });
+      items: [item("ok", "p", "running"), item("unknown", "p", "execution-unknown"), item("failed", "p", "failed"), item("input", "p", "waiting-input"), item("validating", "p", "validating"),
+        { ...item("blocked", "p", "validating"), release: { attemptId: "a", stage: "blocked", autoMerge: false, note: "push failed", updatedAt: "2026-11-15T00:00:00Z" } }] });
+    mixed.plans.p!.definition.items.push({ ...mixed.plans.p!.definition.items[0]!, itemId: "blocked" });
     expect(attentionRows(rows(mixed)).map((r) => [r.item.itemId, r.attention])).toEqual([
-      ["input", "needs_human"], ["failed", "failed"], ["unknown", "stalled"], ["validating", "stalled"],
+      ["input", "needs_human"], ["blocked", "needs_human"], ["failed", "failed"], ["unknown", "stalled"],
     ]);
   });
 });

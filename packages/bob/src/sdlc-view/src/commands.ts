@@ -17,10 +17,14 @@
 import type { ItemSnapshot, PlanSnapshot } from "./model";
 
 /** Coordinator operations the edge may relay. Anything else is refused by the DO and by the exporter. */
-export const RELAYED_OPERATIONS = ["ControlPlan", "RetryItem", "CancelItem", "ReconcileItem", "ResolveInput"] as const;
+export const RELAYED_OPERATIONS = ["ControlPlan", "RetryItem", "CancelItem", "ReconcileItem", "ResolveInput", "RequestRelease", "RequestDeployment"] as const;
 export type RelayedOperation = (typeof RELAYED_OPERATIONS)[number];
 
 export type PlanAction = "start" | "pause" | "resume" | "cancel";
+/** contract.forge ReleaseAction. open-pr is "retry publish". */
+export type ReleaseAction = "open-pr" | "approve" | "merge";
+/** contract.forge DeploymentAction. Surfaces only offer rollback. */
+export type DeploymentAction = "deploy" | "promote" | "rollback";
 
 /** 1 = no confirmation; 2 = confirm; 3 = typed confirmation (type the repo or plan name). */
 export type Tier = 1 | 2 | 3;
@@ -35,7 +39,14 @@ export type CommandInput =
   | { operation: "CancelItem"; input: { itemId: string; expectedVersion: number } }
   | { operation: "ReconcileItem"; input: { itemId: string } }
   /** answer is encodeAnswers(...) — see attempt.ts. Tier 1. */
-  | { operation: "ResolveInput"; input: { itemId: string; attemptId: string; promptId: string; answer: string } };
+  | { operation: "ResolveInput"; input: { itemId: string; attemptId: string; promptId: string; answer: string } }
+  /**
+   * ReleaseRequest is keyed by attemptId; itemId rides along so the edge can check the
+   * attempt names it (the exporter strips it into expectItemId, like ResolveInput).
+   * sourceRevision is the release's headSha: the coordinator refuses a stale head.
+   */
+  | { operation: "RequestRelease"; input: { itemId: string; attemptId: string; action: ReleaseAction; sourceRevision: string; pullRequestRef?: string } }
+  | { operation: "RequestDeployment"; input: { itemId: string; action: DeploymentAction; artifactRef: string; stageRef: string; deploymentRef?: string } };
 
 export function tierOf(command: CommandInput): Tier {
   switch (command.operation) {
@@ -46,7 +57,10 @@ export function tierOf(command: CommandInput): Tier {
       return 1;
     case "RetryItem":
     case "CancelItem":
+    case "RequestRelease":
       return 2;
+    case "RequestDeployment":
+      return 3;
   }
 }
 
@@ -125,12 +139,26 @@ export function planCommands(plan: PlanSnapshot): CommandOption[] {
   }
 }
 
-const RETRYABLE: ReadonlySet<string> = new Set(["failed", "execution-unknown"]);
+// Mirrors execution.mjs RetryItem: only failed and cancelled items retry
+// (an execution-unknown item is reconciled instead).
+const RETRYABLE: ReadonlySet<string> = new Set(["failed", "cancelled"]);
+const SHA = /^[a-f0-9]{40}$/;
+/** The newest `commit:<sha>` evidence ref, when the release has no headSha yet. */
+const evidenceSha = (item: ItemSnapshot): string | undefined => {
+  for (const ref of [...item.evidenceRefs].reverse()) if (ref.startsWith("commit:") && SHA.test(ref.slice(7))) return ref.slice(7);
+  return undefined;
+};
 // Mirrors cancellableStates in packages/bob/coordination/runtime/execution.mjs.
 const CANCELLABLE: ReadonlySet<string> = new Set(["pending", "ready", "reserved", "running", "waiting-input", "validating", "review", "deploying", "execution-unknown"]);
 
-/** Item-level actions. Retry needs the previous attempt id from the item's execution admission. */
-export function itemCommands(item: ItemSnapshot): CommandOption[] {
+/**
+ * Item-level actions. Retry needs the previous attempt id from the item's execution admission.
+ * Release actions follow item.release (BOB-82): Merge/Approve on a review-ready review (at the
+ * release head), Retry publish on a blocked or awaiting-publish release, Rollback (tier 3, type
+ * the repository) once a deployment exists. `plan` resolves the repository when the item has
+ * no execution target, the same way the edge does.
+ */
+export function itemCommands(item: ItemSnapshot, plan?: PlanSnapshot): CommandOption[] {
   const out: CommandOption[] = [];
   const attemptId = (item as { execution?: { attemptId?: string } }).execution?.attemptId;
   if (item.state === "execution-unknown") {
@@ -140,6 +168,28 @@ export function itemCommands(item: ItemSnapshot): CommandOption[] {
   if (RETRYABLE.has(item.state) && attemptId) {
     const command: CommandInput = { operation: "RetryItem", input: { itemId: item.itemId, expectedVersion: item.resourceVersion, previousAttemptId: attemptId, reason: "Retried from Bob" } };
     out.push({ label: "Retry", tier: tierOf(command), command });
+  }
+  const release = item.release;
+  if (release) {
+    const pullRequestRef = release.pullRequest ? String(release.pullRequest.number) : undefined;
+    const releaseOption = (action: ReleaseAction, label: string, sourceRevision: string): CommandOption => {
+      const command: CommandInput = { operation: "RequestRelease", input: { itemId: item.itemId, attemptId: release.attemptId, action, sourceRevision, ...(pullRequestRef ? { pullRequestRef } : {}) } };
+      return { label, tier: tierOf(command), command };
+    };
+    if (item.state === "review" && release.stage === "review-ready" && release.headSha) {
+      out.push(releaseOption("merge", release.autoMerge ? "Merge now" : "Merge", release.headSha));
+      out.push(releaseOption("approve", "Approve", release.headSha));
+    }
+    if (release.stage === "blocked" || release.stage === "awaiting-publish") {
+      const sha = release.headSha ?? evidenceSha(item);
+      if (sha) out.push(releaseOption("open-pr", "Retry publish", sha));
+    }
+    if (release.deploymentId && (release.stage === "deploying" || release.stage === "production-verified")) {
+      const command: CommandInput = { operation: "RequestDeployment", input: { itemId: item.itemId, action: "rollback", artifactRef: release.deploymentId, stageRef: "production", deploymentRef: release.deploymentId } };
+      const repository = item.execution?.target.repository.repositoryId
+        ?? plan?.definition.items.find((d) => d.itemId === item.itemId)?.target.repository.repositoryId;
+      out.push({ label: "Roll back", tier: tierOf(command), command, destructive: true, ...(repository ? { expected: repository } : {}) });
+    }
   }
   if (CANCELLABLE.has(item.state)) {
     const command: CommandInput = { operation: "CancelItem", input: { itemId: item.itemId, expectedVersion: item.resourceVersion } };
@@ -151,6 +201,9 @@ export function itemCommands(item: ItemSnapshot): CommandOption[] {
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const isId = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 200;
 const isVersion = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 1;
+const isSha = (v: unknown): v is string => typeof v === "string" && SHA.test(v);
+const RELEASE_ACTIONS: ReadonlySet<string> = new Set<ReleaseAction>(["open-pr", "approve", "merge"]);
+const DEPLOYMENT_ACTIONS: ReadonlySet<string> = new Set<DeploymentAction>(["deploy", "promote", "rollback"]);
 
 /** Validates an untrusted operation + input pair. Returns null when it is not a relayable command. */
 export function parseCommandInput(operation: unknown, input: unknown): CommandInput | null {
@@ -169,6 +222,14 @@ export function parseCommandInput(operation: unknown, input: unknown): CommandIn
     case "ResolveInput":
       return isId(input.itemId) && isId(input.attemptId) && isId(input.promptId) && typeof input.answer === "string" && input.answer.length >= 1 && input.answer.length <= 16000
         ? { operation, input: { itemId: input.itemId, attemptId: input.attemptId, promptId: input.promptId, answer: input.answer } } : null;
+    case "RequestRelease":
+      if (!isId(input.itemId) || !isId(input.attemptId) || !RELEASE_ACTIONS.has(input.action as string) || !isSha(input.sourceRevision)) return null;
+      if (input.pullRequestRef !== undefined && !isId(input.pullRequestRef)) return null;
+      return { operation, input: { itemId: input.itemId, attemptId: input.attemptId, action: input.action as ReleaseAction, sourceRevision: input.sourceRevision, ...(input.pullRequestRef !== undefined ? { pullRequestRef: input.pullRequestRef } : {}) } };
+    case "RequestDeployment":
+      if (!isId(input.itemId) || !DEPLOYMENT_ACTIONS.has(input.action as string) || !isId(input.artifactRef) || !isId(input.stageRef)) return null;
+      if (input.deploymentRef !== undefined && !isId(input.deploymentRef)) return null;
+      return { operation, input: { itemId: input.itemId, action: input.action as DeploymentAction, artifactRef: input.artifactRef, stageRef: input.stageRef, ...(input.deploymentRef !== undefined ? { deploymentRef: input.deploymentRef } : {}) } };
     default:
       return null;
   }

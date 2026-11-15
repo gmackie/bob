@@ -113,3 +113,24 @@ export resource CoordinationInputDelivery @tenant {
   unique attemptId, promptId
   list by owner, status, nextAttemptAt
 }
+
+/// Releases of succeeded attempts (BOB-82). id is the attemptId. The worker's
+/// release driver carries each row from publish to production under a lease and
+/// polls Forgejo and ForgeGraph at nextCheckAt. stage mirrors ReleaseStatus.stage;
+/// data holds the ReleaseStatus plus a pending RequestRelease/RequestDeployment
+/// command, if any. Never a public API.
+export resource CoordinationRelease @tenant {
+  id : id
+  owner : text length 1..128
+  itemId : text length 1..128
+  planId : text length 1..128
+  stage : text length 1..32
+  data : json
+  checkAttempts : integer >= 0
+  nextCheckAt : integer >= 0
+  leaseOwner : text? length 1..128
+  leaseUntil : integer?
+  createdAt : datetime
+  updatedAt : datetime
+  list by owner, stage, nextCheckAt
+}

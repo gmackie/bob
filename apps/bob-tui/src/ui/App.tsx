@@ -81,7 +81,7 @@ export function App({ session, host, now = Date.now, tickMs = 1000, columns, row
 
   const center = (
     <CenterPane view={view} focus={focus} commands={commands} attempt={state.attempt} maxTail={maxTail}
-      planOptions={sel.plan ? planCommands(sel.plan) : []} itemOptions={sel.item ? itemCommands(sel.item) : []} />
+      planOptions={sel.plan ? planCommands(sel.plan) : []} itemOptions={sel.item ? itemCommands(sel.item, sel.plan ?? undefined) : []} />
   );
   const tree = <TreePane crumbs={breadcrumb(view, ui.path)} nodes={nodes} index={index} width={treeWidth} height={listHeight} />;
 

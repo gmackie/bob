@@ -133,7 +133,7 @@ describe("which actions appear", () => {
     expect(labels(itemCommands(item("running")))).toEqual(["Cancel item"]);
     expect(labels(itemCommands(item("failed", "att-1")))).toEqual(["Retry"]);
     expect(labels(itemCommands(item("failed")))).toEqual([]); // retry needs an attempt
-    expect(labels(itemCommands(item("execution-unknown", "att-1")))).toEqual(["Reconcile", "Retry", "Cancel item"]);
+    expect(labels(itemCommands(item("execution-unknown", "att-1")))).toEqual(["Reconcile", "Cancel item"]); // reconciled, never retried
     expect(itemCommands(item("completed"))).toEqual([]);
   });
 });
@@ -170,6 +170,10 @@ describe("availability", () => {
   const options = planCommands(plan("active"));
   it("enables everything when live, connected and the coordinator is online", () => {
     expect(actionButtons(options, live()).map((b) => [b.key, b.disabled])).toEqual([["ControlPlan:pause", false], ["ControlPlan:cancel", false]]);
+  });
+  it("keys release actions by action, so Merge and Approve are distinct buttons", () => {
+    const review: ItemSnapshot = { ...item("review", "att-1"), release: { attemptId: "att-1", stage: "review-ready", autoMerge: false, headSha: "a".repeat(40), updatedAt: "2026-11-15T00:00:00Z" } };
+    expect(actionButtons(itemCommands(review), live()).map((b) => b.key)).toEqual(["RequestRelease:merge", "RequestRelease:approve", "CancelItem"]);
   });
   it("disables all actions with a reason when offline, disconnected or without a view", () => {
     const offline = actionButtons(options, { ...live(), banner: { kind: "coordinator-offline", since: 1 } });

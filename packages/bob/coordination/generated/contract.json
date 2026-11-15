@@ -1230,6 +1230,13 @@
                         "minimum": 1,
                         "maximum": 32,
                         "x-forge-type": "integer"
+                      },
+                      "autoMerge": {
+                        "type": [
+                          "boolean",
+                          "null"
+                        ],
+                        "description": "Merge on green CI at the exact head without a confirm (BOB-82). Absent: the\ncoordinator's policy default."
                       }
                     },
                     "required": [
@@ -1247,7 +1254,7 @@
                   "plan"
                 ]
               },
-              "fingerprint": "sha256:7a5acd3d6f15a9d1e54a2881c48a294a058eed05976c40bcee78b87d5195e53e"
+              "fingerprint": "sha256:cc01afb42f1a2f97bbfa5497127df04a7a89dc50022a559872cbf77389a706e6"
             }
           }
         ]
@@ -1434,7 +1441,7 @@
           ]
         }
       ],
-      "fingerprint": "sha256:6577148c4ff84d068102684972f34af06f2b8f4968d3e4bf41137aeefdd0afa0"
+      "fingerprint": "sha256:fd49f94e5d1153ee1d34083045b5136a98f3f323c06d575e67a3e0a446c95b55"
     },
     {
       "id": "bob.functions.FindExecution",
@@ -2354,6 +2361,159 @@
                           ],
                           "additionalProperties": false
                         },
+                        "release": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "attemptId": {
+                              "type": "string",
+                              "x-forge-type": "text",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "stage": {
+                              "type": "string",
+                              "enum": [
+                                "awaiting-publish",
+                                "checks-running",
+                                "checks-failed",
+                                "review-ready",
+                                "merged",
+                                "deploying",
+                                "production-verified",
+                                "blocked"
+                              ],
+                              "x-forge-enum": "@bob/coordination/_/ReleaseStage"
+                            },
+                            "autoMerge": {
+                              "type": "boolean"
+                            },
+                            "branch": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "x-forge-type": "text",
+                              "minLength": 1,
+                              "maxLength": 240
+                            },
+                            "headSha": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "x-forge-type": "text",
+                              "pattern": "^[a-f0-9]{40}$"
+                            },
+                            "pullRequest": {
+                              "type": [
+                                "object",
+                                "null"
+                              ],
+                              "properties": {
+                                "repository": {
+                                  "type": "object",
+                                  "properties": {
+                                    "integrationId": {
+                                      "type": "string",
+                                      "x-forge-type": "text",
+                                      "minLength": 1,
+                                      "maxLength": 128
+                                    },
+                                    "repositoryId": {
+                                      "type": "string",
+                                      "x-forge-type": "text",
+                                      "minLength": 1,
+                                      "maxLength": 128
+                                    }
+                                  },
+                                  "required": [
+                                    "integrationId",
+                                    "repositoryId"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "number": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991,
+                                  "x-forge-type": "integer"
+                                },
+                                "url": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "format": "uri",
+                                  "x-forge-type": "url"
+                                }
+                              },
+                              "required": [
+                                "repository",
+                                "number"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "approvedSha": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "x-forge-type": "text",
+                              "pattern": "^[a-f0-9]{40}$"
+                            },
+                            "mergeSha": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "x-forge-type": "text",
+                              "pattern": "^[a-f0-9]{40}$"
+                            },
+                            "appSlug": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "x-forge-type": "text",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "deploymentId": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "x-forge-type": "text",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "note": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "x-forge-type": "text",
+                              "minLength": 1,
+                              "maxLength": 500
+                            },
+                            "updatedAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "x-forge-type": "datetime",
+                              "x-forge-precision": "ms"
+                            }
+                          },
+                          "required": [
+                            "attemptId",
+                            "stage",
+                            "autoMerge",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        },
                         "achievedMilestones": {
                           "type": "array",
                           "items": {
@@ -2420,7 +2580,7 @@
                   ],
                   "additionalProperties": false
                 },
-                "fingerprint": "sha256:083813526edf282b85b9758854a5885f367fab3d0730cad2aeb0125089e26cd8"
+                "fingerprint": "sha256:6cdd26c40976e9611f76281920ad0fd0c896c85e3e45014fafd97ae0181d051f"
               }
             }
           ]
@@ -2512,7 +2672,7 @@
           ]
         }
       ],
-      "fingerprint": "sha256:a68c7c8b629d37c48cb496e3c4cf85484b277477132eaf42730ccb29e497e2d0"
+      "fingerprint": "sha256:6d31ee09f11fd6830ae37868903dafd280722cba1ec7f58788b978ba8b693197"
     },
     {
       "id": "bob.functions.GetOperation",
@@ -3091,6 +3251,13 @@
                           "minimum": 1,
                           "maximum": 32,
                           "x-forge-type": "integer"
+                        },
+                        "autoMerge": {
+                          "type": [
+                            "boolean",
+                            "null"
+                          ],
+                          "description": "Merge on green CI at the exact head without a confirm (BOB-82). Absent: the\ncoordinator's policy default."
                         }
                       },
                       "required": [
@@ -3193,7 +3360,7 @@
                   ],
                   "additionalProperties": false
                 },
-                "fingerprint": "sha256:7404537f0911eb707fc44fd2505dd939be633b6d0b7cd80f5a32e06c23d59f13"
+                "fingerprint": "sha256:b117b0cefdcda1147e61b2a3278c2e431a98d3708045ad0b0cc59b3483a354d6"
               }
             }
           ]
@@ -3285,7 +3452,7 @@
           ]
         }
       ],
-      "fingerprint": "sha256:823756f19444531435a3293965b9cf3c4cf06f287da581445bd8bef485cfaa61"
+      "fingerprint": "sha256:9fffe8daa523edd436b514a3aa8da0c250d3c5522c5f9b21e43b7f6b1db53ba3"
     },
     {
       "id": "bob.functions.ListPlans",
@@ -4309,6 +4476,90 @@
                     "uniqueItems": false,
                     "x-forge-collection": "list",
                     "maxItems": 100
+                  },
+                  "publishedHead": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "branch": {
+                        "type": "string",
+                        "x-forge-type": "text",
+                        "minLength": 1,
+                        "maxLength": 240
+                      },
+                      "commitSha": {
+                        "type": "string",
+                        "x-forge-type": "text",
+                        "pattern": "^[a-f0-9]{40}$"
+                      },
+                      "pullRequest": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "repository": {
+                            "type": "object",
+                            "properties": {
+                              "integrationId": {
+                                "type": "string",
+                                "x-forge-type": "text",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              "repositoryId": {
+                                "type": "string",
+                                "x-forge-type": "text",
+                                "minLength": 1,
+                                "maxLength": 128
+                              }
+                            },
+                            "required": [
+                              "integrationId",
+                              "repositoryId"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "number": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991,
+                            "x-forge-type": "integer"
+                          },
+                          "url": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "uri",
+                            "x-forge-type": "url"
+                          }
+                        },
+                        "required": [
+                          "repository",
+                          "number"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "branch",
+                      "commitSha"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Present when the environment published the work (BOB-82)."
+                  },
+                  "publishSkippedReason": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "x-forge-type": "text",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "description": "Why nothing was published, e.g. no changes or a push failure."
                   }
                 },
                 "additionalProperties": false,
@@ -4326,7 +4577,7 @@
                   "evidenceRefs"
                 ]
               },
-              "fingerprint": "sha256:8ae764384e580cafb60a1d60d6befd336eaa7dcd2f6b34b6f12236cff4f202d6"
+              "fingerprint": "sha256:31d2ed3d546581ff889580b6f96a1fcf22d8c6217f9d46c9cac7e24f267b92ec"
             }
           }
         ]
@@ -4458,7 +4709,7 @@
           ]
         }
       ],
-      "fingerprint": "sha256:006e604b76beac11c40535710264f8d2d2e322b1c71da287fbd193dac01725bc"
+      "fingerprint": "sha256:28e602cee3ad1ebfc6ea4e66e7b564a24e244b102bb68d5166da714742de3684"
     },
     {
       "id": "bob.functions.RecordProductionEvidence",
@@ -8194,6 +8445,13 @@
                         "minimum": 1,
                         "maximum": 32,
                         "x-forge-type": "integer"
+                      },
+                      "autoMerge": {
+                        "type": [
+                          "boolean",
+                          "null"
+                        ],
+                        "description": "Merge on green CI at the exact head without a confirm (BOB-82). Absent: the\ncoordinator's policy default."
                       }
                     },
                     "required": [
@@ -8213,7 +8471,7 @@
                   "plan"
                 ]
               },
-              "fingerprint": "sha256:9541fcccce8264a85ce91a4b809a7279469ff365d8cb093ecbbd97e29232775d"
+              "fingerprint": "sha256:cf3a520b54ef49968ae374ca48b313d87c80d31cbdcb104917066c17153fd712"
             }
           }
         ]
@@ -8400,7 +8658,7 @@
           ]
         }
       ],
-      "fingerprint": "sha256:b4b7b477101cc16576f2d8b88f3ae237e265d0809c89568c58f5d276f1583f2f"
+      "fingerprint": "sha256:e5454322bc59d41db2924ecbfb34d7ed61a2da05b8d4a7707eb1c436206bde98"
     }
   ],
   "components": {
@@ -8504,7 +8762,7 @@
       "bearerFormat": "JWT"
     }
   },
-  "fingerprint": "sha256:e966556b4bb51130f08551d88ed810d9e9da34bcdb0706bc2c65a132ba4bf329",
+  "fingerprint": "sha256:8444d11c178348e2134cc2ed51da01d8fd231bb7f8f0b007b30f6d1d79ac3458",
   "generator": {
     "name": "forgec",
     "version": "0.5.0"

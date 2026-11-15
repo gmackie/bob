@@ -4,29 +4,35 @@ exports[`App frames > fleet: projects, header counts and the inbox 1`] = `
 " Bob SDLC · bob.blder.bot · ● live · coordinator online · 3 plans · 6 items · 4 need attention
 ╭────────────────────────────────╮╭──────────────────────────────────────────────────────────╮╭──────────────────────────────────╮
 │ Fleet                          ││ Bob                                                      ││ Inbox 4 · i to jump              │
-│ › Bob 5 !3                     ││ 2 plans · enter to open                                  ││ ? FORGE-12 Waiting for input · … │
-│   ForgeGraph 2 !1              ││ Pending           1                                      ││ ✗ BOB-72 Failed · gmackie/bob    │
-│                                ││ Execution unknown 1                                      ││ ~ BOB-71 Validating · gmackie/b… │
+│ › Bob 5 !3                     ││ 2 plans · enter to open                                  ││ ? BOB-71 Validating · gmackie/b… │
+│   ForgeGraph 2 !1              ││ Pending           1                                      ││ ? FORGE-12 Waiting for input · … │
+│                                ││ Execution unknown 1                                      ││ ✗ BOB-72 Failed · gmackie/bob    │
 │                                ││ Validating        1                                      ││ ~ BOB-73 Execution unknown · gm… │
 │                                ││ Failed            1                                      ││                                  │
 ╰────────────────────────────────╯╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
- ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
+ ↑↓ move · enter/esc drill · : commands · p pause · c cancel · r retry · a answer · m/o/R release · i inbox · ? help · q quit"
 `;
 
 exports[`App frames > item level: state, milestones, thread and evidence 1`] = `
 " Bob SDLC · bob.blder.bot · ● live · coordinator online · 3 plans · 6 items · 4 need attention
 ╭────────────────────────────────╮╭──────────────────────────────────────────────────────────╮╭──────────────────────────────────╮
 │ Fleet › Bob › gmackie/bob › p… ││ BOB-71 in plan a1c7e5f0 · gmackie/bob                    ││ Inbox 4 · i to jump              │
-│ › BOB-71 Validating            ││ https://tasks.gmac.io/issue/BOB-71                       ││ ? FORGE-12 Waiting for input · … │
-│   BOB-72 Failed                ││ State Validating · validation not yet automated · owner  ││ ✗ BOB-72 Failed · gmackie/bob    │
-│   BOB-73 Execution unknown     ││ system · v5                                              ││ ~ BOB-71 Validating · gmackie/b… │
+│ › BOB-71 Validating            ││ https://tasks.gmac.io/issue/BOB-71                       ││ ? BOB-71 Validating · gmackie/b… │
+│   BOB-72 Failed                ││ State Validating · publishing the branch and running CI  ││ ? FORGE-12 Waiting for input · … │
+│   BOB-73 Execution unknown     ││ · owner system · v5                                      ││ ✗ BOB-72 Failed · gmackie/bob    │
 │   BOB-74 Pending               ││ Milestones ✓ exec ✓  · review-ready  · merged  ·         ││ ~ BOB-73 Execution unknown · gm… │
 │                                ││ prod-verified                                            ││                                  │
 │                                ││ Evidence                                                 ││                                  │
 │                                ││   https://git.forgegraf.com/gmackie/bob/pulls/292        ││                                  │
 │                                ││   ci:run/8812                                            ││                                  │
 │                                ││                                                          ││                                  │
-│                                ││ [c] Cancel item (tier 2)                                 ││                                  │
+│                                ││ Release Blocked · the release needs attention · auto-me… ││                                  │
+│                                ││   PR #292 https://git.forgegraf.com/gmackie/bob/pulls/2… ││                                  │
+│                                ││   branch bob/BOB-71                                      ││                                  │
+│                                ││   head 9f3c1d2e                                          ││                                  │
+│                                ││   ! push rejected: the branch is protected               ││                                  │
+│                                ││                                                          ││                                  │
+│                                ││ [o] Retry publish (tier 2)  [c] Cancel item (tier 2)     ││                                  │
 │                                ││                                                          ││                                  │
 │                                ││ Attempt att-a1                                           ││                                  │
 │                                ││ Thread t3:thr-71 (env env-hetzner-bob, project proj-1)   ││                                  │
@@ -35,7 +41,7 @@ exports[`App frames > item level: state, milestones, thread and evidence 1`] = `
 │                                ││ waiting for live detail…                                 ││                                  │
 │                                ││ CI · no detail yet                                       ││                                  │
 ╰────────────────────────────────╯╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
- ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
+ ↑↓ move · enter/esc drill · : commands · p pause · c cancel · r retry · a answer · m/o/R release · i inbox · ? help · q quit"
 `;
 
 exports[`App frames > medium width puts the inbox under the panes 1`] = `
@@ -61,58 +67,58 @@ exports[`App frames > medium width puts the inbox under the panes 1`] = `
 ╰────────────────────────────╯╰──────────────────────────────────────────────────────────╯
 ╭────────────────────────────────────────────────────────────────────────────────────────╮
 │ Inbox 4 · i to jump                                                                    │
+│ ? BOB-71 Validating · gmackie/bob                                                      │
 │ ? FORGE-12 Waiting for input · gmackie/forgegraph                                      │
 │ ✗ BOB-72 Failed · gmackie/bob                                                          │
-│ ~ BOB-71 Validating · gmackie/bob                                                      │
 │ +1 more                                                                                │
 ╰────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer…"
+ ↑↓ move · enter/esc drill · : commands · p pause · c cancel · r retry · a answer · m/o/…"
 `;
 
 exports[`App frames > plan level: the dependency tree as an indented tree 1`] = `
 " Bob SDLC · bob.blder.bot · ● live · coordinator online · 3 plans · 6 items · 4 need attention
 ╭────────────────────────────────╮╭──────────────────────────────────────────────────────────╮╭──────────────────────────────────╮
 │ Fleet › Bob › gmackie/bob › p… ││ plan a1c7e5f0 Active v3 · 4 items · concurrency 2        ││ Inbox 4 · i to jump              │
-│   BOB-71 Validating            ││ Dependencies (downstream indented under upstream)        ││ ? FORGE-12 Waiting for input · … │
-│ › BOB-72 Failed                ││  BOB-71 Validating                                       ││ ✗ BOB-72 Failed · gmackie/bob    │
-│   BOB-73 Execution unknown     ││ ›  └ BOB-72 Failed                                       ││ ~ BOB-71 Validating · gmackie/b… │
+│   BOB-71 Validating            ││ Dependencies (downstream indented under upstream)        ││ ? BOB-71 Validating · gmackie/b… │
+│ › BOB-72 Failed                ││  BOB-71 Validating                                       ││ ? FORGE-12 Waiting for input · … │
+│   BOB-73 Execution unknown     ││ ›  └ BOB-72 Failed                                       ││ ✗ BOB-72 Failed · gmackie/bob    │
 │   BOB-74 Pending               ││      └ BOB-74 Pending                                    ││ ~ BOB-73 Execution unknown · gm… │
 │                                ││    └ BOB-73 Execution unknown (needs merged)             ││                                  │
 │                                ││      └ BOB-74 ↑ shown above                              ││                                  │
 │                                ││                                                          ││                                  │
 │                                ││ [p] Pause plan  [c] Cancel plan (tier 2)                 ││                                  │
 ╰────────────────────────────────╯╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
- ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
+ ↑↓ move · enter/esc drill · : commands · p pause · c cancel · r retry · a answer · m/o/R release · i inbox · ? help · q quit"
 `;
 
 exports[`App frames > repo level: plans with state badges 1`] = `
 " Bob SDLC · bob.blder.bot · ● live · coordinator online · 3 plans · 6 items · 4 need attention
 ╭────────────────────────────────╮╭──────────────────────────────────────────────────────────╮╭──────────────────────────────────╮
 │ Fleet › Bob › gmackie/bob      ││ plan a1c7e5f0 Active v3 · 4 items · concurrency 2        ││ Inbox 4 · i to jump              │
-│ › plan a1c7e5f0 Active 4 !3    ││ Dependencies (downstream indented under upstream)        ││ ? FORGE-12 Waiting for input · … │
-│   plan c3e9a7b2 Draft 1        ││  BOB-71 Validating                                       ││ ✗ BOB-72 Failed · gmackie/bob    │
-│                                ││    └ BOB-72 Failed                                       ││ ~ BOB-71 Validating · gmackie/b… │
+│ › plan a1c7e5f0 Active 4 !3    ││ Dependencies (downstream indented under upstream)        ││ ? BOB-71 Validating · gmackie/b… │
+│   plan c3e9a7b2 Draft 1        ││  BOB-71 Validating                                       ││ ? FORGE-12 Waiting for input · … │
+│                                ││    └ BOB-72 Failed                                       ││ ✗ BOB-72 Failed · gmackie/bob    │
 │                                ││      └ BOB-74 Pending                                    ││ ~ BOB-73 Execution unknown · gm… │
 │                                ││    └ BOB-73 Execution unknown (needs merged)             ││                                  │
 │                                ││      └ BOB-74 ↑ shown above                              ││                                  │
 │                                ││                                                          ││                                  │
 │                                ││ [p] Pause plan  [c] Cancel plan (tier 2)                 ││                                  │
 ╰────────────────────────────────╯╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
- ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
+ ↑↓ move · enter/esc drill · : commands · p pause · c cancel · r retry · a answer · m/o/R release · i inbox · ? help · q quit"
 `;
 
 exports[`App keys > : opens the palette for the selection 1`] = `
 " Bob SDLC · bob.blder.bot · ● live · coordinator online · 3 plans · 6 items · 4 need attention
 ╭────────────────────────────────╮╭──────────────────────────────────────────────────────────╮╭──────────────────────────────────╮
 │ Fleet › Bob › gmackie/bob › p… ││ BOB-73 in plan a1c7e5f0 · gmackie/bob                    ││ Inbox 4 · i to jump              │
-│   BOB-71 Validating            ││ https://tasks.gmac.io/issue/BOB-73                       ││ ? FORGE-12 Waiting for input · … │
-│   BOB-72 Failed                ││ State Execution unknown · admission unconfirmed;         ││ ✗ BOB-72 Failed · gmackie/bob    │
-│ › BOB-73 Execution unknown     ││ dispatch retries after the lease · owner system · v5     ││ ~ BOB-71 Validating · gmackie/b… │
+│   BOB-71 Validating            ││ https://tasks.gmac.io/issue/BOB-73                       ││ ? BOB-71 Validating · gmackie/b… │
+│   BOB-72 Failed                ││ State Execution unknown · admission unconfirmed;         ││ ? FORGE-12 Waiting for input · … │
+│ › BOB-73 Execution unknown     ││ dispatch retries after the lease · owner system · v5     ││ ✗ BOB-72 Failed · gmackie/bob    │
 │   BOB-74 Pending               ││ Milestones · exec ✓  · review-ready  · merged  ·         ││ ~ BOB-73 Execution unknown · gm… │
 │                                ││ prod-verified                                            ││                                  │
 │                                ││ Evidence none                                            ││                                  │
 │                                ││                                                          ││                                  │
-│                                ││ [:] Reconcile  [r] Retry (tier 2)  [c] Cancel item (tie… ││                                  │
+│                                ││ [:] Reconcile  [c] Cancel item (tier 2)                  ││                                  │
 │                                ││                                                          ││                                  │
 │                                ││ Attempt att-a3                                           ││                                  │
 │                                ││ Thread t3:thr-73 (env env-hetzner-bob, project proj-1)   ││                                  │
@@ -122,23 +128,22 @@ exports[`App keys > : opens the palette for the selection 1`] = `
 │                                ││ CI · no detail yet                                       ││                                  │
 ╰────────────────────────────────╯╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
- │ Commands (enter or 1-5 to run, esc to close)                                                                                 │
+ │ Commands (enter or 1-4 to run, esc to close)                                                                                 │
  │ 1. Pause plan a1c7e5f0                                                                                                       │
  │ 2. Cancel plan a1c7e5f0  (tier 2)                                                                                            │
  │ 3. Reconcile BOB-73                                                                                                          │
- │ 4. Retry BOB-73  (tier 2)                                                                                                    │
- │ 5. Cancel item BOB-73  (tier 2)                                                                                              │
+ │ 4. Cancel item BOB-73  (tier 2)                                                                                              │
  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
+ ↑↓ move · enter/esc drill · : commands · p pause · c cancel · r retry · a answer · m/o/R release · i inbox · ? help · q quit"
 `;
 
 exports[`attempt level (L5) > a steps through the questions and sends ResolveInput (tier 1, no confirm) 1`] = `
 " Bob SDLC · bob.blder.bot · ● live · coordinator online · 3 plans · 6 items · 4 need attention
 ╭────────────────────────────────╮╭──────────────────────────────────────────────────────────╮╭──────────────────────────────────╮
 │ Fleet › ForgeGraph › gmackie/… ││ FORGE-12 in plan b2d8f6a1 · gmackie/forgegraph           ││ Inbox 4 · i to jump              │
-│ › FORGE-12 Waiting for input   ││ https://tasks.gmac.io/issue/FORGE-12                     ││ ? FORGE-12 Waiting for input · … │
-│   FORGE-13 Pending             ││ State Waiting for input · an agent asked a question ·    ││ ✗ BOB-72 Failed · gmackie/bob    │
-│                                ││ owner human · v5                                         ││ ~ BOB-71 Validating · gmackie/b… │
+│ › FORGE-12 Waiting for input   ││ https://tasks.gmac.io/issue/FORGE-12                     ││ ? BOB-71 Validating · gmackie/b… │
+│   FORGE-13 Pending             ││ State Waiting for input · an agent asked a question ·    ││ ? FORGE-12 Waiting for input · … │
+│                                ││ owner human · v5                                         ││ ✗ BOB-72 Failed · gmackie/bob    │
 │                                ││ Milestones · exec ✓  · review-ready  · merged  ·         ││ ~ BOB-73 Execution unknown · gm… │
 │                                ││ prod-verified                                            ││                                  │
 │                                ││ Evidence none                                            ││                                  │
@@ -160,16 +165,16 @@ exports[`attempt level (L5) > a steps through the questions and sends ResolveInp
  │ 2. [x] Production                                                                                                            │
  │ ↑↓ move · space toggles · enter next · shift-tab back · esc cancel                                                           │
  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
+ ↑↓ move · enter/esc drill · : commands · p pause · c cancel · r retry · a answer · m/o/R release · i inbox · ? help · q quit"
 `;
 
 exports[`attempt level (L5) > says when live detail and CI are unavailable 1`] = `
 " Bob SDLC · bob.blder.bot · ● live · coordinator online · 3 plans · 6 items · 4 need attention
 ╭────────────────────────────────╮╭──────────────────────────────────────────────────────────╮╭──────────────────────────────────╮
 │ Fleet › ForgeGraph › gmackie/… ││ FORGE-12 in plan b2d8f6a1 · gmackie/forgegraph           ││ Inbox 4 · i to jump              │
-│ › FORGE-12 Waiting for input   ││ https://tasks.gmac.io/issue/FORGE-12                     ││ ? FORGE-12 Waiting for input · … │
-│   FORGE-13 Pending             ││ State Waiting for input · an agent asked a question ·    ││ ✗ BOB-72 Failed · gmackie/bob    │
-│                                ││ owner human · v5                                         ││ ~ BOB-71 Validating · gmackie/b… │
+│ › FORGE-12 Waiting for input   ││ https://tasks.gmac.io/issue/FORGE-12                     ││ ? BOB-71 Validating · gmackie/b… │
+│   FORGE-13 Pending             ││ State Waiting for input · an agent asked a question ·    ││ ? FORGE-12 Waiting for input · … │
+│                                ││ owner human · v5                                         ││ ✗ BOB-72 Failed · gmackie/bob    │
 │                                ││ Milestones · exec ✓  · review-ready  · merged  ·         ││ ~ BOB-73 Execution unknown · gm… │
 │                                ││ prod-verified                                            ││                                  │
 │                                ││ Evidence none                                            ││                                  │
@@ -184,23 +189,29 @@ exports[`attempt level (L5) > says when live detail and CI are unavailable 1`] =
 │                                ││ live detail unavailable: the relay has not posted for t… ││                                  │
 │                                ││ CI · unavailable: ForgeGraph did not answer              ││                                  │
 ╰────────────────────────────────╯╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
- ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
+ ↑↓ move · enter/esc drill · : commands · p pause · c cancel · r retry · a answer · m/o/R release · i inbox · ? help · q quit"
 `;
 
 exports[`attempt level (L5) > shows the live tail that fits, CI phases and the thread ids 1`] = `
 " Bob SDLC · bob.blder.bot · ● live · coordinator online · 3 plans · 6 items · 4 need attention
 ╭────────────────────────────────╮╭──────────────────────────────────────────────────────────╮╭──────────────────────────────────╮
 │ Fleet › Bob › gmackie/bob › p… ││ BOB-71 in plan a1c7e5f0 · gmackie/bob                    ││ Inbox 4 · i to jump              │
-│ › BOB-71 Validating            ││ https://tasks.gmac.io/issue/BOB-71                       ││ ? FORGE-12 Waiting for input · … │
-│   BOB-72 Failed                ││ State Validating · validation not yet automated · owner  ││ ✗ BOB-72 Failed · gmackie/bob    │
-│   BOB-73 Execution unknown     ││ system · v5                                              ││ ~ BOB-71 Validating · gmackie/b… │
+│ › BOB-71 Validating            ││ https://tasks.gmac.io/issue/BOB-71                       ││ ? BOB-71 Validating · gmackie/b… │
+│   BOB-72 Failed                ││ State Validating · publishing the branch and running CI  ││ ? FORGE-12 Waiting for input · … │
+│   BOB-73 Execution unknown     ││ · owner system · v5                                      ││ ✗ BOB-72 Failed · gmackie/bob    │
 │   BOB-74 Pending               ││ Milestones ✓ exec ✓  · review-ready  · merged  ·         ││ ~ BOB-73 Execution unknown · gm… │
 │                                ││ prod-verified                                            ││                                  │
 │                                ││ Evidence                                                 ││                                  │
 │                                ││   https://git.forgegraf.com/gmackie/bob/pulls/292        ││                                  │
 │                                ││   ci:run/8812                                            ││                                  │
 │                                ││                                                          ││                                  │
-│                                ││ [c] Cancel item (tier 2)                                 ││                                  │
+│                                ││ Release Blocked · the release needs attention · auto-me… ││                                  │
+│                                ││   PR #292 https://git.forgegraf.com/gmackie/bob/pulls/2… ││                                  │
+│                                ││   branch bob/BOB-71                                      ││                                  │
+│                                ││   head 9f3c1d2e                                          ││                                  │
+│                                ││   ! push rejected: the branch is protected               ││                                  │
+│                                ││                                                          ││                                  │
+│                                ││ [o] Retry publish (tier 2)  [c] Cancel item (tier 2)     ││                                  │
 │                                ││                                                          ││                                  │
 │                                ││ Attempt att-a1 · thread running                          ││                                  │
 │                                ││ Thread t3:thr-71 (env env-hetzner-bob, project proj-1)   ││                                  │
@@ -221,5 +232,5 @@ exports[`attempt level (L5) > shows the live tail that fits, CI phases and the t
 │                                ││ CI · 2 of 4 phases passed 9f3c1d2e7a                     ││                                  │
 │                                ││ ✓ lint  ✓ typecheck  ◐ test  ○ deploy-beta               ││                                  │
 ╰────────────────────────────────╯╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
- ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
+ ↑↓ move · enter/esc drill · : commands · p pause · c cancel · r retry · a answer · m/o/R release · i inbox · ? help · q quit"
 `;

@@ -9,7 +9,13 @@ export const FAST_POLL_MS = 2_000;
 const MIN_POLL_MS = 1_000;
 /** Coordinator operations the edge may relay; mirrors RELAYED_OPERATIONS in
  * packages/bob/src/sdlc-view/src/commands.ts. */
-export const RELAYED_OPERATIONS = Object.freeze(['ControlPlan', 'RetryItem', 'CancelItem', 'ReconcileItem', 'ResolveInput']);
+export const RELAYED_OPERATIONS = Object.freeze(['ControlPlan', 'RetryItem', 'CancelItem', 'ReconcileItem', 'ResolveInput', 'RequestRelease', 'RequestDeployment']);
+/** Operations keyed by attemptId whose request has no itemId: the exporter sends the edge's
+ * itemId as expectItemId and the coordinator checks the attempt belongs to that item. */
+const ATTEMPT_KEYED = new Set(['ResolveInput', 'RequestRelease']);
+const RELEASE_ACTIONS = new Set(['open-pr', 'approve', 'merge']);
+const DEPLOYMENT_ACTIONS = new Set(['deploy', 'promote', 'rollback']);
+const isSha = v => typeof v === 'string' && /^[a-f0-9]{40}$/.test(v);
 const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isId = v => typeof v === 'string' && v.length > 0 && v.length <= 200;
 const isVersion = v => Number.isSafeInteger(v) && v >= 1;
@@ -30,6 +36,14 @@ export function parseCommandInput(operation, input) {
     case 'ResolveInput':
       return isId(input.itemId) && isId(input.attemptId) && isId(input.promptId) && typeof input.answer === 'string' && input.answer.length >= 1 && input.answer.length <= 16000
         ? { itemId: input.itemId, attemptId: input.attemptId, promptId: input.promptId, answer: input.answer } : null;
+    case 'RequestRelease':
+      if (!isId(input.itemId) || !isId(input.attemptId) || !RELEASE_ACTIONS.has(input.action) || !isSha(input.sourceRevision)) return null;
+      if (input.pullRequestRef !== undefined && !isId(input.pullRequestRef)) return null;
+      return { itemId: input.itemId, attemptId: input.attemptId, action: input.action, sourceRevision: input.sourceRevision, ...(input.pullRequestRef !== undefined ? { pullRequestRef: input.pullRequestRef } : {}) };
+    case 'RequestDeployment':
+      if (!isId(input.itemId) || !DEPLOYMENT_ACTIONS.has(input.action) || !isId(input.artifactRef) || !isId(input.stageRef)) return null;
+      if (input.deploymentRef !== undefined && !isId(input.deploymentRef)) return null;
+      return { itemId: input.itemId, action: input.action, artifactRef: input.artifactRef, stageRef: input.stageRef, ...(input.deploymentRef !== undefined ? { deploymentRef: input.deploymentRef } : {}) };
     default:
       return null;
   }
@@ -166,9 +180,10 @@ export function edgeExporter({ coordinator, endpoint, token, checkpoint, fetch: 
     if (!allowed.has(command.operation)) return failure(commandId, 'Forbidden', 'Operation is outside the edge principal policy', false);
     const input = parseCommandInput(command.operation, command.input);
     if (!input) return failure(commandId, 'InvalidRequest', 'Command input is invalid', false);
-    // ResolveInputRequest has no itemId: the coordinator checks it names the attempt's item.
-    const { itemId: expectItemId, ...resolve } = command.operation === 'ResolveInput' ? input : {};
-    const body = command.operation === 'ResolveInput' ? resolve : input;
+    // ResolveInputRequest and ReleaseRequest have no itemId: the coordinator checks it names the attempt's item.
+    const keyed = ATTEMPT_KEYED.has(command.operation);
+    const { itemId: expectItemId, ...attemptBody } = keyed ? input : {};
+    const body = keyed ? attemptBody : input;
     try {
       const operation = await (principal.admit ?? principal.call).call(principal, command.operation, { contractVersion: '1', commandId, ...body }, { idempotencyKey: commandId, actor: command.actor, ...(expectItemId ? { expectItemId } : {}) });
       const { error, ...rest } = operation;

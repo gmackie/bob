@@ -1,5 +1,5 @@
 // A fake edge view for tests and `bob-tui demo`: plans in draft, active and paused, and
-// items in validating, failed, execution-unknown, waiting-input, running and pending.
+// items in validating (with a blocked release), failed, execution-unknown, waiting-input, running and pending.
 import { emptyView, reduce, type EdgeView, type ItemSnapshot, type ItemState, type Milestone, type PendingInput, type PlanSnapshot, type PlanState } from "@bob/sdlc-view";
 
 import { emptyAttempt, type AttemptState } from "./model/attempt";
@@ -87,6 +87,11 @@ export function fixtureView(): EdgeView {
     item("item-a1", PLAN_ACTIVE, "validating", {
       execution: { attemptId: "att-a1", target: target("gmackie/bob"), thread: thread("thr-71") },
       achievedMilestones: ["execution-succeeded"], evidenceRefs: ["https://git.forgegraf.com/gmackie/bob/pulls/292", "ci:run/8812"],
+      release: {
+        attemptId: "att-a1", stage: "blocked", autoMerge: false, branch: "bob/BOB-71", headSha: "9f3c1d2e7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d",
+        pullRequest: { repository: target("gmackie/bob").repository, number: 292, url: "https://git.forgegraf.com/gmackie/bob/pulls/292" },
+        note: "push rejected: the branch is protected", updatedAt: "2026-11-15T11:59:00Z",
+      },
     }),
     item("item-a2", PLAN_ACTIVE, "failed", { execution: { attemptId: "att-a2", target: target("gmackie/bob"), thread: thread("thr-72") } }),
     item("item-a3", PLAN_ACTIVE, "execution-unknown", { execution: { attemptId: "att-a3", target: target("gmackie/bob"), thread: thread("thr-73") } }),

@@ -29,6 +29,17 @@ export const MILESTONES = [
   "merged",
   "production-verified",
 ] as const;
+export const RELEASE_STAGES = [
+  "awaiting-publish",
+  "checks-running",
+  "checks-failed",
+  "review-ready",
+  "merged",
+  "deploying",
+  "production-verified",
+  "blocked",
+] as const;
 export type ItemState = (typeof ITEM_STATES)[number];
 export type PlanState = (typeof PLAN_STATES)[number];
 export type Milestone = (typeof MILESTONES)[number];
+export type ReleaseStage = (typeof RELEASE_STAGES)[number];

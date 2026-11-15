@@ -210,13 +210,13 @@ test('the edge exporter relays ResolveInput without itemId and checks it names t
 
 test('a version-four store gains the input delivery table; the README rollback reverses it', async t => {
   const { c, database } = await setup(t);
-  // Exactly the rollback in deploy/coordination/README.md ("Storage version 5 rollback").
+  // Exactly the rollbacks in deploy/coordination/README.md ("Storage version 6 rollback", then "Storage version 5 rollback").
+  c.db.exec('BEGIN; DROP TABLE coordination_release; PRAGMA user_version = 5; COMMIT;');
   c.db.exec('BEGIN; DROP TABLE coordination_input_delivery; PRAGMA user_version = 4; COMMIT;');
   assert.deepEqual(c.db.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'coordination_input_delivery%'").all(), []);
   assert.equal(c.db.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
   const reopened = new ExecutionCoordinator({ database, context }); t.after(() => reopened.close());
-  assert.equal(storageVersion, 5);
-  assert.equal(reopened.db.prepare('PRAGMA user_version').get().user_version, 5);
+  assert.equal(reopened.db.prepare('PRAGMA user_version').get().user_version, storageVersion);
   assert.deepEqual(reopened.db.prepare('PRAGMA index_list(coordination_input_delivery)').all().map(ix => ix.name).filter(n => !n.startsWith('sqlite_')).sort(),
     ['coordination_input_delivery_ix_by_owner_status_next_attempt_at', 'coordination_input_delivery_uq_attemptId_promptId']);
 });

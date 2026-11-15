@@ -22,10 +22,11 @@ describe("StateGraph", () => {
     edges.forEach((m, i) => expect(m[0].includes("stroke-dasharray")).toBe(Boolean(STATE_EDGES[i]!.loop)));
   });
 
-  it("marks stalled validating with the attention colour, and an ordinary state with its owner colour", () => {
+  it("marks stalled execution-unknown with the attention colour, and an ordinary state with its owner colour", () => {
     const html = renderToStaticMarkup(<StateGraph counts={counts} />);
-    expect(nodeOf(html, "validating")).toContain('data-attention="stalled"');
-    expect(nodeOf(html, "validating")).toContain("stroke-amber-500");
+    expect(nodeOf(html, "execution-unknown")).toContain('data-attention="stalled"');
+    expect(nodeOf(html, "execution-unknown")).toContain("stroke-amber-500");
+    expect(nodeOf(html, "validating")).toContain('data-attention="ok"');
     expect(nodeOf(html, "running")).not.toContain("amber");
     expect(nodeOf(html, "running")).toContain("stroke-sky-500");
   });
@@ -34,7 +35,8 @@ describe("StateGraph", () => {
     const html = renderToStaticMarkup(<StateGraph counts={counts} selected="running" />);
     expect(nodeOf(html, "running")).toContain('aria-pressed="true"');
     expect(nodeOf(html, "ready")).toContain('aria-pressed="false"');
-    expect(nodeOf(html, "review")).toContain("opacity-50");
+    expect(nodeOf(html, "cancelling")).toContain("opacity-50");
+    expect(nodeOf(html, "review")).not.toContain("opacity-50"); // the release driver writes it (BOB-82)
     expect(nodeOf(html, "running")).not.toContain("opacity-50");
   });
 

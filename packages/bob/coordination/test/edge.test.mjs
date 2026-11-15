@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Coordinator } from '../runtime/coordinator.mjs';
 import { ExecutionCoordinator } from '../runtime/execution.mjs';
-import { edgeExporter, loadEdgeConfig, MAX_BATCH_BYTES } from '../runtime/edge.mjs';
+import { edgeExporter, loadEdgeConfig, MAX_BATCH_BYTES, parseCommandInput, RELAYED_OPERATIONS } from '../runtime/edge.mjs';
 
 const target = { environmentId: 'hetzner-bob', projectId: 'bob', repository: { integrationId: 'forgegraph', repositoryId: 'bob' } };
 const retired = { environmentId: 'hetzner-old', projectId: 'old', repository: { integrationId: 'forgegraph', repositoryId: 'old' } };
@@ -241,4 +241,44 @@ test('edge configuration needs a valid tokenEnv and reads the token from the env
   assert.throws(() => loadEdgeConfig(write('number.json', { ...base, tokenEnv: 42 }), {}), /tokenEnv/);
   assert.deepEqual(loadEdgeConfig(write('valid.json', { ...base, tokenEnv: 'BOB_SDLC_EDGE_TOKEN' }), { BOB_SDLC_EDGE_TOKEN: 'secret-token' }),
     { ...base, token: 'secret-token' });
+});
+
+test('the exporter relays RequestRelease without itemId (as expectItemId) and RequestDeployment as is (BOB-82)', async t => {
+  const f = fixture(t);
+  const sha = 'a'.repeat(40);
+  const seen = [];
+  const principal = { admit: async (name, body, options) => { seen.push([name, body, options]); return { contractVersion: '1', operationId: 'op-' + body.commandId, commandId: body.commandId, state: 'accepted', resourceId: 'item-1', resourceVersion: 3 }; } };
+  let commands = [
+    { commandId: 'rel-1', actor: 'bob-user-1', queuedAt: 1, operation: 'RequestRelease', input: { itemId: 'item-1', attemptId: 'attempt-1', action: 'merge', sourceRevision: sha, pullRequestRef: '42' } },
+    { commandId: 'dep-1', actor: 'bob-user-1', queuedAt: 1, operation: 'RequestDeployment', input: { itemId: 'item-1', action: 'rollback', artifactRef: 'd-9', stageRef: 'production', deploymentRef: 'd-9' } },
+    { commandId: 'rel-bad', actor: 'bob-user-1', queuedAt: 1, operation: 'RequestRelease', input: { itemId: 'item-1', attemptId: 'attempt-1', action: 'merge', sourceRevision: 'abc' } },
+  ];
+  f.setReply(body => { const answer = { accepted: true, watermark: body.watermark, commands }; commands = []; return answer; });
+  const exporter = edgeExporter({ ...f.options, commands: { operations: ['RequestRelease', 'RequestDeployment'], coordinator: principal } }); t.after(() => exporter.close());
+  await exporter.flush(); await exporter.flush();
+  assert.deepEqual(seen, [
+    ['RequestRelease', { contractVersion: '1', commandId: 'rel-1', attemptId: 'attempt-1', action: 'merge', sourceRevision: sha, pullRequestRef: '42' }, { idempotencyKey: 'rel-1', actor: 'bob-user-1', expectItemId: 'item-1' }],
+    ['RequestDeployment', { contractVersion: '1', commandId: 'dep-1', itemId: 'item-1', action: 'rollback', artifactRef: 'd-9', stageRef: 'production', deploymentRef: 'd-9' }, { idempotencyKey: 'dep-1', actor: 'bob-user-1' }],
+  ]);
+  const results = Object.fromEntries(f.batches.flatMap(b => b.results ?? []).map(r => [r.commandId, r]));
+  assert.equal(results['rel-1'].ok, true); assert.equal(results['dep-1'].ok, true);
+  assert.deepEqual([results['rel-bad'].ok, results['rel-bad'].error.code], [false, 'InvalidRequest']);
+});
+
+test('RequestRelease and RequestDeployment inputs are validated like commands.ts', () => {
+  assert(RELAYED_OPERATIONS.includes('RequestRelease') && RELAYED_OPERATIONS.includes('RequestDeployment'));
+  const sha = 'b'.repeat(40);
+  assert.deepEqual(parseCommandInput('RequestRelease', { itemId: 'i', attemptId: 'a', action: 'open-pr', sourceRevision: sha, junk: 1 }), { itemId: 'i', attemptId: 'a', action: 'open-pr', sourceRevision: sha });
+  for (const bad of [
+    { itemId: 'i', attemptId: 'a', action: 'close', sourceRevision: sha },
+    { itemId: 'i', attemptId: 'a', action: 'merge', sourceRevision: sha.toUpperCase() },
+    { attemptId: 'a', action: 'merge', sourceRevision: sha },
+    { itemId: 'i', attemptId: 'a', action: 'merge', sourceRevision: sha, pullRequestRef: 7 },
+  ]) assert.equal(parseCommandInput('RequestRelease', bad), null);
+  assert.deepEqual(parseCommandInput('RequestDeployment', { itemId: 'i', action: 'rollback', artifactRef: 'd', stageRef: 'production' }), { itemId: 'i', action: 'rollback', artifactRef: 'd', stageRef: 'production' });
+  for (const bad of [
+    { itemId: 'i', action: 'destroy', artifactRef: 'd', stageRef: 'production' },
+    { itemId: 'i', action: 'rollback', artifactRef: '', stageRef: 'production' },
+    { itemId: 'i', action: 'rollback', artifactRef: 'd', stageRef: 'production', deploymentRef: 3 },
+  ]) assert.equal(parseCommandInput('RequestDeployment', bad), null);
 });

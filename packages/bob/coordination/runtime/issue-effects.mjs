@@ -40,6 +40,41 @@ export function commentFor(id, payload, issue) {
   return lines.join('\n');
 }
 
+/** BOB-82 release facts: the Kanbanger state each one sets (if any), and its comment. */
+export const releaseFacts = Object.freeze({
+  'pr-open': { title: 'pull request opened' },
+  'review-ready': { title: 'CI passed, ready for review', state: 'review' },
+  'checks-failed': { title: 'CI failed' },
+  merged: { title: 'merged' },
+  'production-verified': { title: 'verified in production', state: 'done' },
+  blocked: { title: 'release blocked' },
+  'rolled-back': { title: 'production deployment rolled back', state: 'reopen' },
+});
+export function releaseCommentFor(id, payload, issue) {
+  const pr = payload.pullRequest ? (payload.pullRequest.url ? `[#${payload.pullRequest.number}](${payload.pullRequest.url})` : `#${payload.pullRequest.number}`) : 'none';
+  const lines = [`**Bob release: ${releaseFacts[payload.fact].title}** for ${issue.identifier}`, '', `- Attempt: \`${payload.attemptId}\``, `- Pull request: ${pr}`];
+  if (payload.headSha) lines.push(`- Head: \`${payload.headSha}\``);
+  if (payload.mergeSha) lines.push(`- Merge commit: \`${payload.mergeSha}\``);
+  if (payload.appSlug) lines.push(`- ForgeGraph app: \`${payload.appSlug}\`${payload.deploymentId ? `, production deployment \`${payload.deploymentId}\`` : ''}`);
+  if (payload.note) lines.push(`- Note: ${payload.note}`);
+  lines.push('', payload.fact === 'production-verified'
+    ? 'A production deployment containing the merge is active and app health is not critical, so Bob marked the issue done.'
+    : payload.fact === 'review-ready' ? 'CI is green on the exact head. Bob moved the issue to review; it is done only after production is verified.'
+      : payload.fact === 'rolled-back' ? 'Bob moved the issue back to in progress.'
+      : 'Bob changed no issue state for this step.', '', effectMarker(id));
+  return lines.join('\n');
+}
+
+/** The team's state for a release fact: review → the named review state (no fallback);
+ * done → the named done state, else the first completed-type state. */
+async function releaseState(client, issue, kind, names) {
+  const states = await client.workflowStates(issue.team.id);
+  const byName = name => states.find(state => state.name.toLowerCase() === name.toLowerCase());
+  if (kind === 'review') return byName(names.reviewStateName) ?? null;
+  if (kind === 'reopen') return byName(names.inProgressStateName ?? 'In Progress') ?? null;
+  return byName(names.doneStateName) ?? states.filter(state => state.type === 'completed').sort((a, b) => (a.position ?? 0) - (b.position ?? 0))[0] ?? null;
+}
+
 function claim(coordinator, { now, leaseMs, token }) {
   return coordinator.transaction(() => {
     const row = coordinator.db.prepare("SELECT * FROM coordination_issue_effect WHERE tenant=? AND owner=? AND status='pending' AND next_attempt_at<=? AND (lease_until IS NULL OR lease_until<=?) ORDER BY rowid LIMIT 1")
@@ -66,7 +101,7 @@ function settle(coordinator, row, token, { now, outcome, error, random }) {
   });
 }
 
-async function perform(client, row, payload, { inProgressStateName }) {
+async function perform(client, row, payload, { inProgressStateName, reviewStateName = 'In Review', doneStateName = 'Done' }) {
   const issue = await client.resolveIssue(payload.issue.identifier ?? payload.issue.issueId);
   if (![issue.id, issue.identifier].includes(payload.issue.issueId)) throw new KanbangerError('IssueMismatch', 'Resolved issue identity differs from the admitted issue');
   if (!sameTeam(issue, payload.issue.teamId) || !sameProject(issue, payload.issue.projectId)) throw new KanbangerError('IssueProjectMismatch', 'Issue moved outside the admitted team/project');
@@ -81,15 +116,24 @@ async function perform(client, row, payload, { inProgressStateName }) {
     const after = await client.updateIssueState(issue.id, target.id);
     return { action: 'state-set', issue: issue.identifier, state: after.state.name };
   }
+  const release = releaseFacts[payload.fact];
+  let stateAction = null;
+  if (release?.state) {
+    // Never move a closed issue; review never regresses an issue already done.
+    // A rollback reopens a done issue; nothing else moves a closed one.
+    const closed = issue.state && (release.state === 'reopen' ? ['canceled', 'cancelled'] : ['completed', 'canceled', 'cancelled']).includes(issue.state.type);
+    const target = closed ? null : await releaseState(client, issue, release.state, { reviewStateName, doneStateName, inProgressStateName });
+    if (target && target.id !== issue.state?.id) stateAction = (await client.updateIssueState(issue.id, target.id)).state.name;
+  }
   const marker = effectMarker(row.id);
-  if ((await client.issueComments(issue.id)).some(comment => comment.body.includes(marker))) return { action: 'comment-present', issue: issue.identifier };
-  await client.createComment(issue.id, commentFor(row.id, payload, issue));
+  if ((await client.issueComments(issue.id)).some(comment => comment.body.includes(marker))) return { action: stateAction ? 'state-set' : 'comment-present', issue: issue.identifier, ...(stateAction ? { state: stateAction } : {}) };
+  await client.createComment(issue.id, release ? releaseCommentFor(row.id, payload, issue) : commentFor(row.id, payload, issue));
   if (!(await client.issueComments(issue.id)).some(comment => comment.body.includes(marker))) throw new KanbangerError('KanbangerReadBackMismatch', 'Created comment is not visible on read-back', { retryable: true });
-  return { action: 'comment-created', issue: issue.identifier };
+  return { action: 'comment-created', issue: issue.identifier, ...(stateAction ? { state: stateAction } : {}) };
 }
 
 /** Delivers at most one pending effect. Returns { delivered: false } when idle. */
-export async function deliverIssueEffect(coordinator, client, { now = Date.now(), leaseMs = 60000, inProgressStateName = 'In Progress', random = Math.random } = {}) {
+export async function deliverIssueEffect(coordinator, client, { now = Date.now(), leaseMs = 60000, inProgressStateName = 'In Progress', reviewStateName, doneStateName, random = Math.random } = {}) {
   if (!Number.isSafeInteger(now) || !Number.isInteger(leaseMs) || leaseMs < 1000 || leaseMs > 300000) fail('InvalidRequest', 'Invalid effect lease', 400);
   const token = randomUUID();
   const row = claim(coordinator, { now, leaseMs, token });
@@ -104,7 +148,7 @@ export async function deliverIssueEffect(coordinator, client, { now = Date.now()
   }
   let result;
   try {
-    result = await perform(client, row, payload, { inProgressStateName });
+    result = await perform(client, row, payload, { inProgressStateName, ...(reviewStateName ? { reviewStateName } : {}), ...(doneStateName ? { doneStateName } : {}) });
   } catch (error) {
     const code = error.code ?? 'KanbangerUnavailable';
     const outcome = terminalCodes.has(code) ? 'rejected' : 'retry';

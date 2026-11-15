@@ -234,6 +234,36 @@ a release that does not know it:
    `--edge`) and run `systemctl daemon-reload`. Only then point `current` back
    at the older release and restart.
 
+### Storage version 6 rollback
+
+**A version-6 store cannot be opened by a version-5 (or older) release.**
+Storage version 6 (BOB-82) adds only `coordination_release` and its index
+`coordination_release_ix_by_owner_stage_next_check_at`; version-5 tables are
+unchanged. Items may hold `release` in their snapshot JSON; a version-5
+release ignores the field. Rolling back to a version-5 release:
+
+1. Stop the worker, then the coordinator, and back up the database with
+   `.backup` as in "Storage version 4 rollback" step 2 (name it
+   `coordination.v6-before-rollback.sqlite`).
+2. Drop the table and set the version in one transaction, then check:
+
+   ```sh
+   sudo -u bob sqlite3 /home/bob/.bob/coordination/coordination.sqlite \
+     'BEGIN; DROP TABLE coordination_release; PRAGMA user_version = 5; COMMIT;'
+   sudo -u bob sqlite3 /home/bob/.bob/coordination/coordination.sqlite \
+     "PRAGMA user_version; SELECT name FROM sqlite_master WHERE name LIKE 'coordination_release%'; PRAGMA integrity_check;"
+   ```
+
+   Expect `5`, no names, and `ok`. Items in `validating`, `review` or
+   `deploying` stay there (a version-5 release never moves them); their PRs
+   are left as they are on Forgejo. Pending RequestRelease/RequestDeployment
+   Operations stay `accepted`.
+3. Reinstall the version-5 release and start the coordinator, then the worker.
+   To go further back, continue with "Storage version 5 rollback".
+
+`test/commands.test.mjs` and `test/input.test.mjs` apply exactly the step 2 SQL
+before stepping further down.
+
 ### Storage version 5 rollback
 
 **A version-5 store cannot be opened by a version-4 (or older) release.** Rolling

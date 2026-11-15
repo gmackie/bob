@@ -1,5 +1,5 @@
-import { ITEM_STATES, type ItemState, type Milestone, type PlanState } from "./generated/contract";
-import { STATE_PRESENTATION, type Attention } from "./presentation";
+import { ITEM_STATES, type ItemState, type Milestone, type PlanState, type ReleaseStage } from "./generated/contract";
+import { itemAttention, type Attention } from "./presentation";
 
 export interface RepositoryRef { integrationId: string; repositoryId: string }
 export interface ExecutionTarget { environmentId: string; projectId: string; repository: RepositoryRef }
@@ -17,6 +17,26 @@ export interface PlanSnapshot {
   };
 }
 import type { PendingInput } from "./attempt";
+/** A Forgejo pull request (contract.forge `PullRequestRef`). */
+export interface PullRequestRef { repository: RepositoryRef; number: number; url?: string | null }
+/**
+ * The release of the item's current attempt (contract.forge `ReleaseStatus`, BOB-82).
+ * note explains a blocked or failed stage; approvedSha and mergeSha are set once approved and merged.
+ */
+export interface ReleaseStatus {
+  attemptId: string;
+  stage: ReleaseStage;
+  autoMerge: boolean;
+  branch?: string | null;
+  headSha?: string | null;
+  pullRequest?: PullRequestRef | null;
+  approvedSha?: string | null;
+  mergeSha?: string | null;
+  appSlug?: string | null;
+  deploymentId?: string | null;
+  note?: string | null;
+  updatedAt: string;
+}
 /** The coordinator's GetItem `item` (the fields the view reads). */
 export interface ItemSnapshot {
   itemId: string;
@@ -27,6 +47,8 @@ export interface ItemSnapshot {
   execution?: { attemptId: string; target: ExecutionTarget; thread: ThreadRef } | null;
   /** Set while state is waiting-input (BOB-80). See attempt.ts. */
   pendingInput?: PendingInput | null;
+  /** Set once the current attempt succeeded and its release started (BOB-82). */
+  release?: ReleaseStatus | null;
   achievedMilestones: Milestone[];
   operationIds: string[];
   evidenceRefs: string[];
@@ -138,7 +160,7 @@ export function rows(view: EdgeView): Row[] {
     const plan = view.plans[item.planId];
     const def = plan?.definition.items.find((d) => d.itemId === item.itemId);
     if (!plan || !def) continue;
-    out.push({ item, plan, target: def.target, issue: def.issue, ...projectFor(view.topology, def.target.repository), attention: STATE_PRESENTATION[item.state].attention });
+    out.push({ item, plan, target: def.target, issue: def.issue, ...projectFor(view.topology, def.target.repository), attention: itemAttention(item) });
   }
   return out;
 }
