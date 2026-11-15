@@ -10,6 +10,8 @@ import { executionPort } from './execution-port.mjs';
 import { tailRelay } from './tail.mjs';
 import { kanbangerClient, kanbangerIssueResolver, loadKanbangerConfig } from './kanbanger.mjs';
 import { drainIssueEffects, backoffMs } from './issue-effects.mjs';
+import { advanceReleases } from './release.mjs';
+import { forgePort, loadReleaseConfig } from './forge-port.mjs';
 
 const errorOf = error => ({ code: error?.code ?? 'InternalError', message: String(error?.message ?? error).slice(0, 500) });
 
@@ -56,7 +58,8 @@ export function budgetAdmission({ url, token, fetch: transport = fetch, timeoutM
 }
 
 /** tail: an optional tail relay (tail.mjs); it runs its own ~1 s loop beside dispatch and stops with it. */
-export async function runWorker({ coordinator, port, kanbanger, flightdeck, edge, tail, intervalMs = 5000, signal, log = line => console.log(JSON.stringify(line)), random = Math.random, inProgressStateName, drainLimit = 10, admit }) {
+/** release: optional { forge, policy } (BOB-82); each loop advances due releases after the Kanbanger drain. */
+export async function runWorker({ coordinator, port, kanbanger, flightdeck, edge, tail, release, intervalMs = 5000, signal, log = line => console.log(JSON.stringify(line)), random = Math.random, inProgressStateName, drainLimit = 10, admit }) {
   if (!Number.isInteger(intervalMs) || intervalMs < 10 || intervalMs > 3600000) throw new Error('Invalid interval');
   const relay = tail?.run({ signal }).catch(() => {});
   let failures = 0; const analytics = exporterState(), edgeState = exporterState();
@@ -79,6 +82,13 @@ export async function runWorker({ coordinator, port, kanbanger, flightdeck, edge
           effects: summary.results.map(({ effectId, fact, outcome, action, error }) => ({ effectId, fact, outcome, ...(action ? { action } : {}), ...(error ? { error: errorOf(error) } : {}) })) });
       } catch (error) { failed = true; log({ at: new Date().toISOString(), step: 'drain', outcome: 'error', error: errorOf(error) }); }
     }
+    if (release) {
+      try {
+        const summary = await advanceReleases(coordinator, release.forge, { policy: release.policy, log: line => log({ at: new Date().toISOString(), ...line }) });
+        if (summary.errors) failed = true;
+        worked ||= summary.changed > 0;
+      } catch (error) { failed = true; log({ at: new Date().toISOString(), step: 'release', outcome: 'error', error: errorOf(error) }); }
+    }
     await flushExporter('flightdeck', flightdeck, analytics, log);
     const edgeResult = await flushExporter('edge', edge, edgeState, log);
     failures = failed ? failures + 1 : 0;
@@ -94,8 +104,8 @@ export async function runWorker({ coordinator, port, kanbanger, flightdeck, edge
 }
 
 async function main() {
-  const { values } = parseArgs({ options: { database: { type: 'string' }, context: { type: 'string' }, bindings: { type: 'string' }, kanbanger: { type: 'string' }, flightdeck: { type: 'string' }, edge: { type: 'string' }, budget: { type: 'string' }, 'interval-ms': { type: 'string', default: '5000' }, help: { type: 'boolean' } } });
-  if (values.help) { console.log('bob-coordinate-worker --database <sqlite-file> --context <policy.json> --bindings <environment-bindings.json> --kanbanger <kanbanger.json> [--interval-ms <ms>] [--flightdeck <analytics.json>] [--edge <edge.json>]'); return; }
+  const { values } = parseArgs({ options: { database: { type: 'string' }, context: { type: 'string' }, bindings: { type: 'string' }, kanbanger: { type: 'string' }, flightdeck: { type: 'string' }, edge: { type: 'string' }, budget: { type: 'string' }, release: { type: 'string' }, 'interval-ms': { type: 'string', default: '5000' }, help: { type: 'boolean' } } });
+  if (values.help) { console.log('bob-coordinate-worker --database <sqlite-file> --context <policy.json> --bindings <environment-bindings.json> --kanbanger <kanbanger.json> [--interval-ms <ms>] [--flightdeck <analytics.json>] [--edge <edge.json>] [--budget <budget.json>] [--release <release.json>]'); return; }
   if (!values.database || !values.context || !values.bindings || !values.kanbanger) throw Object.assign(new Error('Use --help for required arguments'), { code: 'InvalidRequest' });
   const intervalMs = Number(values['interval-ms']);
   const config = loadKanbangerConfig(values.kanbanger);
@@ -133,7 +143,13 @@ async function main() {
     if (typeof budget.url !== 'string' || typeof budget.token !== 'string') throw Object.assign(new Error('Invalid budget configuration'), { code: 'InvalidRequest' });
     admit = budgetAdmission({ url: budget.url, token: budget.token, log: line => console.log(JSON.stringify(line)) });
   }
-  try { await runWorker({ coordinator, port, kanbanger, flightdeck, edge, tail, intervalMs, signal: controller.signal, inProgressStateName: config.inProgressStateName, admit }); }
+  // --release <json> (BOB-82): { forgejo: { instanceUrl, token, reviewToken? }, forgegraph?: { baseUrl, token }, repositories?: { "<repositoryId>": "owner/repo" } }.
+  let release;
+  if (values.release) {
+    const config = loadReleaseConfig(values.release);
+    release = { forge: forgePort(config), policy: { ...(coordinator.context.release ?? {}), repositories: { ...(coordinator.context.release?.repositories ?? {}), ...(config.repositories ?? {}) } } };
+  }
+  try { await runWorker({ coordinator, port, kanbanger, flightdeck, edge, tail, release, intervalMs, signal: controller.signal, inProgressStateName: config.inProgressStateName, admit }); }
   finally { flightdeck?.close(); tail?.close(); edge?.close(); edgePrincipal?.close(); coordinator.close(); }
 }
 

@@ -199,7 +199,8 @@ test('capabilities advertise CancelItem and ReconcileItem, not TriggerPlan', t =
 
 test('a version-three store gains the command log table', t => {
   const { c, database } = setup(t);
-  // Exactly the rollbacks in deploy/coordination/README.md ("Storage version 5 rollback", then "Storage version 4 rollback").
+  // Exactly the rollbacks in deploy/coordination/README.md ("Storage version 6 rollback", "Storage version 5 rollback", then "Storage version 4 rollback").
+  c.db.exec('BEGIN; DROP TABLE coordination_release; PRAGMA user_version = 5; COMMIT;');
   c.db.exec('BEGIN; DROP TABLE coordination_input_delivery; PRAGMA user_version = 4; COMMIT;');
   c.db.exec('BEGIN; DROP TABLE coordination_command_log; PRAGMA user_version = 3; COMMIT;');
   assert.equal(c.db.prepare('PRAGMA user_version').get().user_version, 3);

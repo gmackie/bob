@@ -202,10 +202,47 @@ request/attempt IDs and preserves the old terminal fact.
 
 Success records execution-succeeded and releases dependencies requiring that
 milestone. An execution-target item completes; review/merge/production items
-remain validating. Later milestone dependencies stay pending. Pause/resume retains
-attempt outcomes and recomputes ready dependencies in the plan transaction.
-Validation, release, production reconciliation and execution cancellation remain
-unimplemented; no execution receipt closes a production issue.
+move to validating and get a release (below). Pause/resume retains attempt
+outcomes and recomputes ready dependencies in the plan transaction. Execution
+cancellation remains unimplemented; no execution receipt closes a production issue.
+
+## Releases (BOB-82)
+
+A succeeded receipt for a review-ready, merged or production item opens a row in
+`coordination_release` (storage version 6) in the receipt transaction and
+projects it as `ItemSnapshot.release`. The worker, started with `--release`,
+carries it forward one step per pass (`runtime/release.mjs`, Forgejo and
+ForgeGraph through `runtime/forge-port.mjs`):
+
+| Stage | Item state | Moves on when |
+| --- | --- | --- |
+| `awaiting-publish` | validating | the branch head is known: the receipt's `publishedHead` (T3 pushed it), else the branch on Forgejo. The PR from the receipt is used, else an open PR for the branch, else one is opened. 15 min without a branch, or a `publishSkippedReason`, blocks. |
+| `checks-running` | validating | Forgejo's combined status for the exact head is `success` with at least one status (→ `review-ready`, milestone `review-ready`), or `failure`/`error` (→ `checks-failed`, item `failed`; RetryItem starts a new attempt). 30 min with no status blocks. |
+| `review-ready` | review | the plan's `autoMerge` (else the policy's `release.autoMergeDefault`) is on, or a RequestRelease `merge` names the current head: approve at the head (a refused self-approval is noted, not fatal), then merge with `head_commit_id` (milestone `merged`). A moved head goes back to `checks-running`. A PR merged by hand is followed. |
+| `merged` | completed (target merged) or deploying | the repository's `.forgegraph.yaml` names an app; without one the release blocks. |
+| `deploying` | deploying | a ForgeGraph production deployment that is `active` contains the merge commit (equal, or among the head's 200 newest ancestors) and app health is not `critical` (→ `production-verified`, item completed, milestone `production-verified`). A failed deployment, or none after 3 h, blocks. |
+
+autoMerge only merges the head the environment published (or the first head
+found on the branch); a head pushed by anyone else needs an explicit
+RequestRelease merge naming it. A retry ignores heads earlier attempts
+published. Only the deployment live in production now counts as evidence; one
+replaced by a rollback never does.
+
+Safety assumption: "green" is Forgejo's combined status, which is only as
+complete as the statuses posted so far. Repositories run with autoMerge should
+make their CI checks required in branch protection, so a fast early status
+cannot stand in for the full run. Milestones already achieved stay true when a
+head later moves (as for cancelled items).
+
+`blocked` keeps the item's state with a `note`. `RequestRelease open-pr`
+retries publishing, or resumes a blocked release at the stage it blocked in; `RequestDeployment rollback` (tier 3 on the edge) rolls the
+recorded deployment back through ForgeGraph and blocks the release. Commands
+stay `accepted` until the worker carries them out. A superseded or cancelled
+attempt's release is retired. Release facts become Kanbanger effects: `pr-open`,
+`merged`, `checks-failed`, `blocked` and `rolled-back` comment; `review-ready`
+also moves the issue to "In Review" (by name, no fallback) and
+`production-verified` to "Done" (by name, else the first `completed` state). A
+closed issue is never moved.
 
 ## Authenticated HTTP host
 
@@ -294,6 +331,7 @@ replayed command or receipt adds none.
 | `admitted` | Set the team's "In Progress" state (by name, else the first `started` state). An issue already started, in review, done or cancelled is left unchanged. |
 | `execution-succeeded` | Comment with request/attempt IDs, environment, execution, thread, checkpoint commit and tree digest. The state is never set to Done. |
 | `execution-failed`, `execution-cancelled` | Comment with the same receipt summary. No state change. |
+| release facts (BOB-82) | See "Releases": review-ready → In Review, production-verified → Done, the others comment only. |
 
 `drainIssueEffects()` claims one row at a time under a lease, writes outside any
 transaction, reads the result back and only then marks the row `delivered`.
@@ -318,8 +356,9 @@ FindExecution before any replay, unknown state on ambiguity), then drains up to
 off exponentially with jitter up to 60 s. Each step prints one JSON line
 (`start`, `dispatch`, `drain`, `stop`) to stdout; tokens never appear in logs.
 SIGTERM/SIGINT stop the loop after the current step settles its lease, then the
-database closes. The worker records no receipts and does not validate, merge,
-deploy or close issues.
+database closes. The worker records no receipts. Without `--release` it does not
+validate, merge, deploy or close issues; with it, it runs the release driver
+after the drain (see "Releases").
 
 Config files, all operator-owned:
 
@@ -327,6 +366,8 @@ Config files, all operator-owned:
   With Kanbanger, `teamId` is the team UUID or key and `projectId` the project UUID.
 - `environment-bindings.json`: `[{ target: ExecutionTarget, baseUrl, authToken? }]`.
 - `kanbanger.json`: shown above.
+- `release.json` (optional, BOB-82): `{ forgejo: { instanceUrl, token, reviewToken? }, forgegraph?: { baseUrl, token }, repositories?: { "<repositoryId>": "owner/repo" } }`.
+  https only. The Forgejo token needs repository read/write on the target repositories (branches, PRs, merge); `reviewToken`, if set, approves as a different user. The ForgeGraph token reads deployments and health and can roll back. `policy.json` may carry `release: { autoMergeDefault, repositories }`.
 
 ### Flightdeck lifecycle export (BOB-62)
 
