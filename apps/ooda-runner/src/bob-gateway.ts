@@ -401,6 +401,10 @@ export class BobGatewayConnector {
             send: (msg) => this.send(msg),
             isConnected: () => this.authenticated && this.ws?.readyState === WebSocket.OPEN,
             log: (line) => console.log(`[bob-gw] ${JSON.stringify(line)}`),
+            // Runaway guard: a run whose weighted tokens pass the cap is
+            // stopped. Off unless BOB_BUDGET_RUN_WEIGHTED_TOKEN_CAP is set.
+            runWeightedTokenCap: Number(process.env.BOB_BUDGET_RUN_WEIGHTED_TOKEN_CAP) || undefined,
+            onRunaway: (runSessionId, weighted) => this.stopRunawayRun(runSessionId, weighted),
           })
         : undefined;
   }
@@ -831,6 +835,15 @@ export class BobGatewayConnector {
   }
 
   /** Bounded append; only the tail matters for classifying a failure. */
+  /** BOB-76: stop a run that spent past the per-run budget cap. */
+  private stopRunawayRun(sessionId: string, weightedTokens: number): void {
+    const handle = this.sessionHandles.get(sessionId);
+    if (!handle) return;
+    console.warn(`[bob-gw] Stopping ${sessionId}: ${Math.round(weightedTokens)} weighted tokens passed the per-run budget cap`);
+    this.sendStatus(sessionId, "failed", { reason: "budget_runaway", retryable: false });
+    handle.kill();
+  }
+
   private captureOutput(sessionId: string, chunk: string): void {
     this.nativeSessions.feed(sessionId, chunk);
     const next = `${this.runOutputTail.get(sessionId) ?? ""}${chunk}`;

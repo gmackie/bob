@@ -170,3 +170,30 @@ describe("UsagePoller session links", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe("UsagePoller runaway guard", () => {
+  it("flags a linked Bob run once when its weighted tokens pass the cap", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "bob-usage-runaway-"));
+    const flagged: string[] = [];
+    const proxy = fakeProxy([record("2026-11-14T20:01:00Z"), record("2026-11-14T20:02:00Z")]);
+    const poller = new UsagePoller({
+      baseUrl: "http://proxy.test",
+      managementKey: MGMT_KEY,
+      bobApiKeys: [BOB_KEY],
+      spoolPath: join(dir, "ledger.json"),
+      send: () => {},
+      isConnected: () => false,
+      fetch: proxy.fetch,
+      now: () => new Date("2026-11-14T20:30:00Z"),
+      runWeightedTokenCap: 50,
+      onRunaway: (run) => flagged.push(run),
+    });
+    poller.linkSession("sess-1", "bob-run-1");
+    await poller.tick();
+    proxy.queue.push(record("2026-11-14T20:03:00Z"));
+    await poller.tick();
+    // Each record weighs 10 input + 5×5 output = 35; two records pass 50.
+    expect(flagged).toEqual(["bob-run-1"]);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});

@@ -37,6 +37,9 @@ export interface UsagePollerOptions {
   resendWindowMs?: number;
   timeoutMs?: number;
   log?: (line: Record<string, unknown>) => void;
+  /** Weighted-token ceiling per Bob run; above it `onRunaway` fires once for that run. Off when unset. */
+  runWeightedTokenCap?: number;
+  onRunaway?: (bobSessionId: string, weightedTokens: number) => void;
 }
 
 const GAP_WARN_MS = 45_000;
@@ -52,6 +55,7 @@ export class UsagePoller {
   private gaps = 0;
   private timer?: ReturnType<typeof setTimeout>;
   private running = false;
+  private readonly flaggedRuns = new Set<string>();
 
   constructor(private readonly options: UsagePollerOptions) {
     this.fetchImpl = options.fetch ?? fetch;
@@ -119,6 +123,7 @@ export class UsagePoller {
       this.lastError = undefined;
       this.ledger.prune(now);
       if (drained > 0) this.writeSpool();
+      this.checkRunaways();
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : "usage queue failed";
       this.options.log?.({ step: "budget-usage", outcome: "error", error: this.lastError });
@@ -151,6 +156,17 @@ export class UsagePoller {
     }
     this.options.send({ type: "budget_usage", buckets, sessions, ...(links.length ? { links } : {}) });
     this.sentRevision = revision;
+  }
+
+  private checkRunaways(): void {
+    const cap = this.options.runWeightedTokenCap;
+    if (!cap || !this.options.onRunaway) return;
+    for (const run of this.ledger.runawayRuns(cap)) {
+      if (this.flaggedRuns.has(run.bobSessionId)) continue;
+      this.flaggedRuns.add(run.bobSessionId);
+      this.options.log?.({ step: "budget-usage", outcome: "runaway", run: run.bobSessionId, weightedTokens: Math.round(run.weightedTokens) });
+      this.options.onRunaway(run.bobSessionId, run.weightedTokens);
+    }
   }
 
   /** Link an agent CLI session to its Bob run; shipped with the next budget_usage. */

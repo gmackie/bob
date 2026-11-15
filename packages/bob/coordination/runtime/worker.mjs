@@ -34,14 +34,32 @@ async function flushExporter(step, exporter, state, log) {
 /** One loop: DispatchOnce (the unchanged lease/FindExecution path), then drain the
  * Kanbanger effect outbox. A stop signal is honoured between steps, so a step in
  * flight finishes and settles its lease normally. */
-export async function runWorker({ coordinator, port, kanbanger, flightdeck, edge, intervalMs = 5000, signal, log = line => console.log(JSON.stringify(line)), random = Math.random, inProgressStateName, drainLimit = 10 }) {
+/** BOB-76: admit new submissions only while Bob's budget governor has a slot.
+ * Fails open (admits) when the allowance cannot be read, like autoDrain falls
+ * back to its legacy pacing, so a Bob outage never stalls the factory. */
+export function budgetAdmission({ url, token, fetch: transport = fetch, timeoutMs = 5000, log = () => {} }) {
+  return async request => {
+    try {
+      const response = await transport(url, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(timeoutMs), redirect: 'error' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const allowance = await response.json();
+      if (allowance?.enforce !== true) return true;
+      return Number(allowance.totalSlots) > 0;
+    } catch (error) {
+      log({ at: new Date().toISOString(), step: 'budget', outcome: 'unavailable', executionProfileId: request?.executionProfileId, error: String(error?.message ?? error).slice(0, 200) });
+      return true;
+    }
+  };
+}
+
+export async function runWorker({ coordinator, port, kanbanger, flightdeck, edge, intervalMs = 5000, signal, log = line => console.log(JSON.stringify(line)), random = Math.random, inProgressStateName, drainLimit = 10, admit }) {
   if (!Number.isInteger(intervalMs) || intervalMs < 10 || intervalMs > 3600000) throw new Error('Invalid interval');
   let failures = 0; const analytics = exporterState(), edgeState = exporterState();
   log({ at: new Date().toISOString(), step: 'start', intervalMs });
   while (!signal?.aborted) {
     let worked = false, failed = false;
     try {
-      const result = await coordinator.dispatchOne(port);
+      const result = await coordinator.dispatchOne(port, admit ? { admit } : {});
       const outcome = result.dispatched ? 'dispatched' : result.state ?? 'idle';
       if (result.error) failed = true;
       worked = Boolean(result.attemptId);
@@ -68,7 +86,7 @@ export async function runWorker({ coordinator, port, kanbanger, flightdeck, edge
 }
 
 async function main() {
-  const { values } = parseArgs({ options: { database: { type: 'string' }, context: { type: 'string' }, bindings: { type: 'string' }, kanbanger: { type: 'string' }, flightdeck: { type: 'string' }, edge: { type: 'string' }, 'interval-ms': { type: 'string', default: '5000' }, help: { type: 'boolean' } } });
+  const { values } = parseArgs({ options: { database: { type: 'string' }, context: { type: 'string' }, bindings: { type: 'string' }, kanbanger: { type: 'string' }, flightdeck: { type: 'string' }, edge: { type: 'string' }, budget: { type: 'string' }, 'interval-ms': { type: 'string', default: '5000' }, help: { type: 'boolean' } } });
   if (values.help) { console.log('bob-coordinate-worker --database <sqlite-file> --context <policy.json> --bindings <environment-bindings.json> --kanbanger <kanbanger.json> [--interval-ms <ms>] [--flightdeck <analytics.json>] [--edge <edge.json>]'); return; }
   if (!values.database || !values.context || !values.bindings || !values.kanbanger) throw Object.assign(new Error('Use --help for required arguments'), { code: 'InvalidRequest' });
   const intervalMs = Number(values['interval-ms']);
@@ -88,7 +106,14 @@ async function main() {
   }
   const controller = new AbortController();
   for (const name of ['SIGINT', 'SIGTERM']) process.once(name, () => controller.abort());
-  try { await runWorker({ coordinator, port, kanbanger, flightdeck, edge, intervalMs, signal: controller.signal, inProgressStateName: config.inProgressStateName }); }
+  // --budget <json>: { "url": "https://bob…/api/internal/budget-allowance", "token": "…" } (BOB-76).
+  let admit;
+  if (values.budget) {
+    const budget = JSON.parse(readFileSync(values.budget, 'utf8'));
+    if (typeof budget.url !== 'string' || typeof budget.token !== 'string') throw Object.assign(new Error('Invalid budget configuration'), { code: 'InvalidRequest' });
+    admit = budgetAdmission({ url: budget.url, token: budget.token, log: line => console.log(JSON.stringify(line)) });
+  }
+  try { await runWorker({ coordinator, port, kanbanger, flightdeck, edge, intervalMs, signal: controller.signal, inProgressStateName: config.inProgressStateName, admit }); }
   finally { flightdeck?.close(); edge?.close(); coordinator.close(); }
 }
 

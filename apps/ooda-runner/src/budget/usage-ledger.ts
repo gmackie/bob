@@ -20,6 +20,7 @@
 
 import {
   parseQuotaMeters,
+  weightedTokens,
   type BobSessionUsageWire,
   type BudgetSessionLinkWire,
   type BudgetMeterWire,
@@ -227,6 +228,20 @@ export class UsageLedger {
 
   links({ since = 0 }: { since?: number } = {}): BudgetSessionLinkWire[] {
     return [...this.linkMap.values()].filter((entry) => entry.rev > since).map((entry) => entry.value);
+  }
+
+  /** Linked Bob runs whose weighted tokens passed `cap` (BOB-76 runaway guard). */
+  runawayRuns(cap: number): Array<{ bobSessionId: string; weightedTokens: number }> {
+    if (!(cap > 0)) return [];
+    const out: Array<{ bobSessionId: string; weightedTokens: number }> = [];
+    const byRun = new Map<string, number>();
+    for (const { value } of this.sessionMap.values()) {
+      const link = this.linkMap.get(value.sessionId);
+      if (!link) continue;
+      byRun.set(link.value.bobSessionId, (byRun.get(link.value.bobSessionId) ?? 0) + weightedTokens(value.tokens));
+    }
+    for (const [bobSessionId, weighted] of byRun) if (weighted > cap) out.push({ bobSessionId, weightedTokens: weighted });
+    return out;
   }
 
   /** Current revision; pass it back as `since` to get only later changes. */

@@ -169,8 +169,16 @@ export class ExecutionCoordinator extends Coordinator {
   }
   /** Network work is deliberately outside the SQLite transaction. Expired leases
    * reconcile admission before replaying the exact request, never a new attempt. */
-  async dispatchOne(port, { now = Date.now(), leaseMs = 60000 } = {}) {
+  async dispatchOne(port, { now = Date.now(), leaseMs = 60000, admit } = {}) {
     if (!Number.isSafeInteger(now) || !Number.isInteger(leaseMs) || leaseMs < 1000 || leaseMs > 300000) fail('InvalidRequest', 'Invalid dispatch lease', 400);
+    // Optional admission gate (BOB-76 budget governor): asked only before a
+    // NEW submission. Recovering an unknown or dispatching attempt never waits,
+    // since that execution already holds capacity.
+    if (admit) {
+      const next = this.db.prepare("SELECT * FROM coordination_attempt WHERE tenant=? AND owner=? AND state IN ('queued','dispatching','unknown') AND (lease_until IS NULL OR lease_until<=?) ORDER BY rowid LIMIT 100")
+        .all(this.tenant, this.owner, now).find(candidate => this.plan(candidate.plan_id).state === 'active');
+      if (next && next.state === 'queued' && !(await admit(JSON.parse(next.request)))) return { dispatched: false, state: 'budget-held' };
+    }
     const token = randomUUID();
     const attempt = this.transaction(() => {
       const candidates = this.db.prepare("SELECT * FROM coordination_attempt WHERE tenant=? AND owner=? AND state IN ('queued','dispatching','unknown') AND (lease_until IS NULL OR lease_until<=?) ORDER BY rowid LIMIT 100")
