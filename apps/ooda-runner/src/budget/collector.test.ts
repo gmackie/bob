@@ -1,9 +1,10 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { collectorConfigFromEnv, createCollector, gatewaySender } from "./collector";
+import { collectorConfigFromEnv, createCollector, gatewaySender, isEntryPoint } from "./collector";
 
 const ENV = {
   CLIPROXY_MANAGEMENT_KEY: "mgmt",
@@ -74,5 +75,24 @@ describe("collector", () => {
   it("gatewaySender reports a rejected post as undelivered", async () => {
     const send = gatewaySender({ gatewayUrl: "http://g", token: "t", workspaceId: "w", hostId: "h" }, (async () => new Response(null, { status: 401 })) as typeof fetch);
     await expect(send({ type: "budget_usage" })).resolves.toBe(false);
+  });
+});
+
+describe("isEntryPoint", () => {
+  it("recognises the module when started through a release symlink", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bob-collector-entry-"));
+    try {
+      const real = join(dir, "releases-abc");
+      const file = join(real, "budget-collector.mjs");
+      mkdirSync(real);
+      writeFileSync(file, "");
+      symlinkSync(real, join(dir, "current"));
+      const moduleUrl = pathToFileURL(realpathSync(file)).href;
+      expect(isEntryPoint(moduleUrl, join(dir, "current", "budget-collector.mjs"))).toBe(true);
+      expect(isEntryPoint(moduleUrl, join(dir, "other.mjs"))).toBe(false);
+      expect(isEntryPoint(moduleUrl, undefined)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
