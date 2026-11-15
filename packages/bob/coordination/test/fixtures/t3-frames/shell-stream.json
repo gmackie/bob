@@ -1,0 +1,23 @@
+{
+  "spec": "§3.2, §3.3, §4",
+  "frames": [
+    { "_tag": "Chunk", "requestId": "$id", "values": [
+      { "kind": "snapshot", "snapshot": { "schemaVersion": 3, "snapshotSequence": 98231, "projects": [],
+        "threads": [
+          { "id": "thr_pilot", "projectId": "prj_1", "title": "Pilot", "status": "running", "activityRunStatus": "running",
+            "pendingRuntimeRequest": { "id": "rr_1", "kind": "user_input", "createdAt": "2026-11-15T10:00:00.000Z", "blocking": true },
+            "latestVisibleMessage": { "text": "I need a target." }, "lastError": null, "branch": "BOB-80", "worktreePath": "/w", "updatedAt": "2026-11-15T10:00:00.000Z" },
+          { "id": "thr_secret", "projectId": "prj_1", "title": "Secret", "status": "running",
+            "pendingRuntimeRequest": { "id": "rr_9", "kind": "user_input", "createdAt": "2026-11-15T10:00:00.000Z", "userOnly": true }, "updatedAt": "2026-11-15T10:00:00.000Z" }
+        ], "archivedThreads": [] } }
+    ] },
+    { "_tag": "Chunk", "requestId": "$id", "values": [
+      { "kind": "snapshot", "snapshot": { "schemaVersion": 3, "snapshotSequence": 98231, "projects": [], "threads": [], "archivedThreads": [] }, "resolvedRepositoryIdentityRoots": ["/repo"] }
+    ] },
+    { "_tag": "Chunk", "requestId": "$id", "values": [ { "kind": "synchronized" } ] },
+    { "_tag": "Chunk", "requestId": "$id", "values": [
+      { "kind": "thread.updated", "sequence": 98232, "location": "active", "thread": { "id": "thr_pilot", "projectId": "prj_1", "title": "Pilot", "status": "running", "pendingRuntimeRequest": null, "updatedAt": "2026-11-15T10:01:00.000Z" } },
+      { "kind": "thread.removed", "sequence": 98233, "location": "active", "threadId": "thr_secret" }
+    ] }
+  ]
+}

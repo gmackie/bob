@@ -17,7 +17,7 @@
 import type { ItemSnapshot, PlanSnapshot } from "./model";
 
 /** Coordinator operations the edge may relay. Anything else is refused by the DO and by the exporter. */
-export const RELAYED_OPERATIONS = ["ControlPlan", "RetryItem", "CancelItem", "ReconcileItem"] as const;
+export const RELAYED_OPERATIONS = ["ControlPlan", "RetryItem", "CancelItem", "ReconcileItem", "ResolveInput"] as const;
 export type RelayedOperation = (typeof RELAYED_OPERATIONS)[number];
 
 export type PlanAction = "start" | "pause" | "resume" | "cancel";
@@ -33,13 +33,16 @@ export type CommandInput =
   | { operation: "ControlPlan"; input: { planId: string; expectedVersion: number; action: PlanAction } }
   | { operation: "RetryItem"; input: { itemId: string; expectedVersion: number; previousAttemptId: string; reason: string } }
   | { operation: "CancelItem"; input: { itemId: string; expectedVersion: number } }
-  | { operation: "ReconcileItem"; input: { itemId: string } };
+  | { operation: "ReconcileItem"; input: { itemId: string } }
+  /** answer is encodeAnswers(...) — see attempt.ts. Tier 1. */
+  | { operation: "ResolveInput"; input: { itemId: string; attemptId: string; promptId: string; answer: string } };
 
 export function tierOf(command: CommandInput): Tier {
   switch (command.operation) {
     case "ControlPlan":
       return command.input.action === "pause" || command.input.action === "resume" ? 1 : 2;
     case "ReconcileItem":
+    case "ResolveInput":
       return 1;
     case "RetryItem":
     case "CancelItem":
@@ -163,6 +166,9 @@ export function parseCommandInput(operation: unknown, input: unknown): CommandIn
       return isId(input.itemId) && isVersion(input.expectedVersion) ? { operation, input: { itemId: input.itemId, expectedVersion: input.expectedVersion } } : null;
     case "ReconcileItem":
       return isId(input.itemId) ? { operation, input: { itemId: input.itemId } } : null;
+    case "ResolveInput":
+      return isId(input.itemId) && isId(input.attemptId) && isId(input.promptId) && typeof input.answer === "string" && input.answer.length >= 1 && input.answer.length <= 16000
+        ? { operation, input: { itemId: input.itemId, attemptId: input.attemptId, promptId: input.promptId, answer: input.answer } } : null;
     default:
       return null;
   }

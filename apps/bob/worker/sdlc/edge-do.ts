@@ -1,12 +1,14 @@
 /// <reference types="@cloudflare/workers-types" />
 import { DurableObject } from "cloudflare:workers";
 import { EdgeController } from "./controller";
-import { attachUser, greet, greetedSockets, handleCommand, ingestResponse, parseCommandMessage, parseHello } from "./edge-sockets";
+import { AttemptEdge, tailResponse } from "./attempt-edge";
+import { attachUser, greet, greetedSockets, handleCommand, ingestResponse, parseCommandMessage, parseHello, parseWatchMessage } from "./edge-sockets";
+import { CI_POLL_MS, fgCiSourceFromEnv, type FgEnv } from "./fg";
 import { SDLC_USER_HEADER } from "./routes";
 import { durableObjectSql } from "./sql";
 import { fetchBizPulseRepos } from "./topology";
 
-interface SdlcEdgeEnv {
+interface SdlcEdgeEnv extends FgEnv {
   BOB_BIZPULSE_API_URL?: string;
   BOB_BIZPULSE_API_KEY?: string;
   /** Re-checked on every command: the list can change while a socket is open. */
@@ -21,6 +23,8 @@ interface SdlcEdgeEnv {
  */
 export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
   private readonly controller: EdgeController;
+  /** Watches, the in-memory live tail and CI detail (BOB-80). Nothing of it is stored. */
+  private readonly attempt: AttemptEdge;
 
   constructor(ctx: DurableObjectState, env: SdlcEdgeEnv) {
     super(ctx, env);
@@ -31,6 +35,16 @@ export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
       schedule: (work) => ctx.waitUntil(work),
       loadTopology: apiUrl && apiKey ? () => fetchBizPulseRepos({ apiUrl, apiKey }) : undefined,
     });
+    const store = this.controller.store;
+    this.attempt = new AttemptEdge({
+      sockets: () => ctx.getWebSockets(),
+      item: (id) => store.item(id),
+      plan: (id) => store.plan(id),
+      topology: () => store.meta().topology,
+      ci: fgCiSourceFromEnv(env),
+      viewerIds: () => this.env.SDLC_VIEWER_USER_IDS,
+      schedule: (work) => ctx.waitUntil(work),
+    });
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -38,6 +52,10 @@ export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
     if (pathname === "/ingest" && request.method === "POST") {
       // routes.ts has already capped the body at MAX_INGEST_BYTES.
       return ingestResponse(this.controller, await request.text());
+    }
+    if (pathname === "/tail" && request.method === "POST") {
+      // routes.ts has already checked the bearer and capped the body at MAX_TAIL_BYTES.
+      return tailResponse(this.attempt, await request.text());
     }
     if (pathname === "/ws") {
       if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") return new Response("expected websocket", { status: 426 });
@@ -53,8 +71,22 @@ export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const hello = parseHello(message);
     if (hello) { greet(this.controller, ws, hello); return; }
+    const watch = parseWatchMessage(message);
+    if (watch) {
+      if (this.attempt.watch(ws, watch)) await this.armCiPoll();
+      return;
+    }
     const command = parseCommandMessage(message);
     if (command) handleCommand(this.controller, ws, command, this.env.SDLC_VIEWER_USER_IDS, Date.now());
+  }
+
+  /** CI detail for watched items, every CI_POLL_MS while anything is watched. */
+  async alarm(): Promise<void> {
+    if (await this.attempt.pollCi()) await this.ctx.storage.setAlarm(Date.now() + CI_POLL_MS);
+  }
+
+  private async armCiPoll(): Promise<void> {
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + CI_POLL_MS);
   }
 
   async webSocketClose(ws: WebSocket, code: number): Promise<void> {

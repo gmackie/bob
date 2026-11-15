@@ -2231,6 +2231,129 @@
                           ],
                           "additionalProperties": false
                         },
+                        "pendingInput": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "attemptId": {
+                              "type": "string",
+                              "x-forge-type": "text",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "promptId": {
+                              "type": "string",
+                              "x-forge-type": "text",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "user_input"
+                              ],
+                              "x-forge-enum": "@bob/coordination/_/PendingInputKind"
+                            },
+                            "questions": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "x-forge-type": "text",
+                                    "minLength": 1,
+                                    "maxLength": 128
+                                  },
+                                  "header": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "x-forge-type": "text",
+                                    "minLength": 1,
+                                    "maxLength": 240
+                                  },
+                                  "question": {
+                                    "type": "string",
+                                    "x-forge-type": "text",
+                                    "minLength": 1,
+                                    "maxLength": 8000
+                                  },
+                                  "options": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "label": {
+                                          "type": "string",
+                                          "x-forge-type": "text",
+                                          "minLength": 1,
+                                          "maxLength": 2000
+                                        },
+                                        "value": {
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ],
+                                          "x-forge-type": "text",
+                                          "minLength": 1,
+                                          "maxLength": 2000
+                                        },
+                                        "description": {
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ],
+                                          "x-forge-type": "text",
+                                          "minLength": 1,
+                                          "maxLength": 4000
+                                        }
+                                      },
+                                      "required": [
+                                        "label"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "uniqueItems": false,
+                                    "x-forge-collection": "list",
+                                    "maxItems": 50
+                                  },
+                                  "multiSelect": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "question",
+                                  "options",
+                                  "multiSelect"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "uniqueItems": false,
+                              "x-forge-collection": "list",
+                              "minItems": 1,
+                              "maxItems": 20
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "x-forge-type": "datetime",
+                              "x-forge-precision": "ms"
+                            }
+                          },
+                          "required": [
+                            "attemptId",
+                            "promptId",
+                            "kind",
+                            "questions",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        },
                         "achievedMilestones": {
                           "type": "array",
                           "items": {
@@ -2297,7 +2420,7 @@
                   ],
                   "additionalProperties": false
                 },
-                "fingerprint": "sha256:db76ce5e9d1328334ee278cc72faa6a90623d72a4259f203a01590b53464e906"
+                "fingerprint": "sha256:083813526edf282b85b9758854a5885f367fab3d0730cad2aeb0125089e26cd8"
               }
             }
           ]
@@ -2389,7 +2512,7 @@
           ]
         }
       ],
-      "fingerprint": "sha256:259cbfa40e8e5a357ed5317acf9764ee51adbe5a68146ed9d29459a7f0aebe44"
+      "fingerprint": "sha256:a68c7c8b629d37c48cb496e3c4cf85484b277477132eaf42730ccb29e497e2d0"
     },
     {
       "id": "bob.functions.GetOperation",
@@ -8381,7 +8504,7 @@
       "bearerFormat": "JWT"
     }
   },
-  "fingerprint": "sha256:a13923ee42b687ff051f65cab19c918d69dc6071bbc494b484080ab14f555361",
+  "fingerprint": "sha256:e966556b4bb51130f08551d88ed810d9e9da34bcdb0706bc2c65a132ba4bf329",
   "generator": {
     "name": "forgec",
     "version": "0.5.0"

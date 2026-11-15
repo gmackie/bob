@@ -11,6 +11,9 @@ export const outputValidators = new Map(Object.values(schema.paths).flatMap(Obje
   .map(op => [op.operationId.split('/').at(-1), ajv.compile(op.responses['200'].content['application/json'].schema)]));
 export const validators = new Map(Object.values(schema.paths).flatMap(Object.values).filter(op => op.operationId)
   .map(op => [op.operationId.split('/').at(-1), ajv.compile(op.requestBody.content['application/json'].schema)]));
+const itemSchema = schema.paths['/api/v1/coordination/items/query'].post.responses['200'].content['application/json'].schema.properties.item;
+/** Validates a PendingInput (contract.forge) as the tail relay reports it. */
+export const pendingInputValidator = ajv.compile({ ...itemSchema.properties.pendingInput, type: 'object' });
 export const supportedOperations = Object.freeze(['CreatePlan', 'UpdatePlan', 'ControlPlan', 'GetPlan', 'GetItem', 'GetOperation', 'ReadEvents', 'GetCapabilities', 'ListPlans']);
 export const canonical = value => JSON.stringify(value, (_key, entry) => entry && typeof entry === 'object' && !Array.isArray(entry)
   ? Object.fromEntries(Object.keys(entry).sort().map(key => [key, entry[key]])) : entry);
@@ -19,9 +22,9 @@ export class CoordinationError extends Error {
   constructor(code, message, status = 409) { super(message); this.code = code; this.status = status; }
 }
 export const fail = (code, message, status) => { throw new CoordinationError(code, message, status); };
-export const storageVersion = 4;
+export const storageVersion = 5;
 /** Commands that change coordination state; each is written to coordination_command_log. */
-export const commandOperations = Object.freeze(['CreatePlan', 'UpdatePlan', 'ControlPlan', 'RequestExecution', 'RetryItem', 'CancelItem', 'ReconcileItem']);
+export const commandOperations = Object.freeze(['CreatePlan', 'UpdatePlan', 'ControlPlan', 'RequestExecution', 'RetryItem', 'CancelItem', 'ReconcileItem', 'ResolveInput']);
 const commandKey = (name, body) => name === 'RequestExecution' ? body?.requestId : body?.commandId;
 const milestones = ['execution-succeeded', 'review-ready', 'merged', 'production-verified'];
 const completionTargets = ['execution', 'review-ready', 'merged', 'production'];
@@ -36,11 +39,11 @@ export class Coordinator {
     this.fault = fault;
     this.db = new DatabaseSync(database);
     this.db.exec('PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
-    // Version 4 is current. Older local stores upgrade transactionally with the
+    // Version 5 is current. Older local stores upgrade transactionally with the
     // exact generated table migrations; any other version is refused.
     const sql = file => readFileSync(new URL(`../storage/generated/${file}`, import.meta.url), 'utf8');
     const version = this.db.prepare('PRAGMA user_version').get().user_version;
-    if (![0, 1, 2, 3, storageVersion].includes(version)) { this.db.close(); fail('StorageVersion', 'Unsupported coordination database version', 500); }
+    if (![0, 1, 2, 3, 4, storageVersion].includes(version)) { this.db.close(); fail('StorageVersion', 'Unsupported coordination database version', 500); }
     if (version !== storageVersion) try {
       this.transaction(() => {
         const current = this.db.prepare('PRAGMA user_version').get().user_version;
@@ -50,6 +53,7 @@ export class Coordinator {
           if (current <= 1) this.db.exec(sql('0002_attempts.sql'));
           if (current <= 2) this.db.exec(sql('0003_issue_effects.sql'));
           if (current <= 3) this.db.exec(sql('0004_command_log.sql'));
+          if (current <= 4) this.db.exec(sql('0005_input_delivery.sql'));
         }
         this.db.exec(`PRAGMA user_version = ${storageVersion}`);
       });

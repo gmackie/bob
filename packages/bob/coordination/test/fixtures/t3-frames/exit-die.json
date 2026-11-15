@@ -1,0 +1,1 @@
+{ "spec": "§2.3", "frames": [ { "_tag": "Exit", "requestId": "$id", "exit": { "_tag": "Failure", "cause": [ { "_tag": "Die", "defect": "Expected string, got 1 at [\"payload\"][\"threadId\"]" } ] } } ] }

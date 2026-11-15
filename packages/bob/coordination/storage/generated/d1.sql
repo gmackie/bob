@@ -109,6 +109,26 @@ CREATE TABLE coordination_event (
   PRIMARY KEY (tenant, id)
 );
 
+CREATE TABLE coordination_input_delivery (
+  "tenant" TEXT NOT NULL,
+  "id" TEXT NOT NULL,
+  "owner" TEXT NOT NULL,
+  "attempt_id" TEXT NOT NULL,
+  "item_id" TEXT NOT NULL,
+  "thread_id" TEXT NOT NULL,
+  "prompt_id" TEXT NOT NULL,
+  "command_id" TEXT NOT NULL,
+  "operation_id" TEXT NOT NULL,
+  "answers" TEXT,
+  "status" TEXT NOT NULL,
+  "delivery_attempts" INTEGER NOT NULL,
+  "next_attempt_at" INTEGER NOT NULL,
+  "last_error" TEXT,
+  "created_at" TEXT NOT NULL,
+  "settled_at" TEXT,
+  PRIMARY KEY (tenant, id)
+);
+
 CREATE TABLE coordination_issue_effect (
   "tenant" TEXT NOT NULL,
   "id" TEXT NOT NULL,
@@ -162,6 +182,8 @@ CREATE INDEX coordination_command_log_ix_by_command_id ON coordination_command_l
 CREATE INDEX coordination_command_log_ix_by_owner_created_at ON coordination_command_log (tenant, owner, created_at, id);
 CREATE UNIQUE INDEX coordination_event_uq_sequence ON coordination_event (tenant, sequence);
 CREATE INDEX coordination_event_ix_by_owner_sequence ON coordination_event (tenant, owner, sequence, id);
+CREATE UNIQUE INDEX coordination_input_delivery_uq_attemptId_promptId ON coordination_input_delivery (tenant, attempt_id, prompt_id);
+CREATE INDEX coordination_input_delivery_ix_by_owner_status_next_attempt_at ON coordination_input_delivery (tenant, owner, status, next_attempt_at, id);
 CREATE UNIQUE INDEX coordination_issue_effect_uq_attemptId_fact ON coordination_issue_effect (tenant, attempt_id, fact);
 CREATE INDEX coordination_issue_effect_ix_by_owner_status_next_attempt_at ON coordination_issue_effect (tenant, owner, status, next_attempt_at, id);
 CREATE INDEX coordination_item_ix_by_owner_plan_id ON coordination_item (tenant, owner, plan_id, id);

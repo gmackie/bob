@@ -7,6 +7,7 @@ import { flightdeckExporter, loadFlightdeckConfig } from './flightdeck.mjs';
 import { edgeExporter, loadEdgeConfig } from './edge.mjs';
 import { ExecutionCoordinator } from './execution.mjs';
 import { executionPort } from './execution-port.mjs';
+import { tailRelay } from './tail.mjs';
 import { kanbangerClient, kanbangerIssueResolver, loadKanbangerConfig } from './kanbanger.mjs';
 import { drainIssueEffects, backoffMs } from './issue-effects.mjs';
 
@@ -54,8 +55,10 @@ export function budgetAdmission({ url, token, fetch: transport = fetch, timeoutM
   };
 }
 
-export async function runWorker({ coordinator, port, kanbanger, flightdeck, edge, intervalMs = 5000, signal, log = line => console.log(JSON.stringify(line)), random = Math.random, inProgressStateName, drainLimit = 10, admit }) {
+/** tail: an optional tail relay (tail.mjs); it runs its own ~1 s loop beside dispatch and stops with it. */
+export async function runWorker({ coordinator, port, kanbanger, flightdeck, edge, tail, intervalMs = 5000, signal, log = line => console.log(JSON.stringify(line)), random = Math.random, inProgressStateName, drainLimit = 10, admit }) {
   if (!Number.isInteger(intervalMs) || intervalMs < 10 || intervalMs > 3600000) throw new Error('Invalid interval');
+  const relay = tail?.run({ signal }).catch(() => {});
   let failures = 0; const analytics = exporterState(), edgeState = exporterState();
   log({ at: new Date().toISOString(), step: 'start', intervalMs });
   while (!signal?.aborted) {
@@ -86,6 +89,7 @@ export async function runWorker({ coordinator, port, kanbanger, flightdeck, edge
     if (signal?.aborted) break;
     try { await sleep(delay, undefined, { signal }); } catch { break; }
   }
+  tail?.close(); await relay;
   log({ at: new Date().toISOString(), step: 'stop', outcome: 'stopped' });
 }
 
@@ -96,23 +100,27 @@ async function main() {
   const intervalMs = Number(values['interval-ms']);
   const config = loadKanbangerConfig(values.kanbanger);
   const kanbanger = kanbangerClient(config);
-  const port = executionPort({ bindings: JSON.parse(readFileSync(values.bindings, 'utf8')) });
+  const bindings = JSON.parse(readFileSync(values.bindings, 'utf8'));
+  const port = executionPort({ bindings });
   const coordinator = new ExecutionCoordinator({ database: values.database, context: JSON.parse(readFileSync(values.context, 'utf8')) });
   let flightdeck;
   if (values.flightdeck) {
     try { flightdeck = flightdeckExporter({ coordinator, ...loadFlightdeckConfig(values.flightdeck) }); }
     catch { console.error(JSON.stringify({ at: new Date().toISOString(), step: 'flightdeck', outcome: 'configuration-unavailable' })); }
   }
-  let edge, edgePrincipal;
+  let edge, edgePrincipal, tail;
   if (values.edge) {
     try {
       const edgeConfig = loadEdgeConfig(values.edge);
       // The edge principal: the worker's trusted context, the configured relayed-operation
       // allowlist, its own connection, and the same Kanbanger issue admission as HTTP.
       if (edgeConfig.commands) edgePrincipal = new ExecutionCoordinator({ database: values.database, context: JSON.parse(readFileSync(values.context, 'utf8')), issueResolver: kanbangerIssueResolver(kanbanger) });
-      edge = edgeExporter({ coordinator, ...edgeConfig, ...(edgeConfig.commands ? { commands: { ...edgeConfig.commands, coordinator: edgePrincipal } } : {}) });
+      const { tail: tailConfig, ...exporterConfig } = edgeConfig;
+      edge = edgeExporter({ coordinator, ...exporterConfig, ...(edgeConfig.commands ? { commands: { ...edgeConfig.commands, coordinator: edgePrincipal } } : {}) });
+      // BOB-80 tail relay: same edge token, the worker's environment bindings and coordinator.
+      if (tailConfig) tail = tailRelay({ coordinator, bindings, edge: { endpoint: edgeConfig.endpoint, token: edgeConfig.token }, postIntervalMs: tailConfig.postIntervalMs });
     } catch {
-      edgePrincipal?.close(); edgePrincipal = undefined;
+      edgePrincipal?.close(); edgePrincipal = undefined; tail = undefined;
       console.error(JSON.stringify({ at: new Date().toISOString(), step: 'edge', outcome: 'configuration-unavailable' }));
     }
   }
@@ -125,8 +133,8 @@ async function main() {
     if (typeof budget.url !== 'string' || typeof budget.token !== 'string') throw Object.assign(new Error('Invalid budget configuration'), { code: 'InvalidRequest' });
     admit = budgetAdmission({ url: budget.url, token: budget.token, log: line => console.log(JSON.stringify(line)) });
   }
-  try { await runWorker({ coordinator, port, kanbanger, flightdeck, edge, intervalMs, signal: controller.signal, inProgressStateName: config.inProgressStateName, admit }); }
-  finally { flightdeck?.close(); edge?.close(); edgePrincipal?.close(); coordinator.close(); }
+  try { await runWorker({ coordinator, port, kanbanger, flightdeck, edge, tail, intervalMs, signal: controller.signal, inProgressStateName: config.inProgressStateName, admit }); }
+  finally { flightdeck?.close(); tail?.close(); edge?.close(); edgePrincipal?.close(); coordinator.close(); }
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { ExecutionCoordinator } from '../runtime/execution.mjs';
-import { CoordinationError, outputValidators } from '../runtime/coordinator.mjs';
+import { CoordinationError, outputValidators, storageVersion } from '../runtime/coordinator.mjs';
 import { classifyCommandError, edgeExporter, loadEdgeConfig, FAST_POLL_MS, INTERNAL_ERROR, MAX_RESULTS_PER_BATCH, RELAYED_OPERATIONS } from '../runtime/edge.mjs';
 import { runWorker } from '../runtime/worker.mjs';
 
@@ -199,13 +199,14 @@ test('capabilities advertise CancelItem and ReconcileItem, not TriggerPlan', t =
 
 test('a version-three store gains the command log table', t => {
   const { c, database } = setup(t);
-  // Exactly the rollback in deploy/coordination/README.md ("Storage version 4 rollback").
+  // Exactly the rollbacks in deploy/coordination/README.md ("Storage version 5 rollback", then "Storage version 4 rollback").
+  c.db.exec('BEGIN; DROP TABLE coordination_input_delivery; PRAGMA user_version = 4; COMMIT;');
   c.db.exec('BEGIN; DROP TABLE coordination_command_log; PRAGMA user_version = 3; COMMIT;');
   assert.equal(c.db.prepare('PRAGMA user_version').get().user_version, 3);
   assert.deepEqual(c.db.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'coordination_command_log%'").all(), []);
   assert.equal(c.db.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
   const reopened = new ExecutionCoordinator({ database, context }); t.after(() => reopened.close());
-  assert.equal(reopened.db.prepare('PRAGMA user_version').get().user_version, 4);
+  assert.equal(reopened.db.prepare('PRAGMA user_version').get().user_version, storageVersion);
   assert.equal(reopened.db.prepare('SELECT COUNT(*) AS n FROM coordination_command_log').get().n, 0);
   // The upgrade creates the final, append-only schema: a row id plus an indexed command_id.
   assert.deepEqual(reopened.db.prepare('PRAGMA table_info(coordination_command_log)').all().filter(col => col.pk).map(col => col.name), ['tenant', 'id']);

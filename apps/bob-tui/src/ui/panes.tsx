@@ -10,7 +10,9 @@ import {
   type Row,
 } from "@bob/sdlc-view";
 
+import type { AttemptState } from "../model/attempt";
 import { latestFor, recent, statusText, type CommandEntry, type CommandsState } from "../model/commands";
+import { AnswerPrompt, AttemptPane } from "../views/attempt";
 import type { Choice, Mode } from "../model/keymap";
 import { dependencyTree, planLabel, type Focus, type TreeNode } from "../model/tree";
 import { ATTENTION_COLOR, ATTENTION_MARK, PLAN_COLOR, planStateLabel, stateBadge, truncate } from "./format";
@@ -56,7 +58,7 @@ function Actions({ options, latest }: { options: CommandOption[]; latest: Comman
   const keyFor = (o: CommandOption) =>
     o.command.operation === "ControlPlan"
       ? o.command.input.action === "pause" || o.command.input.action === "resume" ? "p" : o.command.input.action === "cancel" ? "c" : ":"
-      : o.command.operation === "RetryItem" ? "r" : o.command.operation === "CancelItem" ? "c" : ":";
+      : o.command.operation === "RetryItem" ? "r" : o.command.operation === "CancelItem" ? "c" : o.command.operation === "ResolveInput" ? "a" : ":";
   return (
     <Box flexDirection="column" marginTop={1}>
       {options.length ? (
@@ -70,19 +72,23 @@ function Actions({ options, latest }: { options: CommandOption[]; latest: Comman
 }
 
 /** The center pane: a group summary, a plan's dependency tree, or one item. */
-export function CenterPane({ view, focus, commands, planOptions, itemOptions }: {
+interface CenterProps {
   view: EdgeView; focus: Focus; commands: CommandsState; planOptions: CommandOption[]; itemOptions: CommandOption[];
-}) {
+  /** Live attempt detail for the item level. */
+  attempt: AttemptState;
+  /** How many tail lines fit at the item level. */
+  maxTail: number;
+}
+
+export function CenterPane(props: CenterProps) {
   return (
     <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={20} borderStyle="round" paddingX={1}>
-      <CenterBody view={view} focus={focus} commands={commands} planOptions={planOptions} itemOptions={itemOptions} />
+      <CenterBody {...props} />
     </Box>
   );
 }
 
-function CenterBody({ view, focus, commands, planOptions, itemOptions }: {
-  view: EdgeView; focus: Focus; commands: CommandsState; planOptions: CommandOption[]; itemOptions: CommandOption[];
-}) {
+function CenterBody({ view, focus, commands, planOptions, itemOptions, attempt, maxTail }: CenterProps) {
   switch (focus.kind) {
     case "none":
       return <Text dimColor>{view.epoch === null ? "Waiting for the edge's first snapshot…" : "Nothing selected."}</Text>;
@@ -146,21 +152,15 @@ function CenterBody({ view, focus, commands, planOptions, itemOptions }: {
               return <Text key={m} color={hit ? "green" : undefined} dimColor={!hit}>{hit ? "✓" : "·"} {MILESTONE_LABEL[m]}  </Text>;
             })}
           </Text>
-          {item?.execution ? (
-            <Box flexDirection="column">
-              <Text wrap="truncate-end">Attempt <Text color="cyan">{item.execution.attemptId}</Text></Text>
-              <Text wrap="truncate-end">
-                Thread <Text color="cyan">t3:{item.execution.thread.threadId}</Text>
-                <Text dimColor> (env {item.execution.thread.environmentId}, project {item.execution.thread.projectId})</Text>
-              </Text>
-            </Box>
-          ) : <Text dimColor>No execution admitted yet.</Text>}
           <Text>Evidence{item && item.evidenceRefs.length ? "" : <Text dimColor> none</Text>}</Text>
           {item?.evidenceRefs.map((ref) => {
             const href = safeHref(ref);
             return <Text key={ref} wrap="truncate-end" color={href ? "blue" : undefined} underline={!!href}>  {ref}</Text>;
           })}
           <Actions options={itemOptions} latest={latestFor(commands, entry.itemId)} />
+          <Box flexDirection="column" marginTop={1}>
+            {item ? <AttemptPane item={item} attempt={attempt} maxTail={maxTail} /> : <Text dimColor>No execution admitted yet.</Text>}
+          </Box>
         </Box>
       );
     }
@@ -192,7 +192,7 @@ export function InboxPane({ rows, width, max, horizontal }: { rows: Row[]; width
 const HELP: Array<[string, string]> = [
   ["↑↓ / j k", "move"], ["enter / → / l", "drill in"], ["esc / ← / h", "back out"], ["g / G", "top / bottom"],
   ["i / tab", "next inbox item"], [":", "command palette"], ["p", "pause or resume the plan"], ["c", "cancel item or plan (confirm)"],
-  ["r", "retry a failed item (confirm)"], ["?", "this help"], ["q", "quit"],
+  ["r", "retry a failed item (confirm)"], ["a", "answer the agent's pending question"], ["?", "this help"], ["q", "quit"],
 ];
 
 /** The bottom area: the active prompt or palette, the last message, recent commands, key hints. */
@@ -203,7 +203,7 @@ export function Footer({ mode, message, commands, error }: { mode: Mode; message
       {error ? <Text color="red" wrap="truncate-end">{error}</Text> : null}
       {message ? <Text color="yellow" wrap="truncate-end">{message}</Text> : null}
       {recent(commands, 2).map((e) => <CommandLine key={e.command.commandId} entry={e} />)}
-      <Text dimColor wrap="truncate-end">↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · i inbox · ? help · q quit</Text>
+      <Text dimColor wrap="truncate-end">↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit</Text>
     </Box>
   );
 }
@@ -248,5 +248,7 @@ function ModeView({ mode }: { mode: Mode }) {
           <Text>&gt; {mode.text}<Text inverse> </Text></Text>
         </Box>
       );
+    case "answer":
+      return <AnswerPrompt flow={mode.flow} />;
   }
 }

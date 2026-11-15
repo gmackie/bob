@@ -1,5 +1,6 @@
 // The SdlcEdge Durable Object's logic that does not need the Workers runtime, so node
 // tests can cover it with fakes. edge-do.ts only wires these to the DO's state.
+import type { WatchMessage } from "@bob/sdlc-view";
 import type { CommandSender, EdgeController, EdgeSocket, Hello } from "./controller";
 import { isViewer } from "./routes";
 import { parseBatch } from "./store";
@@ -12,14 +13,22 @@ export interface AttachedSocket extends EdgeSocket {
 
 /** A hello is a small JSON object; anything longer is ignored unread. */
 export const MAX_HELLO_CHARS = 2048;
-/** A command carries at most a 2000-character reason; anything longer is ignored unread. */
-export const MAX_COMMAND_CHARS = 8192;
+/**
+ * The largest command is a ResolveInput: an answer of up to 16000 characters that is itself
+ * JSON (encodeAnswers), escaped again inside the message. Anything longer is ignored unread.
+ */
+export const MAX_COMMAND_CHARS = 64 * 1024;
 
 /**
  * What a socket's attachment holds, across hibernation: whether it said hello, the
  * Bob user id the route verified for its upgrade. (The command rate is per user, in SQLite.)
  */
-export interface SocketAttachment { greeted?: boolean; userId?: string }
+export interface SocketAttachment {
+  greeted?: boolean;
+  userId?: string;
+  /** The one item whose attempt detail (tail, CI) this socket watches (BOB-80). */
+  watch?: string;
+}
 
 export function readAttachment(socket: AttachedSocket): SocketAttachment {
   try {
@@ -82,6 +91,21 @@ export function greet(controller: Pick<EdgeController, "hello">, socket: Attache
     bytes: sizes.reduce((a, b) => a + b, 0),
     largestBytes: Math.max(0, ...sizes),
   }));
+}
+
+/** A watch is `{type:"watch", itemId}`; anything longer is ignored unread. */
+export const MAX_WATCH_CHARS = 512;
+
+/** Parses a client's WatchMessage: `{type:"watch", itemId: string|null}`. Anything else is null. */
+export function parseWatchMessage(message: string | ArrayBuffer): WatchMessage | null {
+  if (typeof message !== "string" || message.length > MAX_WATCH_CHARS) return null;
+  let value: unknown;
+  try { value = JSON.parse(message); } catch { return null; }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const { type, itemId } = value as Record<string, unknown>;
+  if (type !== "watch") return null;
+  if (itemId === null) return { type: "watch", itemId: null };
+  return typeof itemId === "string" && itemId.length > 0 && itemId.length <= 200 ? { type: "watch", itemId } : null;
 }
 
 /** The user id a new socket carries; set once, when the DO accepts the upgrade. */

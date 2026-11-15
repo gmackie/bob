@@ -1986,6 +1986,129 @@
                           ],
                           "additionalProperties": false
                         },
+                        "pendingInput": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "attemptId": {
+                              "type": "string",
+                              "x-forge-type": "text",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "promptId": {
+                              "type": "string",
+                              "x-forge-type": "text",
+                              "minLength": 1,
+                              "maxLength": 128
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "user_input"
+                              ],
+                              "x-forge-enum": "@bob/coordination/_/PendingInputKind"
+                            },
+                            "questions": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "x-forge-type": "text",
+                                    "minLength": 1,
+                                    "maxLength": 128
+                                  },
+                                  "header": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "x-forge-type": "text",
+                                    "minLength": 1,
+                                    "maxLength": 240
+                                  },
+                                  "question": {
+                                    "type": "string",
+                                    "x-forge-type": "text",
+                                    "minLength": 1,
+                                    "maxLength": 8000
+                                  },
+                                  "options": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "label": {
+                                          "type": "string",
+                                          "x-forge-type": "text",
+                                          "minLength": 1,
+                                          "maxLength": 2000
+                                        },
+                                        "value": {
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ],
+                                          "x-forge-type": "text",
+                                          "minLength": 1,
+                                          "maxLength": 2000
+                                        },
+                                        "description": {
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ],
+                                          "x-forge-type": "text",
+                                          "minLength": 1,
+                                          "maxLength": 4000
+                                        }
+                                      },
+                                      "required": [
+                                        "label"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "uniqueItems": false,
+                                    "x-forge-collection": "list",
+                                    "maxItems": 50
+                                  },
+                                  "multiSelect": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "question",
+                                  "options",
+                                  "multiSelect"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "uniqueItems": false,
+                              "x-forge-collection": "list",
+                              "minItems": 1,
+                              "maxItems": 20
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "x-forge-type": "datetime",
+                              "x-forge-precision": "ms"
+                            }
+                          },
+                          "required": [
+                            "attemptId",
+                            "promptId",
+                            "kind",
+                            "questions",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        },
                         "achievedMilestones": {
                           "type": "array",
                           "items": {

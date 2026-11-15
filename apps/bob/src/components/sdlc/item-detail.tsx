@@ -5,7 +5,8 @@ import { cn } from "@gmacko/core/ui";
 
 import { AttentionBadge } from "./state-badge";
 
-export function ItemDetail({ row, onClose, onOpenPlan, actions }: { row: Row; onClose: () => void; onOpenPlan: () => void; actions?: ReactNode }) {
+/** `attempt` is the L5 attempt view; when given it shows the T3 thread, so the row here is left out. */
+export function ItemDetail({ row, onClose, onOpenPlan, actions, attempt }: { row: Row; onClose: () => void; onOpenPlan: () => void; actions?: ReactNode; attempt?: ReactNode }) {
   const { item, issue, target, plan } = row;
   const thread = item.execution?.thread;
   const title = issue.identifier ?? issue.issueId;
@@ -63,17 +64,21 @@ export function ItemDetail({ row, onClose, onOpenPlan, actions }: { row: Row; on
         <dt className="text-muted-foreground">Attempt</dt>
         <dd className="font-mono text-xs">{item.currentAttemptId ?? <span className="font-sans text-muted-foreground">none yet</span>}</dd>
 
-        <dt className="text-muted-foreground">T3 thread</dt>
-        <dd className="font-mono text-xs break-all">
-          {thread ? (
-            <>
-              {thread.environmentId} / {thread.projectId} / {thread.threadId}
-              {thread.turnId ? ` · turn ${thread.turnId}` : ""}
-            </>
-          ) : (
-            <span className="font-sans text-muted-foreground">not started</span>
-          )}
-        </dd>
+        {!attempt && (
+          <>
+            <dt className="text-muted-foreground">T3 thread</dt>
+            <dd className="font-mono text-xs break-all">
+              {thread ? (
+                <>
+                  {thread.environmentId} / {thread.projectId} / {thread.threadId}
+                  {thread.turnId ? ` · turn ${thread.turnId}` : ""}
+                </>
+              ) : (
+                <span className="font-sans text-muted-foreground">not started</span>
+              )}
+            </dd>
+          </>
+        )}
 
         <dt className="text-muted-foreground">Completion</dt>
         <dd>{plan.definition.items.find((d) => d.itemId === item.itemId)?.completionTarget ?? "unknown"}</dd>
@@ -91,6 +96,8 @@ export function ItemDetail({ row, onClose, onOpenPlan, actions }: { row: Row; on
       >
         Open plan
       </button>
+
+      {attempt}
 
       {actions}
     </aside>

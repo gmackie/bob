@@ -1,6 +1,8 @@
 // A fake edge view for tests and `bob-tui demo`: plans in draft, active and paused, and
 // items in validating, failed, execution-unknown, waiting-input, running and pending.
-import { emptyView, reduce, type EdgeView, type ItemSnapshot, type ItemState, type Milestone, type PlanSnapshot, type PlanState } from "@bob/sdlc-view";
+import { emptyView, reduce, type EdgeView, type ItemSnapshot, type ItemState, type Milestone, type PendingInput, type PlanSnapshot, type PlanState } from "@bob/sdlc-view";
+
+import { emptyAttempt, type AttemptState } from "./model/attempt";
 
 export const FIXTURE_NOW = Date.parse("2026-11-15T12:00:00Z");
 
@@ -36,6 +38,37 @@ export const PLAN_ACTIVE = "a1c7e5f0-0000-4000-8000-000000000001";
 export const PLAN_PAUSED = "b2d8f6a1-0000-4000-8000-000000000002";
 export const PLAN_DRAFT = "c3e9a7b2-0000-4000-8000-000000000003";
 
+/** The question item-p1 (FORGE-12, waiting-input) is waiting on. */
+export const FIXTURE_PENDING: PendingInput = {
+  attemptId: "att-p1", promptId: "prompt-p1", kind: "user_input", createdAt: "2026-11-15T11:58:00Z",
+  questions: [
+    { id: "q-db", header: "Database", question: "Which database should the migration target?", options: [{ label: "Postgres", value: "pg", description: "hetzner-master" }, { label: "SQLite" }], multiSelect: false },
+    { id: "q-env", question: "Which stages should it run on?", options: [{ label: "Beta", value: "beta" }, { label: "Production", value: "prod" }], multiSelect: true },
+    { id: "q-note", question: "Anything the agent should know?", options: [], multiSelect: false },
+  ],
+};
+
+/** A live tail for item-a1 and CI for it, plus an unavailable relay for item-p1 (demo and tests). */
+export function fixtureAttempt(): AttemptState {
+  return {
+    ...emptyAttempt(),
+    tails: {
+      "item-a1": {
+        itemId: "item-a1", attemptId: "att-a1", threadId: "thr-71", threadStatus: "running", at: "2026-11-15T11:59:58Z",
+        lines: Array.from({ length: 30 }, (_, i) => `[${String(i + 1).padStart(2, "0")}] pnpm vitest run · ${i < 28 ? "ok" : "running"} suite-${i + 1}`),
+      },
+    },
+    ci: {
+      "item-a1": {
+        type: "ci", itemId: "item-a1", available: true, sha: "9f3c1d2e7a6b5c4d", summary: "2 of 4 phases passed", at: "2026-11-15T11:59:50Z",
+        phases: [{ name: "lint", status: "passed" }, { name: "typecheck", status: "passed" }, { name: "test", status: "running" }, { name: "deploy-beta", status: "queued" }],
+      },
+      "item-p1": { type: "ci", itemId: "item-p1", available: false, reason: "ForgeGraph did not answer", at: "2026-11-15T11:59:50Z" },
+    },
+    unavailable: { "item-p1": "the relay has not posted for this attempt recently" },
+  };
+}
+
 export function fixtureView(): EdgeView {
   const plans = [
     plan(PLAN_ACTIVE, "active", [
@@ -58,7 +91,7 @@ export function fixtureView(): EdgeView {
     item("item-a2", PLAN_ACTIVE, "failed", { execution: { attemptId: "att-a2", target: target("gmackie/bob"), thread: thread("thr-72") } }),
     item("item-a3", PLAN_ACTIVE, "execution-unknown", { execution: { attemptId: "att-a3", target: target("gmackie/bob"), thread: thread("thr-73") } }),
     item("item-a4", PLAN_ACTIVE, "pending"),
-    item("item-p1", PLAN_PAUSED, "waiting-input", { execution: { attemptId: "att-p1", target: target("gmackie/forgegraph"), thread: thread("thr-12") } }),
+    item("item-p1", PLAN_PAUSED, "waiting-input", { execution: { attemptId: "att-p1", target: target("gmackie/forgegraph"), thread: thread("thr-12") }, pendingInput: FIXTURE_PENDING }),
     item("item-p2", PLAN_PAUSED, "pending"),
   ];
   return reduce(emptyView(), {

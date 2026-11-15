@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { once } from 'node:events';
 import { DatabaseSync } from 'node:sqlite';
 import { ExecutionCoordinator } from '../runtime/execution.mjs';
+import { storageVersion } from '../runtime/coordinator.mjs';
 import { kanbangerClient, kanbangerIssueResolver } from '../runtime/kanbanger.mjs';
 import { deliverIssueEffect, drainIssueEffects, effectMarker } from '../runtime/issue-effects.mjs';
 import { fakeKanbanger, teamId, projectId, otherProjectId, issueUuid, states } from './fixtures/fake-kanbanger.mjs';
@@ -194,7 +195,7 @@ test('database v2 upgrades to the current version transactionally and unsupporte
   db.exec(readFileSync(new URL('./fixtures/storage-v2.sql', import.meta.url), 'utf8')); db.exec('PRAGMA user_version = 2');
   db.prepare('INSERT INTO coordination_plan VALUES (?,?,?,?,?,?)').run('workspace', 'old-plan', 'actor', '{}', 'draft', 1); db.close();
   const c = new ExecutionCoordinator({ database, context });
-  assert.equal(c.db.prepare('PRAGMA user_version').get().user_version, 4);
+  assert.equal(c.db.prepare('PRAGMA user_version').get().user_version, storageVersion);
   assert(c.db.prepare("SELECT name FROM sqlite_master WHERE name='coordination_command_log'").get());
   assert.equal(c.db.prepare('SELECT COUNT(*) AS n FROM coordination_plan').get().n, 1);
   assert.equal(c.db.prepare('SELECT COUNT(*) AS n FROM coordination_issue_effect').get().n, 0);
@@ -207,7 +208,7 @@ test('database v2 upgrades to the current version transactionally and unsupporte
   assert.throws(() => new ExecutionCoordinator({ database: broken, context }));
   const check = new DatabaseSync(broken);
   assert.equal(check.prepare('PRAGMA user_version').get().user_version, 2); check.close();
-  const future = join(dir, 'future.sqlite'), next = new DatabaseSync(future); next.exec('PRAGMA user_version = 5'); next.close();
+  const future = join(dir, 'future.sqlite'), next = new DatabaseSync(future); next.exec(`PRAGMA user_version = ${storageVersion + 1}`); next.close();
   assert.throws(() => new ExecutionCoordinator({ database: future, context }), code('StorageVersion'));
 });
 
