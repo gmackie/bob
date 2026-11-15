@@ -59,6 +59,9 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationDefaults = {
   // review is the one thing worth reading at the end of the day.
   daily_plan_ready: { push: true, email: false, in_app: true },
   daily_review_ready: { push: true, email: false, in_app: true },
+  // Subscription budget (BOB-76): budget about to lapse, or Bob in your reserve.
+  budget_projected_miss: { push: true, email: false, in_app: true },
+  budget_reserve_breach: { push: true, email: false, in_app: true },
 };
 
 /** Sparse per-type overrides; absent entries fall back to the defaults. */

@@ -28,6 +28,8 @@ describe("buildNotificationMatrix", () => {
       "daily_review_ready",
       "proxy_unreachable",
       "provider_no_ready_accounts",
+      "budget_projected_miss",
+      "budget_reserve_breach",
       "work_item_assigned",
       "work_item_commented",
       "task_completed",
@@ -128,8 +130,8 @@ describe("summariseNotificationPreferences", () => {
         masters: allOn,
         overrides: { work_item_needs_input: { push: false } },
       }),
-      // Six types push by default; turning one off leaves five.
-    ).toBe("5 events");
+      // Eight types push by default (six + the two budget alerts); turning one off leaves seven.
+    ).toBe("7 events");
   });
 });
 
