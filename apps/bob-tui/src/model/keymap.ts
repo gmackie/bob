@@ -9,6 +9,7 @@ import {
   type EdgeView,
 } from "@bob/sdlc-view";
 
+import { answerablePending, flowKey, resolveInputOption, startFlow, type AnswerFlow } from "./attempt";
 import { isInFlight, latestFor, resourceIdOf, type CommandsState } from "./commands";
 import {
   childrenOf,
@@ -23,15 +24,19 @@ import {
   type TreePath,
 } from "./tree";
 
-/** A command the user can pick, with the target it names. */
-export interface Choice { option: CommandOption; target: string }
+/**
+ * A command the user can pick, with the target it names. `answer` marks the pending-input
+ * entry: picking it opens the answer flow instead of sending `option` (a placeholder).
+ */
+export interface Choice { option: CommandOption; target: string; answer?: true }
 
 export type Mode =
   | { kind: "browse" }
   | { kind: "help" }
   | { kind: "palette"; choices: Choice[]; index: number }
   | { kind: "confirm"; choice: Choice }
-  | { kind: "typed"; choice: Choice; expected: string; text: string };
+  | { kind: "typed"; choice: Choice; expected: string; text: string }
+  | { kind: "answer"; flow: AnswerFlow };
 
 export interface UiState {
   path: TreePath;
@@ -46,7 +51,7 @@ export const initialUi = (): UiState => ({ path: {}, cursor: 0, mode: { kind: "b
 /** The subset of Ink's Key the bindings read. */
 export interface KeyInfo {
   upArrow?: boolean; downArrow?: boolean; leftArrow?: boolean; rightArrow?: boolean;
-  return?: boolean; escape?: boolean; backspace?: boolean; delete?: boolean; ctrl?: boolean; tab?: boolean;
+  return?: boolean; escape?: boolean; backspace?: boolean; delete?: boolean; ctrl?: boolean; tab?: boolean; shift?: boolean;
 }
 
 export type Effect =
@@ -77,7 +82,13 @@ export function choicesFor(view: EdgeView, ui: UiState): Choice[] {
   const sel = selectionOf(view, ui.path, node);
   const out: Choice[] = [];
   if (sel.plan) for (const option of planCommands(sel.plan)) out.push({ option, target: sel.plan.planId.slice(0, 8) });
-  if (sel.item) for (const option of itemCommands(sel.item)) out.push({ option, target: sel.itemLabel ?? sel.item.itemId.slice(0, 8) });
+  if (sel.item) {
+    const target = sel.itemLabel ?? sel.item.itemId.slice(0, 8);
+    const pending = answerablePending(sel.item);
+    // Answering is what the agent is blocked on, so it comes first.
+    if (pending) out.unshift({ option: { ...resolveInputOption(sel.item.itemId, pending, {}), label: "Answer pending input" }, target, answer: true });
+    for (const option of itemCommands(sel.item)) out.push({ option, target });
+  }
   return out;
 }
 
@@ -89,6 +100,13 @@ export function begin(ui: UiState, choice: Choice, ctx: KeyContext): KeyResult {
   if (ctx.blocked) return say(ui, `${choice.option.label}: ${ctx.blocked}`);
   const latest = latestFor(ctx.commands, resourceIdOf(choice.option.command));
   if (latest && isInFlight(latest)) return say(ui, `Waiting for "${latest.label}" to finish.`);
+  if (choice.answer) {
+    const command = choice.option.command;
+    const item = command.operation === "ResolveInput" ? ctx.view.items[command.input.itemId] : undefined;
+    const pending = answerablePending(item);
+    if (!item || !pending) return say(ui, "Nothing is waiting for input here.");
+    return done({ ...ui, mode: { kind: "answer", flow: startFlow(item.itemId, choice.target, pending) }, message: null });
+  }
   const label = `${choice.option.label} ${choice.target}`;
   if (choice.option.tier === 1) return done({ ...ui, mode: { kind: "browse" }, message: null }, [{ type: "send", option: choice.option, label }]);
   if (choice.option.tier === 2) return done({ ...ui, mode: { kind: "confirm", choice }, message: null });
@@ -153,6 +171,10 @@ function browse(ui: UiState, input: string, key: KeyInfo, ctx: KeyContext): KeyR
       : find(choices, (c) => isPlanAction(c, "cancel"));
     return c ? begin(ui, c, ctx) : say(ui, itemSelected ? "This item cannot be cancelled in its state (use : for plan commands)." : "Nothing to cancel here.");
   }
+  if (input === "a") {
+    const c = find(choices, (c) => !!c.answer);
+    return c ? begin(ui, c, ctx) : say(ui, "Nothing is waiting for input here.");
+  }
   if (input === "r") {
     const c = find(choices, (c) => c.option.command.operation === "RetryItem");
     return c ? begin(ui, c, ctx) : say(ui, "Retry needs a failed or execution-unknown item with a previous attempt.");
@@ -195,6 +217,20 @@ export function handleKey(ui: UiState, input: string, key: KeyInfo, ctx: KeyCont
       if (key.backspace || key.delete) return done({ ...ui, mode: { ...mode, text: mode.text.slice(0, -1) } });
       if (input && !key.ctrl && !key.tab) return done({ ...ui, mode: { ...mode, text: mode.text + input } });
       return done(ui);
+    }
+    case "answer": {
+      const result = flowKey(mode.flow, input, key);
+      const label = `Answer ${mode.flow.target}`;
+      if (result.kind === "cancel") return say(ui, `${label}: not sent.`);
+      if (result.kind === "continue") return done({ ...ui, mode: { kind: "answer", flow: result.flow } });
+      // Re-check at submit: the socket or coordinator may have gone, or the question been answered elsewhere.
+      if (ctx.blocked) return done({ ...ui, mode: { kind: "answer", flow: { ...result.flow, error: `Not sent: ${ctx.blocked}.` } } });
+      const latest = latestFor(ctx.commands, result.flow.itemId);
+      if (latest && isInFlight(latest)) return done({ ...ui, mode: { kind: "answer", flow: { ...result.flow, error: `Waiting for "${latest.label}" to finish.` } } });
+      const current = answerablePending(ctx.view.items[result.flow.itemId]);
+      if (!current || current.promptId !== result.flow.pending.promptId) return say(ui, `${label}: the question is no longer pending.`);
+      const option = resolveInputOption(result.flow.itemId, result.flow.pending, result.answers);
+      return done({ ...ui, mode: { kind: "browse" }, message: null }, [{ type: "send", option, label }]);
     }
   }
 }

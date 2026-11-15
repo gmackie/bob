@@ -89,10 +89,12 @@ as environment-local profiles; no credentials enter coordination payloads.
 The opt-in `runtime/coordinator.mjs` adapter uses Node 24's built-in SQLite and
 ForgeC-generated D1 SQL from `storage/src/model.forge`. The PostgreSQL projection
 is generated for review only; no PostgreSQL adapter or production migration is
-enabled. Database version 3 is initialized once. Version 1 upgrades transactionally
-with the generated attempt (`0002_attempts.sql`) and issue-effect
-(`0003_issue_effects.sql`) migrations; version 2 with the issue-effect migration
-only. A failed upgrade rolls back and leaves the prior version. Unsupported versions fail.
+enabled. Database version 5 is initialized once. Older versions upgrade transactionally
+with the generated attempt (`0002_attempts.sql`), issue-effect
+(`0003_issue_effects.sql`), command-log (`0004_command_log.sql`) and input-delivery
+(`0005_input_delivery.sql`, BOB-80) migrations they lack. A failed upgrade rolls back
+and leaves the prior version. Unsupported versions fail. Rollback steps:
+`deploy/coordination/README.md`.
 The local store and policy file are owned by the local operator. The optional
 HTTP host derives actor/workspace authority from configured principals; requests
 cannot supply that authority.

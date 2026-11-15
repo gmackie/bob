@@ -11,7 +11,7 @@ import { CenterPane, Footer, InboxPane, TreePane } from "./panes";
 export const MIN_COLUMNS = 80;
 export const WIDE_COLUMNS = 120;
 
-export type SessionHandle = Pick<Session, "state" | "subscribe" | "send" | "tick">;
+export type SessionHandle = Pick<Session, "state" | "subscribe" | "send" | "tick"> & Partial<Pick<Session, "watch">>;
 
 export interface AppProps {
   session: SessionHandle;
@@ -72,8 +72,15 @@ export function App({ session, host, now = Date.now, tickMs = 1000, columns, row
   const treeWidth = narrow ? cols : wide ? 34 : 30;
   const listHeight = Math.max(4, height - 14);
 
+  // Watch the attempt detail of the item in focus; null when no item is open.
+  const watchedItemId = focus.kind === "item" ? focus.entry.itemId : null;
+  useEffect(() => { session.watch?.(watchedItemId); }, [session, watchedItemId]);
+  // Rows the item pane spends above the tail (header, state, milestones, evidence, actions, attempt header, CI, borders).
+  const evidence = focus.kind === "item" ? focus.entry.item?.evidenceRefs.length ?? 0 : 0;
+  const maxTail = Math.max(3, height - 26 - evidence);
+
   const center = (
-    <CenterPane view={view} focus={focus} commands={commands}
+    <CenterPane view={view} focus={focus} commands={commands} attempt={state.attempt} maxTail={maxTail}
       planOptions={sel.plan ? planCommands(sel.plan) : []} itemOptions={sel.item ? itemCommands(sel.item) : []} />
   );
   const tree = <TreePane crumbs={breadcrumb(view, ui.path)} nodes={nodes} index={index} width={treeWidth} height={listHeight} />;

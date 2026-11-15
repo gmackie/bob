@@ -138,4 +138,24 @@ describe("edge session", () => {
     h.last().handlers.onClose();
     expect(seen).toEqual(["live"]);
   });
+
+  it("sends watch when it changes, re-sends it after the hello on a new socket, and routes attempt messages", () => {
+    const h = harness();
+    h.session.start();
+    h.last().handlers.onOpen();
+    h.session.watch("item-p1");
+    h.session.watch("item-p1");
+    expect(h.last().sent.slice(1)).toEqual([{ type: "watch", itemId: "item-p1" }]);
+    h.last().handlers.onMessage(JSON.stringify({ type: "tail", frame: { itemId: "item-p1", attemptId: "att-p1", threadId: "t", lines: ["hi"], threadStatus: "running", at: "1" } }));
+    h.last().handlers.onMessage(JSON.stringify({ type: "tailUnavailable", itemId: "item-a1", reason: "silent" }));
+    expect(h.session.state.attempt.tails["item-p1"]?.lines).toEqual(["hi"]);
+    expect(h.session.state.attempt.unavailable).toEqual({ "item-a1": "silent" });
+    expect(h.session.state.view.epoch).toBeNull();
+    h.last().handlers.onClose();
+    h.timers.at(-1)!.fn();
+    h.last().handlers.onOpen();
+    expect(h.last().sent).toEqual([{ type: "hello", cursor: null, epoch: null }, { type: "watch", itemId: "item-p1" }]);
+    h.session.watch(null);
+    expect(h.last().sent.at(-1)).toEqual({ type: "watch", itemId: null });
+  });
 });

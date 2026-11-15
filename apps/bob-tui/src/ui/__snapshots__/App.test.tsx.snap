@@ -10,7 +10,7 @@ exports[`App frames > fleet: projects, header counts and the inbox 1`] = `
 │                                ││ Validating        1                                      ││ ~ BOB-73 Execution unknown · gm… │
 │                                ││ Failed            1                                      ││                                  │
 ╰────────────────────────────────╯╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
- ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · i inbox · ? help · q quit"
+ ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
 `;
 
 exports[`App frames > item level: state, milestones, thread and evidence 1`] = `
@@ -22,15 +22,20 @@ exports[`App frames > item level: state, milestones, thread and evidence 1`] = `
 │   BOB-73 Execution unknown     ││ system · v5                                              ││ ~ BOB-71 Validating · gmackie/b… │
 │   BOB-74 Pending               ││ Milestones ✓ exec ✓  · review-ready  · merged  ·         ││ ~ BOB-73 Execution unknown · gm… │
 │                                ││ prod-verified                                            ││                                  │
-│                                ││ Attempt att-a1                                           ││                                  │
-│                                ││ Thread t3:thr-71 (env env-hetzner-bob, project proj-1)   ││                                  │
 │                                ││ Evidence                                                 ││                                  │
 │                                ││   https://git.forgegraf.com/gmackie/bob/pulls/292        ││                                  │
 │                                ││   ci:run/8812                                            ││                                  │
 │                                ││                                                          ││                                  │
 │                                ││ [c] Cancel item (tier 2)                                 ││                                  │
+│                                ││                                                          ││                                  │
+│                                ││ Attempt att-a1                                           ││                                  │
+│                                ││ Thread t3:thr-71 (env env-hetzner-bob, project proj-1)   ││                                  │
+│                                ││                                                          ││                                  │
+│                                ││ Live tail                                                ││                                  │
+│                                ││ waiting for live detail…                                 ││                                  │
+│                                ││ CI · no detail yet                                       ││                                  │
 ╰────────────────────────────────╯╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
- ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · i inbox · ? help · q quit"
+ ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
 `;
 
 exports[`App frames > medium width puts the inbox under the panes 1`] = `
@@ -42,11 +47,17 @@ exports[`App frames > medium width puts the inbox under the panes 1`] = `
 │                            ││ owner human · v5                                         │
 │                            ││ Milestones · exec ✓  · review-ready  · merged  ·         │
 │                            ││ prod-verified                                            │
-│                            ││ Attempt att-p1                                           │
-│                            ││ Thread t3:thr-12 (env env-hetzner-bob, project proj-1)   │
 │                            ││ Evidence none                                            │
 │                            ││                                                          │
 │                            ││ [c] Cancel item (tier 2)                                 │
+│                            ││                                                          │
+│                            ││ Attempt att-p1                                           │
+│                            ││ Thread t3:thr-12 (env env-hetzner-bob, project proj-1)   │
+│                            ││ ? Waiting for your answer (3 questions) · press a        │
+│                            ││                                                          │
+│                            ││ Live tail                                                │
+│                            ││ waiting for live detail…                                 │
+│                            ││ CI · no detail yet                                       │
 ╰────────────────────────────╯╰──────────────────────────────────────────────────────────╯
 ╭────────────────────────────────────────────────────────────────────────────────────────╮
 │ Inbox 4 · i to jump                                                                    │
@@ -55,7 +66,7 @@ exports[`App frames > medium width puts the inbox under the panes 1`] = `
 │ ~ BOB-71 Validating · gmackie/bob                                                      │
 │ +1 more                                                                                │
 ╰────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · i inbox …"
+ ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer…"
 `;
 
 exports[`App frames > plan level: the dependency tree as an indented tree 1`] = `
@@ -71,7 +82,7 @@ exports[`App frames > plan level: the dependency tree as an indented tree 1`] = 
 │                                ││                                                          ││                                  │
 │                                ││ [p] Pause plan  [c] Cancel plan (tier 2)                 ││                                  │
 ╰────────────────────────────────╯╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
- ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · i inbox · ? help · q quit"
+ ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
 `;
 
 exports[`App frames > repo level: plans with state badges 1`] = `
@@ -87,7 +98,7 @@ exports[`App frames > repo level: plans with state badges 1`] = `
 │                                ││                                                          ││                                  │
 │                                ││ [p] Pause plan  [c] Cancel plan (tier 2)                 ││                                  │
 ╰────────────────────────────────╯╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
- ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · i inbox · ? help · q quit"
+ ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
 `;
 
 exports[`App keys > : opens the palette for the selection 1`] = `
@@ -99,11 +110,16 @@ exports[`App keys > : opens the palette for the selection 1`] = `
 │ › BOB-73 Execution unknown     ││ dispatch retries after the lease · owner system · v5     ││ ~ BOB-71 Validating · gmackie/b… │
 │   BOB-74 Pending               ││ Milestones · exec ✓  · review-ready  · merged  ·         ││ ~ BOB-73 Execution unknown · gm… │
 │                                ││ prod-verified                                            ││                                  │
-│                                ││ Attempt att-a3                                           ││                                  │
-│                                ││ Thread t3:thr-73 (env env-hetzner-bob, project proj-1)   ││                                  │
 │                                ││ Evidence none                                            ││                                  │
 │                                ││                                                          ││                                  │
 │                                ││ [:] Reconcile  [r] Retry (tier 2)  [c] Cancel item (tie… ││                                  │
+│                                ││                                                          ││                                  │
+│                                ││ Attempt att-a3                                           ││                                  │
+│                                ││ Thread t3:thr-73 (env env-hetzner-bob, project proj-1)   ││                                  │
+│                                ││                                                          ││                                  │
+│                                ││ Live tail                                                ││                                  │
+│                                ││ waiting for live detail…                                 ││                                  │
+│                                ││ CI · no detail yet                                       ││                                  │
 ╰────────────────────────────────╯╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
  │ Commands (enter or 1-5 to run, esc to close)                                                                                 │
@@ -113,5 +129,97 @@ exports[`App keys > : opens the palette for the selection 1`] = `
  │ 4. Retry BOB-73  (tier 2)                                                                                                    │
  │ 5. Cancel item BOB-73  (tier 2)                                                                                              │
  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · i inbox · ? help · q quit"
+ ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
+`;
+
+exports[`attempt level (L5) > a steps through the questions and sends ResolveInput (tier 1, no confirm) 1`] = `
+" Bob SDLC · bob.blder.bot · ● live · coordinator online · 3 plans · 6 items · 4 need attention
+╭────────────────────────────────╮╭──────────────────────────────────────────────────────────╮╭──────────────────────────────────╮
+│ Fleet › ForgeGraph › gmackie/… ││ FORGE-12 in plan b2d8f6a1 · gmackie/forgegraph           ││ Inbox 4 · i to jump              │
+│ › FORGE-12 Waiting for input   ││ https://tasks.gmac.io/issue/FORGE-12                     ││ ? FORGE-12 Waiting for input · … │
+│   FORGE-13 Pending             ││ State Waiting for input · an agent asked a question ·    ││ ✗ BOB-72 Failed · gmackie/bob    │
+│                                ││ owner human · v5                                         ││ ~ BOB-71 Validating · gmackie/b… │
+│                                ││ Milestones · exec ✓  · review-ready  · merged  ·         ││ ~ BOB-73 Execution unknown · gm… │
+│                                ││ prod-verified                                            ││                                  │
+│                                ││ Evidence none                                            ││                                  │
+│                                ││                                                          ││                                  │
+│                                ││ [c] Cancel item (tier 2)                                 ││                                  │
+│                                ││                                                          ││                                  │
+│                                ││ Attempt att-p1                                           ││                                  │
+│                                ││ Thread t3:thr-12 (env env-hetzner-bob, project proj-1)   ││                                  │
+│                                ││ ? Waiting for your answer (3 questions) · press a        ││                                  │
+│                                ││                                                          ││                                  │
+│                                ││ Live tail                                                ││                                  │
+│                                ││ waiting for live detail…                                 ││                                  │
+│                                ││ CI · no detail yet                                       ││                                  │
+╰────────────────────────────────╯╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
+ ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │ Answer FORGE-12 · question 2/3                                                                                               │
+ │ Which stages should it run on?                                                                                               │
+ │ 1. [x] Beta                                                                                                                  │
+ │ 2. [x] Production                                                                                                            │
+ │ ↑↓ move · space toggles · enter next · shift-tab back · esc cancel                                                           │
+ ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
+`;
+
+exports[`attempt level (L5) > says when live detail and CI are unavailable 1`] = `
+" Bob SDLC · bob.blder.bot · ● live · coordinator online · 3 plans · 6 items · 4 need attention
+╭────────────────────────────────╮╭──────────────────────────────────────────────────────────╮╭──────────────────────────────────╮
+│ Fleet › ForgeGraph › gmackie/… ││ FORGE-12 in plan b2d8f6a1 · gmackie/forgegraph           ││ Inbox 4 · i to jump              │
+│ › FORGE-12 Waiting for input   ││ https://tasks.gmac.io/issue/FORGE-12                     ││ ? FORGE-12 Waiting for input · … │
+│   FORGE-13 Pending             ││ State Waiting for input · an agent asked a question ·    ││ ✗ BOB-72 Failed · gmackie/bob    │
+│                                ││ owner human · v5                                         ││ ~ BOB-71 Validating · gmackie/b… │
+│                                ││ Milestones · exec ✓  · review-ready  · merged  ·         ││ ~ BOB-73 Execution unknown · gm… │
+│                                ││ prod-verified                                            ││                                  │
+│                                ││ Evidence none                                            ││                                  │
+│                                ││                                                          ││                                  │
+│                                ││ [c] Cancel item (tier 2)                                 ││                                  │
+│                                ││                                                          ││                                  │
+│                                ││ Attempt att-p1                                           ││                                  │
+│                                ││ Thread t3:thr-12 (env env-hetzner-bob, project proj-1)   ││                                  │
+│                                ││ ? Waiting for your answer (3 questions) · press a        ││                                  │
+│                                ││                                                          ││                                  │
+│                                ││ Live tail                                                ││                                  │
+│                                ││ live detail unavailable: the relay has not posted for t… ││                                  │
+│                                ││ CI · unavailable: ForgeGraph did not answer              ││                                  │
+╰────────────────────────────────╯╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
+ ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
+`;
+
+exports[`attempt level (L5) > shows the live tail that fits, CI phases and the thread ids 1`] = `
+" Bob SDLC · bob.blder.bot · ● live · coordinator online · 3 plans · 6 items · 4 need attention
+╭────────────────────────────────╮╭──────────────────────────────────────────────────────────╮╭──────────────────────────────────╮
+│ Fleet › Bob › gmackie/bob › p… ││ BOB-71 in plan a1c7e5f0 · gmackie/bob                    ││ Inbox 4 · i to jump              │
+│ › BOB-71 Validating            ││ https://tasks.gmac.io/issue/BOB-71                       ││ ? FORGE-12 Waiting for input · … │
+│   BOB-72 Failed                ││ State Validating · validation not yet automated · owner  ││ ✗ BOB-72 Failed · gmackie/bob    │
+│   BOB-73 Execution unknown     ││ system · v5                                              ││ ~ BOB-71 Validating · gmackie/b… │
+│   BOB-74 Pending               ││ Milestones ✓ exec ✓  · review-ready  · merged  ·         ││ ~ BOB-73 Execution unknown · gm… │
+│                                ││ prod-verified                                            ││                                  │
+│                                ││ Evidence                                                 ││                                  │
+│                                ││   https://git.forgegraf.com/gmackie/bob/pulls/292        ││                                  │
+│                                ││   ci:run/8812                                            ││                                  │
+│                                ││                                                          ││                                  │
+│                                ││ [c] Cancel item (tier 2)                                 ││                                  │
+│                                ││                                                          ││                                  │
+│                                ││ Attempt att-a1 · thread running                          ││                                  │
+│                                ││ Thread t3:thr-71 (env env-hetzner-bob, project proj-1)   ││                                  │
+│                                ││                                                          ││                                  │
+│                                ││ Live tail ● live                                         ││                                  │
+│                                ││   [19] pnpm vitest run · ok suite-19                     ││                                  │
+│                                ││   [20] pnpm vitest run · ok suite-20                     ││                                  │
+│                                ││   [21] pnpm vitest run · ok suite-21                     ││                                  │
+│                                ││   [22] pnpm vitest run · ok suite-22                     ││                                  │
+│                                ││   [23] pnpm vitest run · ok suite-23                     ││                                  │
+│                                ││   [24] pnpm vitest run · ok suite-24                     ││                                  │
+│                                ││   [25] pnpm vitest run · ok suite-25                     ││                                  │
+│                                ││   [26] pnpm vitest run · ok suite-26                     ││                                  │
+│                                ││   [27] pnpm vitest run · ok suite-27                     ││                                  │
+│                                ││   [28] pnpm vitest run · ok suite-28                     ││                                  │
+│                                ││   [29] pnpm vitest run · running suite-29                ││                                  │
+│                                ││   [30] pnpm vitest run · running suite-30                ││                                  │
+│                                ││ CI · 2 of 4 phases passed 9f3c1d2e7a                     ││                                  │
+│                                ││ ✓ lint  ✓ typecheck  ◐ test  ○ deploy-beta               ││                                  │
+╰────────────────────────────────╯╰──────────────────────────────────────────────────────────╯╰──────────────────────────────────╯
+ ↑↓ move · enter/esc drill · : commands · p pause/resume · c cancel · r retry · a answer · i inbox · ? help · q quit"
 `;

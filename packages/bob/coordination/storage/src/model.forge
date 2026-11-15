@@ -88,3 +88,28 @@ export resource CoordinationCommandLog @tenant {
   list by owner, createdAt
   list by commandId
 }
+
+/// Answers to pending t3 questions (BOB-80), queued by ResolveInput in the same
+/// transaction that moves the item back to running. The tail relay delivers each
+/// row once with t3 runtime-request.respond (commandId stable per attempt and
+/// prompt) and erases `answers` when it settles. id is `<attemptId>:<promptId>`;
+/// status is pending, delivered or abandoned. Never a public API.
+export resource CoordinationInputDelivery @tenant {
+  id : id
+  owner : text length 1..128
+  attemptId : text length 1..128
+  itemId : text length 1..128
+  threadId : text length 1..128
+  promptId : text length 1..128
+  commandId : text length 1..128
+  operationId : text length 1..128
+  answers : json?
+  status : text length 1..32
+  deliveryAttempts : integer >= 0
+  nextAttemptAt : integer >= 0
+  lastError : text? length 1..128
+  createdAt : datetime
+  settledAt : datetime?
+  unique attemptId, promptId
+  list by owner, status, nextAttemptAt
+}

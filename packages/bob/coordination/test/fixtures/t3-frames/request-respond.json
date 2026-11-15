@@ -1,0 +1,5 @@
+{
+  "spec": "§2.2, §3.4",
+  "expected": { "_tag": "Request", "tag": "orchestration.dispatchCommand", "headers": [],
+    "payload": { "type": "runtime-request.respond", "commandId": "bob-input-1", "threadId": "thr_pilot", "requestId": "rr_1", "answers": { "q1": "staging" } } }
+}

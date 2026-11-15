@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { emptyView, type CommandInput, type Confirmation, type EdgeView } from "@bob/sdlc-view";
 
+import { emptyAttempt, type AttemptState } from "./attempt-model";
 import { emptyCommands, type CommandsState } from "./commands-model";
 import { createBackoff, createEdgeClient, type EdgeClient, type EdgeConnection } from "./edge-client";
 
@@ -22,10 +23,22 @@ export function edgeSocketUrl(href: string): string {
  */
 export type SendCommand = (command: CommandInput, label: string, confirm?: Confirmation) => string | null;
 
-export function useSdlcEdge(): { view: EdgeView; connection: EdgeConnection; commands: CommandsState; send: SendCommand } {
+export interface SdlcEdge {
+  view: EdgeView;
+  connection: EdgeConnection;
+  commands: CommandsState;
+  send: SendCommand;
+  /** Live attempt detail for the watched item (and the last few watched). */
+  attempt: AttemptState;
+  /** Watch an item's attempt detail; null stops. Re-sent after every reconnect. */
+  watch: (itemId: string | null) => void;
+}
+
+export function useSdlcEdge(): SdlcEdge {
   const [view, setView] = useState<EdgeView>(emptyView);
   const [connection, setConnection] = useState<EdgeConnection>("connecting");
   const [commands, setCommands] = useState<CommandsState>(emptyCommands);
+  const [attempt, setAttempt] = useState<AttemptState>(emptyAttempt);
   const clientRef = useRef<EdgeClient | null>(null);
 
   useEffect(() => {
@@ -37,6 +50,7 @@ export function useSdlcEdge(): { view: EdgeView; connection: EdgeConnection; com
       send: (data) => { if (socket?.readyState === WebSocket.OPEN) socket.send(data); },
       onView: setView,
       onCommands: setCommands,
+      onAttempt: setAttempt,
     });
     clientRef.current = client;
 
@@ -67,5 +81,7 @@ export function useSdlcEdge(): { view: EdgeView; connection: EdgeConnection; com
 
   const send = useCallback<SendCommand>((command, label, confirm) => clientRef.current?.send(command, label, confirm) ?? null, []);
 
-  return { view, connection, commands, send };
+  const watch = useCallback((itemId: string | null) => clientRef.current?.watch(itemId), []);
+
+  return { view, connection, commands, send, attempt, watch };
 }
