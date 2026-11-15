@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
-
 import { Schema } from "effect";
+
+import { sha256Hex } from "../sha256.js";
 
 const IdentifierSchema = Schema.String.pipe(
   Schema.check(Schema.isMinLength(1)),
@@ -283,7 +283,7 @@ export function digestHermesActionScope(input: unknown): string {
     scope.targetRef,
     scope.parametersDigest,
   ]);
-  return `sha256:${createHash("sha256").update(canonical).digest("hex")}`;
+  return `sha256:${sha256Hex(canonical)}`;
 }
 
 export interface HermesApprovalCheck {
