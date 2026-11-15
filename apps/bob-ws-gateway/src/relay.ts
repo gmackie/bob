@@ -163,7 +163,7 @@ export interface RelayConfig {
 
 
 
-const budgetStore: BudgetStore = { recordMeterSamples, upsertBobSessions, upsertBudgetAccounts, upsertSessionLinks, upsertUsageBuckets };
+export const budgetStore: BudgetStore = { recordMeterSamples, upsertBobSessions, upsertBudgetAccounts, upsertSessionLinks, upsertUsageBuckets };
 
 export class Relay {
   private readonly cfg: RelayConfig;

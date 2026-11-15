@@ -384,8 +384,25 @@ export class BobGatewayConnector {
         })
       : undefined;
     const managementKey = process.env.CLIPROXY_MANAGEMENT_KEY?.trim() || undefined;
-    this.usagePoller =
-      proxyRoute && managementKey
+    // With BOB_BUDGET_USAGE_SOURCE=remote the proxy host's collector drains the
+    // usage queue (a pop is destructive, so only one process may), and this
+    // runner only ships the run-to-agent-session links it observes.
+    const remoteUsage = process.env.BOB_BUDGET_USAGE_SOURCE?.trim() === "remote";
+    const spoolPath = process.env.BOB_RUNNER_BUDGET_SPOOL ?? join(homedir(), ".bob-runner", "budget", "usage-ledger.json");
+    if (remoteUsage && process.env.BOB_BUDGET_RUN_WEIGHTED_TOKEN_CAP) {
+      console.warn("[bob-gw] BOB_BUDGET_RUN_WEIGHTED_TOKEN_CAP is ignored with BOB_BUDGET_USAGE_SOURCE=remote: this runner no longer sees per-run usage");
+    }
+    this.usagePoller = remoteUsage
+      ? new UsagePoller({
+          baseUrl: proxyRoute?.baseUrl ?? "",
+          bobApiKeys: [],
+          drainQueue: false,
+          spoolPath,
+          send: (msg) => this.send(msg),
+          isConnected: () => this.authenticated && this.ws?.readyState === WebSocket.OPEN,
+          log: (line) => console.log(`[bob-gw] ${JSON.stringify(line)}`),
+        })
+      : proxyRoute && managementKey
         ? new UsagePoller({
             baseUrl: proxyRoute.baseUrl,
             managementKey,
@@ -396,8 +413,7 @@ export class BobGatewayConnector {
               proxyRoute.apiKey,
               ...(process.env.BOB_BUDGET_BOB_API_KEYS ?? "").split(",").map((key) => key.trim()).filter(Boolean),
             ],
-            spoolPath:
-              process.env.BOB_RUNNER_BUDGET_SPOOL ?? join(homedir(), ".bob-runner", "budget", "usage-ledger.json"),
+            spoolPath,
             send: (msg) => this.send(msg),
             isConnected: () => this.authenticated && this.ws?.readyState === WebSocket.OPEN,
             log: (line) => console.log(`[bob-gw] ${JSON.stringify(line)}`),

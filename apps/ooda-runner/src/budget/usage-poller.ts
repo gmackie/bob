@@ -10,7 +10,13 @@
  *
  * Messages carry absolute totals. Only changes are sent normally, and the
  * last few hours are resent periodically, which repairs anything `send`
- * dropped while the socket was down.
+ * dropped while the socket was down. A `send` that reports failure (returns
+ * or resolves to false, or throws) leaves the changes queued for the next tick.
+ *
+ * Only one process may drain a proxy's queue, because a pop is destructive.
+ * Production drains it on the proxy host (the labnuc collector, see
+ * collector.ts); runners there set `drainQueue: false` and only ship the
+ * run-to-agent-session links they observe.
  */
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -26,7 +32,10 @@ export interface UsagePollerOptions {
   /** This host's proxy API keys; requests made with them are Bob's. */
   bobApiKeys: readonly string[];
   spoolPath: string;
-  send: (message: Record<string, unknown>) => void;
+  /** False when another process drains the queue: only session links are shipped. Default true. */
+  drainQueue?: boolean;
+  /** Deliver one budget_usage message. Returning or resolving to false (or throwing) means not delivered. */
+  send: (message: Record<string, unknown>) => void | boolean | Promise<void | boolean>;
   isConnected: () => boolean;
   fetch?: typeof fetch;
   now?: () => Date;
@@ -53,6 +62,8 @@ export class UsagePoller {
   private lastDrainAt?: number;
   private lastError?: string;
   private gaps = 0;
+  private sendFailures = 0;
+  private lastSentAt?: number;
   private timer?: ReturnType<typeof setTimeout>;
   private running = false;
   private readonly flaggedRuns = new Set<string>();
@@ -65,8 +76,12 @@ export class UsagePoller {
     this.lastFullResendAt = 0;
   }
 
+  private get drains(): boolean {
+    return this.options.drainQueue !== false;
+  }
+
   private get enabled(): boolean {
-    return Boolean(this.options.managementKey);
+    return !this.drains || Boolean(this.options.managementKey);
   }
 
   private loadSpool(): UsageLedger {
@@ -89,7 +104,7 @@ export class UsagePoller {
 
   /** Pop every queued record. Returns how many were ingested. */
   async drain(): Promise<number> {
-    if (!this.enabled) return 0;
+    if (!this.enabled || !this.drains) return 0;
     const base = this.options.baseUrl.replace(/\/+$/, "");
     const batchSize = this.options.batchSize ?? 500;
     const maxBatches = this.options.maxBatchesPerTick ?? 20;
@@ -113,6 +128,10 @@ export class UsagePoller {
   async tick(): Promise<void> {
     if (!this.enabled) return;
     const now = this.now();
+    if (!this.drains) {
+      await this.flush(now);
+      return;
+    }
     try {
       const drained = await this.drain();
       if (this.lastDrainAt !== undefined && now.getTime() - this.lastDrainAt > GAP_WARN_MS) {
@@ -128,10 +147,10 @@ export class UsagePoller {
       this.lastError = error instanceof Error ? error.message : "usage queue failed";
       this.options.log?.({ step: "budget-usage", outcome: "error", error: this.lastError });
     }
-    this.flush(now);
+    await this.flush(now);
   }
 
-  private flush(now: Date): void {
+  private async flush(now: Date): Promise<void> {
     if (!this.options.isConnected()) return;
     const resendEvery = this.options.resendEveryMs ?? 600_000;
     const full = now.getTime() - this.lastFullResendAt >= resendEvery;
@@ -149,13 +168,25 @@ export class UsagePoller {
       links = this.ledger.links({ since: this.sentRevision });
     }
     const revision = this.ledger.revision();
-    if (full) this.lastFullResendAt = now.getTime();
     if (buckets.length === 0 && sessions.length === 0 && links.length === 0) {
+      if (full) this.lastFullResendAt = now.getTime();
       this.sentRevision = revision;
       return;
     }
-    this.options.send({ type: "budget_usage", buckets, sessions, ...(links.length ? { links } : {}) });
+    let delivered: boolean;
+    try {
+      delivered = (await this.options.send({ type: "budget_usage", buckets, sessions, ...(links.length ? { links } : {}) })) !== false;
+    } catch (error) {
+      delivered = false;
+      this.options.log?.({ step: "budget-usage", outcome: "send-failed", error: error instanceof Error ? error.message : String(error) });
+    }
+    if (!delivered) {
+      this.sendFailures += 1;
+      return;
+    }
+    if (full) this.lastFullResendAt = now.getTime();
     this.sentRevision = revision;
+    this.lastSentAt = now.getTime();
   }
 
   private checkRunaways(): void {
@@ -179,11 +210,13 @@ export class UsagePoller {
     }
   }
 
-  status(): { lastDrainAt?: string; lastError?: string; gapsOver45s: number } {
+  status(): { lastDrainAt?: string; lastSentAt?: string; lastError?: string; gapsOver45s: number; sendFailures: number } {
     return {
       ...(this.lastDrainAt !== undefined ? { lastDrainAt: new Date(this.lastDrainAt).toISOString() } : {}),
+      ...(this.lastSentAt !== undefined ? { lastSentAt: new Date(this.lastSentAt).toISOString() } : {}),
       lastError: this.lastError,
       gapsOver45s: this.gaps,
+      sendFailures: this.sendFailures,
     };
   }
 
