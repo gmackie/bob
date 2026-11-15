@@ -322,20 +322,22 @@ export interface BudgetStateRows {
   sessions: { sessionId: string; authIndex: string; provider: string; model: string; requests: number; inputTokens: number; outputTokens: number; reasoningTokens: number; cacheReadTokens: number; cacheCreationTokens: number; totalTokens: number; firstAt: Date; lastAt: Date }[];
 }
 
+// Time filters use typed comparisons: a Date inside a raw sql`` template reaches
+// node-postgres as Date.toString(), which Postgres rejects (PGlite accepts it).
 export async function readBudgetStateRows(db: Db, input: { now: Date; ledgerHours?: number; sessionDays?: number; accountMaxAgeHours?: number }): Promise<BudgetStateRows> {
   const now = input.now.getTime();
   const ledgerSince = new Date(now - (input.ledgerHours ?? 26) * 3_600_000);
   const sessionSince = new Date(now - (input.sessionDays ?? 7) * 86_400_000);
   const accountSince = new Date(now - (input.accountMaxAgeHours ?? 24) * 3_600_000);
   const [accounts, meters, ledger, sessions] = await Promise.all([
-    db.select().from(budgetAccounts).where(sql`${budgetAccounts.updatedAt} >= ${accountSince}`),
+    db.select().from(budgetAccounts).where(gte(budgetAccounts.updatedAt, accountSince)),
     db
       .select()
       .from(budgetMeterSamples)
-      .where(sql`${budgetMeterSamples.model} = '' and ${budgetMeterSamples.observedAt} >= ${new Date(now - 8 * 86_400_000)}`)
+      .where(and(eq(budgetMeterSamples.model, ""), gte(budgetMeterSamples.observedAt, new Date(now - 8 * 86_400_000))))
       .orderBy(budgetMeterSamples.observedAt),
-    db.select().from(budgetUsageLedger).where(sql`${budgetUsageLedger.hour} >= ${ledgerSince}`),
-    db.select().from(budgetSessionUsage).where(sql`${budgetSessionUsage.lastAt} >= ${sessionSince}`),
+    db.select().from(budgetUsageLedger).where(gte(budgetUsageLedger.hour, ledgerSince)),
+    db.select().from(budgetSessionUsage).where(gte(budgetSessionUsage.lastAt, sessionSince)),
   ]);
   return {
     accounts: accounts.map((a) => ({ accountId: a.accountId, provider: a.provider, label: a.label, status: a.status, detail: a.detail, authIndex: a.authIndex, updatedAt: a.updatedAt })),
