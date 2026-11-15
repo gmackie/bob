@@ -9,6 +9,9 @@ import { cn } from "@gmacko/core/ui";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
 import { ActionsPanel } from "~/components/sdlc/actions-panel";
+import { AnswerForm } from "~/components/sdlc/attempt-answer";
+import { answerablePending } from "~/components/sdlc/attempt-model";
+import { AttemptView } from "~/components/sdlc/attempt-view";
 import { itemTarget, planTarget, type ActionContext } from "~/components/sdlc/commands-model";
 import { ItemDetail } from "~/components/sdlc/item-detail";
 import { PlanDag } from "~/components/sdlc/plan-dag";
@@ -49,7 +52,7 @@ function bannerText(banner: Banner): string {
 }
 
 export default function SdlcPage() {
-  const { view, connection, commands, send } = useSdlcEdge();
+  const { view, connection, commands, send, attempt, watch } = useSdlcEdge();
   const now = useNow(15_000);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -65,6 +68,10 @@ export default function SdlcPage() {
   const selectedRow = model.selected;
   const plan = model.plan;
   const actionContext: ActionContext = { connection, banner, hasView: view.epoch !== null, commands };
+  const watchedItemId = selectedRow?.item.itemId ?? null;
+  // Watch the selected item's attempt detail; null stops it. The client re-sends it after a reconnect.
+  useEffect(() => { watch(watchedItemId); }, [watch, watchedItemId]);
+  const pending = selectedRow ? answerablePending(selectedRow.item) : null;
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-6 py-10">
@@ -191,6 +198,17 @@ export default function SdlcPage() {
                   row={selectedRow}
                   onClose={() => setItemId(null)}
                   onOpenPlan={() => setPlanId(selectedRow.plan.planId)}
+                  attempt={
+                    selectedRow.item.execution ? (
+                      <AttemptView
+                        item={selectedRow.item}
+                        attempt={attempt}
+                        answer={pending && (
+                          <AnswerForm key={pending.promptId} itemId={selectedRow.item.itemId} pending={pending} context={actionContext} send={send} />
+                        )}
+                      />
+                    ) : undefined
+                  }
                   actions={
                     <ActionsPanel
                       label="Item actions"

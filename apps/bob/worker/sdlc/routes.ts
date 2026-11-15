@@ -1,5 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 import { MAX_INGEST_BYTES } from "./store";
+import { MAX_TAIL_BYTES } from "./tail";
 
 /** The worker env the SDLC routes read. SDLC_EDGE_INGEST_TOKEN is a secret, the others are vars. */
 export interface SdlcRouteEnv {
@@ -75,6 +76,8 @@ const error = (status: number, message: string) => Response.json({ error: messag
 
 /**
  * POST /api/sdlc/ingest: the coordinator exporter's batches, by bearer token.
+ * POST /api/sdlc/tail: the coordinator tail relay's live frames (BOB-80), by the same
+ *   bearer token, capped at MAX_TAIL_BYTES; relayed to watchers, never stored.
  * GET /api/sdlc/ws: a websocket for a user on SDLC_VIEWER_USER_IDS: a browser by session
  *   cookie with a same-origin Origin, or a native client (no Origin) by `Authorization:
  *   Bearer <device API key>` with `write` or `admin` permission
@@ -99,6 +102,18 @@ export async function handleSdlcRoute(
     const body = await readCapped(request.body, MAX_INGEST_BYTES);
     if (!body) return error(413, "batch too large");
     return stub().fetch("https://sdlc-edge/ingest", {
+      method: "POST",
+      body,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  if (pathname === "/api/sdlc/tail") {
+    if (!bearerMatches(request.headers.get("authorization"), env.SDLC_EDGE_INGEST_TOKEN)) return error(401, "unauthorized");
+    if (request.method !== "POST") return error(405, "method not allowed");
+    const body = await readCapped(request.body, MAX_TAIL_BYTES);
+    if (!body) return error(413, "tail too large");
+    return stub().fetch("https://sdlc-edge/tail", {
       method: "POST",
       body,
       headers: { "content-type": "application/json" },

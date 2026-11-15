@@ -5,7 +5,7 @@ import { configPath, edgeSocketUrl, getKey, removeKey, resolveBaseUrl, saveKey }
 import { LoginError, pollForApiKey, requestDeviceCode, type FetchLike } from "./client/device-login";
 import { createSession, type Session, type SessionState } from "./client/session";
 import { wsOpener } from "./client/ws-socket";
-import { fixtureView, FIXTURE_NOW } from "./fixtures";
+import { fixtureAttempt, fixtureView, FIXTURE_NOW } from "./fixtures";
 import { emptyCommands } from "./model/commands";
 import { App, type SessionHandle } from "./ui/App";
 import { parseArgs } from "./args";
@@ -52,7 +52,7 @@ async function runUi(session: SessionHandle & Partial<Pick<Session, "start" | "s
 
 function demoSession(): SessionHandle {
   // Static fixture: nothing leaves the process; a command only shows a notice.
-  let state: SessionState = { view: fixtureView(), commands: emptyCommands(), connection: "live", error: null };
+  let state: SessionState = { view: fixtureView(), commands: emptyCommands(), attempt: fixtureAttempt(), connection: "live", error: null };
   const listeners = new Set<(s: SessionState) => void>();
   return {
     get state() { return state; },

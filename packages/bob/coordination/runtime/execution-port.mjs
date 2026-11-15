@@ -1,16 +1,22 @@
 import { createClient } from '../generated/client.mjs';
 import { canonical, fail, outputValidators } from './coordinator.mjs';
 
+/** The one environment binding ({ target, baseUrl, authToken }) matching a full execution
+ * target. The tail relay (tail.mjs) uses the same binding for the t3 websocket. */
+export function bindingFor(bindings, target) {
+  const matches = bindings.filter(binding => canonical(binding.target) === canonical(target));
+  if (matches.length !== 1) fail('TargetMismatch', 'Exactly one local binding must match the full execution target');
+  const base = new URL(matches[0].baseUrl);
+  if (base.username || base.password || !['https:', 'http:'].includes(base.protocol)) fail('InvalidRequest', 'Invalid environment base URL', 400);
+  return matches[0];
+}
+
 /** Each binding and credential is environment-local configuration. Credentials
  * never enter the persisted execution request. No legacy T3 dispatch fallback. */
 export function executionPort({ bindings, fetch: transport = fetch, timeoutMs = 15000 }) {
   if (!Array.isArray(bindings) || !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000) fail('InvalidRequest', 'Invalid environment bindings/timeout', 400);
   const client = request => {
-    const matches = bindings.filter(binding => canonical(binding.target) === canonical(request.target));
-    if (matches.length !== 1) fail('TargetMismatch', 'Exactly one local binding must match the full execution target');
-    const binding = matches[0];
-    const base = new URL(binding.baseUrl);
-    if (base.username || base.password || !['https:', 'http:'].includes(base.protocol)) fail('InvalidRequest', 'Invalid environment base URL', 400);
+    const binding = bindingFor(bindings, request.target), base = new URL(binding.baseUrl);
     return createClient({ baseUrl: base.toString(), headers: binding.authToken ? { Authorization: `Bearer ${binding.authToken}` } : {},
       fetch: (url, options) => transport(url, { ...options, signal: AbortSignal.timeout(timeoutMs), redirect: 'error' }) });
   };

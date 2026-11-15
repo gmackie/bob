@@ -1,0 +1,2 @@
+{ "spec": "§2.3, §3.4", "frames": [ { "_tag": "Exit", "requestId": "$id", "exit": { "_tag": "Failure", "cause": [
+  { "_tag": "Fail", "error": { "_tag": "OrchestrationV2DispatchCommandError", "commandId": "bob-input-1", "commandType": "runtime-request.respond", "message": "Runtime request is not pending" } } ] } } ] }

@@ -1,0 +1,34 @@
+{
+  "spec": "§2.3, §2.4, §3.1, §3.3, §4",
+  "frames": [
+    { "_tag": "Chunk", "requestId": "$id", "values": [
+      { "kind": "snapshot", "snapshotSequence": 4170, "historyCursor": null, "hasMoreHistory": true, "latestLocalTurnOrdinal": 12,
+        "projection": {
+          "thread": { "id": "thr_pilot" }, "runs": [], "attempts": [], "nodes": [], "subagents": [], "providerSessions": [], "providerThreads": [], "providerTurns": [],
+          "runtimeRequests": [
+            { "id": "rr_1", "nodeId": "node_1", "providerTurnId": null, "nativeRequestRef": null, "kind": "user_input", "status": "pending",
+              "responseCapability": { "type": "live", "providerSessionId": "ps_1" }, "createdAt": "2026-11-15T10:00:00.000Z", "resolvedAt": null }
+          ],
+          "messages": [], "plans": [],
+          "turnItems": [
+            { "type": "user_message", "id": "ti_0", "ordinal": 1, "text": "Deploy the pilot" },
+            { "type": "reasoning", "id": "ti_1", "ordinal": 2, "text": "Checking the stages.", "streaming": false },
+            { "type": "command_execution", "id": "ti_2", "ordinal": 3, "input": "forge app list", "exitCode": 0, "outputOmitted": true },
+            { "type": "assistant_message", "id": "ti_3", "ordinal": 4, "text": "Two stages exist.\nI need a target.", "streaming": false, "phase": "commentary" },
+            { "type": "user_input_request", "id": "ti_4", "ordinal": 5, "requestId": "rr_1", "status": "pending",
+              "questions": [ { "id": "q1", "header": "Deploy target", "question": "Which stage should I deploy to?",
+                "options": [ { "label": "Staging", "description": "beta.example", "value": "staging" }, { "label": "Production", "description": "live" } ],
+                "multiSelect": false, "allowCustomAnswer": true, "required": true } ] }
+          ],
+          "checkpointScopes": [], "checkpoints": [], "contextHandoffs": [], "contextTransfers": [], "visibleTurnItems": [], "updatedAt": "2026-11-15T10:00:00.000Z" } }
+    ] },
+    { "_tag": "Chunk", "requestId": "$id", "values": [ { "kind": "synchronized" } ] },
+    { "_tag": "Chunk", "requestId": "$id", "values": [
+      { "kind": "event", "sequence": 4171, "event": { "id": "evt_1", "threadId": "thr_pilot", "runId": "run_1", "occurredAt": "2026-11-15T10:00:01.000Z",
+        "type": "turn-item.updated", "payload": { "type": "assistant_message", "id": "ti_5", "ordinal": 6, "text": "Waiting for you.", "streaming": true } } },
+      { "kind": "event", "sequence": 4172, "event": { "id": "evt_2", "threadId": "thr_pilot", "occurredAt": "2026-11-15T10:00:02.000Z",
+        "type": "checkpoint.created", "payload": { "id": "cp_1" } } }
+    ] },
+    { "_tag": "Exit", "requestId": "$id", "exit": { "_tag": "Success" } }
+  ]
+}

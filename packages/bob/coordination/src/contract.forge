@@ -330,6 +330,30 @@ export enum ItemState {
   Cancelled = "cancelled"
   Completed = "completed"
 }
+export enum PendingInputKind { UserInput = "user_input" }
+/// One answer option of a pending question (t3 user_input_request option).
+export shape PendingOption {
+  label : text length 1..2000
+  value : text? length 1..2000
+  description : text? length 1..4000
+}
+/// One t3 question; `id` is the key in the encoded answers object.
+export shape PendingQuestion {
+  id : OpaqueId
+  header : text? length 1..240
+  question : text length 1..8000
+  options : list<PendingOption> length <= 50
+  multiSelect : boolean
+}
+/// The question a running attempt is waiting on (BOB-80). promptId is the t3
+/// runtime request id. Present only while the item is waiting-input.
+export shape PendingInput {
+  attemptId : OpaqueId
+  promptId : OpaqueId
+  kind : PendingInputKind
+  questions : list<PendingQuestion> length 1..20
+  createdAt : datetime
+}
 export shape ItemSnapshot {
   itemId : OpaqueId
   planId : OpaqueId
@@ -337,6 +361,7 @@ export shape ItemSnapshot {
   state : ItemState
   currentAttemptId : OpaqueId?
   execution : ExecutionAdmission?
+  pendingInput : PendingInput?
   achievedMilestones : list<Milestone> length <= 4
   operationIds : list<OpaqueId> length <= 100
   evidenceRefs : list<OpaqueId> length <= 100

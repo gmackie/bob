@@ -16,6 +16,7 @@ export interface PlanSnapshot {
     concurrencyLimit: number;
   };
 }
+import type { PendingInput } from "./attempt";
 /** The coordinator's GetItem `item` (the fields the view reads). */
 export interface ItemSnapshot {
   itemId: string;
@@ -24,6 +25,8 @@ export interface ItemSnapshot {
   state: ItemState;
   currentAttemptId?: string | null;
   execution?: { attemptId: string; target: ExecutionTarget; thread: ThreadRef } | null;
+  /** Set while state is waiting-input (BOB-80). See attempt.ts. */
+  pendingInput?: PendingInput | null;
   achievedMilestones: Milestone[];
   operationIds: string[];
   evidenceRefs: string[];

@@ -1,6 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { Coordinator, supportedOperations, validators, outputValidators, canonical, digest, fail } from './coordinator.mjs';
-const executionOperations = ['RequestExecution', 'RetryItem', 'CancelItem', 'ReconcileItem', 'RecordExecutionReceipt'];
+import { Coordinator, supportedOperations, validators, outputValidators, pendingInputValidator, canonical, digest, fail } from './coordinator.mjs';
+import { decodeAnswers, t3Answers, inputCommandId } from './input.mjs';
+const executionOperations = ['RequestExecution', 'RetryItem', 'CancelItem', 'ReconcileItem', 'ResolveInput', 'RecordExecutionReceipt'];
+/** The receipt's evidence plus `commit:<sha>` (BOB-80: the edge reads the attempt's commit
+ * for CI detail), deduplicated, appended last, within the contract's 100-entry limit. */
+export function evidenceWithCommit(refs, commitSha) {
+  if (!/^[a-f0-9]{40}$/.test(commitSha ?? '')) return refs;
+  const ref = `commit:${commitSha}`;
+  return [...[...new Set(refs)].filter(entry => entry !== ref).slice(-99), ref];
+}
+// Item states the tail relay follows: the attempt's t3 thread is live.
+const liveStates = new Set(['running', 'waiting-input']);
 // Item states CancelItem accepts. Terminal states and `cancelling` refuse it.
 const cancellableStates = new Set(['pending', 'ready', 'reserved', 'running', 'waiting-input', 'execution-unknown', 'validating', 'review', 'deploying']);
 /** Operations that admit issue scope and therefore need a resolved issue when an
@@ -65,7 +75,9 @@ export class ExecutionCoordinator extends Coordinator {
     if (!row) fail('NotFound', 'Attempt not found', 404);
     this.item(row.item_id); return row;
   }
+  /** pendingInput exists only while the item is waiting-input: every other state drops it. */
   storeSnapshot(snapshot, operationId) {
+    if (snapshot.state !== 'waiting-input' && 'pendingInput' in snapshot) { snapshot = { ...snapshot }; delete snapshot.pendingInput; }
     this.db.prepare('UPDATE coordination_item SET snapshot=?,version=? WHERE tenant=? AND owner=? AND id=?')
       .run(canonical(snapshot), snapshot.resourceVersion, this.tenant, this.owner, snapshot.itemId);
     this.event(snapshot.itemId, snapshot.resourceVersion, operationId);
@@ -125,6 +137,8 @@ export class ExecutionCoordinator extends Coordinator {
         itemId = body.itemId; value = this.cancelItem(body);
       } else if (name === 'ReconcileItem') {
         itemId = body.itemId; value = this.reconcileItem(body);
+      } else if (name === 'ResolveInput') {
+        ({ itemId, value } = this.resolveInput(body, options));
       } else { itemId = body.itemId; this.verifyAdmission(name, body, options); value = this.reserve(body, body.requestId); }
       this.fault('after-execution-state');
       this.db.prepare('INSERT INTO forge_receipt VALUES (?,?,?,?,?,?,?)').run(this.tenant, namespace, key, hash, 200, canonical({ itemId, value }), new Date().toISOString());
@@ -196,6 +210,113 @@ export class ExecutionCoordinator extends Coordinator {
     if (attempt.state === 'unknown') this.db.prepare('UPDATE coordination_attempt SET lease_until=NULL WHERE tenant=? AND id=? AND lease_owner IS NULL').run(this.tenant, attempt.id);
     return this.operation(body.commandId, 'accepted', snapshot);
   }
+  /** ResolveInput (BOB-80): answers the current attempt's pending t3 question. The
+   * item goes back to running and the answer is queued, in this transaction, in
+   * coordination_input_delivery for the tail relay to send with t3
+   * runtime-request.respond. The Operation stays `accepted` until the relay settles
+   * the delivery (`succeeded`, or `failed` when it cannot be delivered).
+   * options.expectItemId, set by the edge exporter, must name the attempt's item. */
+  resolveInput(body, options) {
+    const attempt = this.attempt(body.attemptId);
+    const { snapshot } = this.item(attempt.item_id);
+    if (options.expectItemId !== undefined && options.expectItemId !== attempt.item_id) fail('InvalidTransition', 'The attempt does not belong to this item');
+    if (snapshot.currentAttemptId !== attempt.id || attempt.state !== 'admitted') fail('InvalidTransition', 'The attempt is no longer current');
+    const pending = snapshot.pendingInput;
+    if (snapshot.state !== 'waiting-input' || !pending) fail('InvalidTransition', 'The item is not waiting for input');
+    if (pending.promptId !== body.promptId || pending.attemptId !== attempt.id) fail('InvalidTransition', 'The question changed; reload it before answering');
+    if (pending.kind !== 'user_input') fail('InvalidTransition', 'Only user_input questions can be answered from Bob');
+    const answers = decodeAnswers(body.answer, pending);
+    if (!answers) fail('InvalidRequest', 'The answer does not match the pending questions', 400);
+    const next = { ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state: 'running' };
+    const operation = this.operation(body.commandId, 'accepted', next);
+    next.operationIds = [...snapshot.operationIds.slice(-99), operation.operationId];
+    this.storeSnapshot(next, operation.operationId);
+    const admission = JSON.parse(attempt.admission);
+    // One live delivery per prompt (unique attempt_id, prompt_id): an abandoned one is
+    // replaced by this new answer; a pending or delivered one means it was answered.
+    if (this.db.prepare("SELECT 1 FROM coordination_input_delivery WHERE tenant=? AND attempt_id=? AND prompt_id=? AND status IN ('pending','delivered')").get(this.tenant, attempt.id, pending.promptId)) fail('InvalidTransition', 'The question was already answered');
+    this.db.prepare("DELETE FROM coordination_input_delivery WHERE tenant=? AND attempt_id=? AND prompt_id=? AND status='abandoned'").run(this.tenant, attempt.id, pending.promptId);
+    this.db.prepare('INSERT INTO coordination_input_delivery (tenant,id,owner,attempt_id,item_id,thread_id,prompt_id,command_id,operation_id,answers,status,delivery_attempts,next_attempt_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(this.tenant, `${attempt.id}:${pending.promptId}`, this.owner, attempt.id, attempt.item_id, admission.thread.threadId, pending.promptId, body.commandId, operation.operationId, canonical(t3Answers(answers, pending)), 'pending', 0, 0, new Date().toISOString());
+    return { itemId: attempt.item_id, value: operation };
+  }
+  // ---- Internal tail-relay operations (BOB-80). Host-only: not in the contract,
+  // not HTTP- or MCP-exposed, not relayable from the edge. ----
+  /** Attempts whose t3 thread the relay follows: admitted, current, item running or waiting-input. */
+  liveAttempts() {
+    const rows = this.db.prepare("SELECT * FROM coordination_attempt WHERE tenant=? AND owner=? AND state='admitted' ORDER BY rowid").all(this.tenant, this.owner);
+    const live = [];
+    for (const row of rows) {
+      let snapshot;
+      try { ({ snapshot } = this.item(row.item_id)); } catch (error) { if (error.code === 'Forbidden' || error.code === 'NotFound') continue; throw error; }
+      if (snapshot.currentAttemptId !== row.id || !liveStates.has(snapshot.state)) continue;
+      const admission = JSON.parse(row.admission);
+      live.push({ itemId: row.item_id, attemptId: row.id, target: JSON.parse(row.request).target, thread: admission.thread, state: snapshot.state, promptId: snapshot.pendingInput?.promptId ?? null });
+    }
+    return live;
+  }
+  /** The relay saw a user_input request on the attempt's thread. Only the item's current
+   * running attempt moves to waiting-input; the same promptId again is a no-op, a new
+   * one replaces it, and a prompt with a pending or delivered answer is never re-recorded. */
+  recordPendingInput({ attemptId, pendingInput }) {
+    if (!pendingInputValidator(pendingInput) || pendingInput.attemptId !== attemptId) fail('InvalidRequest', 'Pending input does not match the contract', 400);
+    return this.transaction(() => {
+      const attempt = this.attempt(attemptId), { snapshot } = this.item(attempt.item_id);
+      if (snapshot.currentAttemptId !== attemptId || attempt.state !== 'admitted' || !liveStates.has(snapshot.state)) return { changed: false, reason: 'not-running' };
+      // Answered = a delivery still pending or delivered. An abandoned one (not delivered) lets
+      // the still-pending prompt be recorded and answered again.
+      if (this.db.prepare("SELECT 1 FROM coordination_input_delivery WHERE tenant=? AND attempt_id=? AND prompt_id=? AND status IN ('pending','delivered')").get(this.tenant, attemptId, pendingInput.promptId)) return { changed: false, reason: 'answered' };
+      if (snapshot.state === 'waiting-input' && snapshot.pendingInput?.promptId === pendingInput.promptId) return { changed: false, reason: 'unchanged' };
+      this.storeSnapshot({ ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state: 'waiting-input', pendingInput: JSON.parse(canonical(pendingInput)) }, randomUUID());
+      return { changed: true };
+    });
+  }
+  /** The prompt was resolved without Bob (e.g. answered in the T3 UI): back to running. */
+  clearPendingInput({ attemptId, promptId }) {
+    return this.transaction(() => {
+      const attempt = this.attempt(attemptId), { snapshot } = this.item(attempt.item_id);
+      if (snapshot.currentAttemptId !== attemptId || snapshot.state !== 'waiting-input' || snapshot.pendingInput?.promptId !== promptId) return { changed: false };
+      this.storeSnapshot({ ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state: 'running' }, randomUUID());
+      return { changed: true };
+    });
+  }
+  /** Queued answers due for delivery. `live` is false once the attempt ended or was replaced. */
+  pendingInputDeliveries({ now = Date.now(), limit = 20 } = {}) {
+    return this.db.prepare("SELECT d.*, a.request, a.state AS attempt_state FROM coordination_input_delivery d JOIN coordination_attempt a ON a.tenant=d.tenant AND a.id=d.attempt_id WHERE d.tenant=? AND d.owner=? AND d.status='pending' AND d.next_attempt_at<=? ORDER BY d.created_at, d.id LIMIT ?")
+      .all(this.tenant, this.owner, now, limit).map(row => {
+        let current = false;
+        try { current = this.item(row.item_id).snapshot.currentAttemptId === row.attempt_id; } catch (error) { if (error.code !== 'Forbidden' && error.code !== 'NotFound') throw error; }
+        return { id: row.id, attemptId: row.attempt_id, itemId: row.item_id, threadId: row.thread_id, promptId: row.prompt_id, t3CommandId: inputCommandId(row.attempt_id, row.prompt_id, row.command_id),
+          answers: JSON.parse(row.answers), target: JSON.parse(row.request).target, deliveryAttempts: row.delivery_attempts, live: current && row.attempt_state === 'admitted' };
+      });
+  }
+  /** A failed delivery waits (capped exponential back-off) and is retried. Only an error code is kept. */
+  deferInputDelivery(id, { now = Date.now(), code = 'Unavailable' } = {}) {
+    this.transaction(() => {
+      const row = this.db.prepare("SELECT delivery_attempts FROM coordination_input_delivery WHERE tenant=? AND owner=? AND id=? AND status='pending'").get(this.tenant, this.owner, id);
+      if (!row) return;
+      this.db.prepare('UPDATE coordination_input_delivery SET delivery_attempts=?,next_attempt_at=?,last_error=? WHERE tenant=? AND id=?')
+        .run(row.delivery_attempts + 1, now + Math.min(1000 * 2 ** Math.min(row.delivery_attempts, 6), 60000), String(code).slice(0, 128), this.tenant, id);
+    });
+  }
+  /** delivered → the ResolveInput Operation succeeds; abandoned (reason code) → it fails.
+   * The answer text is erased either way, and the log gains a completion row. */
+  settleInputDelivery(id, outcome, reason = null) {
+    if (!['delivered', 'abandoned'].includes(outcome)) fail('InvalidRequest', 'Unknown delivery outcome', 400);
+    return this.transaction(() => {
+      const row = this.db.prepare("SELECT * FROM coordination_input_delivery WHERE tenant=? AND owner=? AND id=? AND status='pending'").get(this.tenant, this.owner, id);
+      if (!row) return { changed: false };
+      this.db.prepare('UPDATE coordination_input_delivery SET status=?,answers=NULL,last_error=?,settled_at=? WHERE tenant=? AND id=?')
+        .run(outcome, reason === null ? null : String(reason).slice(0, 128), new Date().toISOString(), this.tenant, id);
+      const op = this.db.prepare('SELECT receipt FROM coordination_operation WHERE tenant=? AND id=?').get(this.tenant, row.operation_id);
+      const state = outcome === 'delivered' ? 'succeeded' : 'failed';
+      if (op) this.db.prepare('UPDATE coordination_operation SET receipt=? WHERE tenant=? AND id=?').run(canonical({ ...JSON.parse(op.receipt), state,
+        error: state === 'failed' ? { code: 'InputNotDelivered', message: `The answer was not delivered to t3 (${String(reason ?? 'unknown').slice(0, 100)})`, retryable: false } : null }), this.tenant, row.operation_id);
+      const accepted = this.db.prepare("SELECT actor FROM coordination_command_log WHERE tenant=? AND command_id=? AND operation='ResolveInput' AND outcome='accepted' ORDER BY rowid LIMIT 1").get(this.tenant, row.command_id);
+      this.logCommand('ResolveInput', row.command_id, {}, { resourceId: row.item_id, operationId: row.operation_id, outcome: state, owner: row.owner, actor: accepted?.actor ?? null });
+      return { changed: true };
+    });
+  }
   afterPlanWrite(planId) { this.readyDependents(planId); }
   query(name, body) {
     if (name === 'GetCapabilities') return { ...super.query(name, body), operations: [...supportedOperations, ...executionOperations] };
@@ -216,13 +337,13 @@ export class ExecutionCoordinator extends Coordinator {
       environmentId: receipt.environmentId, executionId: receipt.executionId, thread: receipt.thread, commitSha: source.commitSha, treeDigest: source.treeDigest, dirty: source.dirty, patchArtifactRef: source.patchArtifactRef ?? null,
       occurredAt: receipt.occurredAt, evidenceRefs: receipt.evidenceRefs, currentAttempt: snapshot.currentAttemptId === attempt.id });
     if (snapshot.currentAttemptId === attempt.id && snapshot.state === 'cancelling') {
-      const next = this.finishCancel(snapshot, { evidenceRefs: receipt.evidenceRefs });
+      const next = this.finishCancel(snapshot, { evidenceRefs: evidenceWithCommit(receipt.evidenceRefs, source.commitSha) });
       const op = JSON.parse(this.db.prepare('SELECT receipt FROM coordination_operation WHERE tenant=? AND id=?').get(this.tenant, attempt.operation_id).receipt);
       this.db.prepare('UPDATE coordination_operation SET receipt=? WHERE tenant=? AND id=?').run(canonical({ ...op, state: receipt.outcome, resourceVersion: next.resourceVersion }), this.tenant, attempt.operation_id);
     } else if (snapshot.currentAttemptId === attempt.id) {
       const completeAtExecution = definition.items.find(item => item.itemId === attempt.item_id).completionTarget === 'execution';
       const state = receipt.outcome === 'succeeded' ? (completeAtExecution ? 'completed' : 'validating') : receipt.outcome;
-      const next = { ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state, achievedMilestones: receipt.outcome === 'succeeded' ? ['execution-succeeded'] : [], evidenceRefs: receipt.evidenceRefs };
+      const next = { ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state, achievedMilestones: receipt.outcome === 'succeeded' ? ['execution-succeeded'] : [], evidenceRefs: evidenceWithCommit(receipt.evidenceRefs, source.commitSha) };
       this.storeSnapshot(next, randomUUID());
       const op = JSON.parse(this.db.prepare('SELECT receipt FROM coordination_operation WHERE tenant=? AND id=?').get(this.tenant, attempt.operation_id).receipt);
       this.db.prepare('UPDATE coordination_operation SET receipt=? WHERE tenant=? AND id=?').run(canonical({ ...op, state: receipt.outcome, resourceVersion: next.resourceVersion }), this.tenant, attempt.operation_id);

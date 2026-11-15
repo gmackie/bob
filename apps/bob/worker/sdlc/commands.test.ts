@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { COMMAND_LIMITS, OFFLINE_AFTER_MS, type CommandResult, type ItemSnapshot, type PlanSnapshot } from "@bob/sdlc-view";
 import { ACTIVE_POLL_WINDOW_MS, EdgeController, FAST_POLL_MS, SEEN_PERSIST_MS, type EdgeControllerOptions } from "./controller";
-import { attachUser, greet, greetedSockets, handleCommand, parseCommandMessage, readAttachment } from "./edge-sockets";
+import { attachUser, greet, greetedSockets, handleCommand, MAX_COMMAND_CHARS, parseCommandMessage, readAttachment } from "./edge-sockets";
 import { commandHash, MAX_COMMANDS_PER_RESPONSE, REDELIVER_AFTER_MS, RESULT_RETENTION_MS } from "./outbox";
 import { EdgeStore, parseBatch, type IngestBatch } from "./store";
 import { nodeSqlitePort } from "./test-helpers/node-sqlite";
@@ -90,7 +90,7 @@ describe("who may send commands", () => {
     expect(parseCommandMessage("not json")).toBeNull();
     expect(parseCommandMessage(JSON.stringify({ type: "hello" }))).toBeNull();
     expect(parseCommandMessage(new ArrayBuffer(4))).toBeNull();
-    expect(parseCommandMessage(JSON.stringify(pause("a", { pad: "x".repeat(9000) })))).toBeNull();
+    expect(parseCommandMessage(JSON.stringify(pause("a", { pad: "x".repeat(MAX_COMMAND_CHARS) })))).toBeNull();
   });
 });
 

@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 
 import { emptyView, reduce, type CommandOption, type Confirmation, type EdgeView } from "@bob/sdlc-view";
 
+import { asAttemptMessage, emptyAttempt, reduceAttempt, watchMessage, type AttemptState } from "../model/attempt";
 import { applyStatus, asCommandStatus, clientCommand, emptyCommands, expire, recordSent, toResend, type CommandsState } from "../model/commands";
 import { asEdgeMessage, createBackoff, helloFor } from "./edge-protocol";
 
@@ -14,6 +15,8 @@ export type Connection = "connecting" | "live" | "reconnecting" | "auth-failed";
 export interface SessionState {
   view: EdgeView;
   commands: CommandsState;
+  /** Live attempt detail (tail, CI, unavailable), kept apart from the view. */
+  attempt: AttemptState;
   connection: Connection;
   /** Why the session stopped reconnecting (auth), or the last socket error. */
   error: string | null;
@@ -47,6 +50,8 @@ export interface Session {
   send(option: CommandOption, label: string, confirm?: Confirmation): string;
   /** Marks in-flight commands older than the edge's expiry as expired. */
   tick(): void;
+  /** Watch one item's attempt detail (null stops); re-sent on every new socket. */
+  watch(itemId: string | null): void;
   subscribe(listener: (state: SessionState) => void): () => void;
 }
 
@@ -57,7 +62,7 @@ export function createSession(options: SessionOptions): Session {
   const clearTimer = options.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
   const backoff = createBackoff(options.random);
   const listeners = new Set<(s: SessionState) => void>();
-  let state: SessionState = { view: emptyView(), commands: emptyCommands(), connection: "connecting", error: null };
+  let state: SessionState = { view: emptyView(), commands: emptyCommands(), attempt: emptyAttempt(), connection: "connecting", error: null };
   let socket: SocketLike | null = null;
   let isOpen = false;
   let stopped = false;
@@ -83,11 +88,15 @@ export function createSession(options: SessionOptions): Session {
         set({ connection: "live", error: null });
         write(helloFor(state.view));
         for (const command of toResend(state.commands)) write(command);
+        // Watches live per socket on the edge: a new socket watches nothing until told.
+        if (state.attempt.watching !== null) write(watchMessage(state.attempt.watching));
       },
       onMessage(data) {
         if (!mine()) return;
         let value: unknown;
         try { value = JSON.parse(data); } catch { return; }
+        const live = asAttemptMessage(value);
+        if (live) { backoff.heard(); set({ attempt: reduceAttempt(state.attempt, live) }); return; }
         const status = asCommandStatus(value);
         if (status) { backoff.heard(); set({ commands: applyStatus(state.commands, status) }); return; }
         const message = asEdgeMessage(value);
@@ -141,6 +150,11 @@ export function createSession(options: SessionOptions): Session {
       set({ commands: recordSent(state.commands, command, label, now()) });
       write(command);
       return command.commandId;
+    },
+    watch(itemId) {
+      if (itemId === state.attempt.watching) return;
+      set({ attempt: { ...state.attempt, watching: itemId } });
+      write(watchMessage(itemId));
     },
     tick() {
       const commands = expire(state.commands, now());

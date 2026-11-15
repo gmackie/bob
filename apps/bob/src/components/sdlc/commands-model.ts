@@ -258,3 +258,29 @@ export function confirmationFor(option: CommandOption, typed = ""): Confirmation
 /** The target after an option label ("Cancel plan" + "1a2b3c4d"; "Cancel item" + "BOB-71 in plan 1a2b3c4d"). */
 export const planTarget = (planId: string) => planId.slice(0, 8);
 export const itemTarget = (itemTitle: string, planId: string) => `${itemTitle} in plan ${planTarget(planId)}`;
+
+// ── Pending-input answers ────────────────────────────────────────────────────
+
+export interface AnswerFormStatus {
+  disabled: boolean;
+  reason: string | null;
+  /** A command for the item is in flight. */
+  pending: boolean;
+  /** The newest ResolveInput for the item, to show its lifecycle. */
+  latest: CommandEntry | null;
+  text: string | null;
+}
+
+/** Whether the answer form can send now, and the newest answer's lifecycle. ResolveInput is tier 1: no confirmation. */
+export function answerFormStatus(ctx: ActionContext, itemId: string): AnswerFormStatus {
+  const global = globalDisabledReason(ctx);
+  const latestAny = latestFor(ctx.commands, itemId);
+  const pending = !!latestAny && isInFlight(latestAny);
+  let latest: CommandEntry | null = null;
+  for (let i = ctx.commands.order.length - 1; i >= 0; i--) {
+    const entry = ctx.commands.entries[ctx.commands.order[i]!]!;
+    if (entry.resourceId === itemId && entry.command.operation === "ResolveInput") { latest = entry; break; }
+  }
+  const reason = global ?? (pending ? `Waiting for "${latestAny!.label}" to finish.` : null);
+  return { disabled: reason !== null, reason, pending, latest, text: latest ? outcomeText(latest) : null };
+}

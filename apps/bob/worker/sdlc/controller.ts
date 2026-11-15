@@ -1,6 +1,7 @@
 import {
   COMMAND_LIMITS,
   confirmationSatisfies,
+  decodeAnswers,
   OFFLINE_AFTER_MS,
   parseClientCommand,
   tierOf as defaultTierOf,
@@ -126,7 +127,8 @@ export class EdgeController {
    * A client's command. Checks, in order: sender (forbidden), shape (invalid), rate
    * (rate-limited); a commandId already known is answered from the outbox or the stored
    * result without being queued again, unless its operation + input differ from what was
-   * queued (conflict); then coordinator online, tier + confirmation, outbox size (in all,
+   * queued (conflict); then coordinator online, a ResolveInput against the item's pending
+   * prompt (invalid), tier + confirmation, outbox size (in all,
    * then the user's). Accepted commands are stored before the reply. Replies to `socket` only.
    */
   command(socket: EdgeSocket, raw: unknown, sender: CommandSender): CommandStatusMessage {
@@ -148,6 +150,8 @@ export class EdgeController {
     }
     const now = this.now();
     if (!this.coordinatorOnline(now)) return reject("coordinator-offline", "The coordinator is offline; try again when it reconnects.");
+    const stale = this.staleInput(input);
+    if (stale) return reject("invalid", stale);
     const tier = this.tierOf(input);
     if (!confirmationSatisfies(tier, confirm, tier === 3 ? this.expectedConfirmation(input) : undefined)) {
       return reject("confirmation-required", tier === 3 ? "Type the name to confirm." : "This command needs confirmation.");
@@ -160,6 +164,27 @@ export class EdgeController {
     }
     this.outbox.enqueue({ commandId: command.commandId, actor: sender.userId, queuedAt: now, ...input });
     return reply({ type: "commandAccepted", commandId: command.commandId });
+  }
+
+  /**
+   * Why a ResolveInput cannot apply to the item as the edge holds it, or null. The item
+   * must exist, be waiting-input, have a pendingInput for the same attempt and prompt, and
+   * the answer must decode against its questions. Messages never quote the answer, and
+   * nothing here logs it. Other operations: null (the coordinator checks versions).
+   * A re-sent commandId is answered from the outbox before this runs, so a resolved prompt
+   * still replays its result.
+   */
+  staleInput(command: CommandInput): string | null {
+    if (command.operation !== "ResolveInput") return null;
+    const { itemId, attemptId, promptId, answer } = command.input;
+    const item = this.store.item(itemId);
+    if (!item) return "Unknown item.";
+    if (item.state !== "waiting-input") return "This item is not waiting for input.";
+    const pending = item.pendingInput;
+    if (!pending) return "This item has no pending prompt.";
+    if (pending.attemptId !== attemptId || pending.promptId !== promptId) return "This prompt is no longer pending; it was answered or replaced.";
+    if (!decodeAnswers(answer, pending)) return "The answer does not match the prompt's questions.";
+    return null;
   }
 
   /** The sliding per-user minute limit, shared by all of the user's sockets. */

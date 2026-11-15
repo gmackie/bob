@@ -9,7 +9,7 @@ export const FAST_POLL_MS = 2_000;
 const MIN_POLL_MS = 1_000;
 /** Coordinator operations the edge may relay; mirrors RELAYED_OPERATIONS in
  * packages/bob/src/sdlc-view/src/commands.ts. */
-export const RELAYED_OPERATIONS = Object.freeze(['ControlPlan', 'RetryItem', 'CancelItem', 'ReconcileItem']);
+export const RELAYED_OPERATIONS = Object.freeze(['ControlPlan', 'RetryItem', 'CancelItem', 'ReconcileItem', 'ResolveInput']);
 const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isId = v => typeof v === 'string' && v.length > 0 && v.length <= 200;
 const isVersion = v => Number.isSafeInteger(v) && v >= 1;
@@ -27,6 +27,9 @@ export function parseCommandInput(operation, input) {
       return isId(input.itemId) && isVersion(input.expectedVersion) ? { itemId: input.itemId, expectedVersion: input.expectedVersion } : null;
     case 'ReconcileItem':
       return isId(input.itemId) ? { itemId: input.itemId } : null;
+    case 'ResolveInput':
+      return isId(input.itemId) && isId(input.attemptId) && isId(input.promptId) && typeof input.answer === 'string' && input.answer.length >= 1 && input.answer.length <= 16000
+        ? { itemId: input.itemId, attemptId: input.attemptId, promptId: input.promptId, answer: input.answer } : null;
     default:
       return null;
   }
@@ -163,8 +166,11 @@ export function edgeExporter({ coordinator, endpoint, token, checkpoint, fetch: 
     if (!allowed.has(command.operation)) return failure(commandId, 'Forbidden', 'Operation is outside the edge principal policy', false);
     const input = parseCommandInput(command.operation, command.input);
     if (!input) return failure(commandId, 'InvalidRequest', 'Command input is invalid', false);
+    // ResolveInputRequest has no itemId: the coordinator checks it names the attempt's item.
+    const { itemId: expectItemId, ...resolve } = command.operation === 'ResolveInput' ? input : {};
+    const body = command.operation === 'ResolveInput' ? resolve : input;
     try {
-      const operation = await (principal.admit ?? principal.call).call(principal, command.operation, { contractVersion: '1', commandId, ...input }, { idempotencyKey: commandId, actor: command.actor });
+      const operation = await (principal.admit ?? principal.call).call(principal, command.operation, { contractVersion: '1', commandId, ...body }, { idempotencyKey: commandId, actor: command.actor, ...(expectItemId ? { expectItemId } : {}) });
       const { error, ...rest } = operation;
       return { commandId, ok: true, operation: error == null ? rest : operation };
     } catch (error) {
@@ -234,14 +240,25 @@ function validOperations(operations) {
   return Array.isArray(operations) && operations.length > 0 && new Set(operations).size === operations.length && operations.every(name => RELAYED_OPERATIONS.includes(name));
 }
 
-/** edge.json: { endpoint, checkpoint, tokenEnv, commands?: { operations: [...] } }.
+/** edge.json `tail` block (BOB-80): {} or { postIntervalMs } (2000..30000 ms). Its presence
+ * turns on the tail relay (runtime/tail.mjs); null when absent. */
+export function parseTailConfig(tail) {
+  if (tail === undefined) return null;
+  if (!isRecord(tail) || Object.keys(tail).some(key => key !== 'postIntervalMs')) throw new Error('Edge tail must be an object with optional postIntervalMs');
+  if (tail.postIntervalMs !== undefined && (!Number.isInteger(tail.postIntervalMs) || tail.postIntervalMs < 2000 || tail.postIntervalMs > 30_000)) throw new Error('Edge tail.postIntervalMs must be 2000..30000');
+  return { postIntervalMs: tail.postIntervalMs ?? 2000 };
+}
+
+/** edge.json: { endpoint, checkpoint, tokenEnv, commands?: { operations: [...] }, tail?: {...} }.
  * `commands` enables the command channel; its operations are the edge principal's
  * allowlist, a non-empty subset of RELAYED_OPERATIONS. The principal's context is
- * the worker's own --context policy (see deploy/coordination/README.md). */
+ * the worker's own --context policy (see deploy/coordination/README.md). `tail`
+ * enables the tail relay; it is returned as `tail` and is not an exporter option. */
 export function loadEdgeConfig(path, env = process.env) {
   const config = JSON.parse(readFileSync(path, 'utf8'));
   if (typeof config.tokenEnv !== 'string' || !/^[A-Z][A-Z0-9_]*$/.test(config.tokenEnv)) throw new Error('Edge tokenEnv is required');
-  const loaded = { endpoint: config.endpoint, checkpoint: config.checkpoint, token: env[config.tokenEnv] };
+  const tail = parseTailConfig(config.tail);
+  const loaded = { endpoint: config.endpoint, checkpoint: config.checkpoint, token: env[config.tokenEnv], ...(tail ? { tail } : {}) };
   if (config.commands === undefined) return loaded;
   if (!isRecord(config.commands) || Object.keys(config.commands).some(key => key !== 'operations') || !validOperations(config.commands.operations)) throw new Error('Edge commands.operations must be a non-empty, unique subset of ' + RELAYED_OPERATIONS.join(', '));
   return { ...loaded, commands: { operations: [...config.commands.operations] } };

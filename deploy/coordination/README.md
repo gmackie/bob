@@ -77,7 +77,8 @@ port. The channel is off unless `edge.json` has a `commands` block:
   "endpoint": "https://<bob-host>/api/sdlc/ingest",
   "checkpoint": "/home/bob/.bob/coordination/edge.sqlite",
   "tokenEnv": "BOB_SDLC_EDGE_TOKEN",
-  "commands": { "operations": ["ControlPlan", "RetryItem", "CancelItem", "ReconcileItem"] }
+  "commands": { "operations": ["ControlPlan", "RetryItem", "CancelItem", "ReconcileItem", "ResolveInput"] },
+  "tail": {}
 }
 ```
 
@@ -120,6 +121,46 @@ port. The channel is off unless `edge.json` has a `commands` block:
 - `ReconcileItem` (for `execution-unknown` only) expires the attempt's back-off
   so the next worker tick re-runs the FindExecution recovery. `TriggerPlan`
   remains unimplemented (501).
+- `ResolveInput` (BOB-80) answers the question a `waiting-input` item shows.
+  It needs the tail relay below: without it nothing ever puts an item in
+  `waiting-input`, so the command is refused (`InvalidTransition`).
+
+### Tail relay and pending input (BOB-80)
+
+A `tail` block in `edge.json` turns on the tail relay inside the worker:
+`"tail": {}` or `"tail": { "postIntervalMs": 2000 }` (2000–30000 ms, default
+2000; no other key is accepted, and an invalid block makes the whole file
+invalid). It is a block, not a worker flag, so the unit file does not change
+and an older release simply ignores it. Remove the block and restart the worker
+to turn the relay off; dispatch and the exporter keep running.
+
+- For every attempt whose item is `running` or `waiting-input`, the relay opens
+  a WebSocket to the attempt's t3 server, using the `bindings.json` entry that
+  matches the attempt's target (same `baseUrl` and `authToken` as dispatch), at
+  `/ws?orchestrationProtocol=2` with `Authorization: Bearer`. It follows the
+  attempt's thread and the shell, and unsubscribes when the item leaves those
+  states. The token needs `orchestration:read` and `orchestration:operate`.
+- A pending `user_input` request (shell `pendingRuntimeRequest` plus its
+  `user_input_request` item) moves the item to `waiting-input` with
+  `pendingInput`. Requests marked `userOnly` or `not_resumable`, and other
+  kinds (approvals), are never recorded. When t3 shows the request resolved
+  without Bob (answered in the T3 UI), the item returns to `running`.
+- `ResolveInput` moves the item back to `running` at once and queues the
+  answer in `coordination_input_delivery`; the relay sends it with
+  `runtime-request.respond` (a `commandId` stable per attempt and prompt) once
+  t3 shows the request still pending, retries with back-off, and survives
+  restarts. The Operation is `accepted` until then, `succeeded` when delivered,
+  or `failed` (`InputNotDelivered`) when the attempt ended or t3 was answered
+  elsewhere first. The answer text is erased from the row once settled.
+- Assistant, reasoning and command lines (the last 40, 200 characters each) are
+  POSTed to `<edge origin>/api/sdlc/tail` with the ingest token, at most once
+  per `postIntervalMs`, and dropped if the edge is unavailable. The edge never
+  stores them.
+- Logs carry `step: "tail"` with attempt and prompt ids and error codes only:
+  never answers, question text or tokens.
+- Not yet verified live: that the hetzner-bob front proxy forwards `Upgrade`
+  and `Authorization` on `/ws` (the relay logs `outcome: "t3-rejected"` with
+  the HTTP status if not; the one-time `wsTicket` fallback is not implemented).
 
 If either file is missing or invalid, the worker logs `step: "edge"`,
 `outcome: "configuration-unavailable"` once and keeps dispatching without the
@@ -135,9 +176,14 @@ then keeps restarting it, and nothing is dispatched until the unit or the
 release is fixed. Order every change so the unit file never passes `--edge` to
 a release that does not know it:
 
-1. **Rollout:** back up the coordinator database first (a release that
-   raises the storage version upgrades it on start, and older releases then
-   refuse it):
+1. **Rollout:** back up the coordinator database first. This is required, not
+   optional, for every release that raises the storage version — the BOB-79
+   release (version 3 → 4) and the BOB-80 release (version 4 → 5). Such a
+   release upgrades the store on start, and older releases then refuse it
+   (`StorageVersion`). There is no automatic downgrade: going back means
+   either the documented down-step ("Storage version 5 rollback", then
+   "Storage version 4 rollback") or restoring this backup. Take it with the
+   units stopped:
 
    ```sh
    sudo systemctl stop bob-coordinator-worker.service bob-coordinator.service
@@ -146,7 +192,9 @@ a release that does not know it:
    sudo -u bob sqlite3 /home/bob/.bob/coordination/coordination.sqlite 'PRAGMA user_version;'
    ```
 
-   Record the printed version with the backup. Then install the new
+   Record the printed version with the backup (`3` before BOB-79, `4` before
+   BOB-80) and do not start the new release until the backup file exists
+   and `sqlite3 <backup> 'PRAGMA integrity_check;'` prints `ok`. Then install the new
    coordinator release, verify it (see "Verification and rollback"), point
    `current` at it and restart both units with the *previous* worker unit file. Only then install the worker unit
    that passes `--edge`, run `systemctl daemon-reload` and restart the worker.
@@ -154,7 +202,51 @@ a release that does not know it:
    `--edge`) and run `systemctl daemon-reload`. Only then point `current` back
    at the older release and restart.
 
+### Storage version 5 rollback
+
+**A version-5 store cannot be opened by a version-4 (or older) release.** Rolling
+back from BOB-80 requires one of exactly two procedures, both with the units
+stopped: the down-step below (keeps everything since the upgrade except
+undelivered answers), or restoring the pre-upgrade backup taken in "Rollout
+and rollback order" step 1 (loses every change since the upgrade; then delete
+`edge.sqlite`, see below). Pointing `current` back without either leaves both
+units failing with `StorageVersion`. The same holds for version 4 → 3 ("Storage
+version 4 rollback").
+
+Storage version 5 (BOB-80) adds only `coordination_input_delivery` and its two
+indexes (`coordination_input_delivery_uq_attemptId_promptId`,
+`coordination_input_delivery_ix_by_owner_status_next_attempt_at`); version-4
+tables are unchanged. Items may hold `pendingInput` in their snapshot JSON; a
+version-4 release ignores the field. Rolling back to a version-4 release:
+
+1. Remove the `tail` block from `edge.json` (an older worker ignores it, but
+   items left in `waiting-input` would stay there), stop the worker, then the
+   coordinator, and back up the database with `.backup` as in "Storage
+   version 4 rollback" step 2 (name it `coordination.v5-before-rollback.sqlite`).
+2. Drop the table and set the version in one transaction, then check:
+
+   ```sh
+   sudo -u bob sqlite3 /home/bob/.bob/coordination/coordination.sqlite \
+     'BEGIN; DROP TABLE coordination_input_delivery; PRAGMA user_version = 4; COMMIT;'
+   sudo -u bob sqlite3 /home/bob/.bob/coordination/coordination.sqlite \
+     "PRAGMA user_version; SELECT name FROM sqlite_master WHERE name LIKE 'coordination_input_delivery%'; PRAGMA integrity_check;"
+   ```
+
+   Expect `4`, no names, and `ok`. Undelivered answers are lost (their
+   ResolveInput Operations stay `accepted`); answer those questions in the T3
+   UI. An item still in `waiting-input` can be cancelled, or settles on its
+   execution receipt.
+3. Reinstall the version-4 release and start the coordinator, then the worker.
+   To go further back, continue with "Storage version 4 rollback".
+
+`test/input.test.mjs` ("a version-four store gains the input delivery table")
+applies exactly the step 2 SQL and reopens the store with this release.
+
 ### Storage version 4 rollback
+
+**A version-4 store cannot be opened by a version-3 release.** Rolling back from
+BOB-79 requires the down-step below or restoring the pre-upgrade backup from
+"Rollout and rollback order" step 1; nothing else works.
 
 Storage version 4 (BOB-79) adds only `coordination_command_log` and its two
 indexes (`coordination_command_log_ix_by_command_id`,

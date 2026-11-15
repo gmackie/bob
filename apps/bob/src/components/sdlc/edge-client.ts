@@ -2,6 +2,7 @@
 // use-sdlc-edge.ts wires it to a browser WebSocket.
 import { emptyView, reduce, type ClientCommand, type CommandInput, type Confirmation, type EdgeMessage, type EdgeView } from "@bob/sdlc-view";
 
+import { emptyAttempt, parseAttemptMessage, reduceAttempt, watchMessage, type AttemptState } from "./attempt-model";
 import { commandsToResend, emptyCommands, parseCommandStatus, reduceCommands, type CommandsState } from "./commands-model";
 
 export type EdgeConnection = "connecting" | "live" | "reconnecting";
@@ -74,6 +75,13 @@ export interface EdgeClient {
    * command stays pending and goes out on the next open. Returns the commandId.
    */
   send(command: CommandInput, label: string, confirm?: Confirmation): string;
+  /** Live attempt detail (tail, CI, unavailable): kept apart from the view, never reduced into it. */
+  readonly attempt: AttemptState;
+  /**
+   * Watch one item's attempt detail, or none (null). Sent at once when it changes, and
+   * again after the hello on every new socket, since the edge forgets watches on close.
+   */
+  watch(itemId: string | null): void;
 }
 
 /**
@@ -85,11 +93,13 @@ export function createEdgeClient(options: {
   send: (data: string) => void;
   onView?: (view: EdgeView) => void;
   onCommands?: (commands: CommandsState) => void;
+  onAttempt?: (attempt: AttemptState) => void;
   initial?: EdgeView;
   newCommandId?: () => string;
 }): EdgeClient {
   let view = options.initial ?? emptyView();
   let commands = emptyCommands();
+  let attempt = emptyAttempt();
   let resyncRequested = false;
   const newCommandId = options.newCommandId ?? (() => crypto.randomUUID());
   const hello = (message: HelloMessage) => options.send(JSON.stringify(message));
@@ -98,15 +108,28 @@ export function createEdgeClient(options: {
     commands = next;
     options.onCommands?.(commands);
   };
+  const setAttempt = (next: AttemptState) => {
+    if (next === attempt) return;
+    attempt = next;
+    options.onAttempt?.(attempt);
+  };
   return {
     get view() { return view; },
     get commands() { return commands; },
+    get attempt() { return attempt; },
+    watch(itemId) {
+      if (itemId === attempt.watching) return;
+      setAttempt({ ...attempt, watching: itemId });
+      options.send(JSON.stringify(watchMessage(itemId)));
+    },
     opened() {
       // The hello on a new socket already asks for a snapshot when the view needs one.
       resyncRequested = view.needsResync;
       hello(helloFor(view));
       // Commands still in flight go again with the same commandId; the edge dedupes.
       for (const command of commandsToResend(commands)) options.send(JSON.stringify(command));
+      // The edge keeps watches per socket: a new socket starts watching nothing.
+      if (attempt.watching !== null) options.send(JSON.stringify(watchMessage(attempt.watching)));
     },
     send(input, label, confirm) {
       const command = { type: "command", commandId: newCommandId(), ...input, ...(confirm ? { confirm } : {}) } as ClientCommand;
@@ -117,7 +140,12 @@ export function createEdgeClient(options: {
     received(data) {
       const message = parseEdgeMessage(data);
       if (!message) {
-        // Command status messages are not EdgeMessages: they never touch the view.
+        // Command status and attempt messages are not EdgeMessages: they never touch the view.
+        const live = parseAttemptMessage(data);
+        if (live) {
+          setAttempt(reduceAttempt(attempt, live));
+          return true;
+        }
         const status = parseCommandStatus(data);
         if (!status) return false;
         setCommands(reduceCommands(commands, status));

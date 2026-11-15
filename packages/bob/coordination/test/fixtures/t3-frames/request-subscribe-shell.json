@@ -1,0 +1,4 @@
+{
+  "spec": "§2.2, §3.2",
+  "expected": { "_tag": "Request", "tag": "orchestration.subscribeShell", "payload": { "requestCompletionMarker": true }, "headers": [] }
+}
