@@ -1,10 +1,11 @@
+import type { ReactNode } from "react";
 import { MILESTONE_LABEL, MILESTONES, safeHref, STATE_PRESENTATION, type Row } from "@bob/sdlc-view";
 
 import { cn } from "@gmacko/core/ui";
 
 import { AttentionBadge } from "./state-badge";
 
-export function ItemDetail({ row, onClose, onOpenPlan }: { row: Row; onClose: () => void; onOpenPlan: () => void }) {
+export function ItemDetail({ row, onClose, onOpenPlan, actions }: { row: Row; onClose: () => void; onOpenPlan: () => void; actions?: ReactNode }) {
   const { item, issue, target, plan } = row;
   const thread = item.execution?.thread;
   const title = issue.identifier ?? issue.issueId;
@@ -90,6 +91,8 @@ export function ItemDetail({ row, onClose, onOpenPlan }: { row: Row; onClose: ()
       >
         Open plan
       </button>
+
+      {actions}
     </aside>
   );
 }

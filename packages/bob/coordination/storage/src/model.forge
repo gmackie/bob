@@ -67,3 +67,20 @@ export resource CoordinationIssueEffect @tenant {
   unique attemptId, fact
   list by owner, status, nextAttemptAt
 }
+
+/// Audit of mutating coordination commands (BOB-79). id is the command's
+/// idempotency key (commandId; requestId for RequestExecution). owner is the
+/// principal's trusted actorId; actor is the human a relaying host (the SDLC
+/// edge) verified, null for direct principal calls. outcome is the Operation
+/// state on success or the error code on refusal. Never a public API.
+export resource CoordinationCommandLog @tenant {
+  id : id
+  owner : text length 1..128
+  operation : text length 1..64
+  actor : text? length 1..200
+  resourceId : text? length 1..128
+  operationId : text? length 1..128
+  outcome : text length 1..128
+  createdAt : datetime
+  list by owner, createdAt
+}

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { planLayers, type ItemSnapshot, type PlanSnapshot } from "@bob/sdlc-view";
 
 import { AttentionBadge } from "./state-badge";
@@ -6,8 +7,10 @@ import { AttentionBadge } from "./state-badge";
  * A plan's items in dependency layers (longest path first to last), then its
  * dependency edges as a list, each with the milestone the downstream item waits for.
  */
-export function PlanDag({ plan, items, onSelect, onClose }: {
+export function PlanDag({ plan, items, onSelect, onClose, actions }: {
   plan: PlanSnapshot;
+  /** The plan's action panel, drawn under its header. */
+  actions?: ReactNode;
   items: Record<string, ItemSnapshot>;
   onSelect: (itemId: string) => void;
   onClose: () => void;
@@ -35,6 +38,8 @@ export function PlanDag({ plan, items, onSelect, onClose }: {
           ×
         </button>
       </div>
+
+      {actions}
 
       <div className="mt-4 flex gap-6 overflow-x-auto pb-2">
         {layers.map((layer, i) => (

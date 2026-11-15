@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BOB-75 Phases 2–4: commands, TUI, attempt level, mobile and plugin</title>
+<style>
+  .p { font-family: var(--font-sans, system-ui, sans-serif); color: var(--foreground, #1f2328); line-height: 1.55; font-size: 14px; padding: 4px 0 24px; }
+  .p h1 { font-size: 20px; margin: 0 0 4px; }
+  .p h2 { font-size: 16px; margin: 28px 0 8px; padding-top: 12px; border-top: 1px solid var(--border, #d0d7de); }
+  .p h3 { font-size: 14px; margin: 18px 0 6px; }
+  .p p, .p li { margin: 4px 0; }
+  .p code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; background: var(--code-background, #f3f4f6); color: var(--code-foreground, inherit); padding: 1px 4px; border-radius: 4px; }
+  .meta { color: var(--muted-foreground, #57606a); font-size: 12px; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--info, #0969da); color: var(--info-foreground, #fff); vertical-align: 2px; margin-left: 6px; }
+  .lead { background: var(--accent-surface, #fff4e5); color: var(--accent-surface-foreground, inherit); border-left: 3px solid var(--accent, #d4850a); padding: 10px 14px; border-radius: var(--radius, 8px); margin: 12px 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
+  .card { background: var(--card, #f6f8fa); color: var(--card-foreground, inherit); border: 1px solid var(--border, #d0d7de); border-radius: var(--radius, 8px); padding: 10px 14px; }
+  .card h3 { margin-top: 0; }
+  ul.ok, ul.no { list-style: none; padding-left: 0; }
+  ul.ok li::before { content: "✓ "; color: var(--success, #1a7f37); font-weight: 700; }
+  ul.no li::before { content: "✕ "; color: var(--destructive, #cf222e); font-weight: 700; }
+  /* stepper */
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0; }
+  @media (max-width: 560px) { .steps { grid-template-columns: 1fr 1fr; } }
+  .step { border: 1px solid var(--border, #d0d7de); border-radius: var(--radius, 8px); padding: 8px 10px; background: var(--card, #f6f8fa); }
+  .step b { display: block; font-size: 13px; }
+  .step span { font-size: 12px; color: var(--muted-foreground, #57606a); }
+  .step.done { border-color: var(--success, #1a7f37); }
+  .step.now { border-color: var(--accent, #d4850a); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #d4850a) 30%, transparent); }
+  .chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
+  .chip.done { background: var(--success, #1a7f37); color: var(--success-foreground, #fff); }
+  .chip.todo { background: var(--secondary, #eaeef2); color: var(--secondary-foreground, #24292f); }
+  .chip.new { background: var(--warning-surface, #fff8c5); color: var(--warning-foreground, #4d2d00); border: 1px solid var(--warning, #bf8700); }
+  .tbl { overflow-x: auto; margin: 8px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { border-bottom: 1px solid var(--border, #d0d7de); padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { font-weight: 600; color: var(--muted-foreground, #57606a); }
+  details { margin: 8px 0; border: 1px solid var(--border, #d0d7de); border-radius: var(--radius, 8px); padding: 6px 12px; background: var(--card, #f6f8fa); }
+  summary { cursor: pointer; font-weight: 600; }
+  .flow { width: 100%; height: auto; display: block; margin: 8px 0; }
+  .flow text { font-family: var(--font-sans, system-ui); font-size: 11px; fill: var(--foreground, #1f2328); }
+  .flow .box { fill: var(--card, #f6f8fa); stroke: var(--border, #8c959f); }
+  .flow .newbox { fill: var(--card, #f6f8fa); stroke: var(--accent, #d4850a); stroke-dasharray: 4 3; }
+  .flow .data { stroke: var(--success, #1a7f37); stroke-width: 2; fill: none; marker-end: url(#ah-g); }
+  .flow .cmd { stroke: var(--accent, #d4850a); stroke-width: 2; fill: none; marker-end: url(#ah-a); }
+  .risk { display: grid; grid-template-columns: 70px repeat(3, 1fr); gap: 4px; font-size: 12px; margin: 8px 0; }
+  .risk div { padding: 6px; border-radius: 6px; background: var(--card, #f6f8fa); border: 1px solid var(--border, #d0d7de); min-height: 30px; }
+  .risk .h { background: none; border: none; color: var(--muted-foreground, #57606a); font-weight: 600; }
+  .risk .hot { background: var(--destructive-surface, #ffebe9); }
+  .risk .warm { background: var(--warning-surface, #fff8c5); }
+  @media (prefers-reduced-motion: no-preference) {
+    .step, .card, .phase { animation: rise .35s ease-out both; }
+    .steps .step:nth-child(2) { animation-delay: .06s } .steps .step:nth-child(3) { animation-delay: .12s } .steps .step:nth-child(4) { animation-delay: .18s }
+    .flow .data, .flow .cmd { stroke-dasharray: 6 4; animation: dash 1.2s linear infinite; }
+    .step.now { animation: rise .35s ease-out both, pulse 2.4s ease-in-out .4s infinite; }
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+  @keyframes dash { to { stroke-dashoffset: -20 } }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent, #d4850a) 18%, transparent) } }
+</style>
+</head>
+<body>
+<main class="p">
+<h1>BOB-75 Phases 2–4: commands, TUI, attempt level, mobile and plugin <span class="badge">Proposed</span></h1>
+<p class="meta">2026-11-15 · gmackie/bob @ master ce1374f · BOB-75 (umbrella) · builds on Phase 1 (#288, #289) and design rev 2 · Claude with Graham</p>
+
+<div class="lead"><strong>Recommendation.</strong> Ship three phases in order, each as its own PR that lands on master and is verified in production before the next one starts.
+<ol>
+  <li><strong>Phase 2:</strong> a command channel from the SdlcEdge back to the coordinator, carried on the exporter's existing outbound requests, with tiers and a named human actor. Plus web actions and an Ink TUI.</li>
+  <li><strong>Phase 3:</strong> make <code>waiting-input</code> real. A tail relay next to the coordinator follows each running attempt's t3 thread, reports pending questions to the coordinator, and streams a short live tail to the edge. Answers go through <code>ResolveInput</code>.</li>
+  <li><strong>Phase 4:</strong> a mobile Attention tab with push and confirmation sheets, and a <code>bob_sdlc</code> view in the t3code plugin.</li>
+</ol>
+The coordinator stays the only writer, and it still never opens an inbound port.</div>
+
+<div class="steps" role="list" aria-label="Phase progress">
+  <div class="step done" role="listitem"><b>Phase 1 · Edge + read-only web</b><span>Done, live in production</span></div>
+  <div class="step now" role="listitem"><b>Phase 2 · Commands + TUI</b><span>Next</span></div>
+  <div class="step" role="listitem"><b>Phase 3 · Attempt level</b><span>Needs Phase 2's channel</span></div>
+  <div class="step" role="listitem"><b>Phase 4 · Mobile + plugin</b><span>Needs Phases 2 and 3</span></div>
+</div>
+
+<h2>Overview: what exists, and what's missing</h2>
+<p>Phase 1 delivered a read-only picture: the exporter POSTs snapshot, change and heartbeat batches to the <code>SdlcEdge</code> Durable Object, and <code>/sdlc</code> draws them. Before anything can be orchestrated, these gaps need closing (found in the code on master, 2026-11-15):</p>
+<div class="tbl"><table>
+<thead><tr><th>Gap</th><th>Where</th><th>Closed in</th></tr></thead>
+<tbody>
+<tr><td><code>ResolveInput</code>, <code>CancelItem</code>, <code>ReconcileItem</code>, <code>TriggerPlan</code> and the release, validation and deployment requests return 501</td><td><code>coordination/runtime/coordinator.mjs:133</code></td><td>2 (cancel, reconcile, trigger) · 3 (resolve input)</td></tr>
+<tr><td>Commands have no human actor; the principal's <code>context.actorId</code> is stored as <code>owner</code></td><td><code>coordinator.mjs:60</code>, <code>http.mjs:14-46</code></td><td>2</td></tr>
+<tr><td>The ingest response carries only <code>accepted</code>, <code>watermark</code> and <code>resync</code>, so there's no path back to the coordinator</td><td><code>worker/sdlc/store.ts:15</code>, <code>edge.mjs:89</code></td><td>2</td></tr>
+<tr><td>The websocket accepts only <code>hello</code>, drops the user id, and requires a same-origin <code>Origin</code> header (which native clients don't send)</td><td><code>edge-do.ts:48</code>, <code>routes.ts:89-94</code></td><td>2</td></tr>
+<tr><td>Nothing writes <code>waiting-input</code>, and <code>ItemSnapshot</code> has no pending-question field</td><td><code>contract.forge:323,339</code></td><td>3</td></tr>
+<tr><td>No t3 client for Node; the protocol is t3's Effect RPC over a websocket</td><td>t3code <code>packages/contracts/src/orchestrationV2.ts</code></td><td>3</td></tr>
+<tr><td>No Ink anywhere, and no <code>react-native-svg</code> in mobile-bob</td><td>repo-wide</td><td>2 · 4</td></tr>
+</tbody></table></div>
+
+<h3>Command flow (new in Phase 2)</h3>
+<svg class="flow" viewBox="0 0 720 230" role="img" aria-label="Command flow: a client sends a command over the websocket to SdlcEdge; the DO checks tier and viewer and queues it; the exporter's next POST receives it in the response; the coordinator runs it with the commandId as idempotency key; the result comes back in the following batch and is broadcast.">
+  <defs>
+    <marker id="ah-g" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="var(--success, #1a7f37)"/></marker>
+    <marker id="ah-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="var(--accent, #d4850a)"/></marker>
+  </defs>
+  <rect class="box" x="10" y="80" width="150" height="64" rx="8"/><text x="22" y="104">Coordinator + exporter</text><text x="22" y="122">hetzner-bob, no inbound port</text>
+  <rect class="newbox" x="285" y="80" width="150" height="64" rx="8"/><text x="297" y="104">SdlcEdge DO</text><text x="297" y="122">command outbox, tier check</text>
+  <rect class="box" x="560" y="20" width="150" height="40" rx="8"/><text x="572" y="44">Web /sdlc</text>
+  <rect class="newbox" x="560" y="72" width="150" height="40" rx="8"/><text x="572" y="96">Ink TUI (bob-tui)</text>
+  <rect class="newbox" x="560" y="124" width="150" height="40" rx="8"/><text x="572" y="148">Mobile Attention</text>
+  <rect class="newbox" x="560" y="176" width="150" height="40" rx="8"/><text x="572" y="200">t3code bob_sdlc view</text>
+  <path class="data" d="M160,100 L283,100"/><text x="170" y="92">POST batch + results</text>
+  <path class="cmd" d="M285,126 L162,126"/><text x="176" y="142">response: commands[]</text>
+  <path class="data" d="M435,100 C500,100 500,40 558,40"/>
+  <path class="cmd" d="M558,92 C500,92 500,118 437,118"/><text x="452" y="176">ws: command / result</text>
+  <path class="cmd" d="M558,144 C510,144 500,124 437,124"/>
+  <path class="cmd" d="M558,196 C505,196 495,130 437,130"/>
+</svg>
+<details class="mermaid-source"><summary>Diagram source</summary><pre>
+client --ws {type:"command", commandId, operation, input, confirm}--&gt; SdlcEdge DO
+SdlcEdge DO: viewer allow-list, tier check, typed confirm, enqueue in outbox (SQLite)
+exporter --POST batch--&gt; DO;  DO --response {commands:[...]}--&gt; exporter
+exporter: coordinator.admit(operation, input, {idempotencyKey: commandId, actor})
+exporter --next POST {results:[{commandId, operation|error}]}--&gt; DO --ws commandResult--&gt; clients
+</pre></details>
+
+<h2>Goals and non-goals</h2>
+<div class="grid2">
+  <div class="card"><h3>Goals</h3><ul class="ok">
+    <li>Run tier 1–2 commands from web, TUI and mobile, with confirmation and an audit of who did what</li>
+    <li>Make <code>waiting-input</code> a real state, answerable from any surface</li>
+    <li>Live attempt tail and display-only CI phases at L5</li>
+    <li>Push alerts on new waiting-input, review gates and failures</li>
+    <li>Show the item behind the current t3 thread inside t3code</li>
+  </ul></div>
+  <div class="card"><h3>Non-goals (separate issues)</h3><ul class="no">
+    <li>Implementing release, validation and deployment execution in the coordinator. Those buttons follow <code>GetCapabilities</code> and stay disabled with a reason until a coordinator track ships them.</li>
+    <li>Moving the legacy loop onto plans</li>
+    <li>Upgrading Bob's Effect to 4.1.3</li>
+    <li>New native modules in mobile-bob. Phase 4 has to ship as an over-the-air (EAS) update.</li>
+  </ul></div>
+</div>
+
+<h2>Key decisions</h2>
+<div class="grid2">
+  <div class="card"><h3>Commands ride the exporter's outbound POST</h3><p>The DO queues commands in an outbox, and each ingest response returns them. While anything is pending, or a client is connected, the exporter polls every 2 s, so a command reaches the coordinator in about 2 s. Otherwise it keeps the 30 s heartbeat. Results come back in the next batch. No inbound port, no second socket.</p></div>
+  <div class="card"><h3>One edge principal, a named actor per command</h3><p>The exporter runs commands in-process under a dedicated <code>edge</code> principal context with its own operation allowlist. Each command also carries <code>actor</code> (the Bob user id the DO verified), which is recorded in a new <code>coordination_command_log</code>. That's simpler than one coordinator principal per human, and the principal policy still applies on top.</p></div>
+  <div class="card"><h3>Native clients use device-login API keys</h3><p><code>/api/sdlc/ws</code> also accepts <code>Authorization: Bearer bob_…</code>, minted by the existing device flow (<code>/api/v1/device/*</code>), when no <code>Origin</code> header is sent. Browsers keep the session and same-origin check. Both still go through <code>SDLC_VIEWER_USER_IDS</code>.</p></div>
+  <div class="card"><h3>Bob writes a small t3 client</h3><p>No reusable Node client exists yet. <code>runtime/t3-client.mjs</code> speaks just enough of t3's websocket RPC (<code>subscribeThread</code>, <code>subscribeShell</code>, <code>dispatchCommand</code> with <code>runtime-request.respond</code>), pinned by contract tests on recorded frames. If t3code ships its facade, we swap it in.</p></div>
+</div>
+
+<h2>Phase 2: Commands and TUI v1</h2>
+<p class="meta">Issue: BOB-75 child (Phase 2) · one PR · production: Worker plus coordinator release</p>
+<div class="tbl"><table>
+<thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>2.1 Coordinator: implement <code>CancelItem</code>, <code>ReconcileItem</code>, <code>TriggerPlan</code>; add <code>actor</code> to the command context and a <code>coordination_command_log</code> table</td><td><code>packages/bob/coordination/runtime/{coordinator,execution,store}.mjs</code>, <code>src/contract.forge</code>, generated client</td><td><code>node --test</code>: a stale <code>expectedVersion</code> is rejected; a replay returns the same receipt; the actor is recorded; the coordination contract job passes</td><td><span class="chip todo">Todo</span></td></tr>
+<tr><td>2.2 Exporter command channel: read <code>commands[]</code> from the ingest response, run each through <code>coordinator.admit</code> with <code>idempotencyKey = commandId</code> under the edge principal, send <code>results[]</code> in the next batch, poll every 2 s while busy</td><td><code>runtime/edge.mjs</code>, <code>runtime/worker.mjs</code>, <code>deploy/coordination/*</code></td><td>node tests: at-least-once delivery yields exactly one effect; an unknown operation becomes an error result; crash recovery between run and report</td><td><span class="chip todo">Todo</span></td></tr>
+<tr><td>2.3 Edge: a command outbox in the DO; websocket <code>command</code> messages; tiers from <code>@bob/sdlc-view</code>; typed confirmation for tier 3; the user id kept as a socket attachment; <code>commandResult</code> broadcast; commands refused while the coordinator is offline</td><td><code>apps/bob/worker/sdlc/{store,controller,edge-do,edge-sockets,routes}.ts</code>, <code>packages/bob/src/sdlc-view/src/commands.ts</code></td><td>vitest: tier enforcement, non-viewers rejected, outbox drained exactly once, results correlated, offline refusal</td><td><span class="chip todo">Todo</span></td></tr>
+<tr><td>2.4 Native auth on <code>/api/sdlc/ws</code>: a Bearer device API key when there's no <code>Origin</code></td><td><code>apps/bob/worker/index.ts</code>, <code>worker/sdlc/routes.ts</code></td><td>vitest: a valid key is accepted; a revoked or unlisted key gets 401/403; a browser with a foreign Origin still gets 403</td><td><span class="chip todo">Todo</span></td></tr>
+<tr><td>2.5 Web actions panel: allowed commands per item and plan, confirm dialogs, typed confirm, pending and result state</td><td><code>apps/bob/src/components/sdlc/*</code>, <code>(dashboard)/sdlc/page.tsx</code></td><td>Component tests; production: pause and resume a pilot plan from <code>/sdlc</code></td><td><span class="chip todo">Todo</span></td></tr>
+<tr><td>2.6 <code>apps/bob-tui</code> v1 (Ink 6, Node 22): device login, panes for tree, machine or plan DAG (as an indented tree) and evidence, an inbox strip, keys <code>enter/esc :</code> <code>r</code> <code>c</code> <code>p</code></td><td><code>apps/bob-tui/**</code></td><td><code>ink-testing-library</code> frame snapshots; manual: drill down to the pilot plan and pause and resume it against production</td><td><span class="chip todo">Todo</span></td></tr>
+</tbody></table></div>
+
+<h2>Phase 3: Attempt level</h2>
+<p class="meta">Issue: BOB-75 child (Phase 3) · one PR · production: Worker plus coordinator release with the relay enabled</p>
+<div class="tbl"><table>
+<thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>3.1 Contract: <code>ItemSnapshot.pendingInput {attemptId, promptId, kind, question, options?, createdAt}</code>; an internal <code>RecordPendingInput</code>; <code>ResolveInput</code> implemented (validates <code>promptId</code>, moves the item back to running, records a receipt)</td><td><code>src/contract.forge</code>, <code>runtime/execution.mjs</code>, generated files, <code>sdlc-view</code> regenerated</td><td>node tests: running → waiting-input → running; a wrong or stale prompt is rejected; replay is idempotent</td><td><span class="chip todo">Todo</span></td></tr>
+<tr><td>3.2 <code>runtime/t3-client.mjs</code>: websocket RPC client for <code>subscribeThread</code>, <code>subscribeShell</code> and <code>dispatchCommand</code>, with reconnect and resume from <code>afterSequence</code></td><td><code>packages/bob/coordination/runtime/t3-client.mjs</code>, <code>test/fixtures/t3-frames/*</code></td><td>Contract tests on frames recorded from the hetzner-bob t3 server</td><td><span class="chip todo">Todo</span></td></tr>
+<tr><td>3.3 <code>runtime/tail.mjs</code> tail relay: follow <code>execution.thread</code> for running attempts; a <code>user_input</code> request becomes <code>RecordPendingInput</code>; <code>ResolveInput</code> becomes <code>runtime-request.respond</code>; the last ~40 lines of output are POSTed to <code>/api/sdlc/tail</code> (ephemeral)</td><td><code>runtime/tail.mjs</code>, <code>worker.mjs</code> (<code>--tail</code>), <code>apps/bob/worker/sdlc/tail.ts</code></td><td>Relay restart resumes without duplicate pending inputs; tail frames reach only subscribed sockets and are never stored</td><td><span class="chip todo">Todo</span></td></tr>
+<tr><td>3.4 Display-only ForgeGraph CI detail: when an item is subscribed, the DO polls <code>/api/fg/ci/gate</code> for its sha (cached 30 s)</td><td><code>apps/bob/worker/sdlc/fg.ts</code></td><td>Never changes coordinator state; shows “live detail unavailable” when ForgeGraph is down</td><td><span class="chip todo">Todo</span></td></tr>
+<tr><td>3.5 L5 on web and TUI: attempt view with the live tail, a pending-input answer box (tier 1) and CI phases</td><td><code>apps/bob/src/components/sdlc/attempt-*.tsx</code>, <code>apps/bob-tui/src/views/attempt.tsx</code></td><td>Production: launch a pilot attempt that asks a question, then answer it from the TUI; the item returns to running</td><td><span class="chip todo">Todo</span></td></tr>
+</tbody></table></div>
+
+<h2>Phase 4: Mobile and plugin</h2>
+<p class="meta">Issues: BOB-75 child (mobile and push) plus a T3CODE issue for the plugin view · two PRs (gmackie/bob, t3code-bob-plugin)</p>
+<div class="tbl"><table>
+<thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>4.1 SDLC push alerts: the DO spots transitions into waiting-input, review and failed on ingest and calls Bob's push service, deduplicated per item, state and version; new notification types and preference entries</td><td><code>apps/bob/worker/sdlc/alerts.ts</code>, <code>packages/bob/src/db/drizzle/00xx_sdlc_notification_types.sql</code>, <code>notifications/src/preferences.ts</code></td><td>vitest: one push per transition, none on replay or resync; production migration applied following the 0041 pattern</td><td><span class="chip todo">Todo</span></td></tr>
+<tr><td>4.2 Mobile Attention tab: a state tile grid at L1–L3 (no SVG), lists at L4–L5, a websocket client with a device key or cookie, push taps deep-linking to the item</td><td><code>apps/mobile-bob/src/app/attention.tsx</code>, <code>src/features/sdlc/*</code>, <code>features/navigation/mobile-tabs.ts</code></td><td>Model unit tests; iOS simulator QA through the device tools</td><td><span class="chip todo">Todo</span></td></tr>
+<tr><td>4.3 Mobile confirmation sheets for tiers 2 and 3, and an answer sheet for pending input</td><td><code>src/features/sdlc/ConfirmSheet.tsx</code>, <code>AnswerSheet.tsx</code></td><td>Simulator: pause and resume the pilot plan, answer a pilot prompt</td><td><span class="chip todo">Todo</span></td></tr>
+<tr><td>4.4 <code>bob_sdlc</code> view in the t3code plugin: in a thread, the item whose <code>execution.thread.threadId</code> is the current thread; at project scope, the Fleet</td><td><code>/Volumes/dev/t3code/t3code-bob-plugin/src/views/sdlc.client.ts</code>, <code>src/server.ts</code>, <code>src/edgeClient.ts</code></td><td><code>bun test</code>, <code>bunx tsc --noEmit</code>, the dev host against production</td><td><span class="chip todo">Todo</span></td></tr>
+<tr><td>4.5 Ship mobile as an EAS update; install the plugin build into T3</td><td>release only</td><td>Update id recorded; the view opens on a pilot thread</td><td><span class="chip todo">Todo</span></td></tr>
+</tbody></table></div>
+
+<h2>Risks and mitigations</h2>
+<div class="risk" role="table" aria-label="Risk grid: likelihood by impact">
+  <div class="h"></div><div class="h">low impact</div><div class="h">medium</div><div class="h">high impact</div>
+  <div class="h">likely</div><div></div><div class="warm">R3 t3 protocol drift</div><div></div>
+  <div class="h">possible</div><div>R5 polling cost</div><div class="warm">R4 push noise</div><div class="hot">R1 public commands · R2 duplicate effects</div>
+  <div class="h">unlikely</div><div>R6 Ink layout</div><div></div><div class="warm">R7 prod enum migration</div>
+</div>
+<details><summary>Mitigations</summary>
+<ul>
+<li><b>R1 public command surface:</b> the viewer allow-list, tiers, typed confirmation for tier 3, the coordinator's principal allowlist for the edge principal, and per-command actor logging. Release and deploy operations stay disabled until a later track.</li>
+<li><b>R2 duplicate effects:</b> <code>commandId</code> is the coordinator's idempotency key, and a replay returns the stored receipt. The outbox is drained with acknowledgements; delivery is at least once, the effect happens once.</li>
+<li><b>R3 t3 protocol drift:</b> the relay's client sits behind a small interface, pinned by recorded-frame tests. If the relay fails, the UI shows “live detail unavailable” and state is unaffected.</li>
+<li><b>R4 push noise:</b> deduplicated per item, state and version, with a per-type preference toggle; only viewers on the allow-list get pushes.</li>
+<li><b>R5 polling cost:</b> 2 s polling only while commands are pending or clients are connected; idle stays at the 30 s heartbeat.</li>
+<li><b>R6 Ink layout:</b> the DAG is drawn as an indented tree, with OpenTUI as a fallback.</li>
+<li><b>R7 production enum migration:</b> additive <code>ADD VALUE</code> only, applied as postgres over SSH like 0041, before the Worker deploys.</li>
+</ul></details>
+
+<h2>Verification and delivery</h2>
+<ul>
+<li>Each phase is one PR on gmackie/bob (Phase 4 adds one on t3code-bob-plugin). It's approved only when every check is green on its exact head, then merged.</li>
+<li>Production per phase: the Worker deploy through CI, checked against <code>wrangler deployments</code>; a new coordinator release on hetzner-bob that passes host verification, with the previous release and unit file kept for rollback (as in Phase 1).</li>
+<li>Production evidence uses the BOB-75 pilot plan: Phase 2 pause and resume from the web and the TUI; Phase 3 a pilot attempt that asks a question answered from the TUI; Phase 4 the same from the simulator, plus the plugin view on the pilot thread.</li>
+<li>Kanbanger: one child issue per phase under BOB-75, kept open until production is verified; BOB-75 closes after Phase 4.</li>
+</ul>
+
+<h2>Open questions</h2>
+<ul>
+<li>Is the t3 server on hetzner-bob the one running pilot attempts, and which token does the relay use? Task 3.2 confirms this before building on it.</li>
+<li>Do ForgeGraph's CI stream routes accept bearer tokens? If not, 3.4 stays on the 30 s gate poll.</li>
+</ul>
+</main>
+</body>
+</html>

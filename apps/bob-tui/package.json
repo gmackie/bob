@@ -1,0 +1,38 @@
+{
+  "name": "@bob/tui",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "bob-tui": "./dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsup",
+    "clean": "git clean -xdf .cache .turbo dist node_modules",
+    "dev": "tsx src/cli.tsx",
+    "start": "node dist/cli.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ink": "6.8.0",
+    "react": "catalog:react19",
+    "ws": "catalog:"
+  },
+  "devDependencies": {
+    "@bob/sdlc-view": "workspace:*",
+    "@bob/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:react19",
+    "@types/ws": "catalog:",
+    "ink-testing-library": "4.0.0",
+    "tsup": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^4.1.11"
+  }
+}

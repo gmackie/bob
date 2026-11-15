@@ -1,6 +1,8 @@
 // The SdlcEdge Durable Object's logic that does not need the Workers runtime, so node
 // tests can cover it with fakes. edge-do.ts only wires these to the DO's state.
-import type { EdgeController, EdgeSocket, Hello } from "./controller";
+import { COMMAND_LIMITS } from "@bob/sdlc-view";
+import type { CommandSender, EdgeController, EdgeSocket, Hello } from "./controller";
+import { isViewer } from "./routes";
 import { parseBatch } from "./store";
 
 /** The part of a hibernatable WebSocket the edge uses. The attachment survives hibernation. */
@@ -11,15 +13,24 @@ export interface AttachedSocket extends EdgeSocket {
 
 /** A hello is a small JSON object; anything longer is ignored unread. */
 export const MAX_HELLO_CHARS = 2048;
+/** A command carries at most a 2000-character reason; anything longer is ignored unread. */
+export const MAX_COMMAND_CHARS = 8192;
 
-const isGreeted = (socket: AttachedSocket) => {
+/**
+ * What a socket's attachment holds, across hibernation: whether it said hello, the
+ * Bob user id the route verified for its upgrade, and its recent command times.
+ */
+export interface SocketAttachment { greeted?: boolean; userId?: string; commandTimes?: number[] }
+
+export function readAttachment(socket: AttachedSocket): SocketAttachment {
   try {
-    const attachment = socket.deserializeAttachment() as { greeted?: unknown } | null;
-    return attachment?.greeted === true;
+    const value = socket.deserializeAttachment();
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as SocketAttachment) : {};
   } catch {
-    return false;
+    return {};
   }
-};
+}
+const isGreeted = (socket: AttachedSocket) => readAttachment(socket).greeted === true;
 
 /**
  * The sockets broadcasts go to: only those that have sent a valid hello. A socket that
@@ -52,7 +63,7 @@ const byteLength = (s: string) => new TextEncoder().encode(s).byteLength;
  * to watch for snapshots that approach the WebSocket message limit.
  */
 export function greet(controller: Pick<EdgeController, "hello">, socket: AttachedSocket, hello: Hello, log: Log = console.log): void {
-  socket.serializeAttachment({ greeted: true });
+  socket.serializeAttachment({ ...readAttachment(socket), greeted: true });
   const sizes: number[] = [];
   let first: string | null = null;
   controller.hello(
@@ -72,6 +83,46 @@ export function greet(controller: Pick<EdgeController, "hello">, socket: Attache
     bytes: sizes.reduce((a, b) => a + b, 0),
     largestBytes: Math.max(0, ...sizes),
   }));
+}
+
+/** The user id a new socket carries; set once, when the DO accepts the upgrade. */
+export function attachUser(socket: AttachedSocket, userId: string | null): void {
+  socket.serializeAttachment(userId ? { userId } : {});
+}
+
+/** A parsed `{type:"command", ...}` message (shape unchecked: the controller validates it), or null. */
+export function parseCommandMessage(message: string | ArrayBuffer): unknown {
+  if (typeof message !== "string" || message.length > MAX_COMMAND_CHARS) return null;
+  let value: unknown;
+  try { value = JSON.parse(message); } catch { return null; }
+  return typeof value === "object" && value !== null && (value as { type?: unknown }).type === "command" ? value : null;
+}
+
+/**
+ * Runs a command message through the controller with the socket's user id (from its
+ * attachment, never from the message), the viewer allow-list as it is now, and a
+ * per-socket sliding one-minute limit kept in the attachment so hibernation does not reset it.
+ */
+export function handleCommand(
+  controller: Pick<EdgeController, "command">,
+  socket: AttachedSocket,
+  raw: unknown,
+  viewerIds: string | undefined,
+  now: number,
+): void {
+  const attachment = readAttachment(socket);
+  const userId = typeof attachment.userId === "string" && attachment.userId.length > 0 ? attachment.userId : null;
+  const sender: CommandSender = {
+    userId,
+    viewer: userId !== null && isViewer(userId, viewerIds),
+    take: () => {
+      const recent = (Array.isArray(attachment.commandTimes) ? attachment.commandTimes : []).filter((t) => typeof t === "number" && now - t < 60_000);
+      if (recent.length >= COMMAND_LIMITS.maxPerSocketPerMinute) return false;
+      socket.serializeAttachment({ ...readAttachment(socket), commandTimes: [...recent, now] });
+      return true;
+    },
+  };
+  controller.command(socket, raw, sender);
 }
 
 /**

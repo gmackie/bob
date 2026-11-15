@@ -187,14 +187,15 @@ test('delivery failures back off durably and terminal issue errors are rejected'
   assert.equal(fake.issues.get(issueUuid).stateId, states[0].id);
 });
 
-test('database v2 upgrades to v3 transactionally and unsupported versions fail', t => {
+test('database v2 upgrades to the current version transactionally and unsupported versions fail', t => {
   const dir = mkdtempSync(join(tmpdir(), 'bob-migration-v2-')), database = join(dir, 'store.sqlite');
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const db = new DatabaseSync(database);
   db.exec(readFileSync(new URL('./fixtures/storage-v2.sql', import.meta.url), 'utf8')); db.exec('PRAGMA user_version = 2');
   db.prepare('INSERT INTO coordination_plan VALUES (?,?,?,?,?,?)').run('workspace', 'old-plan', 'actor', '{}', 'draft', 1); db.close();
   const c = new ExecutionCoordinator({ database, context });
-  assert.equal(c.db.prepare('PRAGMA user_version').get().user_version, 3);
+  assert.equal(c.db.prepare('PRAGMA user_version').get().user_version, 4);
+  assert(c.db.prepare("SELECT name FROM sqlite_master WHERE name='coordination_command_log'").get());
   assert.equal(c.db.prepare('SELECT COUNT(*) AS n FROM coordination_plan').get().n, 1);
   assert.equal(c.db.prepare('SELECT COUNT(*) AS n FROM coordination_issue_effect').get().n, 0);
   assert(c.db.prepare("SELECT name FROM sqlite_master WHERE name='coordination_issue_effect_uq_attemptId_fact'").get());
@@ -206,7 +207,7 @@ test('database v2 upgrades to v3 transactionally and unsupported versions fail',
   assert.throws(() => new ExecutionCoordinator({ database: broken, context }));
   const check = new DatabaseSync(broken);
   assert.equal(check.prepare('PRAGMA user_version').get().user_version, 2); check.close();
-  const future = join(dir, 'future.sqlite'), next = new DatabaseSync(future); next.exec('PRAGMA user_version = 4'); next.close();
+  const future = join(dir, 'future.sqlite'), next = new DatabaseSync(future); next.exec('PRAGMA user_version = 5'); next.close();
   assert.throws(() => new ExecutionCoordinator({ database: future, context }), code('StorageVersion'));
 });
 

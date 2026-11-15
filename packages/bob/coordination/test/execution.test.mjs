@@ -153,9 +153,10 @@ test('version-one local databases migrate through the generated attempt and issu
   db.prepare('INSERT INTO coordination_plan VALUES (?,?,?,?,?,?)').run('workspace', 'old-plan', 'actor', '{}', 'draft', 1); db.close();
   const c = new ExecutionCoordinator({ database, context });
   t.after(() => { c.close(); rmSync(dir, { recursive: true, force: true }); });
-  assert.equal(c.db.prepare('PRAGMA user_version').get().user_version, 3);
+  assert.equal(c.db.prepare('PRAGMA user_version').get().user_version, 4);
   assert.equal(c.db.prepare('SELECT COUNT(*) AS n FROM coordination_plan').get().n, 1);
   assert.equal(c.db.prepare('SELECT COUNT(*) AS n FROM coordination_attempt').get().n, 0);
+  assert.equal(c.db.prepare('SELECT COUNT(*) AS n FROM coordination_command_log').get().n, 0);
   assert.equal(c.db.prepare('SELECT COUNT(*) AS n FROM coordination_issue_effect').get().n, 0);
 });
 test('HTTP port refuses legacy capabilities and preserves IDs, target and environment-local credentials', async t => {

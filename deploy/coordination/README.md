@@ -65,6 +65,55 @@ The worker pushes plan and work-item changes to the SDLC edge with
   `/home/bob/.bob/coordination/edge.sqlite`, and `tokenEnv` set to
   `BOB_SDLC_EDGE_TOKEN`. The token never goes in this file.
 
+### Command channel (BOB-79)
+
+Bob's SDLC surfaces (web, TUI, mobile) send commands to the edge, which queues
+them and returns them in its ingest response (`commands`). The exporter runs
+them in-process and reports `results` in its next batch. There is no inbound
+port. The channel is off unless `edge.json` has a `commands` block:
+
+```json
+{
+  "endpoint": "https://<bob-host>/api/sdlc/ingest",
+  "checkpoint": "/home/bob/.bob/coordination/edge.sqlite",
+  "tokenEnv": "BOB_SDLC_EDGE_TOKEN",
+  "commands": { "operations": ["ControlPlan", "RetryItem", "CancelItem", "ReconcileItem"] }
+}
+```
+
+- `commands.operations` is the edge principal's allowlist: a non-empty, unique
+  subset of the relayed operations above (no other key is accepted). List fewer
+  to narrow it, for example only `["ControlPlan"]` for pause/resume. A command
+  outside it is answered with error code `Forbidden`; with no `commands` block,
+  every relayed command is answered `Forbidden`. An invalid block makes the
+  whole file invalid (`configuration-unavailable`, exporter off).
+- The edge principal's context is the worker's own `--context` file
+  (`context.json`): same workspace, actor (owner) and target/issue-project
+  policy, so it can act only on plans the worker itself exports. It runs on its
+  own database connection with the same validation, `Idempotency-Key =
+  commandId` replay and Kanbanger issue admission as the HTTP host.
+- Each command's `actor` (the Bob user id the edge verified) is recorded, with
+  the principal owner and outcome, in `coordination_command_log` (storage
+  version 4; older stores upgrade on start). Direct HTTP/MCP commands are
+  logged too, with a null actor. Rollback: an older release refuses a
+  version-4 database (`StorageVersion`), so restore the pre-upgrade backup or
+  drop `coordination_command_log` and set `PRAGMA user_version = 3` before
+  pointing `current` back.
+- Unreported results live in `edge.sqlite` (`edge_command_result`) and are
+  re-sent after a crash; re-delivered commands replay the stored Operation.
+- While commands or results are in flight, or the edge's response carries
+  `pollMs`, the worker contacts the edge every ~2 s (or `pollMs`, clamped to
+  1–30 s) instead of every 30 s. Idle behaviour is unchanged.
+- `CancelItem` cancels an item without a live attempt (or with a queued,
+  never-submitted one) at once. With a live or unknown execution it moves the
+  item to `cancelling`: no environment cancellation port exists yet, so the
+  running execution is not interrupted; the item settles to `cancelled` on its
+  terminal receipt, or when the worker finds no execution for it (it never
+  submits a new one). Kanbanger is not updated for coordinator-side cancels.
+- `ReconcileItem` (for `execution-unknown` only) expires the attempt's back-off
+  so the next worker tick re-runs the FindExecution recovery. `TriggerPlan`
+  remains unimplemented (501).
+
 If either file is missing or invalid, the worker logs `step: "edge"`,
 `outcome: "configuration-unavailable"` once and keeps dispatching without the
 exporter. Edge outages log `outcome: "unavailable"` and back off; they never

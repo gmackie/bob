@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { MAX_INGEST_BYTES } from "./store";
-import { bearerMatches, handleSdlcRoute, type SdlcRouteEnv } from "./routes";
+import { bearerMatches, handleSdlcRoute, SDLC_USER_HEADER, type SdlcRouteEnv } from "./routes";
 
 const TOKEN = "k".repeat(40);
 
-interface Forwarded { path: string; method: string; body: string; upgrade: string | null; cookie: string | null }
+interface Forwarded { path: string; method: string; body: string; upgrade: string | null; cookie: string | null; user?: string | null; authorization?: string | null }
 /** A fake DurableObjectNamespace: records the name it was addressed by and every request the stub got. */
 function namespace() {
   const names: string[] = [];
@@ -22,6 +22,8 @@ function namespace() {
           body: request.body ? await request.text() : "",
           upgrade: request.headers.get("upgrade"),
           cookie: request.headers.get("cookie"),
+          ...(request.headers.has(SDLC_USER_HEADER) ? { user: request.headers.get(SDLC_USER_HEADER) } : {}),
+          ...(request.headers.has("authorization") ? { authorization: request.headers.get("authorization") } : {}),
         });
         return new Response("forwarded", { status: 200 });
       },
@@ -178,7 +180,7 @@ describe("handleSdlcRoute: socket", () => {
     const res = await route(upgrade({ cookie: "session=secret" }), e, "u3");
     expect(res.status).toBe(200);
     expect(e.SDLC_EDGE.names).toEqual(["gmacko"]);
-    expect(e.SDLC_EDGE.calls).toEqual([{ path: "/ws", method: "GET", body: "", upgrade: "websocket", cookie: null }]);
+    expect(e.SDLC_EDGE.calls).toEqual([{ path: "/ws", method: "GET", body: "", upgrade: "websocket", cookie: null, user: "u3" }]);
   });
   it("accepts the upgrade header in any case", async () => {
     const e = env();
@@ -211,6 +213,67 @@ describe("handleSdlcRoute: socket", () => {
     expect(res.status).toBe(200);
     expect(getUserId).toHaveBeenCalledTimes(1);
     expect(e.SDLC_EDGE.calls.map((c) => c.path)).toEqual(["/ws"]);
+  });
+});
+
+describe("handleSdlcRoute: native clients (device API key)", () => {
+  const KEY = "bob_valid";
+  const verify = vi.fn(async (key: string) => (key === KEY ? "u1" : key === "bob_unlisted" ? "u2" : null));
+  const native = (headers: Record<string, string>) => req("/api/sdlc/ws", { headers: { upgrade: "websocket", ...headers } });
+  const call = (request: Request, e: FakeEnv, getUserId = vi.fn(async () => null as string | null)) =>
+    handleSdlcRoute(request, e as unknown as SdlcRouteEnv, getUserId, verify);
+
+  it("accepts a valid bearer key without an Origin, forwarding its user id and not the key, without a session lookup", async () => {
+    const e = env();
+    const getUserId = vi.fn(async () => "u3");
+    const res = await call(native({ authorization: `Bearer ${KEY}` }), e, getUserId);
+    expect(res.status).toBe(200);
+    expect(getUserId).not.toHaveBeenCalled();
+    expect(verify).toHaveBeenCalledWith(KEY);
+    expect(e.SDLC_EDGE.calls).toEqual([{ path: "/ws", method: "GET", body: "", upgrade: "websocket", cookie: null, user: "u1" }]);
+  });
+  it("answers 401 to an invalid or revoked key", async () => {
+    const e = env();
+    for (const authorization of ["Bearer bob_revoked", "Bearer gmk_nope", "Bearer not-a-key"]) {
+      expect((await call(native({ authorization }), e)).status).toBe(401);
+    }
+    expect(e.SDLC_EDGE.calls).toEqual([]);
+  });
+  it("answers 403 to a valid key whose user is not on SDLC_VIEWER_USER_IDS", async () => {
+    const e = env();
+    expect((await call(native({ authorization: "Bearer bob_unlisted" }), e)).status).toBe(403);
+    expect(e.SDLC_EDGE.calls).toEqual([]);
+  });
+  it("answers 403 to a foreign Origin even with a valid key, without checking the key", async () => {
+    verify.mockClear();
+    const e = env();
+    const res = await call(native({ authorization: `Bearer ${KEY}`, origin: "https://evil.test" }), e);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "forbidden origin" });
+    expect(verify).not.toHaveBeenCalled();
+    expect(e.SDLC_EDGE.calls).toEqual([]);
+  });
+  it("uses the session, not the key, for a same-origin browser upgrade", async () => {
+    verify.mockClear();
+    const e = env();
+    const res = await call(upgrade({ authorization: `Bearer ${KEY}` }), e, vi.fn(async () => "u3"));
+    expect(res.status).toBe(200);
+    expect(verify).not.toHaveBeenCalled();
+    expect(e.SDLC_EDGE.calls.map((c) => c.user)).toEqual(["u3"]);
+  });
+  it("never forwards a user id header the client sent; only the verified one", async () => {
+    const e = env();
+    await call(native({ authorization: `Bearer ${KEY}`, [SDLC_USER_HEADER]: "u3" }), e);
+    await route(upgrade({ [SDLC_USER_HEADER]: "u1" }), e, "u3");
+    expect(e.SDLC_EDGE.calls.map((c) => c.user)).toEqual(["u1", "u3"]);
+    // Unauthenticated: refused, the spoofed header gets nowhere.
+    expect((await call(native({ [SDLC_USER_HEADER]: "u1" }), e)).status).toBe(403);
+    expect((await route(upgrade({ [SDLC_USER_HEADER]: "u1" }), e, null)).status).toBe(401);
+    expect(e.SDLC_EDGE.calls).toHaveLength(2);
+  });
+  it("without a key verifier (the default), a bearer upgrade is 401", async () => {
+    const e = env();
+    expect((await handleSdlcRoute(native({ authorization: `Bearer ${KEY}` }), e as never, async () => "u1")).status).toBe(401);
   });
 });
 

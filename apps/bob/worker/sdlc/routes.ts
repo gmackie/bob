@@ -24,8 +24,10 @@ export function bearerMatches(header: string | null, token: string | undefined):
   return diff === 0;
 }
 
-const listed = (userId: string, csv: string | undefined) =>
+/** Whether userId is on a comma-separated allow-list (SDLC_VIEWER_USER_IDS). Empty: nobody. */
+export const isViewer = (userId: string, csv: string | undefined) =>
   (csv ?? "").split(",").map((s) => s.trim()).filter(Boolean).includes(userId);
+const listed = isViewer;
 
 /**
  * Reads a body up to `limit` bytes, counting what actually arrives (Content-Length is
@@ -52,11 +54,22 @@ export async function readCapped(body: ReadableStream<Uint8Array> | null, limit:
   return out;
 }
 
+/**
+ * The header the route sets on the upgrade it forwards to the DO: the verified Bob user id.
+ * The forwarded request is built from scratch, so a client's own copy never reaches the DO.
+ */
+export const SDLC_USER_HEADER = "x-bob-sdlc-user-id";
+
+/** Resolves a device API key (bob_/gmk_, minted by /api/v1/device/*) to its user id; null when invalid, revoked or expired. */
+export type VerifyApiKey = (key: string) => Promise<string | null>;
+
 const error = (status: number, message: string) => Response.json({ error: message }, { status });
 
 /**
  * POST /api/sdlc/ingest: the coordinator exporter's batches, by bearer token.
- * GET /api/sdlc/ws: a same-origin websocket for a signed-in user on SDLC_VIEWER_USER_IDS.
+ * GET /api/sdlc/ws: a websocket for a user on SDLC_VIEWER_USER_IDS: a browser by session
+ *   cookie with a same-origin Origin, or a native client (no Origin) by `Authorization:
+ *   Bearer <device API key>`. A foreign Origin is refused whatever else is sent.
  * Both go to the one SdlcEdge Durable Object named by SDLC_EDGE_WORKSPACE_ID; until that
  * and the binding exist, both answer 503 before checking anything else.
  */
@@ -64,6 +77,7 @@ export async function handleSdlcRoute(
   request: Request,
   env: SdlcRouteEnv,
   getUserId: () => Promise<string | null>,
+  verifyApiKey: VerifyApiKey = async () => null,
 ): Promise<Response> {
   const { pathname } = new URL(request.url);
   const namespace = env.SDLC_EDGE;
@@ -86,12 +100,22 @@ export async function handleSdlcRoute(
     if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") return error(426, "expected websocket");
     // Cross-site WebSocket hijacking: the session cookie rides along on any site's
     // handshake, so only our own origin may open one. Browsers always send Origin here.
-    if (request.headers.get("origin") !== new URL(request.url).origin) return error(403, "forbidden origin");
-    const userId = await getUserId();
+    // Native clients send no Origin and authenticate by bearer key instead; with no
+    // Origin and no bearer, or a foreign Origin, the answer stays 403.
+    const origin = request.headers.get("origin");
+    const authorization = request.headers.get("authorization");
+    let userId: string | null;
+    if (origin === null && authorization?.startsWith("Bearer ")) {
+      const key = authorization.slice(7).trim();
+      userId = key ? await verifyApiKey(key) : null;
+    } else {
+      if (origin !== new URL(request.url).origin) return error(403, "forbidden origin");
+      userId = await getUserId();
+    }
     if (!userId) return error(401, "unauthorized");
     if (!listed(userId, env.SDLC_VIEWER_USER_IDS)) return error(403, "forbidden");
-    // Only the upgrade goes through: the DO needs no cookies or other credentials.
-    return stub().fetch("https://sdlc-edge/ws", { headers: { upgrade: "websocket" } });
+    // Only the upgrade and the verified user id go through: no cookies, keys or client headers.
+    return stub().fetch("https://sdlc-edge/ws", { headers: { upgrade: "websocket", [SDLC_USER_HEADER]: userId } });
   }
 
   return error(404, "not found");

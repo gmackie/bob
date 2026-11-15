@@ -1,13 +1,16 @@
 /// <reference types="@cloudflare/workers-types" />
 import { DurableObject } from "cloudflare:workers";
 import { EdgeController } from "./controller";
-import { greet, greetedSockets, ingestResponse, parseHello } from "./edge-sockets";
+import { attachUser, greet, greetedSockets, handleCommand, ingestResponse, parseCommandMessage, parseHello } from "./edge-sockets";
+import { SDLC_USER_HEADER } from "./routes";
 import { durableObjectSql } from "./sql";
 import { fetchBizPulseRepos } from "./topology";
 
 interface SdlcEdgeEnv {
   BOB_BIZPULSE_API_URL?: string;
   BOB_BIZPULSE_API_KEY?: string;
+  /** Re-checked on every command: the list can change while a socket is open. */
+  SDLC_VIEWER_USER_IDS?: string;
 }
 
 /**
@@ -25,6 +28,7 @@ export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
     this.controller = new EdgeController({
       sql: durableObjectSql(ctx.storage),
       sockets: () => greetedSockets(ctx.getWebSockets()),
+      connected: () => ctx.getWebSockets().length,
       schedule: (work) => ctx.waitUntil(work),
       loadTopology: apiUrl && apiKey ? () => fetchBizPulseRepos({ apiUrl, apiKey }) : undefined,
     });
@@ -39,7 +43,9 @@ export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
     if (pathname === "/ws") {
       if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") return new Response("expected websocket", { status: 426 });
       const { 0: client, 1: server } = new WebSocketPair();
-      this.ctx.acceptWebSocket(server); // Hibernation API: no attachment until it says hello
+      this.ctx.acceptWebSocket(server); // Hibernation API: the attachment survives eviction
+      // routes.ts is the only way in and sets this from the session or device key it verified.
+      attachUser(server, request.headers.get(SDLC_USER_HEADER));
       return new Response(null, { status: 101, webSocket: client });
     }
     return new Response("not found", { status: 404 });
@@ -47,7 +53,9 @@ export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const hello = parseHello(message);
-    if (hello) greet(this.controller, ws, hello);
+    if (hello) { greet(this.controller, ws, hello); return; }
+    const command = parseCommandMessage(message);
+    if (command) handleCommand(this.controller, ws, command, this.env.SDLC_VIEWER_USER_IDS, Date.now());
   }
 
   async webSocketClose(ws: WebSocket, code: number): Promise<void> {

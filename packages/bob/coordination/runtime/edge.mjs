@@ -3,6 +3,34 @@ import { readFileSync, realpathSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const HEARTBEAT_MS = 30_000;
+/** While commands flow, the exporter contacts the edge this often instead of every 30 s. */
+export const FAST_POLL_MS = 2_000;
+const MIN_POLL_MS = 1_000;
+/** Coordinator operations the edge may relay; mirrors RELAYED_OPERATIONS in
+ * packages/bob/src/sdlc-view/src/commands.ts. */
+export const RELAYED_OPERATIONS = Object.freeze(['ControlPlan', 'RetryItem', 'CancelItem', 'ReconcileItem']);
+const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isId = v => typeof v === 'string' && v.length > 0 && v.length <= 200;
+const isVersion = v => Number.isSafeInteger(v) && v >= 1;
+/** Mirrors parseCommandInput in commands.ts: the operation input, or null. */
+export function parseCommandInput(operation, input) {
+  if (!isRecord(input)) return null;
+  switch (operation) {
+    case 'ControlPlan':
+      return isId(input.planId) && isVersion(input.expectedVersion) && ['start', 'pause', 'resume', 'cancel'].includes(input.action)
+        ? { planId: input.planId, expectedVersion: input.expectedVersion, action: input.action } : null;
+    case 'RetryItem':
+      return isId(input.itemId) && isVersion(input.expectedVersion) && isId(input.previousAttemptId) && typeof input.reason === 'string' && input.reason.length >= 1 && input.reason.length <= 2000
+        ? { itemId: input.itemId, expectedVersion: input.expectedVersion, previousAttemptId: input.previousAttemptId, reason: input.reason } : null;
+    case 'CancelItem':
+      return isId(input.itemId) && isVersion(input.expectedVersion) ? { itemId: input.itemId, expectedVersion: input.expectedVersion } : null;
+    case 'ReconcileItem':
+      return isId(input.itemId) ? { itemId: input.itemId } : null;
+    default:
+      return null;
+  }
+}
+const failure = (commandId, code, message, retryable = false) => ({ commandId, ok: false, error: { code: String(code).slice(0, 128), message: String(message).slice(0, 500), retryable } });
 // The edge refuses larger ingest bodies (413): keep in step with MAX_INGEST_BYTES in apps/bob/worker/sdlc/store.ts.
 export const MAX_BATCH_BYTES = 1_000_000;
 const PAGE = 50, EVENTS = 100;
@@ -12,24 +40,40 @@ const LIVE_PLAN_STATES = ['draft', 'active', 'paused', 'cancelling'];
 
 /** Pushes coordinator plan and item snapshots to Bob's SdlcEdge. Read-only:
  * it never changes domain state, and keeps its checkpoint in a separate database. */
-export function edgeExporter({ coordinator, endpoint, token, checkpoint, fetch: send = fetch, timeoutMs = 5000, now = Date.now, maxBytes = MAX_BATCH_BYTES }) {
+/** commands: { operations, coordinator? } turns on the command channel. Commands
+ * the edge returns run in-process under that edge principal (its own coordinator,
+ * defaulting to the exporting one) and its operation allowlist; results ride the
+ * next batch. Without it, every relayed command is answered Forbidden. */
+export function edgeExporter({ coordinator, endpoint, token, checkpoint, fetch: send = fetch, timeoutMs = 5000, now = Date.now, maxBytes = MAX_BATCH_BYTES, commands }) {
   const url = new URL(endpoint);
   if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/api/sdlc/ingest') throw new Error('Edge needs an HTTPS /api/sdlc/ingest endpoint');
   if (!/^[A-Za-z0-9_-]{32,256}$/.test(token ?? '') || !checkpoint || checkpoint === ':memory:') throw new Error('Invalid edge configuration');
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new Error('Invalid edge configuration');
+  if (commands !== undefined && (!isRecord(commands) || !validOperations(commands.operations))) throw new Error('Invalid edge configuration');
+  const allowed = new Set(commands?.operations ?? []);
+  const principal = commands?.coordinator ?? coordinator;
   const source = coordinator.db.prepare('PRAGMA database_list').all().find(row => row.name === 'main')?.file;
   const destination = existsSync(checkpoint) ? realpathSync(checkpoint) : resolve(checkpoint);
   if (source && realpathSync(source) === destination) throw new Error('Edge checkpoint must be a separate database');
   const db = new DatabaseSync(checkpoint);
   db.exec('CREATE TABLE IF NOT EXISTS edge_checkpoint (owner TEXT PRIMARY KEY, position INTEGER NOT NULL, sent_at INTEGER NOT NULL)');
+  // Results executed but not yet acknowledged by the edge; they survive a crash and are re-reported.
+  db.exec('CREATE TABLE IF NOT EXISTS edge_command_result (owner TEXT NOT NULL, command_id TEXT NOT NULL, result TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (owner, command_id))');
   const owner = JSON.stringify([coordinator.tenant, coordinator.owner, url.href]);
   const read = () => db.prepare('SELECT position, sent_at FROM edge_checkpoint WHERE owner=?').get(owner);
   const save = position => db.prepare('INSERT INTO edge_checkpoint VALUES (?,?,?) ON CONFLICT(owner) DO UPDATE SET position=excluded.position, sent_at=excluded.sent_at').run(owner, position, now());
   const reset = () => db.prepare('DELETE FROM edge_checkpoint WHERE owner=?').run(owner);
+  const pendingResults = () => db.prepare('SELECT command_id, result FROM edge_command_result WHERE owner=? ORDER BY created_at, command_id').all(owner)
+    .map(row => ({ commandId: row.command_id, result: JSON.parse(row.result) }));
+  const hasResult = commandId => Boolean(db.prepare('SELECT 1 FROM edge_command_result WHERE owner=? AND command_id=?').get(owner, commandId));
+  const keepResult = result => db.prepare('INSERT INTO edge_command_result VALUES (?,?,?,?) ON CONFLICT(owner, command_id) DO UPDATE SET result=excluded.result')
+    .run(owner, result.commandId, JSON.stringify(result), now());
+  const clearResults = ids => { for (const id of ids) db.prepare('DELETE FROM edge_command_result WHERE owner=? AND command_id=?').run(owner, id); };
+  let pollMs = null; // fast-poll interval while commands flow, else null (30 s heartbeat)
   // Direct queries: the caller holds one read transaction, so bodies must stay contract-shaped.
   const q = (name, body) => coordinator.query(name, { contractVersion: '1', ...body });
   // A plan whose target or issue project left the trusted policy is not exported.
-  const allowed = fn => { try { return fn(); } catch (error) { if (error.code === 'Forbidden') return null; throw error; } };
+  const inPolicy = fn => { try { return fn(); } catch (error) { if (error.code === 'Forbidden') return null; throw error; } };
   const livePlanIds = coordinator.db.prepare(`SELECT id FROM coordination_plan WHERE tenant=? AND owner=? AND id>? AND state IN (${LIVE_PLAN_STATES.map(() => '?').join(',')}) ORDER BY id LIMIT ?`);
   const eventRows = coordinator.db.prepare('SELECT resource_id, sequence FROM coordination_event WHERE tenant=? AND owner=? AND sequence>? ORDER BY sequence LIMIT ?');
 
@@ -40,11 +84,11 @@ export function edgeExporter({ coordinator, endpoint, token, checkpoint, fetch: 
       // Not ListPlans: it authorizes every row, so one out-of-policy plan would fail the page.
       page = livePlanIds.all(coordinator.tenant, coordinator.owner, afterPlanId, ...LIVE_PLAN_STATES, PAGE);
       for (const { id } of page) {
-        const plan = allowed(() => q('GetPlan', { resourceId: id }));
+        const plan = inPolicy(() => q('GetPlan', { resourceId: id }));
         if (!plan) continue;
         plans.push(plan);
         for (const summary of plan.items) {
-          const item = allowed(() => q('GetItem', { resourceId: summary.itemId }).item);
+          const item = inPolicy(() => q('GetItem', { resourceId: summary.itemId }).item);
           if (item) items.push(item);
         }
       }
@@ -60,13 +104,13 @@ export function edgeExporter({ coordinator, endpoint, token, checkpoint, fetch: 
     if (!events.length) return null;
     const plans = [], items = [];
     for (const id of new Set(events.map(event => event.resource_id))) {
-      const item = allowed(() => {
+      const item = inPolicy(() => {
         try { return q('GetItem', { resourceId: id }).item; }
         catch (error) { if (error.code !== 'NotFound') throw error; return undefined; }
       });
       if (item) { items.push(item); continue; }
       if (item === null) continue;
-      const plan = allowed(() => q('GetPlan', { resourceId: id }));
+      const plan = inPolicy(() => q('GetPlan', { resourceId: id }));
       if (plan) plans.push(plan);
     }
     return { kind: 'changes', fromSequence: position, watermark: events.at(-1).sequence, plans, items };
@@ -79,16 +123,56 @@ export function edgeExporter({ coordinator, endpoint, token, checkpoint, fetch: 
     catch (error) { coordinator.db.exec('ROLLBACK'); throw error; }
   }
 
-  async function post(batch) {
+  /** Serializes the batch with as many pending results as fit under maxBytes. */
+  function encode(batch, pending) {
     const body = JSON.stringify({ contractVersion: '1', ...batch });
     const bytes = Buffer.byteLength(body);
     if (bytes > maxBytes) throw new Error(`Edge batch too large: ${bytes} bytes`);
+    for (let count = pending.length; count > 0; count--) {
+      const results = pending.slice(0, count).map(entry => entry.result);
+      const withResults = JSON.stringify({ contractVersion: '1', ...batch, results });
+      if (Buffer.byteLength(withResults) <= maxBytes) return { body: withResults, sent: pending.slice(0, count).map(entry => entry.commandId) };
+    }
+    return { body, sent: [] };
+  }
+
+  /** Runs one relayed command. Never throws: every outcome is a CommandResult. */
+  async function run(command) {
+    const commandId = command.commandId;
+    if (!allowed.has(command.operation)) return failure(commandId, 'Forbidden', 'Operation is outside the edge principal policy', false);
+    const input = parseCommandInput(command.operation, command.input);
+    if (!input) return failure(commandId, 'InvalidRequest', 'Command input is invalid', false);
+    try {
+      const operation = await (principal.admit ?? principal.call).call(principal, command.operation, { contractVersion: '1', commandId, ...input }, { idempotencyKey: commandId, actor: command.actor });
+      const { error, ...rest } = operation;
+      return { commandId, ok: true, operation: error == null ? rest : operation };
+    } catch (error) {
+      const status = Number.isInteger(error?.status) ? error.status : 500;
+      return failure(commandId, error?.code ?? 'InternalError', status === 500 && !error?.code ? 'Bob could not confirm this command' : error?.message ?? 'Command failed', status >= 500);
+    }
+  }
+
+  async function execute(list) {
+    let executed = 0;
+    for (const command of list) {
+      if (!isRecord(command) || typeof command.commandId !== 'string' || command.commandId.length < 1 || command.commandId.length > 200) continue; // nothing to correlate a result with
+      if (hasResult(command.commandId)) continue; // already executed, awaiting report
+      const result = !RELAYED_OPERATIONS.includes(command.operation) ? failure(command.commandId, 'InvalidRequest', 'Unknown operation', false)
+        : typeof command.actor !== 'string' || command.actor.length < 1 || command.actor.length > 200 ? failure(command.commandId, 'InvalidRequest', 'Command actor is invalid', false)
+        : await run(command);
+      keepResult(result); executed++;
+    }
+    return executed;
+  }
+
+  async function post(batch, body) {
     const response = await send(url.href, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body });
     if (!response.ok) { await response.body?.cancel(); throw new Error('Edge unavailable'); }
     const result = await response.json();
     if (result.resync === true) { reset(); throw new Error('Edge requested a fresh snapshot'); }
     if (result.accepted !== true || result.watermark !== batch.watermark) throw new Error('Edge did not accept the batch');
+    return result;
   }
 
   return {
@@ -100,20 +184,40 @@ export function edgeExporter({ coordinator, endpoint, token, checkpoint, fetch: 
         try { return changes(state.position); }
         catch (error) { if (error.code !== 'CursorExpired') throw error; return snapshot(); }
       });
+      const pending = pendingResults();
       if (!batch) {
-        if (now() - state.sent_at < HEARTBEAT_MS) return { kind: 'idle', sent: 0 };
+        const wait = pending.length ? 0 : pollMs ?? HEARTBEAT_MS;
+        if (now() - state.sent_at < wait) return { kind: 'idle', sent: 0, ...(pollMs ? { pollMs } : {}) };
         batch = { kind: 'heartbeat', watermark: state.position, plans: [], items: [] };
       }
-      await post(batch);
+      const { body, sent } = encode(batch, pending);
+      const response = await post(batch, body);
       save(batch.watermark);
-      return { kind: batch.kind, sent: batch.plans.length + batch.items.length };
+      clearResults(sent);
+      // Commands are only taken from an accepted response; the edge re-sends anything unanswered.
+      const received = Array.isArray(response.commands) ? response.commands : [];
+      const executed = await execute(received);
+      const asked = Number.isSafeInteger(response.pollMs) && response.pollMs > 0 ? Math.min(Math.max(response.pollMs, MIN_POLL_MS), HEARTBEAT_MS) : null;
+      pollMs = asked ?? (received.length || pendingResults().length ? FAST_POLL_MS : null);
+      return { kind: batch.kind, sent: batch.plans.length + batch.items.length, ...(sent.length ? { results: sent.length } : {}), ...(executed ? { commands: executed } : {}), ...(pollMs ? { pollMs } : {}) };
     },
     close() { db.close(); },
   };
 }
 
+function validOperations(operations) {
+  return Array.isArray(operations) && operations.length > 0 && new Set(operations).size === operations.length && operations.every(name => RELAYED_OPERATIONS.includes(name));
+}
+
+/** edge.json: { endpoint, checkpoint, tokenEnv, commands?: { operations: [...] } }.
+ * `commands` enables the command channel; its operations are the edge principal's
+ * allowlist, a non-empty subset of RELAYED_OPERATIONS. The principal's context is
+ * the worker's own --context policy (see deploy/coordination/README.md). */
 export function loadEdgeConfig(path, env = process.env) {
   const config = JSON.parse(readFileSync(path, 'utf8'));
   if (typeof config.tokenEnv !== 'string' || !/^[A-Z][A-Z0-9_]*$/.test(config.tokenEnv)) throw new Error('Edge tokenEnv is required');
-  return { endpoint: config.endpoint, checkpoint: config.checkpoint, token: env[config.tokenEnv] };
+  const loaded = { endpoint: config.endpoint, checkpoint: config.checkpoint, token: env[config.tokenEnv] };
+  if (config.commands === undefined) return loaded;
+  if (!isRecord(config.commands) || Object.keys(config.commands).some(key => key !== 'operations') || !validOperations(config.commands.operations)) throw new Error('Edge commands.operations must be a non-empty, unique subset of ' + RELAYED_OPERATIONS.join(', '));
+  return { ...loaded, commands: { operations: [...config.commands.operations] } };
 }

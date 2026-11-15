@@ -723,21 +723,39 @@ export default Sentry.withSentry(
         }
 
         // SDLC edge: the coordinator exporter's ingest (bearer token) and the viewers'
-        // websocket (session + SDLC_VIEWER_USER_IDS), both to the SdlcEdge DO.
+        // websocket (session, or a device API key from a native client, then
+        // SDLC_VIEWER_USER_IDS), both to the SdlcEdge DO.
         if (url.pathname === "/api/sdlc/ingest" || url.pathname === "/api/sdlc/ws") {
-          return handleSdlcRoute(request, runtimeEnv, async () => {
-            const { connectionString, isHyperdrive } =
-              getHyperdriveConnectionString(runtimeEnv);
-            const session = await runWithDb(
-              connectionString,
-              isHyperdrive,
-              async () => {
-                const { auth } = await import("../src/auth/server");
-                return auth.api.getSession({ headers: request.headers });
-              },
-            );
-            return session?.user?.id ?? null;
-          });
+          return handleSdlcRoute(
+            request,
+            runtimeEnv,
+            async () => {
+              const { connectionString, isHyperdrive } =
+                getHyperdriveConnectionString(runtimeEnv);
+              const session = await runWithDb(
+                connectionString,
+                isHyperdrive,
+                async () => {
+                  const { auth } = await import("../src/auth/server");
+                  return auth.api.getSession({ headers: request.headers });
+                },
+              );
+              return session?.user?.id ?? null;
+            },
+            async (key) => {
+              const { connectionString, isHyperdrive } =
+                getHyperdriveConnectionString(runtimeEnv);
+              const apiKeyAuth = await runWithDb(
+                connectionString,
+                isHyperdrive,
+                async () => {
+                  const { validateApiKey } = await import("@bob/auth/api-key");
+                  return validateApiKey(key);
+                },
+              );
+              return apiKeyAuth?.userId ?? null;
+            },
+          );
         }
 
         const isHermesDashboard = isHermesProxyPath(url.pathname);
