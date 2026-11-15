@@ -223,3 +223,24 @@ test('terminal receipt failure rolls back its fact, operation and dependent read
   call(f.service, 'RecordExecutionReceipt', receipt(body));
   assert.equal(f.service.call('GetItem', query(body.itemId)).item.state, 'completed');
 });
+
+test('the budget admission gate holds new submissions and never blocks recovery', async t => {
+  const f = setup(t), body = request(f); call(f.service, 'RequestExecution', body);
+  let submissions = 0;
+  const held = await f.service.dispatchOne(port({ submit: async r => { submissions++; return admission(r); } }), { now: 1000, leaseMs: 1000, admit: async r => r.executionProfileId !== 'pistache' });
+  assert.equal(held.state, 'budget-held'); assert.equal(submissions, 0);
+  assert.equal(f.service.call('GetItem', query(body.itemId)).item.state, 'reserved');
+  const lost = await f.service.dispatchOne(port({ submit: async () => { throw new Error('response lost'); } }), { now: 2000, leaseMs: 1000 });
+  assert.equal(lost.state, 'unknown');
+  const recovered = await f.service.dispatchOne(port({ find: async () => admission(body) }), { now: 3001, leaseMs: 1000, admit: async () => false });
+  assert(recovered.dispatched);
+});
+
+test('budget admission reads the allowance and fails open', async () => {
+  const { budgetAdmission } = await import('../runtime/worker.mjs');
+  const reply = body => async () => new Response(JSON.stringify(body), { status: 200 });
+  assert.equal(await budgetAdmission({ url: 'http://x', token: 't', fetch: reply({ enforce: true, totalSlots: 0 }) })({}), false);
+  assert.equal(await budgetAdmission({ url: 'http://x', token: 't', fetch: reply({ enforce: true, totalSlots: 2 }) })({}), true);
+  assert.equal(await budgetAdmission({ url: 'http://x', token: 't', fetch: reply({ enforce: false, totalSlots: 0 }) })({}), true);
+  assert.equal(await budgetAdmission({ url: 'http://x', token: 't', fetch: async () => { throw new Error('down'); } })({}), true);
+});

@@ -78,6 +78,8 @@ interface Env {
   FORGEGRAPH_TRACE_API_URL?: string;
   FORGEGRAPH_TRACE_API_TOKEN?: string;
   HERMES_ORIGIN_TOKEN?: string;
+  /** BOB-76: bearer token the coordinator presents to read the budget allowance. */
+  BOB_BUDGET_ALLOWANCE_TOKEN?: string;
   HERMES_PROXY_ORIGIN_TOKEN?: string;
   HERMES_ORIGIN_URL?: string;
   HERMES_OPERATOR_USER_IDS?: string;
@@ -699,6 +701,25 @@ export default Sentry.withSentry(
                 ? 204
                 : 401,
           });
+        }
+
+        // BOB-76: the budget governor's current allowance, for the durable
+        // coordinator's admission gate. Bearer token only; absent token → 404.
+        if (url.pathname === "/api/internal/budget-allowance") {
+          const token = runtimeEnv.BOB_BUDGET_ALLOWANCE_TOKEN ?? process.env.BOB_BUDGET_ALLOWANCE_TOKEN ?? "";
+          if (!token) return new Response("Not found", { status: 404 });
+          if (!verifyOriginAuthorization(request.headers.get("authorization"), token)) {
+            return new Response("Unauthorized", { status: 401 });
+          }
+          const { connectionString, isHyperdrive } = getHyperdriveConnectionString(runtimeEnv);
+          const verdict = await runWithDb(connectionString, isHyperdrive, async () => {
+            const { evaluateBudget } = await import("@bob/api/services/budget/state");
+            return (await evaluateBudget()).verdict;
+          });
+          return Response.json(
+            { at: verdict.at, enforce: verdict.enforce, mode: verdict.mode, totalSlots: verdict.totalSlots, byProvider: verdict.byProvider },
+            { headers: { "cache-control": "no-store" } },
+          );
         }
 
         // SDLC edge: the coordinator exporter's ingest (bearer token) and the viewers'
