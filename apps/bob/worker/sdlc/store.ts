@@ -1,18 +1,34 @@
 import {
   ITEM_STATES,
+  parseCommandResult,
   PLAN_STATES,
   safeHref,
   TERMINAL_PLAN_STATES,
+  type CommandResult,
   type EdgeMessage,
   type ItemSnapshot,
   type PlanSnapshot,
+  type QueuedCommand,
   type TopologyRepo,
 } from "@bob/sdlc-view";
+import { migrateOutbox, OUTBOX_SCHEMA } from "./outbox";
 import type { SqlPort } from "./sql";
 
 /** What the coordinator's edge exporter (packages/bob/coordination/runtime/edge.mjs) POSTs. */
-export interface IngestBatch { contractVersion: "1"; kind: "snapshot" | "changes" | "heartbeat"; watermark: number; fromSequence?: number; plans: PlanSnapshot[]; items: ItemSnapshot[] }
-export type IngestResult = { accepted: true; watermark: number } | { accepted: false; resync: true };
+export interface IngestBatch {
+  contractVersion: "1"; kind: "snapshot" | "changes" | "heartbeat"; watermark: number; fromSequence?: number; plans: PlanSnapshot[]; items: ItemSnapshot[];
+  /** The outcomes of commands from earlier responses (BOB-79). Any kind of batch may carry them. */
+  results?: CommandResult[];
+}
+/** What applying the batch's state did. */
+export type ApplyResult = { accepted: true; watermark: number } | { accepted: false; resync: true };
+/**
+ * The ingest response. commands: queued commands for the exporter to run (also on a resync).
+ * pollMs: present while commands are queued, or within ACTIVE_POLL_WINDOW_MS of a result; the exporter polls that often.
+ */
+export type IngestResult = ApplyResult & { commands: QueuedCommand[]; pollMs?: number };
+/** More results than this in one batch is refused. */
+export const MAX_RESULTS_PER_BATCH = 500;
 export type Delta = Extract<EdgeMessage, { type: "delta" }>;
 export type Snapshot = Extract<EdgeMessage, { type: "snapshot" }>;
 /** Ingest bodies above this are refused (413); the exporter's MAX_BATCH_BYTES matches it. */
@@ -56,6 +72,17 @@ export function parseBatch(value: unknown): IngestBatch | null {
   } else if (value.fromSequence !== undefined && !isSeq(value.fromSequence)) return null;
   if (value.kind === "heartbeat" && (value.plans.length > 0 || value.items.length > 0)) return null;
   if (!value.plans.every(isPlan) || !value.items.every(isItem)) return null;
+  let results: CommandResult[] | undefined;
+  if (value.results !== undefined) {
+    if (!Array.isArray(value.results) || value.results.length > MAX_RESULTS_PER_BATCH) return null;
+    results = [];
+    for (const raw of value.results) {
+      const result = parseCommandResult(raw);
+      if (!result) return null;
+      results.push(result);
+    }
+    value.results = results;
+  }
   for (const plan of value.plans as PlanSnapshot[]) stripUnsafeIssueUrls(plan);
   return value as unknown as IngestBatch;
 }
@@ -74,7 +101,7 @@ export interface EdgeMeta {
   topologyFailedAt: number | null;
 }
 export interface ApplyOutcome {
-  result: IngestResult;
+  result: ApplyResult;
   /** What to log and broadcast once the transaction has committed. */
   message: Delta | Snapshot | null;
   /** The batch was a replay the edge already holds: nothing applied, nothing to send. */
@@ -87,8 +114,9 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, plan_id TEXT NOT NULL, rv INTEGER NOT NULL, json TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS items_by_plan ON items (plan_id)",
   "CREATE TABLE IF NOT EXISTS tombstones (plan_id TEXT PRIMARY KEY, rv INTEGER NOT NULL)",
+  ...OUTBOX_SCHEMA,
 ];
-const META_KEYS = { epoch: "epoch", watermark: "watermark", seq: "seq", topology: "topology_json", topologyAt: "topology_at", topologyFailedAt: "topology_failed_at" } as const;
+const META_KEYS = { epoch: "epoch", watermark: "watermark", seq: "seq", topology: "topology_json", topologyAt: "topology_at", topologyFailedAt: "topology_failed_at", coordinatorSeenAt: "coordinator_seen_at" } as const;
 
 /** Sorted by repoSlug, then startupId, so the same BizPulse list always compares equal. */
 export const sortTopology = (topology: TopologyRepo[]) =>
@@ -111,6 +139,7 @@ export class EdgeStore {
   constructor(private readonly sql: SqlPort, newEpoch: () => string = () => crypto.randomUUID()) {
     sql.transaction(() => {
       for (const statement of SCHEMA) sql.exec(statement);
+      migrateOutbox(sql);
       if (this.read(META_KEYS.epoch) === undefined) {
         this.write(META_KEYS.epoch, newEpoch());
         this.write(META_KEYS.watermark, 0);
@@ -126,6 +155,15 @@ export class EdgeStore {
   }
   private write(key: string, value: unknown) {
     this.sql.exec("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", key, JSON.stringify(value));
+  }
+
+  /** When the coordinator was last heard from, as last persisted; null when never. */
+  coordinatorSeenAt(): number | null {
+    const value = this.read(META_KEYS.coordinatorSeenAt);
+    return typeof value === "number" ? value : null;
+  }
+  setCoordinatorSeenAt(at: number): void {
+    this.write(META_KEYS.coordinatorSeenAt, at);
   }
 
   meta(): EdgeMeta {
@@ -144,13 +182,13 @@ export class EdgeStore {
    * - changes starting past the watermark, or a heartbeat ahead of it: resync, nothing written;
    * - changes ending at or below the watermark (a replay): accepted with the batch's own
    *   watermark, which the exporter checks, and nothing applied;
-   * - a heartbeat: accepted, nothing written (liveness lives in the caller's memory);
+   * - a heartbeat: accepted, nothing written here (the caller persists liveness, throttled);
    * - otherwise applied, and a delta is returned when anything changed.
    */
   apply(batch: IngestBatch, now: number): ApplyOutcome {
     return this.sql.transaction(() => {
       const { watermark } = this.meta();
-      const accepted: IngestResult = { accepted: true, watermark: batch.watermark };
+      const accepted: ApplyResult = { accepted: true, watermark: batch.watermark };
       if (batch.kind === "heartbeat") {
         return batch.watermark > watermark
           ? { result: { accepted: false, resync: true }, message: null, covered: false }
@@ -210,6 +248,15 @@ export class EdgeStore {
   private bump(coordinatorSeenAt: number | null): Snapshot {
     this.nextSeq();
     return this.snapshot(coordinatorSeenAt);
+  }
+
+  plan(planId: string): PlanSnapshot | undefined {
+    const row = this.sql.exec<{ json: string }>("SELECT json FROM plans WHERE id = ?", planId)[0];
+    return row ? (JSON.parse(row.json) as PlanSnapshot) : undefined;
+  }
+  item(itemId: string): ItemSnapshot | undefined {
+    const row = this.sql.exec<{ json: string }>("SELECT json FROM items WHERE id = ?", itemId)[0];
+    return row ? (JSON.parse(row.json) as ItemSnapshot) : undefined;
   }
 
   /** The full state, as sent to a client that cannot resume from its cursor. */

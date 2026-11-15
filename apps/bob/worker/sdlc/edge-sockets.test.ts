@@ -53,7 +53,7 @@ describe("broadcasts reach greeted sockets only", () => {
     const viewer = h.connect(), lurker = h.connect();
     greet(h.controller, viewer, { cursor: null, epoch: null }, h.log);
     viewer.sent.length = 0;
-    expect(h.controller.ingest(batch({ watermark: 2 }))).toEqual({ accepted: true, watermark: 2 });
+    expect(h.controller.ingest(batch({ watermark: 2 }))).toMatchObject({ accepted: true, watermark: 2 });
     expect(types(viewer)).toEqual(["snapshot"]);
     expect(lurker.sent).toEqual([]);
     // Once it says hello it gets its own reply, then later broadcasts.
@@ -123,7 +123,7 @@ describe("ingestResponse", () => {
     const c = controller();
     const res = ingestResponse(c, JSON.stringify(batch({ watermark: 5 })));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ accepted: true, watermark: 5 });
+    expect(await res.json()).toEqual({ accepted: true, watermark: 5, commands: [] });
   });
   it("answers 503 with a generic body when storage fails, so the exporter retries", async () => {
     const sql = nodeSqlitePort();

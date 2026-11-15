@@ -65,6 +65,62 @@ The worker pushes plan and work-item changes to the SDLC edge with
   `/home/bob/.bob/coordination/edge.sqlite`, and `tokenEnv` set to
   `BOB_SDLC_EDGE_TOKEN`. The token never goes in this file.
 
+### Command channel (BOB-79)
+
+Bob's SDLC surfaces (web, TUI, mobile) send commands to the edge, which queues
+them and returns them in its ingest response (`commands`). The exporter runs
+them in-process and reports `results` in its next batch. There is no inbound
+port. The channel is off unless `edge.json` has a `commands` block:
+
+```json
+{
+  "endpoint": "https://<bob-host>/api/sdlc/ingest",
+  "checkpoint": "/home/bob/.bob/coordination/edge.sqlite",
+  "tokenEnv": "BOB_SDLC_EDGE_TOKEN",
+  "commands": { "operations": ["ControlPlan", "RetryItem", "CancelItem", "ReconcileItem"] }
+}
+```
+
+- `commands.operations` is the edge principal's allowlist: a non-empty, unique
+  subset of the relayed operations above (no other key is accepted). List fewer
+  to narrow it, for example only `["ControlPlan"]` for pause/resume. A command
+  outside it is answered with error code `Forbidden`; with no `commands` block,
+  every relayed command is answered `Forbidden`. An invalid block makes the
+  whole file invalid (`configuration-unavailable`, exporter off).
+- The edge principal's context is the worker's own `--context` file
+  (`context.json`): same workspace, actor (owner) and target/issue-project
+  policy, so it can act only on plans the worker itself exports. It runs on its
+  own database connection with the same validation, `Idempotency-Key =
+  commandId` replay and Kanbanger issue admission as the HTTP host.
+- Each command's `actor` (the Bob user id the edge verified) is recorded, with
+  the principal owner and outcome, in `coordination_command_log` (storage
+  version 4; older stores upgrade on start). Direct HTTP/MCP commands are
+  logged too, with a null actor. The log is append-only: a refusal, the
+  acceptance and a later completion of one `commandId` are separate rows
+  (indexed by `command_id`). An older release refuses a version-4 database
+  (`StorageVersion`); see "Storage version 4 rollback" below.
+- Transient failures while running a command (SQLite busy, Kanbanger or
+  network errors, any 5xx or non-coordinator error) are not reported: the
+  exporter logs `outcome: "command-transient"` with the code only, and the edge
+  re-sends the command after its 10 s redelivery interval until it runs or the
+  edge expires it at 10 minutes. Only coordinator refusals (4xx) reach Bob with
+  their message; anything else reads "The coordinator could not run this
+  command."
+- Unreported results live in `edge.sqlite` (`edge_command_result`) and are
+  re-sent after a crash; re-delivered commands replay the stored Operation.
+- While commands or results are in flight, or the edge's response carries
+  `pollMs`, the worker contacts the edge every ~2 s (or `pollMs`, clamped to
+  1–30 s) instead of every 30 s. Idle behaviour is unchanged.
+- `CancelItem` cancels an item without a live attempt (or with a queued,
+  never-submitted one) at once. With a live or unknown execution it moves the
+  item to `cancelling`: no environment cancellation port exists yet, so the
+  running execution is not interrupted; the item settles to `cancelled` on its
+  terminal receipt, or when the worker finds no execution for it (it never
+  submits a new one). Kanbanger is not updated for coordinator-side cancels.
+- `ReconcileItem` (for `execution-unknown` only) expires the attempt's back-off
+  so the next worker tick re-runs the FindExecution recovery. `TriggerPlan`
+  remains unimplemented (501).
+
 If either file is missing or invalid, the worker logs `step: "edge"`,
 `outcome: "configuration-unavailable"` once and keeps dispatching without the
 exporter. Edge outages log `outcome: "unavailable"` and back off; they never
@@ -79,13 +135,73 @@ then keeps restarting it, and nothing is dispatched until the unit or the
 release is fixed. Order every change so the unit file never passes `--edge` to
 a release that does not know it:
 
-1. **Rollout:** install the new coordinator release, verify it (see
-   "Verification and rollback"), point `current` at it and restart both units
-   with the *previous* worker unit file. Only then install the worker unit
+1. **Rollout:** back up the coordinator database first (a release that
+   raises the storage version upgrades it on start, and older releases then
+   refuse it):
+
+   ```sh
+   sudo systemctl stop bob-coordinator-worker.service bob-coordinator.service
+   sudo -u bob sqlite3 /home/bob/.bob/coordination/coordination.sqlite \
+     ".backup '/home/bob/.bob/coordination/coordination.pre-<source-revision>.sqlite'"
+   sudo -u bob sqlite3 /home/bob/.bob/coordination/coordination.sqlite 'PRAGMA user_version;'
+   ```
+
+   Record the printed version with the backup. Then install the new
+   coordinator release, verify it (see "Verification and rollback"), point
+   `current` at it and restart both units with the *previous* worker unit file. Only then install the worker unit
    that passes `--edge`, run `systemctl daemon-reload` and restart the worker.
 2. **Rollback:** first restore the previous worker unit file (without
    `--edge`) and run `systemctl daemon-reload`. Only then point `current` back
    at the older release and restart.
+
+### Storage version 4 rollback
+
+Storage version 4 (BOB-79) adds only `coordination_command_log` and its two
+indexes (`coordination_command_log_ix_by_command_id`,
+`coordination_command_log_ix_by_owner_created_at`); no version-3 table changes.
+Rolling back to a version-3 release therefore drops that audit table and
+nothing else. The steps, in order:
+
+1. Stop the worker, then the coordinator, so nothing writes:
+
+   ```sh
+   sudo systemctl stop bob-coordinator-worker.service
+   sudo systemctl stop bob-coordinator.service
+   ```
+
+2. Back up the version-4 database (this keeps the command log):
+
+   ```sh
+   sudo -u bob sqlite3 /home/bob/.bob/coordination/coordination.sqlite \
+     ".backup '/home/bob/.bob/coordination/coordination.v4-before-rollback.sqlite'"
+   ```
+
+3. Drop the table (its indexes go with it) and set the version, in one
+   transaction, then check:
+
+   ```sh
+   sudo -u bob sqlite3 /home/bob/.bob/coordination/coordination.sqlite \
+     'BEGIN; DROP TABLE coordination_command_log; PRAGMA user_version = 3; COMMIT;'
+   sudo -u bob sqlite3 /home/bob/.bob/coordination/coordination.sqlite \
+     "PRAGMA user_version; SELECT name FROM sqlite_master WHERE name LIKE 'coordination_command_log%'; PRAGMA integrity_check;"
+   ```
+
+   Expect `3`, no table or index names, and `ok`. Plans, items, attempts,
+   events and issue effects are untouched, so `edge.sqlite` stays valid; its
+   unreported command results (`edge_command_result`) are simply never sent by
+   an older release. Restoring the pre-upgrade backup instead loses every
+   change since the upgrade; prefer the drop.
+
+4. Reinstall the previous release: if it predates `--edge`, restore the
+   previous worker unit file and `systemctl daemon-reload` first (see
+   "Rollout and rollback order"); point `current` back; start the coordinator,
+   then the worker. A pre-BOB-79 release ignores the `commands` block in
+   `edge.json`. Check that neither unit logs `StorageVersion`.
+
+The upgrade path is covered by `test/commands.test.mjs` ("a version-three
+store gains the command log table"), which applies exactly the step 3 SQL and
+reopens the store: it is a valid version-3 database, and starting a version-4
+release again recreates the table, empty.
 
 To turn the edge off without touching releases or unit files, use a kill
 switch. Both leave dispatch running:

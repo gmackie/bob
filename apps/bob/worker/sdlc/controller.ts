@@ -1,4 +1,18 @@
-import type { EdgeMessage, TopologyRepo } from "@bob/sdlc-view";
+import {
+  COMMAND_LIMITS,
+  confirmationSatisfies,
+  OFFLINE_AFTER_MS,
+  parseClientCommand,
+  tierOf as defaultTierOf,
+  type CommandInput,
+  type CommandRejectCode,
+  type CommandResult,
+  type CommandStatusMessage,
+  type EdgeMessage,
+  type Tier,
+  type TopologyRepo,
+} from "@bob/sdlc-view";
+import { CommandOutbox, commandHash } from "./outbox";
 import type { SqlPort } from "./sql";
 import { DeltaLog, EdgeStore, type IngestBatch, type IngestResult } from "./store";
 
@@ -17,6 +31,29 @@ export interface EdgeControllerOptions {
   /** Keeps background work running after a reply: ctx.waitUntil in the Durable Object. */
   schedule?: (work: Promise<unknown>) => void;
   newEpoch?: () => string;
+  /** Tests only: no operation is tier 3 yet, so the typed-confirmation path needs an override. */
+  tierOf?: (command: CommandInput) => Tier;
+}
+
+/** The exporter polls this often while commands are queued, or for ACTIVE_POLL_WINDOW_MS after one was sent or answered. */
+export const FAST_POLL_MS = 2_000;
+/** How long fast polling lasts after the last command was enqueued or answered. An open socket alone does not count. */
+export const ACTIVE_POLL_WINDOW_MS = 2 * 60_000;
+/**
+ * coordinatorSeenAt is written to the meta table at most this often (heartbeats come every
+ * few seconds); far below OFFLINE_AFTER_MS, so a value loaded after eviction is close enough.
+ */
+export const SEEN_PERSIST_MS = 15_000;
+
+/**
+ * Who sent a command, as the socket's attachment and the DO's env say. The route put the
+ * user id on the upgrade; the allow-list is checked again here because it can change.
+ */
+export interface CommandSender {
+  userId: string | null;
+  viewer: boolean;
+  /** Counts this command against the user's per-minute limit (across sockets); false when it is over. */
+  take: () => boolean;
 }
 
 const TOPOLOGY_TTL_MS = 5 * 60_000;
@@ -29,7 +66,8 @@ const TOPOLOGY_RETRY_MS = 60_000;
  * Storage is synchronous SQLite: each change commits in one transaction before anything
  * is logged or broadcast, so memory, the delta log and storage cannot disagree. If the
  * transaction throws, ingest throws, nothing changes, and the exporter retries.
- * When the coordinator was last heard from is kept in memory only (heartbeats write nothing).
+ * When the coordinator was last heard from is kept in memory and persisted to the meta
+ * table at most every SEEN_PERSIST_MS, so offline checks and the banner survive eviction.
  */
 export class EdgeController {
   readonly store: EdgeStore;
@@ -38,8 +76,11 @@ export class EdgeController {
   private readonly now: () => number;
   private readonly loadTopology?: () => Promise<TopologyRepo[]>;
   private readonly schedule: (work: Promise<unknown>) => void;
-  private coordinatorSeenAt: number | null = null;
+  private coordinatorSeenAt: number | null;
+  private persistedSeenAt: number | null;
   private topologyLoad: Promise<void> | null = null;
+  readonly outbox: CommandOutbox;
+  private readonly tierOf: (command: CommandInput) => Tier;
 
   constructor(options: EdgeControllerOptions) {
     this.store = new EdgeStore(options.sql, options.newEpoch);
@@ -47,17 +88,93 @@ export class EdgeController {
     this.now = options.now ?? Date.now;
     this.loadTopology = options.loadTopology;
     this.schedule = options.schedule ?? ((work) => { work.catch(() => {}); });
+    this.outbox = new CommandOutbox(options.sql);
+    this.coordinatorSeenAt = this.persistedSeenAt = this.store.coordinatorSeenAt();
+    this.tierOf = options.tierOf ?? defaultTierOf;
   }
 
-  /** Throws when storage fails; the route answers 5xx so the exporter retries the batch. */
+  /**
+   * Throws when storage fails; the route answers 5xx so the exporter retries the batch.
+   * State and commands are two transactions: if the second fails after the first committed,
+   * the retried batch is a covered replay for the state and the results apply then.
+   * Results and queued commands travel on every response, a resync included.
+   */
   ingest(batch: IngestBatch): IngestResult {
     const now = this.now();
     const { result, message, covered } = this.store.apply(batch, now);
-    if (!result.accepted) return result;
-    this.coordinatorSeenAt = Math.max(this.coordinatorSeenAt ?? now, now);
-    if (message) this.publish(message);
-    else if (!covered) this.broadcast({ type: "status", coordinatorSeenAt: this.coordinatorSeenAt });
-    return result;
+    if (result.accepted) {
+      this.coordinatorSeenAt = Math.max(this.coordinatorSeenAt ?? now, now);
+      if (this.persistedSeenAt === null || this.coordinatorSeenAt - this.persistedSeenAt >= SEEN_PERSIST_MS) {
+        this.store.setCoordinatorSeenAt(this.coordinatorSeenAt);
+        this.persistedSeenAt = this.coordinatorSeenAt;
+      }
+      if (message) this.publish(message);
+      else if (!covered) this.broadcast({ type: "status", coordinatorSeenAt: this.coordinatorSeenAt });
+    }
+    const { finished, commands, pending } = this.outbox.exchange(batch.results ?? [], now);
+    for (const finishedResult of finished) this.broadcastResult(finishedResult);
+    const active = pending > 0 || this.outbox.answeredSince(now - ACTIVE_POLL_WINDOW_MS);
+    return { ...result, commands, ...(active ? { pollMs: FAST_POLL_MS } : {}) };
+  }
+
+  /** Whether the coordinator was heard from within the offline banner's window. */
+  coordinatorOnline(now = this.now()): boolean {
+    return this.coordinatorSeenAt !== null && now - this.coordinatorSeenAt <= OFFLINE_AFTER_MS;
+  }
+
+  /**
+   * A client's command. Checks, in order: sender (forbidden), shape (invalid), rate
+   * (rate-limited); a commandId already known is answered from the outbox or the stored
+   * result without being queued again, unless its operation + input differ from what was
+   * queued (conflict); then coordinator online, tier + confirmation, outbox size (in all,
+   * then the user's). Accepted commands are stored before the reply. Replies to `socket` only.
+   */
+  command(socket: EdgeSocket, raw: unknown, sender: CommandSender): CommandStatusMessage {
+    const commandId = typeof (raw as { commandId?: unknown } | null)?.commandId === "string" ? (raw as { commandId: string }).commandId.slice(0, 200) : "";
+    const reply = (message: CommandStatusMessage) => { try { socket.send(JSON.stringify(message)); } catch { /* closed */ } return message; };
+    const reject = (code: CommandRejectCode, message: string) => reply({ type: "commandRejected", commandId, code, message });
+    if (sender.userId === null || !sender.viewer) return reject("forbidden", "Not allowed to send commands.");
+    const command = parseClientCommand(raw);
+    if (!command) return reject("invalid", "Malformed command or unknown operation.");
+    if (!sender.take()) return reject("rate-limited", `At most ${COMMAND_LIMITS.maxPerUserPerMinute} commands a minute.`);
+    const { type: _type, commandId: _id, confirm, ...input } = command;
+    const known = this.outbox.known(command.commandId);
+    if (known) {
+      // A null hash is a row from before hashes were stored: it cannot be compared.
+      if (known.hash !== null && known.hash !== commandHash(input)) {
+        return reject("conflict", "This command id was already used for a different command.");
+      }
+      return known.result ? reply({ type: "commandResult", ...known.result }) : reply({ type: "commandAccepted", commandId: command.commandId });
+    }
+    const now = this.now();
+    if (!this.coordinatorOnline(now)) return reject("coordinator-offline", "The coordinator is offline; try again when it reconnects.");
+    const tier = this.tierOf(input);
+    if (!confirmationSatisfies(tier, confirm, tier === 3 ? this.expectedConfirmation(input) : undefined)) {
+      return reject("confirmation-required", tier === 3 ? "Type the name to confirm." : "This command needs confirmation.");
+    }
+    const expired = this.outbox.expire(now);
+    for (const result of expired) this.broadcastResult(result);
+    if (this.outbox.size() >= COMMAND_LIMITS.maxQueued) return reject("outbox-full", "Too many commands are waiting for the coordinator.");
+    if (this.outbox.sizeFor(sender.userId) >= COMMAND_LIMITS.maxQueuedPerUser) {
+      return reject("outbox-full", `You have ${COMMAND_LIMITS.maxQueuedPerUser} commands waiting for the coordinator; wait for some to finish.`);
+    }
+    this.outbox.enqueue({ commandId: command.commandId, actor: sender.userId, queuedAt: now, ...input });
+    return reply({ type: "commandAccepted", commandId: command.commandId });
+  }
+
+  /** The sliding per-user minute limit, shared by all of the user's sockets. */
+  takeCommandSlot(userId: string, now = this.now()): boolean {
+    return this.outbox.take(userId, now);
+  }
+
+  /** What a tier-3 command must type: the plan id, or the item's repository. Undefined (never satisfied) when unknown. */
+  expectedConfirmation(command: CommandInput): string | undefined {
+    if (command.operation === "ControlPlan") return command.input.planId;
+    const item = this.store.item(command.input.itemId);
+    if (!item) return undefined;
+    const fromExecution = item.execution?.target.repository.repositoryId;
+    if (fromExecution) return fromExecution;
+    return this.store.plan(item.planId)?.definition.items.find((d) => d.itemId === item.itemId)?.target.repository.repositoryId;
   }
 
   /**
@@ -99,7 +216,11 @@ export class EdgeController {
     this.broadcast(message);
   }
 
-  private broadcast(message: EdgeMessage) {
+  private broadcastResult(result: CommandResult) {
+    this.broadcast({ type: "commandResult", ...result });
+  }
+
+  private broadcast(message: EdgeMessage | CommandStatusMessage) {
     const data = JSON.stringify(message);
     for (const socket of this.sockets()) {
       try { socket.send(data); } catch { /* closed socket */ }

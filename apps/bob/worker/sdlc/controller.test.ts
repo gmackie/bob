@@ -30,13 +30,13 @@ const WRITES = /^\s*(INSERT|UPDATE|DELETE|REPLACE)/i;
 describe("EdgeController.ingest", () => {
   it("stores accepted batches and broadcasts them to connected clients", () => {
     const h = harness(), edge = h.make(), client = h.socket();
-    expect(edge.ingest(batch({ kind: "snapshot", watermark: 2 }))).toEqual({ accepted: true, watermark: 2 });
+    expect(edge.ingest(batch({ kind: "snapshot", watermark: 2 }))).toEqual({ accepted: true, watermark: 2, commands: [] });
     expect(types(client)).toEqual(["snapshot"]);
     expect(edge.store.meta().watermark).toBe(2);
   });
   it("neither stores nor broadcasts a batch it must resync", () => {
     const h = harness(), edge = h.make(), client = h.socket();
-    expect(edge.ingest(batch({ fromSequence: 5, watermark: 6 }))).toEqual({ accepted: false, resync: true });
+    expect(edge.ingest(batch({ fromSequence: 5, watermark: 6 }))).toEqual({ accepted: false, resync: true, commands: [] });
     expect(client.sent).toEqual([]); expect(edge.store.meta()).toMatchObject({ watermark: 0, seq: 0 });
   });
   it("answers a heartbeat with a status broadcast and writes nothing", () => {
@@ -44,7 +44,7 @@ describe("EdgeController.ingest", () => {
     edge.ingest(batch({ kind: "snapshot", watermark: 2 }));
     const writes = h.sql.statements.length;
     h.tick(500);
-    expect(edge.ingest(batch({ kind: "heartbeat", watermark: 2 }))).toEqual({ accepted: true, watermark: 2 });
+    expect(edge.ingest(batch({ kind: "heartbeat", watermark: 2 }))).toEqual({ accepted: true, watermark: 2, commands: [] });
     expect(parsed(client).at(-1)).toEqual({ type: "status", coordinatorSeenAt: 1_500 });
     expect(h.sql.statements.slice(writes).filter((q) => WRITES.test(q))).toEqual([]);
   });
@@ -69,7 +69,7 @@ describe("EdgeController.ingest", () => {
     // A client at seq is still told it is current, and that is true.
     const resumer = h.socket(); edge.hello(resumer, { cursor: seq, epoch: "epoch-1" });
     expect(types(resumer)).toEqual(["status"]);
-    expect(edge.ingest(change)).toEqual({ accepted: true, watermark: 3 });
+    expect(edge.ingest(change)).toMatchObject({ accepted: true, watermark: 3 });
     expect(parsed(resumer).at(-1)).toMatchObject({ type: "delta", seq: seq + 1 });
   });
 });

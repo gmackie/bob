@@ -1,6 +1,8 @@
 // The SDLC edge client's logic without a socket or React, so node tests cover it.
 // use-sdlc-edge.ts wires it to a browser WebSocket.
-import { emptyView, reduce, type EdgeMessage, type EdgeView } from "@bob/sdlc-view";
+import { emptyView, reduce, type ClientCommand, type CommandInput, type Confirmation, type EdgeMessage, type EdgeView } from "@bob/sdlc-view";
+
+import { commandsToResend, emptyCommands, parseCommandStatus, reduceCommands, type CommandsState } from "./commands-model";
 
 export type EdgeConnection = "connecting" | "live" | "reconnecting";
 
@@ -66,6 +68,12 @@ export interface EdgeClient {
    * Returns whether it was a valid edge message; the hook resets its backoff on the first one.
    */
   received(data: unknown): boolean;
+  readonly commands: CommandsState;
+  /**
+   * Sends a command with a fresh commandId and tracks it. If no socket is open the
+   * command stays pending and goes out on the next open. Returns the commandId.
+   */
+  send(command: CommandInput, label: string, confirm?: Confirmation): string;
 }
 
 /**
@@ -73,20 +81,48 @@ export interface EdgeClient {
  * it sends one hello with cursor null on the open socket; the edge answers with a
  * snapshot, which clears needsResync. It asks again only after that, or on a new socket.
  */
-export function createEdgeClient(options: { send: (data: string) => void; onView?: (view: EdgeView) => void; initial?: EdgeView }): EdgeClient {
+export function createEdgeClient(options: {
+  send: (data: string) => void;
+  onView?: (view: EdgeView) => void;
+  onCommands?: (commands: CommandsState) => void;
+  initial?: EdgeView;
+  newCommandId?: () => string;
+}): EdgeClient {
   let view = options.initial ?? emptyView();
+  let commands = emptyCommands();
   let resyncRequested = false;
+  const newCommandId = options.newCommandId ?? (() => crypto.randomUUID());
   const hello = (message: HelloMessage) => options.send(JSON.stringify(message));
+  const setCommands = (next: CommandsState) => {
+    if (next === commands) return;
+    commands = next;
+    options.onCommands?.(commands);
+  };
   return {
     get view() { return view; },
+    get commands() { return commands; },
     opened() {
       // The hello on a new socket already asks for a snapshot when the view needs one.
       resyncRequested = view.needsResync;
       hello(helloFor(view));
+      // Commands still in flight go again with the same commandId; the edge dedupes.
+      for (const command of commandsToResend(commands)) options.send(JSON.stringify(command));
+    },
+    send(input, label, confirm) {
+      const command = { type: "command", commandId: newCommandId(), ...input, ...(confirm ? { confirm } : {}) } as ClientCommand;
+      setCommands(reduceCommands(commands, { type: "sent", command, label }));
+      options.send(JSON.stringify(command));
+      return command.commandId;
     },
     received(data) {
       const message = parseEdgeMessage(data);
-      if (!message) return false;
+      if (!message) {
+        // Command status messages are not EdgeMessages: they never touch the view.
+        const status = parseCommandStatus(data);
+        if (!status) return false;
+        setCommands(reduceCommands(commands, status));
+        return true;
+      }
       view = reduce(view, message);
       if (!view.needsResync) resyncRequested = false;
       else if (!resyncRequested) {

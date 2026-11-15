@@ -62,7 +62,7 @@ describe("coordinator exporter → SDLC edge", () => {
     f.edge.hello(f.client, { cursor: null, epoch: null });
 
     const first = f.create("c1", "item-1");
-    expect(await f.exporter.flush()).toEqual({ kind: "snapshot", sent: 2 });
+    expect(await f.exporter.flush()).toMatchObject({ kind: "snapshot", sent: 2 });
     expect(f.ids(f.client.view)).toEqual({ plans: [first], items: ["item-1"] });
     expect(f.edge.store.meta().watermark).toBe(f.coordinator.watermark());
     // The issue's identifier and link survive coordinator → exporter → edge → client.
@@ -82,7 +82,7 @@ describe("coordinator exporter → SDLC edge", () => {
 
     // Nothing new: after 30 s the exporter sends a heartbeat, which the edge accepts.
     f.tick(31_000);
-    expect(await f.exporter.flush()).toEqual({ kind: "heartbeat", sent: 0 });
+    expect(await f.exporter.flush()).toMatchObject({ kind: "heartbeat", sent: 0 });
     expect(f.client.view.coordinatorSeenAt).toBe(32_000);
 
     // The edge loses its storage. The next changes batch starts past its watermark, so
