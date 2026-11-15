@@ -24,6 +24,7 @@ const historical = files.filter(
       "0039_budget_governor.sql",
       "0040_budget_session_links.sql",
       "0041_budget_notification_types.sql",
+      "0042_sdlc_notification_types.sql",
     ].includes(entry.filename),
 );
 
@@ -50,7 +51,7 @@ describe("production migration deployment guard", () => {
     ).toThrow("mismatch");
     expect(() =>
       validateProductionMigrationLedger(
-        [...files, { filename: "0042_unreviewed.sql", hash: "new" }],
+        [...files, { filename: "0043_unreviewed.sql", hash: "new" }],
         historical,
       ),
     ).toThrow("roster");

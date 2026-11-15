@@ -59,7 +59,8 @@ export default function SdlcPage() {
   const scope = useMemo(() => scopeFromParams(searchParams), [searchParams]);
   const state = stateFromParams(searchParams);
   const setState = (next: typeof state) => router.replace(sdlcHref(scope, next), { scroll: false });
-  const [itemId, setItemId] = useState<string | null>(null);
+  // ?item= is where an SDLC push or inbox row points (BOB-81); it only seeds the selection.
+  const [itemId, setItemId] = useState<string | null>(() => searchParams.get("item"));
   const [planId, setPlanId] = useState<string | null>(null);
 
   // The selection is looked up within the scope, so drilling elsewhere hides it.

@@ -112,6 +112,9 @@ function firstRouteParam(
  */
 const PHONE_SCREEN_TITLES: readonly (readonly [string, string])[] = [
   ["home", "Home"],
+  ["attention", "Attention"],
+  ["attention/browse", "SDLC"],
+  ["attention/[itemId]", "Item"],
   ["tasks", "Tasks"],
   ["tasks/queue", "Priority Queue"],
   ["tasks/outcomes", "Recent Outcomes"],

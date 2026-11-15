@@ -33,6 +33,11 @@ export interface CreateInAppNotificationInput {
    * defaults to true, matching the column default).
    */
   push?: boolean;
+  /**
+   * Extra push `data`, merged over the defaults. A surface's own routing keys
+   * (SDLC pushes send {type:"sdlc", itemId}) go here; the inbox row keeps `type`.
+   */
+  pushData?: Record<string, unknown>;
 }
 
 async function pushEnabledForUser(db: Db, userId: string): Promise<boolean> {
@@ -78,6 +83,7 @@ export async function createInAppNotification(
             notificationId: notification.id,
             workItemId: input.workItemId ?? undefined,
             url: input.url ?? undefined,
+            ...input.pushData,
           },
           channelId: "tasks",
           priority: "default",

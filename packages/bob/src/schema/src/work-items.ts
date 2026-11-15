@@ -132,6 +132,11 @@ export const workItemNotificationType = [
   // the interactive reserve. Added by migration 0041.
   "budget_projected_miss",
   "budget_reserve_breach",
+  // SDLC alerts (BOB-81): an SDLC item waiting on an answer, ready for review,
+  // or failed. Added by migration 0042.
+  "sdlc_waiting_input",
+  "sdlc_review",
+  "sdlc_failed",
 ] as const;
 export type WorkItemNotificationType =
   (typeof workItemNotificationType)[number];

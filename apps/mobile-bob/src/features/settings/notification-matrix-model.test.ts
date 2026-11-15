@@ -24,6 +24,9 @@ describe("buildNotificationMatrix", () => {
     expect(rows.map((r) => r.type)).toEqual([
       "work_item_needs_input",
       "work_item_review_ready",
+      "sdlc_waiting_input",
+      "sdlc_review",
+      "sdlc_failed",
       "daily_plan_ready",
       "daily_review_ready",
       "proxy_unreachable",
@@ -130,8 +133,9 @@ describe("summariseNotificationPreferences", () => {
         masters: allOn,
         overrides: { work_item_needs_input: { push: false } },
       }),
-      // Eight types push by default (six + the two budget alerts); turning one off leaves seven.
-    ).toBe("7 events");
+      // Eleven types push by default (six, the two budget alerts and the three SDLC
+      // alerts); turning one off leaves ten.
+    ).toBe("10 events");
   });
 });
 

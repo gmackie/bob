@@ -27,6 +27,9 @@ import type {
 const ROW_ORDER: NotificationType[] = [
   "work_item_needs_input",
   "work_item_review_ready",
+  "sdlc_waiting_input",
+  "sdlc_review",
+  "sdlc_failed",
   "daily_plan_ready",
   "daily_review_ready",
   "proxy_unreachable",
@@ -43,6 +46,9 @@ const ROW_ORDER: NotificationType[] = [
 const ROW_LABELS: Record<NotificationType, string> = {
   work_item_needs_input: "Needs input",
   work_item_review_ready: "Review ready",
+  sdlc_waiting_input: "SDLC needs answer",
+  sdlc_review: "SDLC ready for review",
+  sdlc_failed: "SDLC item failed",
   daily_plan_ready: "Daily plan ready",
   daily_review_ready: "Daily review ready",
   proxy_unreachable: "Proxy unreachable",
@@ -59,6 +65,9 @@ const ROW_LABELS: Record<NotificationType, string> = {
 const ROW_HINTS: Record<NotificationType, string> = {
   work_item_needs_input: "An agent is blocked waiting on you",
   work_item_review_ready: "Work is ready for your review",
+  sdlc_waiting_input: "An SDLC item is waiting on your answer",
+  sdlc_review: "An SDLC item is ready for your review",
+  sdlc_failed: "An SDLC item failed and needs a look",
   daily_plan_ready: "Today's plan is waiting for your approval",
   daily_review_ready: "The day's review is ready to read",
   proxy_unreachable: "The inference proxy cannot be reached; no run can be served",

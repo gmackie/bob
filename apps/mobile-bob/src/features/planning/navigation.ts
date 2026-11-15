@@ -204,7 +204,13 @@ export function getNotificationTargetHref(data: {
   workspaceId?: string | null;
   sessionId?: string | null;
   url?: string | null;
+  type?: string | null;
+  itemId?: string | null;
 }): Extract<Href, string> | null {
+  // SDLC pushes (BOB-75 Phase 4) name a coordinator item, not a work item.
+  if (data.type === "sdlc") {
+    return data.itemId ? `/attention/${encodeURIComponent(data.itemId)}` : "/attention";
+  }
   if (data.workItemId)
     return getWorkItemHref(data.workItemId, data.workspaceId);
   // Ad-hoc runs (blocked/host_unknown/terminal pushes) have no work item —
