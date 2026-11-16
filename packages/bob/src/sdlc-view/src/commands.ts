@@ -200,6 +200,8 @@ export function itemCommands(item: ItemSnapshot, plan?: PlanSnapshot): CommandOp
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const isId = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 200;
+/** A t3 runtime request id: Codex async question ids run to ~191 chars (coordination contract PromptId, BOB-85). */
+const isPromptId = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 1024;
 const isVersion = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 1;
 const isSha = (v: unknown): v is string => typeof v === "string" && SHA.test(v);
 const RELEASE_ACTIONS: ReadonlySet<string> = new Set<ReleaseAction>(["open-pr", "approve", "merge"]);
@@ -220,7 +222,7 @@ export function parseCommandInput(operation: unknown, input: unknown): CommandIn
     case "ReconcileItem":
       return isId(input.itemId) ? { operation, input: { itemId: input.itemId } } : null;
     case "ResolveInput":
-      return isId(input.itemId) && isId(input.attemptId) && isId(input.promptId) && typeof input.answer === "string" && input.answer.length >= 1 && input.answer.length <= 16000
+      return isId(input.itemId) && isId(input.attemptId) && isPromptId(input.promptId) && typeof input.answer === "string" && input.answer.length >= 1 && input.answer.length <= 16000
         ? { operation, input: { itemId: input.itemId, attemptId: input.attemptId, promptId: input.promptId, answer: input.answer } } : null;
     case "RequestRelease":
       if (!isId(input.itemId) || !isId(input.attemptId) || !RELEASE_ACTIONS.has(input.action as string) || !isSha(input.sourceRevision)) return null;

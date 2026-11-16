@@ -4,8 +4,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ExecutionCoordinator, evidenceWithCommit } from '../runtime/execution.mjs';
-import { outputValidators, storageVersion } from '../runtime/coordinator.mjs';
-import { edgeExporter } from '../runtime/edge.mjs';
+import { outputValidators, pendingInputValidator, storageVersion, validators } from '../runtime/coordinator.mjs';
+import { edgeExporter, parseCommandInput } from '../runtime/edge.mjs';
 import { answersMatch, decodeAnswers, inputCommandId } from '../runtime/input.mjs';
 
 const target = { environmentId: 'bob', projectId: 'bob', repository: { integrationId: 'forgegraph', repositoryId: 'bob' } };
@@ -206,6 +206,38 @@ test('the edge exporter relays ResolveInput without itemId and checks it names t
   assert.equal(results['relay-1'].ok, true); assert.equal(results['relay-1'].operation.state, 'accepted');
   assert.equal(logRows(c, 'relay-1')[0].actor, 'bob-user-3');
   assert.equal(getItem(c, 'item-1').state, 'running');
+});
+
+// BOB-85: t3's runtime-request id for a Codex async question, verbatim from production (191 chars).
+const CODEX_PROMPT_ID = 'runtime-request:provider:codex:provider-turn:provider-turn%3Aprovider%3Acodex%3Anative-turn%3A01a1e6aa-d07e-7ce2-b8c2-ba050d0744cb:native-request:async%3Acall_fc16422cc4a74b34b23f109b96c9345a';
+
+test('a Codex prompt id longer than 128 chars is recorded, snapshotted, relayed by the edge and answered', async t => {
+  assert.equal(CODEX_PROMPT_ID.length, 191);
+  assert.equal(pendingInputValidator(pending('attempt-1', CODEX_PROMPT_ID)), true, JSON.stringify(pendingInputValidator.errors));
+  assert.equal(pendingInputValidator(pending('attempt-1', 'p'.repeat(1025))), false);
+  assert.equal(validators.get('ResolveInput')({ contractVersion: '1', commandId: 'c', attemptId: 'attempt-1', promptId: CODEX_PROMPT_ID, answer }), true);
+  const edgeInput = promptId => parseCommandInput('ResolveInput', { itemId: 'item-1', attemptId: 'attempt-1', promptId, answer });
+  assert.equal(edgeInput('p'.repeat(1024))?.promptId.length, 1024);
+  assert.equal(edgeInput('p'.repeat(1025)), null);
+  const { c, dir } = await setup(t);
+  assert.deepEqual(c.recordPendingInput({ attemptId: 'attempt-1', pendingInput: pending('attempt-1', CODEX_PROMPT_ID) }), { changed: true });
+  const waiting = getItem(c, 'item-1');
+  assert.equal(waiting.state, 'waiting-input'); assert.equal(waiting.pendingInput.promptId, CODEX_PROMPT_ID);
+  assert.deepEqual(c.liveAttempts().map(a => a.promptId), [CODEX_PROMPT_ID]);
+  let commands = [{ commandId: 'relay-codex', actor: 'bob-user-3', queuedAt: 1, operation: 'ResolveInput', input: { itemId: 'item-1', attemptId: 'attempt-1', promptId: CODEX_PROMPT_ID, answer } }];
+  const batches = [];
+  const fetch = async (_url, req) => { const body = JSON.parse(req.body); batches.push(body); const reply = { accepted: true, watermark: body.watermark, commands }; commands = []; return Response.json(reply); };
+  const exporter = edgeExporter({ coordinator: c, endpoint: 'https://bob.test/api/sdlc/ingest', token: 't'.repeat(40), checkpoint: join(dir, 'edge.sqlite'), fetch, commands: { operations: ['ResolveInput'] } });
+  t.after(() => exporter.close());
+  await exporter.flush(); await exporter.flush();
+  // The edge snapshot carries the full id, and the relayed answer is accepted.
+  assert(batches.some(b => (b.items ?? []).some(i => i.pendingInput?.promptId === CODEX_PROMPT_ID)), 'snapshot carries the full prompt id');
+  const result = batches.flatMap(b => b.results ?? []).find(r => r.commandId === 'relay-codex');
+  assert.equal(result.ok, true, JSON.stringify(result)); assert.equal(result.operation.state, 'accepted');
+  assert.equal(getItem(c, 'item-1').state, 'running');
+  const [delivery] = c.pendingInputDeliveries();
+  assert.equal(delivery.promptId, CODEX_PROMPT_ID); assert.equal(delivery.id, 'attempt-1:' + CODEX_PROMPT_ID);
+  assert.equal(delivery.t3CommandId, inputCommandId('attempt-1', CODEX_PROMPT_ID, 'relay-codex'));
 });
 
 test('a version-four store gains the input delivery table; the README rollback reverses it', async t => {

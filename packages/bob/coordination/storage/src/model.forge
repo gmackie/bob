@@ -100,7 +100,7 @@ export resource CoordinationInputDelivery @tenant {
   attemptId : text length 1..128
   itemId : text length 1..128
   threadId : text length 1..128
-  promptId : text length 1..128
+  promptId : text length 1..1024
   commandId : text length 1..128
   operationId : text length 1..128
   answers : json?
