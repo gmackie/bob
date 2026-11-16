@@ -1,6 +1,8 @@
 /// Bob owns coordination; T3 owns environment-local execution.
 /// These functions declare the wire contract, not deployed handlers.
 export type OpaqueId = text length 1..128
+/// A t3 runtime request id. Codex async question ids run to ~191 characters (BOB-85).
+export type PromptId = text length 1..1024
 export type ContractVersion = text pattern "^1$"
 export type Sha256 = text pattern "^[a-f0-9]{64}$"
 export type CommitSha = text pattern "^[a-f0-9]{40}$"
@@ -211,7 +213,7 @@ export shape ResolveInputRequest {
   contractVersion : ContractVersion
   commandId : OpaqueId
   attemptId : OpaqueId
-  promptId : OpaqueId
+  promptId : PromptId
   answer : text length 1..16000
 }
 export shape SourceSnapshot {
@@ -382,7 +384,7 @@ export shape PendingQuestion {
 /// runtime request id. Present only while the item is waiting-input.
 export shape PendingInput {
   attemptId : OpaqueId
-  promptId : OpaqueId
+  promptId : PromptId
   kind : PendingInputKind
   questions : list<PendingQuestion> length 1..20
   createdAt : datetime

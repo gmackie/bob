@@ -2009,7 +2009,7 @@
                               "type": "string",
                               "x-forge-type": "text",
                               "minLength": 1,
-                              "maxLength": 128
+                              "maxLength": 1024
                             },
                             "kind": {
                               "type": "string",
@@ -5882,7 +5882,7 @@
                     "type": "string",
                     "x-forge-type": "text",
                     "minLength": 1,
-                    "maxLength": 128
+                    "maxLength": 1024
                   },
                   "answer": {
                     "type": "string",

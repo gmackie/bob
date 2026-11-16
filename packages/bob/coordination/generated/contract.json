@@ -2254,7 +2254,7 @@
                               "type": "string",
                               "x-forge-type": "text",
                               "minLength": 1,
-                              "maxLength": 128
+                              "maxLength": 1024
                             },
                             "kind": {
                               "type": "string",
@@ -2580,7 +2580,7 @@
                   ],
                   "additionalProperties": false
                 },
-                "fingerprint": "sha256:6cdd26c40976e9611f76281920ad0fd0c896c85e3e45014fafd97ae0181d051f"
+                "fingerprint": "sha256:1a4a49d277dc831d3e07f4651f86f47e31614a6552911d63399c16aff47a8cad"
               }
             }
           ]
@@ -2672,7 +2672,7 @@
           ]
         }
       ],
-      "fingerprint": "sha256:6d31ee09f11fd6830ae37868903dafd280722cba1ec7f58788b978ba8b693197"
+      "fingerprint": "sha256:f840e6fd618dd6d9d88b9d39913407df23944679dee821d83cf376f593ae1406"
     },
     {
       "id": "bob.functions.GetOperation",
@@ -6877,7 +6877,7 @@
                     "type": "string",
                     "x-forge-type": "text",
                     "minLength": 1,
-                    "maxLength": 128
+                    "maxLength": 1024
                   },
                   "answer": {
                     "type": "string",
@@ -6895,7 +6895,7 @@
                   "answer"
                 ]
               },
-              "fingerprint": "sha256:2e535f9b9c36d4fb0460501ad11bf6a1771356808c2f13636eb29f9ccfec4572"
+              "fingerprint": "sha256:7129dea3f1c99495cd6825fb159137046d6300ce05a93dfd8b4a57d24d6578e8"
             }
           }
         ]
@@ -7082,7 +7082,7 @@
           ]
         }
       ],
-      "fingerprint": "sha256:a0e5dbf4e5e8432bcca9b48ff997401987332ba9d36ed87e349b875757f10419"
+      "fingerprint": "sha256:9f77e6b449053deba895033beda35dee46c0cf41c587135d10e61bec25dae6ff"
     },
     {
       "id": "bob.functions.RetryItem",
@@ -8762,7 +8762,7 @@
       "bearerFormat": "JWT"
     }
   },
-  "fingerprint": "sha256:8444d11c178348e2134cc2ed51da01d8fd231bb7f8f0b007b30f6d1d79ac3458",
+  "fingerprint": "sha256:65de39bbb9bc6ea06f3c29e0cdeff0af0a20212cb16403e1be4a40eae96e3445",
   "generator": {
     "name": "forgec",
     "version": "0.5.0"

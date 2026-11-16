@@ -18,6 +18,8 @@ const DEPLOYMENT_ACTIONS = new Set(['deploy', 'promote', 'rollback']);
 const isSha = v => typeof v === 'string' && /^[a-f0-9]{40}$/.test(v);
 const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isId = v => typeof v === 'string' && v.length > 0 && v.length <= 200;
+// t3 runtime request ids (Codex async questions run to ~191 chars) — contract PromptId (BOB-85).
+const isPromptId = v => typeof v === 'string' && v.length > 0 && v.length <= 1024;
 const isVersion = v => Number.isSafeInteger(v) && v >= 1;
 /** Mirrors parseCommandInput in commands.ts: the operation input, or null. */
 export function parseCommandInput(operation, input) {
@@ -34,7 +36,7 @@ export function parseCommandInput(operation, input) {
     case 'ReconcileItem':
       return isId(input.itemId) ? { itemId: input.itemId } : null;
     case 'ResolveInput':
-      return isId(input.itemId) && isId(input.attemptId) && isId(input.promptId) && typeof input.answer === 'string' && input.answer.length >= 1 && input.answer.length <= 16000
+      return isId(input.itemId) && isId(input.attemptId) && isPromptId(input.promptId) && typeof input.answer === 'string' && input.answer.length >= 1 && input.answer.length <= 16000
         ? { itemId: input.itemId, attemptId: input.attemptId, promptId: input.promptId, answer: input.answer } : null;
     case 'RequestRelease':
       if (!isId(input.itemId) || !isId(input.attemptId) || !RELEASE_ACTIONS.has(input.action) || !isSha(input.sourceRevision)) return null;

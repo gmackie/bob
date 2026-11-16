@@ -71,4 +71,11 @@ describe("ResolveInput command", () => {
     expect(parseCommandInput("ResolveInput", { ...input, answer: "a".repeat(16001) })).toBeNull();
     expect(parseCommandInput("ResolveInput", { ...input, promptId: "" })).toBeNull();
   });
+  it("accepts a real Codex t3 prompt id longer than 128 chars (BOB-85)", () => {
+    const promptId = "runtime-request:provider:codex:provider-turn:provider-turn%3Aprovider%3Acodex%3Anative-turn%3A01a1e6aa-d07e-7ce2-b8c2-ba050d0744cb:native-request:async%3Acall_fc16422cc4a74b34b23f109b96c9345a";
+    expect(promptId).toHaveLength(191);
+    expect(parseCommandInput("ResolveInput", { ...input, promptId })).toEqual({ operation: "ResolveInput", input: { ...input, promptId } });
+    expect(parseCommandInput("ResolveInput", { ...input, promptId: "p".repeat(1024) })).not.toBeNull();
+    expect(parseCommandInput("ResolveInput", { ...input, promptId: "p".repeat(1025) })).toBeNull();
+  });
 });
