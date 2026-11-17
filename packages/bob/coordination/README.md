@@ -238,7 +238,22 @@ head later moves (as for cancelled items).
 retries publishing, or resumes a blocked release at the stage it blocked in; `RequestDeployment rollback` (tier 3 on the edge) rolls the
 recorded deployment back through ForgeGraph and blocks the release. Commands
 stay `accepted` until the worker carries them out. A superseded or cancelled
-attempt's release is retired. Release facts become Kanbanger effects: `pr-open`,
+attempt's release is retired.
+
+Retries (BOB-88): RetryItem gives the new attempt its own branch, the item's
+first attempt's branch plus `-a<N>` (N is the attempt's 1-based number for the
+item: `-a2`, `-a3`, ...; the base is truncated, never the suffix, to stay within
+240 characters), so the environment never reuses a branch an earlier attempt
+created. The superseded attempt's release becomes due at once; the driver
+retires it and, on the next pass, re-reads the PR it recorded: an open,
+unmerged PR gets a comment (`Superseded by attempt <id> (retry). Closed by Bob
+coordination.`) and is closed; a merged or already closed PR is left alone. The
+outcome is recorded on the release (`supersededPullRequest`) so it happens
+once; a Forgejo error keeps the release retired and retries with back-off.
+Cancellation alone never closes a PR. PR titles carry the issue key once: a
+work title that already starts with it is used as is.
+
+Release facts become Kanbanger effects: `pr-open`,
 `merged`, `checks-failed`, `blocked` and `rolled-back` comment; `review-ready`
 also moves the issue to "In Review" (by name, no fallback) and
 `production-verified` to "Done" (by name, else the first `completed` state). A

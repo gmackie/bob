@@ -82,6 +82,12 @@ export function forgePort({ forgejo, forgegraph, fetch: transport = fetch, timeo
       const pr = await json(await git('GET', `${repoPath(repo)}/pulls/${number}`), 'pull request');
       return { state: pr.state, merged: pr.merged === true, mergeSha: pr.merge_commit_sha ?? null, headSha: pr?.head?.sha ?? null, headRepo: pr?.head?.repo?.full_name ?? null, mergeable: pr.mergeable !== false };
     },
+    /** BOB-88: comments on the PR, then closes it. The caller checks it is open and not
+     * merged first; this never merges or reopens anything. */
+    async closePullRequest(repo, number, comment) {
+      await json(await git('POST', `${repoPath(repo)}/issues/${number}/comments`, { body: comment }), 'pull request comment');
+      await json(await git('PATCH', `${repoPath(repo)}/pulls/${number}`, { state: 'closed' }), 'close pull request');
+    },
     async combinedStatus(repo, sha) {
       const body = await json(await git('GET', `${repoPath(repo)}/commits/${sha}/status`), 'commit status');
       const total = Number(body?.total_count ?? (Array.isArray(body?.statuses) ? body.statuses.length : 0));
