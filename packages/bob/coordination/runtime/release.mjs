@@ -56,6 +56,14 @@ export function repoSlug(repository, policy = {}) {
   return /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(slug) ? slug : null;
 }
 
+/** The PR title: the work title, prefixed with the issue key unless it already starts
+ * with it (case-insensitive, followed by `:` or whitespace). */
+export function pullRequestTitle(identifier, title) {
+  if (!identifier) return title;
+  const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${escaped}(:|\\s)`, 'i').test(title) ? title : `${identifier}: ${title}`;
+}
+
 /** ReleaseStatus as projected onto ItemSnapshot.release. */
 export function statusOf(data) {
   const status = {
@@ -199,9 +207,11 @@ function settleCommand(coordinator, command, itemId, outcome, error, resourceVer
   coordinator.logCommand(command.kind === 'deployment' ? 'RequestDeployment' : 'RequestRelease', command.commandId, {}, { resourceId: itemId, operationId: command.operationId, outcome, actor: command.actor });
 }
 
+/** checks-failed and retired rows are scheduled at NEVER; they are due only when a
+ * RetryItem supersedes their attempt (BOB-88) or a retirement left a PR to close. */
 function claim(coordinator, { now, leaseMs, token }) {
   return coordinator.transaction(() => {
-    const row = coordinator.db.prepare(`SELECT * FROM coordination_release WHERE tenant=? AND owner=? AND stage IN ('awaiting-publish','checks-running','review-ready','merged','deploying','blocked','production-verified')
+    const row = coordinator.db.prepare(`SELECT * FROM coordination_release WHERE tenant=? AND owner=? AND stage IN ('awaiting-publish','checks-running','review-ready','merged','deploying','blocked','production-verified','checks-failed','retired')
       AND next_check_at<=? AND (lease_until IS NULL OR lease_until<=?) ORDER BY next_check_at, id LIMIT 1`).get(coordinator.tenant, coordinator.owner, now, now);
     if (!row) return null;
     coordinator.db.prepare('UPDATE coordination_release SET lease_owner=?,lease_until=? WHERE tenant=? AND id=?').run(token, now + leaseMs, coordinator.tenant, row.id);
@@ -247,7 +257,7 @@ export async function step(data, forge, { now, policy = {}, timings = releaseTim
         const base = await forge.defaultBranch(repo);
         const found = await forge.findPullRequest(repo, data.branch, base) ?? await forge.openPullRequest(repo, {
           head: data.branch, base,
-          title: data.issue?.identifier ? `${data.issue.identifier}: ${data.title}` : data.title,
+          title: pullRequestTitle(data.issue?.identifier, data.title),
           body: `Opened by Bob coordination for attempt \`${data.attemptId}\`${data.issue?.identifier ? ` (${data.issue.identifier})` : ''}.`,
         });
         pullRequest = { repository: data.repository, number: found.number, ...(found.url ? { url: found.url } : {}) };
@@ -366,6 +376,41 @@ function apply(coordinator, row, token, result, { now, timings }) {
   });
 }
 
+/** BOB-88: closes the PR a superseded attempt's retired release recorded, once. The PR is
+ * re-read first: a merged PR is never closed, one already closed is left alone. The
+ * outcome is recorded on the release (supersededPullRequest), so later passes skip it;
+ * a network error keeps the row retired and retries with the driver's back-off. */
+async function closeSupersededPullRequest(coordinator, forge, row, data, token, { now, policy, timings, supersededBy }) {
+  const save = (next, nextCheckAt, checkAttempts) => coordinator.transaction(() => coordinator.db.prepare('UPDATE coordination_release SET data=?,check_attempts=?,next_check_at=?,lease_owner=NULL,lease_until=NULL WHERE tenant=? AND id=? AND lease_owner=?')
+    .run(canonical(next), checkAttempts, nextCheckAt, coordinator.tenant, row.id, token));
+  if (!supersededBy) { save(data, NEVER, row.check_attempts); return null; }
+  const repo = repoSlug(data.repository, policy);
+  const number = data.pullRequest.number;
+  let outcome;
+  try {
+    if (!repo) outcome = 'unmapped';
+    else {
+      const pr = await forge.pullRequest(repo, number);
+      if (pr.merged) outcome = 'merged';
+      else if (pr.state !== 'open') outcome = 'already-closed';
+      else {
+        await forge.closePullRequest(repo, number, `Superseded by attempt ${supersededBy} (retry). Closed by Bob coordination.`);
+        outcome = 'closed';
+      }
+    }
+  } catch (error) {
+    if (error?.code !== 'NotFound') {
+      const backoff = Math.min(timings.pollMs * 2 ** Math.min(row.check_attempts, 5), 30 * 60_000);
+      save(data, now + backoff, row.check_attempts + 1);
+      return { attemptId: row.id, stage: 'retired', outcome: 'error', error: { code: error?.code ?? 'ForgeUnavailable', message: String(error?.message ?? error).slice(0, 300) } };
+    }
+    outcome = 'not-found';
+  }
+  const at = new Date(now).toISOString();
+  save({ ...data, supersededPullRequest: { supersededBy, number, outcome, at }, updatedAt: at }, NEVER, 0);
+  return { attemptId: row.id, from: 'retired', outcome: `superseded-pr-${outcome}` };
+}
+
 /** One release pass for the worker: advances at most `limit` due releases. */
 export async function advanceReleases(coordinator, forge, { now = Date.now(), limit = 5, policy = coordinator.context.release ?? {}, timings = releaseTimings, log = () => {} } = {}) {
   const summary = { processed: 0, changed: 0, errors: 0, results: [] };
@@ -375,13 +420,25 @@ export async function advanceReleases(coordinator, forge, { now = Date.now(), li
     if (!row) break;
     summary.processed++;
     const data = JSON.parse(row.data);
-    // A superseded or cancelled attempt's release stops here.
     let snapshot;
     try { ({ snapshot } = coordinator.item(row.item_id)); } catch (error) { if (error.code !== 'Forbidden' && error.code !== 'NotFound') throw error; }
-    if (!snapshot || snapshot.currentAttemptId !== row.id || ['cancelling', 'cancelled'].includes(snapshot.state)) {
+    // BOB-88: superseded means a retry made another attempt current. Cancellation alone
+    // never closes anything.
+    const supersededBy = snapshot?.currentAttemptId && snapshot.currentAttemptId !== row.id ? snapshot.currentAttemptId : null;
+    const closeDue = Boolean(supersededBy && data.pullRequest && !data.supersededPullRequest);
+    if (row.stage === 'retired') {
+      // Only a retired release whose superseded PR still has to be closed is ever due.
+      const entry = await closeSupersededPullRequest(coordinator, forge, row, data, token, { now, policy, timings, supersededBy: closeDue ? supersededBy : null });
+      if (entry) { if (entry.outcome === 'error') summary.errors++; summary.results.push(entry); log({ step: 'release', ...entry }); }
+      continue;
+    }
+    // A superseded or cancelled attempt's release stops here.
+    if (!snapshot || supersededBy || ['cancelling', 'cancelled'].includes(snapshot.state)) {
       coordinator.transaction(() => {
         const settleData = data.command ? { ...data, command: null } : data;
-        coordinator.db.prepare('UPDATE coordination_release SET stage=?,data=?,next_check_at=?,lease_owner=NULL,lease_until=NULL WHERE tenant=? AND id=? AND lease_owner=?').run('retired', canonical(settleData), NEVER, coordinator.tenant, row.id, token);
+        // A superseded attempt's recorded PR is closed on a following pass.
+        coordinator.db.prepare('UPDATE coordination_release SET stage=?,data=?,check_attempts=?,next_check_at=?,lease_owner=NULL,lease_until=NULL WHERE tenant=? AND id=? AND lease_owner=?')
+          .run('retired', canonical(settleData), closeDue ? 0 : row.check_attempts, closeDue ? now + 1 : NEVER, coordinator.tenant, row.id, token);
         if (data.command) settleCommand(coordinator, data.command, row.item_id, 'failed', { code: 'InvalidTransition', message: 'The attempt is no longer current' }, snapshot?.resourceVersion ?? 1);
       });
       summary.results.push({ attemptId: row.id, outcome: 'retired' });

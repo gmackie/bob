@@ -116,6 +116,34 @@ test('failed attempt retry gets new IDs only after terminal confirmation; old re
   call(f.service, 'RecordExecutionReceipt', receipt(second));
   assert.equal(f.service.call('GetItem', query(body.itemId)).item.state, 'completed');
 });
+test('each retry gets its own branch from the first attempt\'s base, never compounded, within 240 characters', async t => {
+  const retryOnce = async (f, previous, commandId) => {
+    const snapshot = f.service.call('GetItem', query(previous.itemId)).item;
+    call(f.service, 'RetryItem', { contractVersion: '1', commandId, itemId: previous.itemId, expectedVersion: snapshot.resourceVersion, previousAttemptId: previous.attemptId, reason: 'again' });
+    let next;
+    await f.service.dispatchOne(port({ submit: async r => { next = r; return admission(r); } }));
+    call(f.service, 'RecordExecutionReceipt', receipt(next, 'failed'));
+    return next;
+  };
+  const f = setup(t), body = request(f); call(f.service, 'RequestExecution', body); await f.service.dispatchOne(port());
+  call(f.service, 'RecordExecutionReceipt', receipt(body, 'failed'));
+  const second = await retryOnce(f, body, 'retry-2');
+  const third = await retryOnce(f, second, 'retry-3');
+  assert.equal(second.workspace.branch, 'BOB-44-execution-a2');
+  assert.equal(third.workspace.branch, 'BOB-44-execution-a3');
+  const { workspace, requestId, attemptId, ...rest } = second, original = { ...body };
+  for (const key of ['workspace', 'requestId', 'attemptId']) delete original[key];
+  assert.deepEqual(rest, original, 'everything else in the request is unchanged');
+  assert.equal(workspace.baseRevision, body.workspace.baseRevision);
+  void requestId; void attemptId;
+
+  const g = setup(t), long = { ...request(g), workspace: { baseRevision: 'a'.repeat(40), branch: 'b'.repeat(236) + '/xyz' } };
+  call(g.service, 'RequestExecution', long); await g.service.dispatchOne(port());
+  call(g.service, 'RecordExecutionReceipt', receipt(long, 'failed'));
+  const retried = await retryOnce(g, long, 'retry-long');
+  assert.equal(retried.workspace.branch, 'b'.repeat(236) + '-a2', 'the base is truncated (and its trailing separator dropped), not the suffix');
+  assert(retried.workspace.branch.length <= 240);
+});
 test('dependent work waits for its declared milestone and becomes ready on receipt', async t => {
   const dependency = { upstreamItemId: 'item-1', downstreamItemId: 'item-2', requiredMilestone: 'execution-succeeded' };
   const f = setup(t, { dependencies: [dependency] }), body = request(f);

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ExecutionCoordinator } from '../runtime/execution.mjs';
 import { outputValidators } from '../runtime/coordinator.mjs';
-import { advanceReleases, itemStateFor, repoSlug, releaseTimings } from '../runtime/release.mjs';
+import { advanceReleases, itemStateFor, repoSlug, releaseTimings, pullRequestTitle } from '../runtime/release.mjs';
 import { forgePort } from '../runtime/forge-port.mjs';
 import { deliverIssueEffect, releaseCommentFor } from '../runtime/issue-effects.mjs';
 
@@ -66,6 +66,7 @@ function fakeForge(overrides = {}) {
     async findPullRequest(repo, branch) { state.calls.push(['findPullRequest', branch]); return Object.entries(state.prs).find(([, pr]) => pr.branch === branch && pr.state === 'open')?.[0] ? { number: 9 } : null; },
     async openPullRequest(repo, body) { state.calls.push(['openPullRequest', body]); state.prs[9] = { state: 'open', merged: false, mergeSha: null, headSha: state.branches[body.head], mergeable: true, branch: body.head }; return { number: 9, url: 'https://git.forgegraf.com/gmackie/bob/pulls/9' }; },
     async pullRequest(repo, number) { return { ...state.prs[number] }; },
+    async closePullRequest(repo, number, comment) { state.calls.push(['closePullRequest', number, comment]); state.prs[number].state = 'closed'; },
     async combinedStatus(repo, head) { return state.statuses[head] ?? { state: 'none', total: 0 }; },
     async approve(repo, number, head) { state.calls.push(['approve', number, head]); return { approved: true }; },
     async merge(repo, number, head) {
@@ -277,6 +278,8 @@ test('a cancelled item retires its release and a network error backs off', async
   const retired = await pass(f, forge, T0 + 10 * 60_000);
   assert.deepEqual(retired.results.map(r => r.outcome), ['retired']);
   assert.equal(getItem(f).state, 'cancelled');
+  assert.equal((await pass(f, forge, T0 + 20 * 60_000)).processed, 0, 'cancellation alone never closes the PR');
+  assert.equal(forge.state.calls.some(c => c[0] === 'closePullRequest'), false);
 });
 
 test('itemStateFor and repoSlug', () => {
@@ -424,17 +427,18 @@ test('a retry that publishes nothing new does not adopt the previous attempt\'s 
   const failed = getItem(f);
   assert.equal(failed.state, 'failed');
   call(f.service, 'RetryItem', { contractVersion: '1', commandId: 'retry', itemId: 'item-1', expectedVersion: failed.resourceVersion, previousAttemptId: 'attempt-1', reason: 'again' });
-  const r2 = { ...request(f, '1'), requestId: getItem(f).currentAttemptId };
   const attemptId = getItem(f).currentAttemptId;
   const attempt = f.service.attempt(attemptId);
+  assert.equal(JSON.parse(attempt.request).workspace.branch, 'bob/BOB-1-task-a2');
   await f.service.dispatchOne(port);
   call(f.service, 'RecordExecutionReceipt', receipt({ ...JSON.parse(attempt.request) }, {}));
+  // The retry branch was cut from the old head and nothing new was pushed.
+  forge.state.branches['bob/BOB-1-task-a2'] = sha('d');
   await pass(f, forge, clock += 60_000);
-  assert.equal(getItem(f).release.stage, 'awaiting-publish', 'the old head on the shared branch is ignored');
-  forge.state.branches['bob/BOB-1-task'] = sha('5');
+  assert.equal(getItem(f).release.stage, 'awaiting-publish', 'the old head on the retry branch is ignored');
+  forge.state.branches['bob/BOB-1-task-a2'] = sha('5');
   await pass(f, forge, clock += 60_000);
   assert.equal(getItem(f).release.headSha, sha('5'));
-  void r2;
 });
 
 test('forgePort treats a 405 on an already merged PR as merged and ignores fork PRs', async () => {
@@ -447,4 +451,116 @@ test('forgePort treats a 405 on an already merged PR as merged and ignores fork 
   const forge = forgePort({ forgejo: { instanceUrl: 'https://git.example', token: 't' }, fetch: transport });
   assert.deepEqual(await forge.merge('gmackie/bob', 7, sha('d')), { merged: true, mergeSha: sha('e') });
   assert.equal((await forge.findPullRequest('gmackie/bob', 'b', 'master')).number, 4);
+});
+
+/** CI fails on attempt-1's PR #7, then RetryItem supersedes it. Returns the new attempt id. */
+async function failAndRetry(f, forge) {
+  forge.state.statuses[sha('d')] = { state: 'failure', total: 1 };
+  await succeed(f);
+  await pass(f, forge); await pass(f, forge);
+  const failed = getItem(f);
+  assert.equal(failed.release.stage, 'checks-failed');
+  call(f.service, 'RetryItem', { contractVersion: '1', commandId: 'retry', itemId: 'item-1', expectedVersion: failed.resourceVersion, previousAttemptId: 'attempt-1', reason: 'again' });
+  return getItem(f).currentAttemptId;
+}
+const releaseOf = (f, attemptId) => f.service.db.prepare('SELECT stage, data, next_check_at FROM coordination_release WHERE id=?').get(attemptId);
+const closes = forge => forge.state.calls.filter(c => c[0] === 'closePullRequest');
+
+test('a retry retires the superseded release and closes its open PR once, with a comment', async t => {
+  const f = setup(t), forge = fakeForge();
+  const next = await failAndRetry(f, forge);
+  assert.deepEqual((await pass(f, forge)).results.map(r => r.outcome), ['retired'], 'the checks-failed release is due after the retry');
+  assert.deepEqual((await pass(f, forge)).results.map(r => r.outcome), ['superseded-pr-closed']);
+  assert.deepEqual(closes(forge), [['closePullRequest', 7, `Superseded by attempt ${next} (retry). Closed by Bob coordination.`]]);
+  assert.equal(forge.state.prs[7].state, 'closed');
+  const row = releaseOf(f, 'attempt-1');
+  assert.equal(row.stage, 'retired');
+  assert.deepEqual(JSON.parse(row.data).supersededPullRequest, { supersededBy: next, number: 7, outcome: 'closed', at: JSON.parse(row.data).updatedAt });
+  assert.equal(row.next_check_at, Number.MAX_SAFE_INTEGER);
+  for (let i = 0; i < 3; i++) await pass(f, forge, clock += 60 * 60_000);
+  assert.equal(closes(forge).length, 1, 'idempotent across passes');
+  assert.equal(getItem(f).currentAttemptId, next);
+});
+
+test('a superseded PR that was merged (or already closed) is never closed', async t => {
+  const f = setup(t), forge = fakeForge();
+  await failAndRetry(f, forge);
+  Object.assign(forge.state.prs[7], { merged: true, state: 'closed', mergeSha: sha('e') });
+  await pass(f, forge); await pass(f, forge);
+  assert.deepEqual(closes(forge), []);
+  assert.equal(JSON.parse(releaseOf(f, 'attempt-1').data).supersededPullRequest.outcome, 'merged');
+
+  const g = setup(t), other = fakeForge();
+  await failAndRetry(g, other);
+  other.state.prs[7].state = 'closed';
+  await pass(g, other); await pass(g, other);
+  assert.deepEqual(closes(other), []);
+  assert.equal(JSON.parse(releaseOf(g, 'attempt-1').data).supersededPullRequest.outcome, 'already-closed');
+});
+
+test('a failed close keeps the release retired and is retried after back-off', async t => {
+  const f = setup(t);
+  let down = true;
+  const forge = fakeForge({
+    async closePullRequest(repo, number, comment) {
+      if (down) throw Object.assign(new Error('close pull request: HTTP 502'), { code: 'ForgeUnavailable' });
+      forge.state.calls.push(['closePullRequest', number, comment]); forge.state.prs[number].state = 'closed';
+    },
+  });
+  await failAndRetry(f, forge);
+  await pass(f, forge);
+  const failedClose = await pass(f, forge);
+  assert.equal(failedClose.errors, 1);
+  assert.deepEqual(failedClose.results.map(r => r.outcome), ['error']);
+  assert.equal(releaseOf(f, 'attempt-1').stage, 'retired', 'the retirement is kept');
+  assert.equal(JSON.parse(releaseOf(f, 'attempt-1').data).supersededPullRequest, undefined);
+  assert.equal((await pass(f, forge)).processed, 0, 'backed off');
+  down = false;
+  assert.deepEqual((await pass(f, forge, clock += releaseTimings.pollMs * 2)).results.map(r => r.outcome), ['superseded-pr-closed']);
+  assert.equal(closes(forge).length, 1);
+  assert.equal(forge.state.prs[7].state, 'closed');
+});
+
+test('the PR title carries the issue key once', async t => {
+  assert.equal(pullRequestTitle('BOB-86', 'record the receipt'), 'BOB-86: record the receipt');
+  assert.equal(pullRequestTitle('BOB-86', 'BOB-86: record the receipt'), 'BOB-86: record the receipt');
+  assert.equal(pullRequestTitle('BOB-86', 'bob-86 record the receipt'), 'bob-86 record the receipt');
+  assert.equal(pullRequestTitle('BOB-8', 'BOB-86: other work'), 'BOB-8: BOB-86: other work');
+  assert.equal(pullRequestTitle('BOB-86', 'BOB-86'), 'BOB-86: BOB-86');
+  assert.equal(pullRequestTitle(undefined, 'Task'), 'Task');
+
+  const f = setup(t), forge = fakeForge();
+  const r = { ...request(f), work: { ...request(f).work, title: 'BOB-1: Task 1' } };
+  call(f.service, 'RequestExecution', r);
+  await f.service.dispatchOne(port);
+  call(f.service, 'RecordExecutionReceipt', receipt(r, {}));
+  await pass(f, forge);
+  assert.equal(forge.state.calls.find(c => c[0] === 'openPullRequest')[1].title, 'BOB-1: Task 1');
+});
+
+test('forgePort closePullRequest comments, then closes, and errors carry only the HTTP status', async () => {
+  const seen = [];
+  let failOn = null;
+  const transport = async (url, init) => {
+    seen.push({ url, method: init.method, auth: init.headers.authorization, redirect: init.redirect, signal: init.signal instanceof AbortSignal, body: init.body ? JSON.parse(init.body) : null });
+    if (failOn && url.endsWith(failOn)) return new Response('{"message":"secret-token git-token leaked"}', { status: 500, headers: { 'x-token': 'git-token' } });
+    if (url.endsWith('/issues/7/comments')) return Response.json({ id: 1 }, { status: 201 });
+    if (url.endsWith('/pulls/7')) return Response.json({ number: 7, state: 'closed' });
+    return new Response(null, { status: 404 });
+  };
+  const forge = forgePort({ forgejo: { instanceUrl: 'https://git.example/', token: 'git-token' }, fetch: transport });
+  await forge.closePullRequest('gmackie/bob', 7, 'Superseded by attempt a2 (retry). Closed by Bob coordination.');
+  assert.deepEqual(seen.map(s => [s.method, s.url, s.body]), [
+    ['POST', 'https://git.example/api/v1/repos/gmackie/bob/issues/7/comments', { body: 'Superseded by attempt a2 (retry). Closed by Bob coordination.' }],
+    ['PATCH', 'https://git.example/api/v1/repos/gmackie/bob/pulls/7', { state: 'closed' }],
+  ]);
+  assert(seen.every(s => s.redirect === 'manual' && s.signal && s.auth === 'token git-token'));
+  for (const [path, label] of [['/issues/7/comments', 'pull request comment'], ['/pulls/7', 'close pull request']]) {
+    failOn = path; seen.length = 0;
+    const error = await forge.closePullRequest('gmackie/bob', 7, 'x').then(() => null, e => e);
+    assert.equal(error.message, `${label}: HTTP 500`);
+    assert.equal(error.status, 500);
+    assert.doesNotMatch(JSON.stringify({ ...error, message: error.message, stack: error.stack }), /git-token|secret/);
+    if (path === '/issues/7/comments') assert.equal(seen.length, 1, 'no close after a failed comment');
+  }
 });

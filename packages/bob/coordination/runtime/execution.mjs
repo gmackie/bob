@@ -103,6 +103,17 @@ export class ExecutionCoordinator extends Coordinator {
     this.db.prepare('INSERT INTO coordination_operation VALUES (?,?,?,?)').run(this.tenant, operationId, this.owner, canonical(operation));
     return operation;
   }
+  /** BOB-88: each retry gets its own branch, `<first attempt's branch>-a<N>` where N is
+   * the new attempt's 1-based number for the item, so the environment never collides
+   * with the branch an earlier attempt created. The base is always the first attempt's
+   * branch (never an already-suffixed one); a base too long for the contract's 240
+   * characters is truncated, never the suffix. */
+  retryBranch(itemId) {
+    const first = this.db.prepare('SELECT request FROM coordination_attempt WHERE tenant=? AND owner=? AND item_id=? ORDER BY rowid LIMIT 1').get(this.tenant, this.owner, itemId);
+    const { n } = this.db.prepare('SELECT COUNT(*) AS n FROM coordination_attempt WHERE tenant=? AND owner=? AND item_id=?').get(this.tenant, this.owner, itemId);
+    const suffix = `-a${n + 1}`, base = JSON.parse(first.request).workspace.branch;
+    return base.length + suffix.length <= 240 ? base + suffix : base.slice(0, 240 - suffix.length).replace(/[/.]+$/, '') + suffix;
+  }
   execute(name, input, options = {}) {
     if (!executionOperations.includes(name)) return super.execute(name, input, options);
     let body;
@@ -131,9 +142,14 @@ export class ExecutionCoordinator extends Coordinator {
         const previousAttempt = this.attempt(body.previousAttemptId);
         if (previousAttempt.state !== 'terminal') fail('ExecutionUnknown', 'Previous execution must be confirmed terminal');
         if (!['failed', 'cancelled'].includes(snapshot.state)) fail('InvalidTransition', 'Only failed/cancelled work can be retried');
-        const request = { ...JSON.parse(previousAttempt.request), requestId: randomUUID(), attemptId: randomUUID(), planVersion: plan.version };
+        const previousRequest = JSON.parse(previousAttempt.request);
+        const request = { ...previousRequest, requestId: randomUUID(), attemptId: randomUUID(), planVersion: plan.version, workspace: { ...previousRequest.workspace, branch: this.retryBranch(itemId) } };
         this.db.prepare('UPDATE coordination_item SET snapshot=? WHERE tenant=? AND owner=? AND id=?').run(canonical({ ...snapshot, state: 'ready' }), this.tenant, this.owner, itemId);
         value = this.reserve(request, body.commandId);
+        // BOB-88: the superseded attempt's release (checks-failed, blocked or already
+        // retired) is due now, so the release driver retires it and closes its open PR.
+        // Schedule only: the row's data and lease are the driver's.
+        this.db.prepare('UPDATE coordination_release SET next_check_at=0 WHERE tenant=? AND owner=? AND id=?').run(this.tenant, this.owner, previousAttempt.id);
       } else if (name === 'CancelItem') {
         itemId = body.itemId; value = this.cancelItem(body);
       } else if (name === 'ReconcileItem') {
