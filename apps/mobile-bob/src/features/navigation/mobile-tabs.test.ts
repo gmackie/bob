@@ -56,6 +56,7 @@ describe("resolveTabForPath", () => {
   it("keeps Attention lit across its drill-down and item detail", () => {
     expect(resolveTabForPath("/attention/browse?project=p1")).toBe("attention");
     expect(resolveTabForPath("/attention/item-1")).toBe("attention");
+    expect(resolveTabForPath("/arcade")).toBe("attention");
     expect(tabHref("attention")).toBe("/attention");
   });
 

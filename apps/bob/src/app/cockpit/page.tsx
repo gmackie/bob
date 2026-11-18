@@ -13,6 +13,7 @@ import { Suspense } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { useCockpitActions } from "~/components/cockpit/controls";
+import { FloorPanel } from "~/components/cockpit/floor-panel";
 import { SpectacleLayer, type BurstKind } from "~/components/cockpit/spectacle";
 import { AgentStage, HeaderStrip, PrPipelines, QueueLanes, Timeline24h } from "~/components/cockpit/wall";
 import { useCockpit } from "~/components/cockpit/use-cockpit";
@@ -89,6 +90,7 @@ function CockpitInner() {
           <AgentStage sessions={status.sessions} feeds={feeds} feedVersion={feedVersion} ops={ops} />
           <PrPipelines status={status} ops={ops} />
         </div>
+        <FloorPanel />
         <Timeline24h status={status} />
       </div>
     </div>

@@ -52,6 +52,7 @@ const ROUTE_OWNERS: readonly [prefix: string, tab: MobileTabKey][] = [
   ["/home", "home"],
   ["/today", "home"],
   ["/attention", "attention"],
+  ["/arcade", "attention"],
   ["/tasks", "tasks"],
   ["/work-items", "tasks"],
   ["/sessions", "tasks"],

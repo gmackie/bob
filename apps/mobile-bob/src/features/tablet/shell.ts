@@ -42,7 +42,9 @@ export type TabletShellTarget =
   | { type: "project"; projectId: string }
   | { type: "provider"; provider: ProviderKey }
   | { type: "task-lane"; lane: TaskLaneKey }
-  | { type: "settings" };
+  | { type: "settings" }
+  // Bob Arcade: the live SDLC floor (BOB-92).
+  | { type: "arcade" };
 
 export interface TabletShellState {
   mode: TabletShellMode;
@@ -289,6 +291,14 @@ export function getShellStateForPath(
     };
   }
 
+  if (path === "/arcade") {
+    return {
+      mode: currentMode,
+      leftTab: getDefaultLeftRailTab(currentMode),
+      target: { type: "arcade" },
+    };
+  }
+
   if (path === "/chat" || path.startsWith("/chat/")) {
     return switchShellMode("ooda");
   }
@@ -526,6 +536,7 @@ export function getShellModeForTarget(
     case "task-lane":
       return "tasks";
     case "settings":
+    case "arcade":
       return currentMode;
   }
 }
@@ -585,6 +596,7 @@ export function isNativeTabletShellTarget(target: TabletShellTarget): boolean {
     case "provider":
     case "task-lane":
     case "settings":
+    case "arcade":
       return true;
   }
 }

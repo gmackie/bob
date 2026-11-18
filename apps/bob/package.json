@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@bob/api": "workspace:*",
+    "@bob/arcade": "workspace:*",
     "@bob/auth": "workspace:*",
     "@bob/config": "workspace:*",
     "@bob/db": "workspace:*",
