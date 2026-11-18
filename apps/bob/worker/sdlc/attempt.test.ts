@@ -1,7 +1,7 @@
 // BOB-80 (BOB-75 Phase 3): the edge's attempt level — tail route, tail validation and
 // fan-out, watches across hibernation, the unavailable marker, ResolveInput checks.
 import { describe, expect, it, vi } from "vitest";
-import { encodeAnswers, TAIL_LIMITS, type CiMessage, type ItemSnapshot, type PendingInput, type PlanSnapshot, type TailFrame } from "@bob/sdlc-view";
+import { encodeAnswers, MAX_WATCHED_ITEMS, TAIL_LIMITS, type CiMessage, type ItemSnapshot, type PendingInput, type PlanSnapshot, type TailFrame } from "@bob/sdlc-view";
 import { AttemptEdge, tailResponse } from "./attempt-edge";
 import { EdgeController } from "./controller";
 import { attachUser, greet, greetedSockets, handleCommand, parseCommandMessage, parseWatchMessage, readAttachment } from "./edge-sockets";
@@ -219,7 +219,7 @@ describe("watch and tail fan-out", () => {
     for (const s of [ungreeted, anon, stranger]) expect(h.watch(s, "i1")).toBe(false);
     h.edge.ingestTail([frame()]);
     for (const s of [ungreeted, anon, stranger]) expect(s.sent).toEqual([]);
-    expect(readAttachment(stranger).watch).toBeUndefined();
+    expect(readAttachment(stranger).watches).toBeUndefined();
   });
   it("re-checks the allow-list on fan-out", () => {
     const h = harness();
@@ -257,12 +257,137 @@ describe("watch and tail fan-out", () => {
     h.watch(s, "i1");
     const woken = rehydrate(s);
     h.all.splice(h.all.indexOf(s), 1, woken);
-    expect(readAttachment(woken)).toMatchObject({ greeted: true, userId: "u1", watch: "i1" });
+    expect(readAttachment(woken)).toMatchObject({ greeted: true, userId: "u1", watches: ["i1"] });
     h.edge.ingestTail([frame()]);
     expect(messages(woken)).toEqual([{ type: "tail", frame: frame() }]);
     // A later hello keeps the watch.
     greet(h.controller, woken, { cursor: null, epoch: null }, () => {});
-    expect(readAttachment(woken).watch).toBe("i1");
+    expect(readAttachment(woken).watches).toEqual(["i1"]);
+  });
+});
+
+// ─── Multi-watch (BOB-94) ─────────────────────────────────────────────────────
+
+describe("multi-watch (BOB-94)", () => {
+  const watchMany = (h: ReturnType<typeof harness>, s: Socket, itemIds: string[]) =>
+    h.edge.watch(s, parseWatchMessage(JSON.stringify({ type: "watch", itemIds }))!);
+  const running = (...ids: string[]) => ids.map((id) => item("running", {}, id));
+
+  it("parses the multi form strictly", () => {
+    expect(parseWatchMessage(JSON.stringify({ type: "watch", itemIds: ["i1", "i2"] }))).toEqual({ type: "watch", itemIds: ["i1", "i2"] });
+    expect(parseWatchMessage(JSON.stringify({ type: "watch", itemIds: [] }))).toEqual({ type: "watch", itemIds: [] });
+    for (const bad of [
+      { type: "watch", itemIds: "i1" },
+      { type: "watch", itemIds: ["i1", ""] },
+      { type: "watch", itemIds: ["i1", 3] },
+      { type: "watch", itemIds: ["x".repeat(201)] },
+      { type: "watch", itemIds: ["i1"], itemId: "i2" },
+      { type: "watch", itemIds: Array.from({ length: 4 * MAX_WATCHED_ITEMS + 1 }, (_, i) => `i${i}`) },
+    ]) expect(parseWatchMessage(JSON.stringify(bad))).toBeNull();
+    // Six ids of the longest allowed length fit under the message cap.
+    const longest = Array.from({ length: MAX_WATCHED_ITEMS }, (_, i) => `${i}`.padEnd(200, "x"));
+    expect(parseWatchMessage(JSON.stringify({ type: "watch", itemIds: longest }))).not.toBeNull();
+  });
+
+  it("sends each item's frames to every socket whose set contains it", () => {
+    const h = harness(running("i1", "i2", "i3"));
+    const desk = h.connect("u1"), single = h.connect("u2");
+    watchMany(h, desk, ["i1", "i2"]); h.watch(single, "i2");
+    for (const s of [desk, single]) s.sent.length = 0;
+    h.edge.ingestTail([frame("i1"), frame("i2"), frame("i3")]);
+    expect(messages(desk).map((m) => (m.frame as TailFrame).itemId)).toEqual(["i1", "i2"]);
+    expect(messages(single).map((m) => (m.frame as TailFrame).itemId)).toEqual(["i2"]);
+  });
+
+  it("caps the set at MAX_WATCHED_ITEMS, deduped, in order", () => {
+    const ids = Array.from({ length: MAX_WATCHED_ITEMS + 2 }, (_, i) => `i${i}`);
+    const h = harness(running(...ids));
+    const s = h.connect("u1");
+    watchMany(h, s, [ids[1]!, ids[1]!, ...ids]);
+    expect(readAttachment(s).watches).toEqual([ids[1], ids[0], ...ids.slice(2, MAX_WATCHED_ITEMS)]);
+    s.sent.length = 0;
+    h.edge.ingestTail(ids.map((id) => frame(id)));
+    expect(messages(s)).toHaveLength(MAX_WATCHED_ITEMS);
+    expect(h.edge.watchedItems()).toHaveLength(MAX_WATCHED_ITEMS);
+  });
+
+  it("a new set replaces the old one, replays only newly added items, and an empty list stops", async () => {
+    const h = harness(running("i1", "i2", "i3"));
+    h.edge.ingestTail([frame("i1"), frame("i2"), frame("i3")]);
+    const s = h.connect("u1");
+    expect(watchMany(h, s, ["i1", "i2"])).toBe(true);
+    await h.settle();
+    s.sent.length = 0;
+    h.ciMessage.mockClear();
+    watchMany(h, s, ["i2", "i3"]);
+    await h.settle();
+    expect(messages(s).map((m) => [m.type, (m.frame as TailFrame | undefined)?.itemId ?? m.itemId])).toEqual([["tail", "i3"], ["ci", "i3"]]);
+    expect(h.ciMessage).toHaveBeenCalledTimes(1);
+    s.sent.length = 0;
+    h.edge.ingestTail([frame("i1"), frame("i2"), frame("i3")]);
+    expect(messages(s).map((m) => (m.frame as TailFrame).itemId)).toEqual(["i2", "i3"]);
+    expect(watchMany(h, s, [])).toBe(false);
+    expect(readAttachment(s)).toEqual({ userId: "u1", greeted: true });
+    s.sent.length = 0;
+    h.edge.ingestTail([frame("i2")]);
+    expect(s.sent).toEqual([]);
+  });
+
+  it("sends tailUnavailable per new item that has no fresh frame", () => {
+    const h = harness(running("i1", "i2"));
+    h.edge.ingestTail([frame("i1")]);
+    const s = h.connect("u1");
+    watchMany(h, s, ["i1", "i2"]);
+    expect(messages(s).map((m) => m.type)).toEqual(["tail", "tailUnavailable"]);
+    expect(messages(s)[1]).toMatchObject({ itemId: "i2" });
+  });
+
+  it("drops CI for an item that left the set before its reply arrived", async () => {
+    const h = harness(running("i1", "i2"));
+    const s = h.connect("u1");
+    watchMany(h, s, ["i1", "i2"]);
+    watchMany(h, s, ["i2"]);
+    s.sent.length = 0;
+    await h.settle();
+    expect(messages(s).filter((m) => m.type === "ci").map((m) => m.itemId)).toEqual(["i2"]);
+  });
+
+  it("polls CI for every watched item once, however many sockets watch it", async () => {
+    const h = harness(running("i1", "i2", "i3"));
+    const a = h.connect("u1"), b = h.connect("u2");
+    watchMany(h, a, ["i1", "i2"]); watchMany(h, b, ["i2", "i3"]);
+    await h.settle();
+    h.ciMessage.mockClear();
+    expect(await h.edge.pollCi()).toBe(true);
+    expect(h.ciMessage.mock.calls.map(([i]) => i.itemId).sort()).toEqual(["i1", "i2", "i3"]);
+  });
+
+  it("refuses a multi watch from a socket that may not watch", () => {
+    const h = harness(running("i1", "i2"));
+    const stranger = h.connect("u9");
+    expect(watchMany(h, stranger, ["i1", "i2"])).toBe(false);
+    expect(readAttachment(stranger).watches).toBeUndefined();
+  });
+
+  it("still serves a socket whose attachment holds the pre-BOB-94 single watch", () => {
+    const h = harness(running("i1", "i2"));
+    const s = h.connect("u1");
+    s.serializeAttachment({ ...readAttachment(s), watch: "i1" });
+    s.sent.length = 0;
+    h.edge.ingestTail([frame("i1")]);
+    expect(messages(s).map((m) => (m.frame as TailFrame).itemId)).toEqual(["i1"]);
+    expect(h.edge.watchedItems()).toEqual(["i1"]);
+    // The next watch rewrites it in the new form.
+    watchMany(h, s, ["i2"]);
+    expect(readAttachment(s)).toEqual({ userId: "u1", greeted: true, watches: ["i2"] });
+  });
+
+  it("a full set with a long user id stays under the 2 KiB hibernation attachment limit", () => {
+    const h = harness();
+    const s = h.connect("u".repeat(64));
+    h.setViewers("u".repeat(64));
+    watchMany(h, s, Array.from({ length: MAX_WATCHED_ITEMS }, (_, i) => `${i}`.padEnd(200, "x")));
+    expect(new TextEncoder().encode(JSON.stringify(readAttachment(s))).byteLength).toBeLessThan(2048);
   });
 });
 

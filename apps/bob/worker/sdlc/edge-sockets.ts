@@ -1,6 +1,6 @@
 // The SdlcEdge Durable Object's logic that does not need the Workers runtime, so node
 // tests can cover it with fakes. edge-do.ts only wires these to the DO's state.
-import type { WatchMessage } from "@bob/sdlc-view";
+import { MAX_WATCHED_ITEMS, type WatchMessage } from "@bob/sdlc-view";
 import type { CommandSender, EdgeController, EdgeSocket, Hello } from "./controller";
 import { isViewer } from "./routes";
 import { parseBatch } from "./store";
@@ -26,8 +26,19 @@ export const MAX_COMMAND_CHARS = 64 * 1024;
 export interface SocketAttachment {
   greeted?: boolean;
   userId?: string;
-  /** The one item whose attempt detail (tail, CI) this socket watches (BOB-80). */
+  /**
+   * The one item a socket watched before BOB-94. Only read, from attachments written by
+   * an older deploy; a watch now always writes `watches` and removes this.
+   */
   watch?: string;
+  /** The items whose attempt detail (tail, CI) this socket watches (BOB-80, BOB-94); at most MAX_WATCHED_ITEMS. */
+  watches?: string[];
+}
+
+/** The items a socket watches, from either attachment form. */
+export function watchesOf(attachment: SocketAttachment): string[] {
+  if (Array.isArray(attachment.watches)) return attachment.watches.filter((id): id is string => typeof id === "string");
+  return typeof attachment.watch === "string" ? [attachment.watch] : [];
 }
 
 export function readAttachment(socket: AttachedSocket): SocketAttachment {
@@ -93,19 +104,32 @@ export function greet(controller: Pick<EdgeController, "hello">, socket: Attache
   }));
 }
 
-/** A watch is `{type:"watch", itemId}`; anything longer is ignored unread. */
-export const MAX_WATCH_CHARS = 512;
+/**
+ * A watch is `{type:"watch", itemId}` or `{type:"watch", itemIds}`; anything longer is
+ * ignored unread. Room for MAX_WATCHED_ITEMS ids of up to 200 characters, escaped.
+ */
+export const MAX_WATCH_CHARS = 4096;
+/** A multi watch listing more ids than this is ignored; up to it, ids past MAX_WATCHED_ITEMS are dropped. */
+const MAX_LISTED_IDS = 4 * MAX_WATCHED_ITEMS;
+const isItemId = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 200;
 
-/** Parses a client's WatchMessage: `{type:"watch", itemId: string|null}`. Anything else is null. */
+/**
+ * Parses a client's WatchMessage: `{type:"watch", itemId: string|null}`, or (BOB-94)
+ * `{type:"watch", itemIds: string[]}` with every id valid. Anything else is null.
+ */
 export function parseWatchMessage(message: string | ArrayBuffer): WatchMessage | null {
   if (typeof message !== "string" || message.length > MAX_WATCH_CHARS) return null;
   let value: unknown;
   try { value = JSON.parse(message); } catch { return null; }
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  const { type, itemId } = value as Record<string, unknown>;
+  const { type, itemId, itemIds } = value as Record<string, unknown>;
   if (type !== "watch") return null;
+  if (itemIds !== undefined) {
+    if (itemId !== undefined || !Array.isArray(itemIds) || itemIds.length > MAX_LISTED_IDS || !itemIds.every(isItemId)) return null;
+    return { type: "watch", itemIds: [...itemIds] };
+  }
   if (itemId === null) return { type: "watch", itemId: null };
-  return typeof itemId === "string" && itemId.length > 0 && itemId.length <= 200 ? { type: "watch", itemId } : null;
+  return isItemId(itemId) ? { type: "watch", itemId } : null;
 }
 
 /** The user id a new socket carries; set once, when the DO accepts the upgrade. */
