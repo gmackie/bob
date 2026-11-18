@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -46,6 +47,74 @@ describe("slugify", () => {
 });
 
 describe("generateBranchName", () => {
+  it("admits colon-separated intake identities through Git without losing identity", () => {
+    const identifier =
+      "bizpulse:2026-10-05:startup-id:connector_failure:restore-connection";
+    const branch = generateBranchName(identifier, "Restore connection");
+    expect(
+      execFileSync("git", ["check-ref-format", "--branch", branch], {
+        encoding: "utf8",
+      }).trim(),
+    ).toBe(branch);
+    expect(decodeURIComponent(branch.split("/")[1] ?? "")).toBe(identifier);
+  });
+
+  it("does not merge identities when escaping punctuation or Unicode", () => {
+    const identifiers = [
+      "a:b",
+      "ab",
+      "a-b",
+      "a/b",
+      "a%3Ab",
+      "a.b",
+      "a@{b}",
+      "a b",
+      "é",
+      "日本語",
+      "a\\b",
+      "a\u0000b",
+    ];
+    const branches = identifiers.map((id) =>
+      generateBranchName(id, "Same title"),
+    );
+    expect(new Set(branches).size).toBe(identifiers.length);
+    for (const [index, branch] of branches.entries()) {
+      expect(
+        execFileSync("git", ["check-ref-format", "--branch", branch], {
+          encoding: "utf8",
+        }).trim(),
+      ).toBe(branch);
+      expect(decodeURIComponent(branch.split("/")[1] ?? "")).toBe(
+        identifiers[index],
+      );
+      expect(generateBranchName(identifiers[index] ?? "", "Same title")).toBe(
+        branch,
+      );
+      expect(
+        execFileSync("git", ["check-ref-format", "--branch", `${branch}-a2`], {
+          encoding: "utf8",
+        }).trim(),
+      ).toBe(`${branch}-a2`);
+    }
+  });
+
+  it.each(["", "!!!", "日本語"])(
+    "uses a nonempty branch component for title %j",
+    (title) => {
+      const branch = generateBranchName("work-item", title);
+      expect(branch).toBe("bob/work-item/task");
+      expect(
+        execFileSync("git", ["check-ref-format", "--branch", branch], {
+          encoding: "utf8",
+        }).trim(),
+      ).toBe(branch);
+    },
+  );
+
+  it("refuses an absent identifier rather than sharing an anonymous branch", () => {
+    expect(() => generateBranchName("", "Task")).toThrow("identifier");
+  });
+
   it("builds bob/<identifier>/<slug>", () => {
     expect(generateBranchName("1a2b3c4d", "Fix the login bug")).toBe(
       "bob/1a2b3c4d/fix-the-login-bug",
@@ -71,7 +140,9 @@ describe("tracker identifiers", () => {
   it("accepts exactly what Kanbanger's [A-Z]{2,10}-\\d+ extractor finds", () => {
     expect(isTrackerIdentifier("GMA-612")).toBe(true);
     expect(isTrackerIdentifier("gma-612")).toBe(false);
-    expect(isTrackerIdentifier("1df6e8a9-d380-4fb9-8929-ee8700d2c0b4")).toBe(false);
+    expect(isTrackerIdentifier("1df6e8a9-d380-4fb9-8929-ee8700d2c0b4")).toBe(
+      false,
+    );
     expect(isTrackerIdentifier("81431962")).toBe(false);
     expect(isTrackerIdentifier(null)).toBe(false);
   });
@@ -85,7 +156,9 @@ describe("tracker identifiers", () => {
         sourceMetadata: { trackerIdentifier: "GMA-700" },
       }),
     ).toBe("GMA-700");
-    expect(trackerIdentifierOf({ externalProvider: "linear", externalId: "GMA-5" })).toBe("GMA-5");
+    expect(
+      trackerIdentifierOf({ externalProvider: "linear", externalId: "GMA-5" }),
+    ).toBe("GMA-5");
     expect(
       trackerIdentifierOf({
         externalProvider: "linear",
@@ -97,18 +170,25 @@ describe("tracker identifiers", () => {
   });
 
   it("is null for internal items and for imports with no recoverable identifier", () => {
-    expect(trackerIdentifierOf({ externalProvider: null, externalId: "GMA-5" })).toBeNull();
     expect(
-      trackerIdentifierOf({ externalProvider: "linear", externalId: "1df6e8a9-d380-4fb9-8929-ee8700d2c0b4" }),
+      trackerIdentifierOf({ externalProvider: null, externalId: "GMA-5" }),
+    ).toBeNull();
+    expect(
+      trackerIdentifierOf({
+        externalProvider: "linear",
+        externalId: "1df6e8a9-d380-4fb9-8929-ee8700d2c0b4",
+      }),
     ).toBeNull();
   });
 
   it("builds bob/GMA-612-<slug>, keeping the identifier upper-case for Kanbanger's matcher", () => {
-    expect(generateTrackerBranchName("GMA-612", "Fix the login redirect!")).toBe(
-      "bob/GMA-612-fix-the-login-redirect",
-    );
+    expect(
+      generateTrackerBranchName("GMA-612", "Fix the login redirect!"),
+    ).toBe("bob/GMA-612-fix-the-login-redirect");
     expect(generateTrackerBranchName("GMA-612", "!!!")).toBe("bob/GMA-612");
     // The identifier survives verbatim, so Kanbanger finds it in the head ref.
-    expect(/[A-Z]{2,10}-\d+/.exec(generateTrackerBranchName("GMA-612", "x"))?.[0]).toBe("GMA-612");
+    expect(
+      /[A-Z]{2,10}-\d+/.exec(generateTrackerBranchName("GMA-612", "x"))?.[0],
+    ).toBe("GMA-612");
   });
 });

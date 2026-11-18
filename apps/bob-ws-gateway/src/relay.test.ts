@@ -1371,6 +1371,43 @@ describe("Relay", () => {
       expect(taskUpdate?.blockedReason).toBe("boom: agent exited 1");
     });
 
+    it.each([true, false])("blocks a deterministic branch admission failure instead of retrying another provider (task run: %s)", async (hasTaskRun) => {
+      const daemonWs = new FakeWs();
+      relay.handleConnection(daemonWs as any);
+      daemonWs.receive({
+        type: "hello", clientId: "d1", deviceType: "daemon",
+        token: "good-daemon", workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+      const SID = "55555555-5555-4555-8555-555555555555";
+      (db.query.chatConversations.findFirst as any).mockResolvedValueOnce({
+        id: SID, userId: "user-1", status: "starting", workItemId: "wi-1", agentType: "codex",
+      });
+      (db.query.taskRuns.findFirst as any) = vi.fn(() =>
+        Promise.resolve(hasTaskRun ? { id: "tr-1", workItemId: "wi-1" } : null),
+      );
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (payload: any) => {
+          setPayloads.push(payload);
+          return { where: () => Promise.resolve() };
+        },
+      }));
+      daemonWs.receive({
+        type: "session_status", sessionId: SID, status: "error",
+        summary: {
+          code: "INVALID_BRANCH", phase: "worktree_admission", modelStarted: false, retryable: false,
+          error: "Session branch must be a valid Git branch of at most 240 bytes",
+        },
+      } as any);
+      await new Promise((r) => setImmediate(r));
+      expect(setPayloads.find((p) => p.lastError)?.lastError.code).toBe("INVALID_BRANCH");
+      expect(setPayloads).toContainEqual({ status: "blocked" });
+      expect(setPayloads).not.toContainEqual({ status: "ready" });
+      if (hasTaskRun) expect(setPayloads.find((p) => "blockedReason" in p)).toMatchObject({ status: "failed" });
+      expect(setPayloads.find((p) => p.summary)?.summary).toMatchObject({ modelStarted: false, retryable: false });
+    });
+
     it("never marks a no-commit run done or in review", async () => {
       const daemonWs = new FakeWs();
       relay.handleConnection(daemonWs as any);

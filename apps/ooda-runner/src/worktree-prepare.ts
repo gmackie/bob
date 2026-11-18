@@ -15,6 +15,7 @@
  * filesystem explained the failure.
  */
 
+import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -36,6 +37,34 @@ function samePath(a: string, b: string): boolean {
 
 /** Runs git in `cwd` and resolves with stdout. */
 export type GitRunner = (cwd: string, args: string[]) => Promise<string>;
+
+/** Keep distinct refs distinct on disk, including escaped external identities. */
+export function worktreeDirectoryName(branch: string): string {
+  return createHash("sha256").update(branch).digest("hex");
+}
+
+export const INVALID_BRANCH_ERROR = "Session branch must be a valid Git branch of at most 240 bytes";
+
+/** Read-only admission, before fetch, cleanup, checkout or any agent starts. */
+export async function assertValidWorktreeBranch(
+  git: GitRunner,
+  cwd: string,
+  branch: string,
+): Promise<void> {
+  // Bound admitted refs without truncating away item identity. Escaping a long
+  // Unicode identity can otherwise exceed the intended branch-name limit.
+  if (!branch || Buffer.byteLength(branch, "utf8") > 240) {
+    throw new Error(INVALID_BRANCH_ERROR);
+  }
+  try {
+    const checked = await git(cwd, ["check-ref-format", "--branch", branch]);
+    // Git may expand checkout shorthand. Admission must validate the exact ref.
+    if (checked.trim() !== branch) throw new Error(INVALID_BRANCH_ERROR);
+  } catch {
+    // Do not put arbitrary ref text or Git stderr in the failure receipt/log.
+    throw new Error(INVALID_BRANCH_ERROR);
+  }
+}
 
 interface WorktreeEntry {
   path: string;
