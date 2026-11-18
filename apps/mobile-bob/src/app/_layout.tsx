@@ -42,7 +42,7 @@ import { TaskLaneTablePane } from "~/components/tablet/TaskLaneTablePane";
 import { TasksDashboard } from "~/components/tablet/TasksDashboard";
 import { WorkItemPane } from "~/components/tablet/WorkItemPane";
 import { AuthGate } from "~/features/auth/auth-gate";
-import { ArcadeScreen } from "~/features/arcade/ArcadeScreen";
+import { TabletArcadePane } from "~/features/arcade/ArcadeScreen";
 import { ChatScreenView } from "~/features/chat/chat-screen";
 import {
   OodaConversationProvider,
@@ -330,7 +330,7 @@ function MainPane({
   }
 
   if (target.type === "arcade") {
-    return <ArcadeScreen />;
+    return <TabletArcadePane />;
   }
 
   if (target.type === "today") {
