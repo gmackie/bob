@@ -37,6 +37,15 @@ export interface SocketAttachment {
   shipped?: boolean;
 }
 
+/**
+ * Whether a socket may receive viewer-only detail (tail, CI, shipped, Live Activities): it
+ * said hello and its user is on the allow-list as it is now.
+ */
+export function mayWatch(attachment: Pick<SocketAttachment, "greeted" | "userId">, viewerIds: string | undefined): boolean {
+  const { greeted, userId } = attachment;
+  return greeted === true && typeof userId === "string" && userId.length > 0 && isViewer(userId, viewerIds);
+}
+
 /** The items a socket watches, from either attachment form. */
 export function watchesOf(attachment: SocketAttachment): string[] {
   if (Array.isArray(attachment.watches)) return attachment.watches.filter((id): id is string => typeof id === "string");

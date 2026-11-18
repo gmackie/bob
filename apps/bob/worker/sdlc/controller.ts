@@ -47,6 +47,11 @@ export interface EdgeControllerOptions {
   logLine?: (line: string) => void;
   /** Items that first reached production in a committed batch (BOB-95); ShippedEdge.publish in the DO. */
   onShipped?: (entries: ShippedEntry[]) => void;
+  /**
+   * After every accepted ingest, heartbeats included, once the state committed (BOB-96: Live
+   * Activity updates, LiveActivityEdge.flush). A throw is swallowed: it never fails the ingest.
+   */
+  afterIngest?: (now: number) => void;
 }
 
 /**
@@ -112,6 +117,7 @@ export class EdgeController {
   private readonly notify?: (deliveries: SdlcAlertDelivery[]) => void;
   private readonly logLine: (line: string) => void;
   private readonly onShipped?: (entries: ShippedEntry[]) => void;
+  private readonly afterIngest?: (now: number) => void;
 
   constructor(options: EdgeControllerOptions) {
     this.store = new EdgeStore(options.sql, options.newEpoch);
@@ -126,6 +132,7 @@ export class EdgeController {
     this.notify = options.notify;
     this.logLine = options.logLine ?? ((line) => console.log(line));
     this.onShipped = options.onShipped;
+    this.afterIngest = options.afterIngest;
   }
 
   /**
@@ -149,6 +156,11 @@ export class EdgeController {
       }
       if (message) this.publish(message);
       else if (!covered) this.broadcast({ type: "status", coordinatorSeenAt: this.coordinatorSeenAt });
+      if (this.afterIngest) {
+        try { this.afterIngest(now); } catch (error) {
+          console.error(JSON.stringify({ event: "sdlc_edge_after_ingest_failed", error: error instanceof Error ? error.message : String(error) }));
+        }
+      }
     }
     const { finished, commands, pending } = this.outbox.exchange(batch.results ?? [], now);
     for (const finishedResult of finished) this.broadcastResult(finishedResult);

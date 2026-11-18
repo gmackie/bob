@@ -6,11 +6,13 @@ import { AttemptEdge, tailResponse } from "./attempt-edge";
 import { attachUser, greet, greetedSockets, handleCommand, ingestResponse, parseCommandMessage, parseHello, parseWatchMessage } from "./edge-sockets";
 import { CI_POLL_MS, fgCiSourceFromEnv, type FgEnv } from "./fg";
 import { SDLC_USER_HEADER, viewerList } from "./routes";
+import { liveActivitySender, type ApnsEnv } from "./apns";
+import { LiveActivityEdge, parseLiveActivityRegistration } from "./live-activity";
 import { parseShippedRequest, ShippedEdge } from "./shipped";
 import { durableObjectSql } from "./sql";
 import { fetchBizPulseRepos } from "./topology";
 
-interface SdlcEdgeEnv extends FgEnv {
+interface SdlcEdgeEnv extends FgEnv, ApnsEnv {
   BOB_BIZPULSE_API_URL?: string;
   BOB_BIZPULSE_API_KEY?: string;
   /** Re-checked on every command: the list can change while a socket is open. */
@@ -31,6 +33,8 @@ export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
   private readonly attempt: AttemptEdge;
   /** Opt-in "shipped today" entries (BOB-95). */
   private readonly shipped: ShippedEdge;
+  /** iOS Live Activity tokens and their APNs updates (BOB-96). */
+  private readonly liveActivities: LiveActivityEdge;
 
   constructor(ctx: DurableObjectState, env: SdlcEdgeEnv) {
     super(ctx, env);
@@ -44,12 +48,21 @@ export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
       alertRecipients: () => viewerList(this.env.SDLC_VIEWER_USER_IDS),
       notify: (deliveries) => ctx.waitUntil(sendAlertsThroughBob(this.env, deliveries)),
       onShipped: (entries) => this.shipped.publish(entries),
+      afterIngest: (now) => this.liveActivities.flush(now),
     });
     const store = this.controller.store;
     this.shipped = new ShippedEdge({
       sockets: () => ctx.getWebSockets(),
       recent: (now) => store.shipped.recent(now),
       viewerIds: () => this.env.SDLC_VIEWER_USER_IDS,
+    });
+    const sendLiveActivities = liveActivitySender(env, (tokens) => this.liveActivities.forget(tokens));
+    this.liveActivities = new LiveActivityEdge({
+      sql: durableObjectSql(ctx.storage),
+      item: (id) => store.item(id),
+      plan: (id) => store.plan(id),
+      viewerIds: () => this.env.SDLC_VIEWER_USER_IDS,
+      send: (sends) => ctx.waitUntil(sendLiveActivities(sends)),
     });
     this.attempt = new AttemptEdge({
       sockets: () => ctx.getWebSockets(),
@@ -92,6 +105,8 @@ export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
       return;
     }
     if (parseShippedRequest(message)) { this.shipped.request(ws); return; }
+    const registration = parseLiveActivityRegistration(message);
+    if (registration) { this.liveActivities.register(ws, registration, Date.now()); return; }
     const command = parseCommandMessage(message);
     if (command) handleCommand(this.controller, ws, command, this.env.SDLC_VIEWER_USER_IDS, Date.now());
   }

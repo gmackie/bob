@@ -14,6 +14,7 @@ import {
 } from "@bob/sdlc-view";
 import { ALERT_SCHEMA, AlertLedger, type ItemAlert } from "./alerts";
 import { migrateOutbox, OUTBOX_SCHEMA } from "./outbox";
+import { LIVE_ACTIVITY_SCHEMA } from "./live-activity";
 import { SHIPPED_SCHEMA, ShippedLedger } from "./shipped";
 import type { SqlPort } from "./sql";
 
@@ -124,6 +125,7 @@ const SCHEMA = [
   ...OUTBOX_SCHEMA,
   ...ALERT_SCHEMA,
   ...SHIPPED_SCHEMA,
+  ...LIVE_ACTIVITY_SCHEMA,
 ];
 const META_KEYS = { epoch: "epoch", watermark: "watermark", seq: "seq", topology: "topology_json", topologyAt: "topology_at", topologyFailedAt: "topology_failed_at", coordinatorSeenAt: "coordinator_seen_at" } as const;
 
