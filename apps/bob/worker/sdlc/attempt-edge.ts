@@ -1,8 +1,8 @@
-// BOB-80 (BOB-75 Phase 3): the SdlcEdge's attempt level. Watches (one item per socket, in
-// the socket's hibernation-safe attachment), the ephemeral live tail, and display-only CI.
+// BOB-80 (BOB-75 Phase 3): the SdlcEdge's attempt level. Watches (up to MAX_WATCHED_ITEMS
+// per socket since BOB-94, in the socket's hibernation-safe attachment), the ephemeral live tail, and display-only CI.
 // Runs under node tests with fakes; edge-do.ts wires it to the DO.
-import type { AttemptMessage, ItemSnapshot, PlanSnapshot, TailFrame, TopologyRepo, WatchMessage } from "@bob/sdlc-view";
-import { readAttachment, type AttachedSocket } from "./edge-sockets";
+import { watchedIds, type AttemptMessage, type ItemSnapshot, type PlanSnapshot, type TailFrame, type TopologyRepo, type WatchMessage } from "@bob/sdlc-view";
+import { readAttachment, watchesOf, type AttachedSocket } from "./edge-sockets";
 import { MAX_POLLED_ITEMS, type FgCiSource } from "./fg";
 import { isViewer } from "./routes";
 import { parseTailPost, TailHub } from "./tail";
@@ -43,38 +43,43 @@ export class AttemptEdge {
 
   /** Sockets watching itemId, allow-list re-checked. */
   watchers(itemId: string): AttachedSocket[] {
-    return this.options.sockets().filter((s) => readAttachment(s).watch === itemId && this.allowed(s));
+    return this.options.sockets().filter((s) => watchesOf(readAttachment(s)).includes(itemId) && this.allowed(s));
   }
 
   /** Distinct items watched by allowed sockets. */
   watchedItems(): string[] {
     const ids = new Set<string>();
     for (const s of this.options.sockets()) {
-      const { watch } = readAttachment(s);
-      if (watch && this.allowed(s)) ids.add(watch);
+      if (!this.allowed(s)) continue;
+      for (const id of watchesOf(readAttachment(s))) ids.add(id);
     }
     return [...ids];
   }
 
   /**
-   * A WatchMessage. Ignored unless the socket may watch. Stores the item (or clears it) in
-   * the attachment, then replies to this socket only: the latest tail frame held, a
+   * A WatchMessage. Ignored unless the socket may watch. Replaces the socket's watch set in
+   * its attachment (watchedIds: deduped, at most MAX_WATCHED_ITEMS), then replies to this
+   * socket only, for each item newly in the set: the latest tail frame held, a
    * tailUnavailable marker when a running / waiting-input item has had no frame within
-   * TAIL_STALE_MS, and the CI detail (asynchronously). Returns whether a watch was set.
+   * TAIL_STALE_MS, and the CI detail (asynchronously, dropped if the item left the set
+   * meanwhile). Items already watched get nothing again. Returns whether anything is watched.
    */
   watch(socket: AttachedSocket, message: WatchMessage): boolean {
     if (!this.allowed(socket)) return false;
-    const { watch: _previous, ...rest } = readAttachment(socket);
-    socket.serializeAttachment(message.itemId === null ? rest : { ...rest, watch: message.itemId });
-    if (message.itemId === null) return false;
-    const itemId = message.itemId;
-    const latest = this.tail.get(itemId);
-    if (latest) send(socket, { type: "tail", frame: latest.frame });
-    const item = this.options.item(itemId);
-    const marker = this.tail.unavailable(itemId, item?.state, this.now());
-    if (marker) send(socket, marker);
-    if (item) this.schedule(this.ciFor(item).then((message) => { if (readAttachment(socket).watch === itemId) send(socket, message); }));
-    return true;
+    const { watch: _legacy, watches: _previous, ...rest } = readAttachment(socket);
+    const before = new Set(watchesOf(readAttachment(socket)));
+    const ids = watchedIds(message);
+    socket.serializeAttachment(ids.length === 0 ? rest : { ...rest, watches: ids });
+    for (const itemId of ids) {
+      if (before.has(itemId)) continue;
+      const latest = this.tail.get(itemId);
+      if (latest) send(socket, { type: "tail", frame: latest.frame });
+      const item = this.options.item(itemId);
+      const marker = this.tail.unavailable(itemId, item?.state, this.now());
+      if (marker) send(socket, marker);
+      if (item) this.schedule(this.ciFor(item).then((ci) => { if (watchesOf(readAttachment(socket)).includes(itemId)) send(socket, ci); }));
+    }
+    return ids.length > 0;
   }
 
   /** Holds the latest frame per item and sends each to that item's watchers. Never stored. */

@@ -106,8 +106,24 @@ export interface TailFrame {
 
 export const TAIL_LIMITS = { maxLines: 40, maxLineChars: 200, maxFramesPerPost: 50 } as const;
 
-/** Client → DO: watch one item's attempt detail (null stops). One watched item per socket. */
-export interface WatchMessage { type: "watch"; itemId: string | null }
+/** How many items one socket may watch at once (BOB-94): keeps tail fan-out and CI polling predictable. */
+export const MAX_WATCHED_ITEMS = 6;
+
+/**
+ * Client → DO: which items' attempt detail (tail, CI) this socket watches. A watch replaces
+ * the socket's whole set. The single form watches one item (null stops); the multi form
+ * (BOB-94) watches up to MAX_WATCHED_ITEMS, and an empty list stops.
+ */
+export type WatchMessage = { type: "watch"; itemId: string | null } | { type: "watch"; itemIds: string[] };
+
+/**
+ * The item ids a watch asks for, in order, without duplicates, capped at MAX_WATCHED_ITEMS
+ * (ids past the cap are dropped).
+ */
+export function watchedIds(message: WatchMessage): string[] {
+  const ids = "itemIds" in message ? message.itemIds : message.itemId === null ? [] : [message.itemId];
+  return [...new Set(ids)].slice(0, MAX_WATCHED_ITEMS);
+}
 
 /** DO → watching sockets. */
 export interface TailMessage { type: "tail"; frame: TailFrame }

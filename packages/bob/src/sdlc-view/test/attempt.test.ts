@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeAnswers, encodeAnswers, parseCommandInput, stripTerminalControls, tierOf, type PendingInput } from "../src";
+import { decodeAnswers, encodeAnswers, MAX_WATCHED_ITEMS, parseCommandInput, stripTerminalControls, tierOf, watchedIds, type PendingInput } from "../src";
 
 const pending: PendingInput = {
   attemptId: "a1", promptId: "r1", kind: "user_input", createdAt: "2026-11-15T00:00:00Z",
@@ -77,5 +77,18 @@ describe("ResolveInput command", () => {
     expect(parseCommandInput("ResolveInput", { ...input, promptId })).toEqual({ operation: "ResolveInput", input: { ...input, promptId } });
     expect(parseCommandInput("ResolveInput", { ...input, promptId: "p".repeat(1024) })).not.toBeNull();
     expect(parseCommandInput("ResolveInput", { ...input, promptId: "p".repeat(1025) })).toBeNull();
+  });
+});
+
+describe("watchedIds (BOB-94)", () => {
+  it("reads the single form", () => {
+    expect(watchedIds({ type: "watch", itemId: "i1" })).toEqual(["i1"]);
+    expect(watchedIds({ type: "watch", itemId: null })).toEqual([]);
+  });
+  it("reads the multi form in order, without duplicates, capped at MAX_WATCHED_ITEMS", () => {
+    expect(watchedIds({ type: "watch", itemIds: ["b", "a", "b"] })).toEqual(["b", "a"]);
+    expect(watchedIds({ type: "watch", itemIds: [] })).toEqual([]);
+    const many = Array.from({ length: MAX_WATCHED_ITEMS + 3 }, (_, i) => `i${i}`);
+    expect(watchedIds({ type: "watch", itemIds: many })).toEqual(many.slice(0, MAX_WATCHED_ITEMS));
   });
 });
