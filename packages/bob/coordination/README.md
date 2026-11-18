@@ -246,10 +246,13 @@ item: `-a2`, `-a3`, ...; the base is truncated, never the suffix, to stay within
 240 characters), so the environment never reuses a branch an earlier attempt
 created. The superseded attempt's release becomes due at once; the driver
 retires it and, on the next pass, re-reads the PR it recorded: an open,
-unmerged PR gets a comment (`Superseded by attempt <id> (retry). Closed by Bob
-coordination.`) and is closed; a merged or already closed PR is left alone. The
-outcome is recorded on the release (`supersededPullRequest`) so it happens
-once; a Forgejo error keeps the release retired and retries with back-off.
+unmerged PR is closed, then gets a comment (`Superseded by attempt <id>
+(retry). Closed by Bob coordination.`); a merged or already closed PR is left
+alone. The comment is best-effort: Forgejo needs `write:issue` for PR comments,
+and a release token scoped only to `write:repository` gets HTTP 403, so the
+close goes ahead and `comment: "skipped (HTTP 403)"` is recorded. The outcome is
+recorded on the release (`supersededPullRequest`) so it happens once; a failed
+close keeps the release retired and retries with back-off.
 Cancellation alone never closes a PR. PR titles carry the issue key once: a
 work title that already starts with it is used as is.
 

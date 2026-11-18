@@ -379,14 +379,15 @@ function apply(coordinator, row, token, result, { now, timings }) {
 /** BOB-88: closes the PR a superseded attempt's retired release recorded, once. The PR is
  * re-read first: a merged PR is never closed, one already closed is left alone. The
  * outcome is recorded on the release (supersededPullRequest), so later passes skip it;
- * a network error keeps the row retired and retries with the driver's back-off. */
+ * a network error keeps the row retired and retries with the driver's back-off. The
+ * explanatory comment is best-effort and its result is recorded as `comment`. */
 async function closeSupersededPullRequest(coordinator, forge, row, data, token, { now, policy, timings, supersededBy }) {
   const save = (next, nextCheckAt, checkAttempts) => coordinator.transaction(() => coordinator.db.prepare('UPDATE coordination_release SET data=?,check_attempts=?,next_check_at=?,lease_owner=NULL,lease_until=NULL WHERE tenant=? AND id=? AND lease_owner=?')
     .run(canonical(next), checkAttempts, nextCheckAt, coordinator.tenant, row.id, token));
   if (!supersededBy) { save(data, NEVER, row.check_attempts); return null; }
   const repo = repoSlug(data.repository, policy);
   const number = data.pullRequest.number;
-  let outcome;
+  let outcome, comment;
   try {
     if (!repo) outcome = 'unmapped';
     else {
@@ -394,8 +395,9 @@ async function closeSupersededPullRequest(coordinator, forge, row, data, token, 
       if (pr.merged) outcome = 'merged';
       else if (pr.state !== 'open') outcome = 'already-closed';
       else {
-        await forge.closePullRequest(repo, number, `Superseded by attempt ${supersededBy} (retry). Closed by Bob coordination.`);
+        const closed = await forge.closePullRequest(repo, number, `Superseded by attempt ${supersededBy} (retry). Closed by Bob coordination.`);
         outcome = 'closed';
+        if (typeof closed?.comment === 'string') comment = closed.comment;
       }
     }
   } catch (error) {
@@ -407,7 +409,7 @@ async function closeSupersededPullRequest(coordinator, forge, row, data, token, 
     outcome = 'not-found';
   }
   const at = new Date(now).toISOString();
-  save({ ...data, supersededPullRequest: { supersededBy, number, outcome, at }, updatedAt: at }, NEVER, 0);
+  save({ ...data, supersededPullRequest: { supersededBy, number, outcome, ...(comment ? { comment } : {}), at }, updatedAt: at }, NEVER, 0);
   return { attemptId: row.id, from: 'retired', outcome: `superseded-pr-${outcome}` };
 }
 
