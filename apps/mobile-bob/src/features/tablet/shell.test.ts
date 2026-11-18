@@ -286,6 +286,16 @@ describe("tablet shell model", () => {
     });
   });
 
+  it("opens the Arcade in the current mode (BOB-92)", () => {
+    expect(getShellStateForPath("/arcade", {}, "planning")).toEqual({
+      mode: "planning",
+      leftTab: "recent-sessions",
+      target: { type: "arcade" },
+    });
+    expect(getShellModeForTarget({ type: "arcade" }, "ooda")).toBe("ooda");
+    expect(isNativeTabletShellTarget({ type: "arcade" })).toBe(true);
+  });
+
   it("derives mode from selected targets", () => {
     expect(getShellModeForTarget({ type: "ooda-chat" })).toBe("ooda");
     expect(getShellModeForTarget({ type: "work-item", workItemId: "W1" })).toBe(

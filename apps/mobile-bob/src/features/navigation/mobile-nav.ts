@@ -23,6 +23,11 @@ export const MOBILE_NAV_DESTINATIONS: readonly MobileNavDestination[] = [
     label: "Attention",
     description: "SDLC items waiting on you",
   },
+  {
+    href: "/arcade",
+    label: "Arcade",
+    description: "Watch agents work the SDLC live",
+  },
   { href: "/today", label: "Today", description: "The day's plan, progress and review" },
   { href: "/chat", label: "Chat", description: "Talk to the agent" },
   { href: "/tasks", label: "Tasks", description: "Queue and outcomes" },
