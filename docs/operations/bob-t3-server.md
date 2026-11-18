@@ -87,11 +87,41 @@ The rollback snapshot is `/root/T3CODE-114-rollback` (the four databases and the
 previous `runtime.conf`); restore it the same way as the BOB-55 snapshot described
 below.
 
-The new runtime recognizes `git.forgegraf.com` remotes as the ForgeGraph
-source-control provider. Its ForgeGraph login for `bob`
-(`/home/bob/.forgegraph/credentials.json`) is currently refused, so T3 can push a
-run's branch but may not open its pull request; Bob's coordinator then opens the
-PR with its own Forgejo token. Replace that login to restore T3-side PR creation.
+The T3CODE-114 runtime recognizes `git.forgegraf.com` remotes as the ForgeGraph
+source-control provider. Until 2026-11-18 its ForgeGraph login for `bob`
+(`/home/bob/.forgegraph/credentials.json`) was refused, so T3 pushed a run's branch
+but could not open its pull request, and Bob's coordinator opened the PR with its
+own Forgejo token (BOB-86, PR #304). On 2026-11-18 that login was replaced with an
+admin-scope ForgeGraph token with a 90-day expiry, which restores T3-side PR
+creation. The coordinator's Forgejo fallback remains for runs whose publication
+is skipped.
+
+On 2026-11-17 (T3CODE-117), `t3code-bob.service` switched to
+`/opt/t3code-releases/T3CODE-117/runtime/t3-0.1.9-gmacko.202611170109-linux-x64/t3`,
+built on hetzner-bob the same way from t3code commit
+`6e519a3212740e5d20b9898c2185f52bfe9fd2d2`. The archive SHA256 is
+`b3839af5c8bdcc7ec3e6413d0d1758a2870e685218afb7aa943f944d58afb5f4`.
+The rollback snapshot is `/root/T3CODE-117-rollback`.
+
+On 2026-11-18 (T3CODE-116, receipts for runs that fail before a checkpoint),
+`t3code-bob.service` switched to
+`/opt/t3code-releases/T3CODE-116/runtime/t3-0.1.10-gmacko.202611180213-linux-x64/t3`,
+built on hetzner-bob from t3code commit
+`88ceb783f6650483a08fe527ac46e22b1193835f`. The archive SHA256 is
+`18adc508e08c3d8f4edd8a468f2bb1dd31c5667cca32e0bc4f44e50df913a6df`.
+The rollback snapshot is `/root/T3CODE-116-rollback` (the four databases and the
+previous `runtime.conf`). With it, a run that fails before any checkpoint (for
+example in workspace preparation) sends a failed terminal receipt instead of
+leaving the coordinator item running.
+
+On 2026-11-18 the Forgejo token that was embedded in the `origin` URLs of the
+repositories under `/home/bob/forge/` was moved into bob's git credential store
+(`/home/bob/.config/git/credentials`, mode 0600, configured as
+`credential.https://git.forgegraf.com.helper`) and rotated, so `git remote -v` no
+longer shows a credential. The coordinator's Forgejo release token in
+`/etc/bob/coordination/release.json` was rotated to one that also has `write:issue`,
+so it can comment when it closes a superseded pull request. Pre-rotation copies
+are kept root-only in `/root`. Never write a token value into this runbook.
 
 An inherited migration-32 name conflict remains visible in T3's warning output:
 `ProjectionThreadsExternalTask` versus `AuthPairingProofKeyThumbprint`. Both
