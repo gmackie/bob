@@ -2,9 +2,8 @@
 // per socket since BOB-94, in the socket's hibernation-safe attachment), the ephemeral live tail, and display-only CI.
 // Runs under node tests with fakes; edge-do.ts wires it to the DO.
 import { watchedIds, type AttemptMessage, type ItemSnapshot, type PlanSnapshot, type TailFrame, type TopologyRepo, type WatchMessage } from "@bob/sdlc-view";
-import { readAttachment, watchesOf, type AttachedSocket } from "./edge-sockets";
+import { mayWatch, readAttachment, watchesOf, type AttachedSocket } from "./edge-sockets";
 import { MAX_POLLED_ITEMS, type FgCiSource } from "./fg";
-import { isViewer } from "./routes";
 import { parseTailPost, TailHub } from "./tail";
 
 export interface AttemptEdgeOptions {
@@ -37,8 +36,7 @@ export class AttemptEdge {
 
   /** A socket may watch when it has said hello and its user is on the allow-list now. */
   private allowed(socket: AttachedSocket): boolean {
-    const { greeted, userId } = readAttachment(socket);
-    return greeted === true && typeof userId === "string" && userId.length > 0 && isViewer(userId, this.options.viewerIds());
+    return mayWatch(readAttachment(socket), this.options.viewerIds());
   }
 
   /** Sockets watching itemId, allow-list re-checked. */

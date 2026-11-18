@@ -115,6 +115,13 @@
     // the workspace id is the kill switch: /api/sdlc/* then answers 503. The
     // exporter's token is the secret SDLC_EDGE_INGEST_TOKEN, NOT a var here.
     "SDLC_EDGE_WORKSPACE_ID": "e3d5ca9f-afaa-4276-8b8b-494eeaa80457",
-    "SDLC_VIEWER_USER_IDS": "tkE66fMc4mevdYYjtq78ALErJ7QnhAge"
+    "SDLC_VIEWER_USER_IDS": "tkE66fMc4mevdYYjtq78ALErJ7QnhAge",
+    // iOS Live Activity updates from the SDLC edge (BOB-96), sent straight to
+    // APNs (Expo does not carry them). The key is the secrets APNS_TEAM_ID,
+    // APNS_KEY_ID and APNS_PRIVATE_KEY (the .p8); until all three are set the
+    // edge only logs sdlc_live_activity_unconfigured. TestFlight and App Store
+    // builds use the production APNs environment.
+    "APNS_BUNDLE_ID": "com.gmacko.bob",
+    "APNS_ENVIRONMENT": "production"
   }
 }

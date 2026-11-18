@@ -1,8 +1,7 @@
 // BOB-95: the edge's record of items reaching production ("shipped today", BOB-91 wallboard).
 // The ledger runs inside the ingest transaction; ShippedEdge serves opted-in sockets.
 import { MAX_SHIPPED_ENTRIES, SHIPPED_WINDOW_MS, type ItemSnapshot, type PlanSnapshot, type ShippedEntry, type ShippedMessage } from "@bob/sdlc-view";
-import { readAttachment, type AttachedSocket } from "./edge-sockets";
-import { isViewer } from "./routes";
+import { mayWatch, readAttachment, type AttachedSocket } from "./edge-sockets";
 import type { SqlPort } from "./sql";
 
 export const SHIPPED_SCHEMA = [
@@ -109,8 +108,7 @@ export class ShippedEdge {
   }
 
   private allowed(socket: AttachedSocket): boolean {
-    const { greeted, userId } = readAttachment(socket);
-    return greeted === true && typeof userId === "string" && userId.length > 0 && isViewer(userId, this.options.viewerIds());
+    return mayWatch(readAttachment(socket), this.options.viewerIds());
   }
 
   /** A ShippedRequest: ignored unless the socket may watch; otherwise opts in and replies with the full list. */
