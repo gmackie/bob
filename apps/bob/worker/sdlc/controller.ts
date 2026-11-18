@@ -10,6 +10,7 @@ import {
   type CommandResult,
   type CommandStatusMessage,
   type EdgeMessage,
+  type ShippedEntry,
   type Tier,
   type TopologyRepo,
 } from "@bob/sdlc-view";
@@ -44,6 +45,8 @@ export interface EdgeControllerOptions {
   notify?: (deliveries: SdlcAlertDelivery[]) => void;
   /** One structured line per command decision (BOB-89); console.log in the DO. */
   logLine?: (line: string) => void;
+  /** Items that first reached production in a committed batch (BOB-95); ShippedEdge.publish in the DO. */
+  onShipped?: (entries: ShippedEntry[]) => void;
 }
 
 /**
@@ -108,6 +111,7 @@ export class EdgeController {
   private readonly alertRecipients: () => string[];
   private readonly notify?: (deliveries: SdlcAlertDelivery[]) => void;
   private readonly logLine: (line: string) => void;
+  private readonly onShipped?: (entries: ShippedEntry[]) => void;
 
   constructor(options: EdgeControllerOptions) {
     this.store = new EdgeStore(options.sql, options.newEpoch);
@@ -121,6 +125,7 @@ export class EdgeController {
     this.alertRecipients = options.alertRecipients ?? (() => []);
     this.notify = options.notify;
     this.logLine = options.logLine ?? ((line) => console.log(line));
+    this.onShipped = options.onShipped;
   }
 
   /**
@@ -131,8 +136,11 @@ export class EdgeController {
    */
   ingest(batch: IngestBatch): IngestResult {
     const now = this.now();
-    const { result, message, covered, alerts } = this.store.apply(batch, now);
+    const { result, message, covered, alerts, shipped } = this.store.apply(batch, now);
     if (alerts.length > 0) this.sendAlerts(alerts, now);
+    if (shipped.length > 0 && this.onShipped) {
+      try { this.onShipped(shipped); } catch { /* a send never fails the ingest: the entries are stored */ }
+    }
     if (result.accepted) {
       this.coordinatorSeenAt = Math.max(this.coordinatorSeenAt ?? now, now);
       if (this.persistedSeenAt === null || this.coordinatorSeenAt - this.persistedSeenAt >= SEEN_PERSIST_MS) {

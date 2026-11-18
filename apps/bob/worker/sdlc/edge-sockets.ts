@@ -33,6 +33,8 @@ export interface SocketAttachment {
   watch?: string;
   /** The items whose attempt detail (tail, CI) this socket watches (BOB-80, BOB-94); at most MAX_WATCHED_ITEMS. */
   watches?: string[];
+  /** The socket asked for shipped entries (BOB-95) and is sent each new one. */
+  shipped?: boolean;
 }
 
 /** The items a socket watches, from either attachment form. */

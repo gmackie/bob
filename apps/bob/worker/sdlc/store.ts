@@ -9,10 +9,12 @@ import {
   type ItemSnapshot,
   type PlanSnapshot,
   type QueuedCommand,
+  type ShippedEntry,
   type TopologyRepo,
 } from "@bob/sdlc-view";
 import { ALERT_SCHEMA, AlertLedger, type ItemAlert } from "./alerts";
 import { migrateOutbox, OUTBOX_SCHEMA } from "./outbox";
+import { SHIPPED_SCHEMA, ShippedLedger } from "./shipped";
 import type { SqlPort } from "./sql";
 
 /** What the coordinator's edge exporter (packages/bob/coordination/runtime/edge.mjs) POSTs. */
@@ -109,6 +111,8 @@ export interface ApplyOutcome {
   covered: boolean;
   /** Items that newly entered waiting-input, review or failed (alerts.ts); recorded in the same transaction. */
   alerts: ItemAlert[];
+  /** Items that first reached production-verified in this batch (BOB-95); recorded in the same transaction. */
+  shipped: ShippedEntry[];
 }
 
 const SCHEMA = [
@@ -119,6 +123,7 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS tombstones (plan_id TEXT PRIMARY KEY, rv INTEGER NOT NULL)",
   ...OUTBOX_SCHEMA,
   ...ALERT_SCHEMA,
+  ...SHIPPED_SCHEMA,
 ];
 const META_KEYS = { epoch: "epoch", watermark: "watermark", seq: "seq", topology: "topology_json", topologyAt: "topology_at", topologyFailedAt: "topology_failed_at", coordinatorSeenAt: "coordinator_seen_at" } as const;
 
@@ -141,9 +146,11 @@ export const sortTopology = (topology: TopologyRepo[]) =>
  */
 export class EdgeStore {
   readonly alerts: AlertLedger;
+  readonly shipped: ShippedLedger;
 
   constructor(private readonly sql: SqlPort, newEpoch: () => string = () => crypto.randomUUID()) {
     this.alerts = new AlertLedger(sql);
+    this.shipped = new ShippedLedger(sql);
     sql.transaction(() => {
       for (const statement of SCHEMA) sql.exec(statement);
       migrateOutbox(sql);
@@ -198,12 +205,12 @@ export class EdgeStore {
       const accepted: ApplyResult = { accepted: true, watermark: batch.watermark };
       if (batch.kind === "heartbeat") {
         return batch.watermark > watermark
-          ? { result: { accepted: false, resync: true }, message: null, covered: false, alerts: [] }
-          : { result: accepted, message: null, covered: false, alerts: [] };
+          ? { result: { accepted: false, resync: true }, message: null, covered: false, alerts: [], shipped: [] }
+          : { result: accepted, message: null, covered: false, alerts: [], shipped: [] };
       }
       if (batch.kind === "changes") {
-        if ((batch.fromSequence ?? Infinity) > watermark) return { result: { accepted: false, resync: true }, message: null, covered: false, alerts: [] };
-        if (batch.watermark <= watermark) return { result: accepted, message: null, covered: true, alerts: [] };
+        if ((batch.fromSequence ?? Infinity) > watermark) return { result: { accepted: false, resync: true }, message: null, covered: false, alerts: [], shipped: [] };
+        if (batch.watermark <= watermark) return { result: accepted, message: null, covered: true, alerts: [], shipped: [] };
       }
       const snapshot = batch.kind === "snapshot";
       // What the batch's items were before it, for alerts: a snapshot replaces items the edge already held.
@@ -214,12 +221,13 @@ export class EdgeStore {
       if (snapshot) { this.sql.exec("DELETE FROM plans"); this.sql.exec("DELETE FROM items"); }
       const { plans, items } = this.merge(batch);
       const alerts = this.alerts.observe(items, previous, baseline, now);
+      const shipped = this.shipped.observe(items, previous, baseline, (id) => this.plan(id), now);
       if (snapshot || plans.some((p) => TERMINAL_PLAN_STATES.has(p.state))) this.alerts.prune();
       this.write(META_KEYS.watermark, batch.watermark);
-      if (snapshot) return { result: accepted, message: this.bump(now), covered: false, alerts };
-      if (plans.length === 0 && items.length === 0) return { result: accepted, message: null, covered: false, alerts };
+      if (snapshot) return { result: accepted, message: this.bump(now), covered: false, alerts, shipped };
+      if (plans.length === 0 && items.length === 0) return { result: accepted, message: null, covered: false, alerts, shipped };
       const seq = this.nextSeq();
-      return { result: accepted, message: { type: "delta", seq, plans, items, coordinatorSeenAt: now }, covered: false, alerts };
+      return { result: accepted, message: { type: "delta", seq, plans, items, coordinatorSeenAt: now }, covered: false, alerts, shipped };
     });
   }
 
