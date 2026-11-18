@@ -3,7 +3,7 @@ import type { CommandOption } from "@bob/sdlc-view";
 
 import { FIXTURE_NOW, fixtureView } from "../fixtures";
 import { reconnectDelay } from "./edge-protocol";
-import { createSession, type SocketHandlers } from "./session";
+import { ACK_TIMEOUT_MS, createSession, type SocketHandlers } from "./session";
 
 const option: CommandOption = { label: "Pause plan", tier: 1, command: { operation: "ControlPlan", input: { planId: "p1", expectedVersion: 2, action: "pause" } } };
 
@@ -11,20 +11,21 @@ function harness() {
   const sockets: Array<{ handlers: SocketHandlers; sent: unknown[]; closed: boolean }> = [];
   const timers: Array<{ fn: () => void; ms: number }> = [];
   let ids = 0;
+  let clock = FIXTURE_NOW;
   const session = createSession({
     open: (handlers) => {
       const s = { handlers, sent: [] as unknown[], closed: false };
       sockets.push(s);
       return { send: (d) => s.sent.push(JSON.parse(d)), close: () => { s.closed = true; } };
     },
-    now: () => FIXTURE_NOW,
+    now: () => clock,
     newId: () => `cmd-${++ids}`,
     random: () => 0.5,
     setTimer: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
     clearTimer: () => {},
   });
   const last = () => sockets[sockets.length - 1]!;
-  return { session, sockets, timers, last };
+  return { session, sockets, timers, last, advance: (ms: number) => { clock += ms; } };
 }
 
 const snapshot = (seq: number, epoch = "e1") => {
@@ -90,7 +91,7 @@ describe("edge session", () => {
     const second = h.session.send(option, "again");
     h.last().handlers.onMessage(JSON.stringify({ type: "commandResult", commandId: second, ok: false, error: { code: "VersionConflict", message: "", retryable: false } }));
     h.last().handlers.onClose();
-    h.timers[0]!.fn();
+    h.timers.at(-1)!.fn(); // the reconnect (an ack deadline was set first)
     h.last().handlers.onOpen();
     expect(h.last().sent.slice(1)).toEqual([expect.objectContaining({ commandId: first })]);
   });
@@ -157,5 +158,60 @@ describe("edge session", () => {
     expect(h.last().sent).toEqual([{ type: "hello", cursor: null, epoch: null }, { type: "watch", itemId: "item-p1" }]);
     h.session.watch(null);
     expect(h.last().sent.at(-1)).toEqual({ type: "watch", itemId: null });
+  });
+
+  it("replaces a socket that never answers a command, and resends it with the same commandId (BOB-89)", () => {
+    const h = harness();
+    h.session.start();
+    const first = h.last();
+    first.handlers.onOpen();
+    first.handlers.onMessage(snapshot(10));
+    h.session.send(option, "Pause plan");
+    const deadline = h.timers.find((t) => t.ms === ACK_TIMEOUT_MS)!;
+    expect(deadline).toBeDefined();
+
+    h.advance(ACK_TIMEOUT_MS);
+    deadline.fn();
+    expect(first.closed).toBe(true);
+    expect(h.sockets).toHaveLength(2);
+    expect(h.session.state.connection).toBe("reconnecting");
+
+    h.last().handlers.onOpen();
+    const resent = h.last().sent.filter((m) => (m as { type: string }).type === "command");
+    expect(resent).toEqual([expect.objectContaining({ commandId: "cmd-1", operation: "ControlPlan" })]);
+    // Events from the replaced socket are ignored.
+    first.handlers.onClose();
+    expect(h.session.state.connection).toBe("live");
+  });
+
+  it("keeps the socket when the edge answers in time, and waits for the latest command's own deadline", () => {
+    const h = harness();
+    h.session.start();
+    h.last().handlers.onOpen();
+    h.session.send(option, "Pause plan");
+    h.last().handlers.onMessage(JSON.stringify({ type: "commandAccepted", commandId: "cmd-1" }));
+    h.advance(ACK_TIMEOUT_MS - 1000);
+    h.session.send(option, "Pause plan");
+    const first = h.timers.find((t) => t.ms === ACK_TIMEOUT_MS)!;
+    h.advance(1000);
+    first.fn();
+    // cmd-1 was answered; cmd-2 has 9 s left, so the socket stays and a new deadline is set.
+    expect(h.sockets).toHaveLength(1);
+    expect(h.last().closed).toBe(false);
+    expect(h.timers.at(-1)!.ms).toBe(ACK_TIMEOUT_MS - 1000);
+    h.last().handlers.onMessage(JSON.stringify({ type: "commandRejected", commandId: "cmd-2", code: "rate-limited", message: "slow down" }));
+    h.advance(ACK_TIMEOUT_MS);
+    h.timers.at(-1)!.fn();
+    expect(h.sockets).toHaveLength(1);
+    expect(h.session.state.commands.entries["cmd-2"]!.status).toBe("rejected");
+  });
+
+  it("starts no deadline for a command sent while disconnected; it starts when the resend goes out", () => {
+    const h = harness();
+    h.session.start();
+    h.session.send(option, "Pause plan");
+    expect(h.timers.some((t) => t.ms === ACK_TIMEOUT_MS)).toBe(false);
+    h.last().handlers.onOpen();
+    expect(h.timers.some((t) => t.ms === ACK_TIMEOUT_MS)).toBe(true);
   });
 });

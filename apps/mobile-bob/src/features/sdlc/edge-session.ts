@@ -122,9 +122,18 @@ export interface SocketHandlers {
 export interface SocketLike { send(data: string): void; close(): void }
 export type OpenSocket = (handlers: SocketHandlers) => SocketLike;
 
+/**
+ * A command written to a live socket is answered by the edge at once (commandAccepted or
+ * commandRejected, or its stored result). No answer this long means the socket is half
+ * dead though it never closed: it is replaced, and onOpen resends the command with the
+ * same commandId, which the edge dedupes (BOB-89).
+ */
+export const ACK_TIMEOUT_MS = 10_000;
+
 export interface SessionOptions {
   open: OpenSocket;
   newId: () => string;
+  now?: () => number;
   random?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -148,6 +157,7 @@ export interface Session {
 }
 
 export function createSession(options: SessionOptions): Session {
+  const now = options.now ?? Date.now;
   const setTimer = options.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
   const clearTimer = options.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
   const backoff = createBackoff(options.random);
@@ -159,12 +169,40 @@ export function createSession(options: SessionOptions): Session {
   let timer: unknown;
   let resyncRequested = false;
   let watched: string | null = null;
+  /** commandId → when it was written to the current socket, until the edge answers it. */
+  const unacked = new Map<string, number>();
+  let ackTimer: unknown;
 
   const set = (patch: Partial<SessionState>) => {
     state = { ...state, ...patch };
     for (const l of listeners) l(state);
   };
   const write = (message: unknown) => { if (socket && isOpen) socket.send(JSON.stringify(message)); };
+  const disarmAck = () => {
+    if (ackTimer !== undefined) clearTimer(ackTimer);
+    ackTimer = undefined;
+  };
+  const armAck = () => {
+    if (ackTimer !== undefined || unacked.size === 0) return;
+    const due = Math.min(...unacked.values()) + ACK_TIMEOUT_MS;
+    ackTimer = setTimer(checkAck, Math.max(0, due - now()));
+  };
+  const checkAck = () => {
+    ackTimer = undefined;
+    if (!socket || !isOpen || stopped) return;
+    const overdue = [...unacked.values()].some((at) => now() - at >= ACK_TIMEOUT_MS);
+    if (!overdue) { armAck(); return; }
+    dropSocket();
+    set({ connection: "reconnecting" });
+    connect();
+  };
+  /** Writes a command and starts its answer deadline when it actually went out. */
+  const writeCommand = (command: ClientCommand) => {
+    if (!socket || !isOpen) return;
+    socket.send(JSON.stringify(command));
+    unacked.set(command.commandId, now());
+    armAck();
+  };
 
   const onAttempt = (event: AttemptEvent) => {
     const itemId = event.type === "tail" ? event.frame.itemId : event.itemId;
@@ -179,6 +217,8 @@ export function createSession(options: SessionOptions): Session {
   const dropSocket = () => {
     clearTimer(timer);
     timer = undefined;
+    unacked.clear();
+    disarmAck();
     const s = socket;
     socket = null;
     isOpen = false;
@@ -198,7 +238,7 @@ export function createSession(options: SessionOptions): Session {
         resyncRequested = state.view.needsResync;
         set({ connection: "live", error: null });
         write(helloFor(state.view));
-        for (const command of commandsToResend(state.commands)) write(command);
+        for (const command of commandsToResend(state.commands)) writeCommand(command);
         if (watched) write({ type: "watch", itemId: watched } satisfies WatchMessage);
       },
       onMessage(data) {
@@ -206,7 +246,7 @@ export function createSession(options: SessionOptions): Session {
         let value: unknown;
         try { value = JSON.parse(data); } catch { return; }
         const status = asCommandStatus(value);
-        if (status) { backoff.heard(); set({ commands: reduceCommands(state.commands, status) }); return; }
+        if (status) { backoff.heard(); unacked.delete(status.commandId); set({ commands: reduceCommands(state.commands, status) }); return; }
         const attempt = asAttemptMessage(value);
         if (attempt) { backoff.heard(); onAttempt(attempt); return; }
         const message = asEdgeMessage(value);
@@ -224,6 +264,8 @@ export function createSession(options: SessionOptions): Session {
         if (!mine()) return;
         socket = null;
         isOpen = false;
+        unacked.clear();
+        disarmAck();
         if (stopped || state.connection === "auth-failed") return;
         set({ connection: "reconnecting" });
         timer = setTimer(connect, backoff.nextDelay());
@@ -267,7 +309,7 @@ export function createSession(options: SessionOptions): Session {
     send(command, label, confirm) {
       const message = { type: "command", commandId: options.newId(), ...command, ...(confirm ? { confirm } : {}) } as ClientCommand;
       set({ commands: reduceCommands(state.commands, { type: "sent", command: message, label }) });
-      write(message);
+      writeCommand(message);
       return message.commandId;
     },
     watch(itemId) {

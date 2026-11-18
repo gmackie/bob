@@ -60,8 +60,18 @@ export function createBackoff(random: () => number = Math.random) {
   };
 }
 
+/**
+ * A command written to a live socket is answered by the edge at once (commandAccepted or
+ * commandRejected, or its stored result). No answer this long means the socket is half
+ * dead though it never closed; the hook replaces it, and opened() resends the command with
+ * the same commandId, which the edge dedupes (BOB-89).
+ */
+export const ACK_TIMEOUT_MS = 10_000;
+
 export interface EdgeClient {
   readonly view: EdgeView;
+  /** Whether a command written to the current socket has gone ACK_TIMEOUT_MS without an answer. */
+  overdue(now?: number): boolean;
   /** The socket opened: say hello. */
   opened(): void;
   /**
@@ -90,7 +100,9 @@ export interface EdgeClient {
  * snapshot, which clears needsResync. It asks again only after that, or on a new socket.
  */
 export function createEdgeClient(options: {
-  send: (data: string) => void;
+  /** Writes to the open socket; returns exactly false when nothing was written (no open socket). */
+  send: (data: string) => unknown;
+  now?: () => number;
   onView?: (view: EdgeView) => void;
   onCommands?: (commands: CommandsState) => void;
   onAttempt?: (attempt: AttemptState) => void;
@@ -102,6 +114,12 @@ export function createEdgeClient(options: {
   let attempt = emptyAttempt();
   let resyncRequested = false;
   const newCommandId = options.newCommandId ?? (() => crypto.randomUUID());
+  const now = options.now ?? Date.now;
+  /** commandId → when it was written to the current socket, until the edge answers it. */
+  const unacked = new Map<string, number>();
+  const sendCommand = (command: ClientCommand) => {
+    if (options.send(JSON.stringify(command)) !== false) unacked.set(command.commandId, now());
+  };
   const hello = (message: HelloMessage) => options.send(JSON.stringify(message));
   const setCommands = (next: CommandsState) => {
     if (next === commands) return;
@@ -117,6 +135,10 @@ export function createEdgeClient(options: {
     get view() { return view; },
     get commands() { return commands; },
     get attempt() { return attempt; },
+    overdue(at = now()) {
+      for (const sentAt of unacked.values()) if (at - sentAt >= ACK_TIMEOUT_MS) return true;
+      return false;
+    },
     watch(itemId) {
       if (itemId === attempt.watching) return;
       setAttempt({ ...attempt, watching: itemId });
@@ -127,14 +149,15 @@ export function createEdgeClient(options: {
       resyncRequested = view.needsResync;
       hello(helloFor(view));
       // Commands still in flight go again with the same commandId; the edge dedupes.
-      for (const command of commandsToResend(commands)) options.send(JSON.stringify(command));
+      unacked.clear();
+      for (const command of commandsToResend(commands)) sendCommand(command);
       // The edge keeps watches per socket: a new socket starts watching nothing.
       if (attempt.watching !== null) options.send(JSON.stringify(watchMessage(attempt.watching)));
     },
     send(input, label, confirm) {
       const command = { type: "command", commandId: newCommandId(), ...input, ...(confirm ? { confirm } : {}) } as ClientCommand;
       setCommands(reduceCommands(commands, { type: "sent", command, label }));
-      options.send(JSON.stringify(command));
+      sendCommand(command);
       return command.commandId;
     },
     received(data) {
@@ -148,6 +171,7 @@ export function createEdgeClient(options: {
         }
         const status = parseCommandStatus(data);
         if (!status) return false;
+        unacked.delete(status.commandId);
         setCommands(reduceCommands(commands, status));
         return true;
       }

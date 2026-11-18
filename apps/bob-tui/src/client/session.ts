@@ -4,13 +4,21 @@
 // The socket is injected, so tests drive it without a network.
 import { randomUUID } from "node:crypto";
 
-import { emptyView, reduce, type CommandOption, type Confirmation, type EdgeView } from "@bob/sdlc-view";
+import { emptyView, reduce, type ClientCommand, type CommandOption, type Confirmation, type EdgeView } from "@bob/sdlc-view";
 
 import { asAttemptMessage, emptyAttempt, reduceAttempt, watchMessage, type AttemptState } from "../model/attempt";
 import { applyStatus, asCommandStatus, clientCommand, emptyCommands, expire, recordSent, toResend, type CommandsState } from "../model/commands";
 import { asEdgeMessage, createBackoff, helloFor } from "./edge-protocol";
 
 export type Connection = "connecting" | "live" | "reconnecting" | "auth-failed";
+
+/**
+ * A command written to a live socket is answered by the edge at once (commandAccepted or
+ * commandRejected, or its stored result). No answer this long means the socket is half
+ * dead though it never closed: it is replaced, and onOpen resends the command with the
+ * same commandId, which the edge dedupes (BOB-89).
+ */
+export const ACK_TIMEOUT_MS = 10_000;
 
 export interface SessionState {
   view: EdgeView;
@@ -68,16 +76,50 @@ export function createSession(options: SessionOptions): Session {
   let stopped = false;
   let timer: unknown;
   let resyncRequested = false;
+  /** commandId → when it was written to the current socket, until the edge answers it. */
+  const unacked = new Map<string, number>();
+  let ackTimer: unknown;
 
   const set = (patch: Partial<SessionState>) => {
     state = { ...state, ...patch };
     for (const l of listeners) l(state);
   };
   const write = (message: unknown) => { if (socket && isOpen) socket.send(JSON.stringify(message)); };
+  const disarmAck = () => {
+    if (ackTimer !== undefined) clearTimer(ackTimer);
+    ackTimer = undefined;
+  };
+  const armAck = () => {
+    if (ackTimer !== undefined || unacked.size === 0) return;
+    const due = Math.min(...unacked.values()) + ACK_TIMEOUT_MS;
+    ackTimer = setTimer(checkAck, Math.max(0, due - now()));
+  };
+  const checkAck = () => {
+    ackTimer = undefined;
+    if (!socket || !isOpen) return;
+    const overdue = [...unacked.values()].some((at) => now() - at >= ACK_TIMEOUT_MS);
+    if (!overdue) { armAck(); return; }
+    const dead = socket;
+    socket = null;
+    isOpen = false;
+    unacked.clear();
+    dead.close();
+    set({ connection: "reconnecting", error: "The edge did not answer a command; reconnecting to send it again." });
+    connect();
+  };
+  /** Writes a command and starts its answer deadline when it actually went out. */
+  const writeCommand = (command: ClientCommand) => {
+    if (!socket || !isOpen) return;
+    socket.send(JSON.stringify(command));
+    unacked.set(command.commandId, now());
+    armAck();
+  };
 
   const connect = () => {
     if (stopped) return;
     isOpen = false;
+    unacked.clear();
+    disarmAck();
     let current: SocketLike | null = null;
     const mine = () => socket === current && current !== null;
     current = options.open({
@@ -87,7 +129,7 @@ export function createSession(options: SessionOptions): Session {
         resyncRequested = state.view.needsResync;
         set({ connection: "live", error: null });
         write(helloFor(state.view));
-        for (const command of toResend(state.commands)) write(command);
+        for (const command of toResend(state.commands)) writeCommand(command);
         // Watches live per socket on the edge: a new socket watches nothing until told.
         if (state.attempt.watching !== null) write(watchMessage(state.attempt.watching));
       },
@@ -98,7 +140,7 @@ export function createSession(options: SessionOptions): Session {
         const live = asAttemptMessage(value);
         if (live) { backoff.heard(); set({ attempt: reduceAttempt(state.attempt, live) }); return; }
         const status = asCommandStatus(value);
-        if (status) { backoff.heard(); set({ commands: applyStatus(state.commands, status) }); return; }
+        if (status) { backoff.heard(); unacked.delete(status.commandId); set({ commands: applyStatus(state.commands, status) }); return; }
         const message = asEdgeMessage(value);
         if (!message) return;
         backoff.heard();
@@ -114,6 +156,8 @@ export function createSession(options: SessionOptions): Session {
         if (!mine()) return;
         socket = null;
         isOpen = false;
+        unacked.clear();
+        disarmAck();
         if (stopped || state.connection === "auth-failed") return;
         set({ connection: "reconnecting" });
         timer = setTimer(connect, backoff.nextDelay());
@@ -140,6 +184,8 @@ export function createSession(options: SessionOptions): Session {
     stop() {
       stopped = true;
       clearTimer(timer);
+      unacked.clear();
+      disarmAck();
       const s = socket;
       socket = null;
       isOpen = false;
@@ -148,7 +194,7 @@ export function createSession(options: SessionOptions): Session {
     send(option, label, confirm) {
       const command = clientCommand(newId(), option, confirm);
       set({ commands: recordSent(state.commands, command, label, now()) });
-      write(command);
+      writeCommand(command);
       return command.commandId;
     },
     watch(itemId) {

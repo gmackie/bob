@@ -3,7 +3,7 @@ import type { EdgeMessage, ItemSnapshot, PlanSnapshot } from "@bob/sdlc-view";
 import { EdgeController } from "../../../worker/sdlc/controller";
 import type { IngestBatch } from "../../../worker/sdlc/store";
 import { nodeSqlitePort } from "../../../worker/sdlc/test-helpers/node-sqlite";
-import { createBackoff, createEdgeClient, helloFor, parseEdgeMessage, reconnectDelay } from "./edge-client";
+import { ACK_TIMEOUT_MS, createBackoff, createEdgeClient, helloFor, parseEdgeMessage, reconnectDelay } from "./edge-client";
 import { edgeSocketUrl } from "./use-sdlc-edge";
 
 const target = { environmentId: "hetzner-bob", projectId: "bob", repository: { integrationId: "forgegraph", repositoryId: "bob" } };
@@ -137,5 +137,54 @@ describe("reconnectDelay and edgeSocketUrl", () => {
   it("uses wss on https and ws on http, same origin", () => {
     expect(edgeSocketUrl("https://blder.bot/sdlc?x=1")).toBe("wss://blder.bot/api/sdlc/ws");
     expect(edgeSocketUrl("http://localhost:3000/sdlc")).toBe("ws://localhost:3000/api/sdlc/ws");
+  });
+});
+
+describe("command answer deadline (BOB-89)", () => {
+  const pause = { operation: "ControlPlan", input: { planId: "p", expectedVersion: 1, action: "pause" } } as const;
+  function ackHarness(open = true) {
+    let clock = 1_000;
+    let writable = open;
+    const sent: unknown[] = [];
+    const client = createEdgeClient({
+      send: (d) => { if (!writable) return false; sent.push(JSON.parse(d)); return true; },
+      now: () => clock,
+      newCommandId: () => `cmd-${sent.length}`,
+    });
+    return { client, sent, advance: (ms: number) => { clock += ms; }, open: () => { writable = true; } };
+  }
+
+  it("is overdue once a written command goes ACK_TIMEOUT_MS without an answer", () => {
+    const h = ackHarness();
+    const id = h.client.send(pause, "Pause");
+    h.advance(ACK_TIMEOUT_MS - 1);
+    expect(h.client.overdue()).toBe(false);
+    h.advance(1);
+    expect(h.client.overdue()).toBe(true);
+    // The replacement socket resends it with the same commandId and the clock restarts.
+    h.client.opened();
+    expect(h.sent.at(-1)).toMatchObject({ type: "command", commandId: id });
+    expect(h.client.overdue()).toBe(false);
+  });
+
+  it("any answer clears it: accepted, rejected or a result", () => {
+    const h = ackHarness();
+    const a = h.client.send(pause, "Pause");
+    const b = h.client.send(pause, "Pause again");
+    h.client.received(JSON.stringify({ type: "commandAccepted", commandId: a }));
+    h.client.received(JSON.stringify({ type: "commandRejected", commandId: b, code: "rate-limited", message: "slow" }));
+    h.advance(ACK_TIMEOUT_MS * 2);
+    expect(h.client.overdue()).toBe(false);
+  });
+
+  it("does not count a command that was never written; its clock starts on the resend", () => {
+    const h = ackHarness(false);
+    h.client.send(pause, "Pause");
+    h.advance(ACK_TIMEOUT_MS * 2);
+    expect(h.client.overdue()).toBe(false);
+    h.open();
+    h.client.opened();
+    h.advance(ACK_TIMEOUT_MS);
+    expect(h.client.overdue()).toBe(true);
   });
 });

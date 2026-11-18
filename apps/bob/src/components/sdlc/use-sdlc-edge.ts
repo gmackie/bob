@@ -47,7 +47,11 @@ export function useSdlcEdge(): SdlcEdge {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const client = createEdgeClient({
-      send: (data) => { if (socket?.readyState === WebSocket.OPEN) socket.send(data); },
+      send: (data) => {
+        if (socket?.readyState !== WebSocket.OPEN) return false;
+        socket.send(data);
+        return true;
+      },
       onView: setView,
       onCommands: setCommands,
       onAttempt: setAttempt,
@@ -70,11 +74,21 @@ export function useSdlcEdge(): SdlcEdge {
       };
     };
     open();
+    // A socket that stopped answering commands is replaced; opened() resends them (BOB-89).
+    const watchdog = setInterval(() => {
+      if (disposed || socket?.readyState !== WebSocket.OPEN || !client.overdue()) return;
+      const dead = socket;
+      socket = null;
+      dead.close();
+      setConnection("reconnecting");
+      open();
+    }, 2_000);
 
     return () => {
       disposed = true;
       clientRef.current = null;
       clearTimeout(timer);
+      clearInterval(watchdog);
       socket?.close();
     };
   }, []);
