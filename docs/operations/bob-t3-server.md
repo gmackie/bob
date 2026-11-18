@@ -69,6 +69,30 @@ terminal, and the production databases were backed up through SQLite's backup
 API. The existing gateway bearer credential still authenticated after restart.
 The old CLI also read the isolated migration snapshot successfully.
 
+On 2026-11-16 (T3CODE-114, Bob execution publishing), `t3code-bob.service` switched
+to `/opt/t3code-releases/T3CODE-114/runtime/t3-0.1.9-gmacko.202611162207-linux-x64/t3`.
+The nightly release could not publish because the macOS builds were blocked by
+the free-disk guard on gmacko-mini, so this runtime archive was built on
+hetzner-bob from merged t3code commit
+`06e6c29170e745705b58a8704161c52a484b3462` with the release workflow's Linux steps
+(desktop AppImage skipped) and passed `scripts/smoke-cli-archive.ts`. Its SHA256 is
+`07983a4532a7a6549db4a13b8df7044450f32fc7b24061588cdb4a82da6b68a8`.
+The BOB-55 runtime remains installed.
+
+Migrations 82 to 99, including `099 BobExecutionPublications`, were applied first
+to SQLite backup copies in an isolated data directory and then to the live
+databases. The gateway owner and T3 were stopped, all T3 runs were checked
+terminal, and all four databases were backed up through SQLite's backup API.
+The rollback snapshot is `/root/T3CODE-114-rollback` (the four databases and the
+previous `runtime.conf`); restore it the same way as the BOB-55 snapshot described
+below.
+
+The new runtime recognizes `git.forgegraf.com` remotes as the ForgeGraph
+source-control provider. Its ForgeGraph login for `bob`
+(`/home/bob/.forgegraph/credentials.json`) is currently refused, so T3 can push a
+run's branch but may not open its pull request; Bob's coordinator then opens the
+PR with its own Forgejo token. Replace that login to restore T3-side PR creation.
+
 An inherited migration-32 name conflict remains visible in T3's warning output:
 `ProjectionThreadsExternalTask` versus `AuthPairingProofKeyThumbprint`. Both
 `projection_threads.external_task_json` and
