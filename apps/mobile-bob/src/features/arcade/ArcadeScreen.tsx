@@ -3,12 +3,14 @@
 // does not open a second socket.
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
+import { useGlobalSearchParams } from "expo-router";
 import { useReducedMotion } from "react-native-reanimated";
 import { beatLine, createBeatLog, floorScene, floorSummary, hud } from "@bob/arcade";
 import { rows, RELEASE_STAGE_PRESENTATION, STATE_PRESENTATION } from "@bob/sdlc-view";
 import type { EdgeView } from "@bob/sdlc-view";
 
 import { attentionEntries, bannerFor, firstQuestion, releaseReason } from "~/features/sdlc/attention-model";
+import type { Banner } from "~/features/sdlc/commands-model";
 import { ATTENTION_COLOR, OfflineBanner } from "~/features/sdlc/components";
 import { useNow, useSdlcEdge } from "~/features/sdlc/use-sdlc-edge";
 import { colors } from "~/lib/colors";
@@ -17,11 +19,12 @@ import type { LiveEffect } from "./arcade-model";
 import { EFFECT_TTL_MS, expire, step } from "./arcade-model";
 import { FloorView, STAGE } from "./FloorView";
 import { playHaptic } from "./haptics";
+import { useDemoEdge } from "./use-demo-edge";
 
 const MONO = "Menlo";
 const SIDE_PANEL_MIN_WIDTH = 700;
 
-function HudStrip({ view }: { view: EdgeView }) {
+function HudStrip({ view, demo }: { view: EdgeView; demo: boolean }) {
   const h = hud(view);
   const cells: [string, number, string][] = [
     ["AGENTS", h.agents, "#ffd27a"],
@@ -39,6 +42,7 @@ function HudStrip({ view }: { view: EdgeView }) {
       style={{ flexDirection: "row", flexWrap: "wrap", columnGap: 14, rowGap: 4, paddingHorizontal: 14, paddingVertical: 10 }}
       testID="arcade-hud"
     >
+      {demo ? <Text style={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1, color: "#000", backgroundColor: "#ffd27a", paddingHorizontal: 4 }}>DEMO FEED</Text> : null}
       {cells.map(([k, v, c]) => (
         <Text key={k} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1, color: STAGE.label }}>
           {k} <Text style={{ fontSize: 13, fontWeight: "800", color: c }}>{v}</Text>
@@ -106,12 +110,41 @@ function NeedsYou({ view, onSelect }: { view: EdgeView; onSelect: (itemId: strin
   );
 }
 
+/** The Arcade over the live SDLC edge. */
 export function ArcadeScreen({ onOpenItem }: { onOpenItem?: (itemId: string) => void }) {
   const { state, retry } = useSdlcEdge();
-  const view = state.view;
   const now = useNow();
+  return <ArcadeView view={state.view} banner={bannerFor(state.view, state.connection, now, state.error)} now={now} onRetry={retry} onOpenItem={onOpenItem} />;
+}
+
+/** Dev-only: the Arcade over a scripted feed (demo-feed.ts), for screenshots and the wall demo. */
+export function DemoArcadeScreen() {
+  const view = useDemoEdge();
+  return <ArcadeView view={view} banner={null} now={Date.now()} demo />;
+}
+
+/** The iPad shell's Arcade pane (no router Slot there, so it reads the global params). */
+export function TabletArcadePane() {
+  const { demo } = useGlobalSearchParams<{ demo?: string }>();
+  return __DEV__ && demo === "1" ? <DemoArcadeScreen /> : <ArcadeScreen />;
+}
+
+function ArcadeView({
+  view,
+  banner,
+  now,
+  onRetry,
+  onOpenItem,
+  demo = false,
+}: {
+  view: EdgeView;
+  banner: Banner | null;
+  now: number;
+  onRetry?: () => void;
+  onOpenItem?: (itemId: string) => void;
+  demo?: boolean;
+}) {
   const reduced = useReducedMotion();
-  const banner = bannerFor(view, state.connection, now, state.error);
 
   // Beats and effects. The first view is a baseline (sdlcBeats never celebrates it).
   const log = useMemo(() => createBeatLog(80), []);
@@ -158,10 +191,10 @@ export function ArcadeScreen({ onOpenItem }: { onOpenItem?: (itemId: string) => 
     <View style={{ flex: 1, backgroundColor: STAGE.bg }} onLayout={(e) => setScreenWidth(e.nativeEvent.layout.width)} testID="arcade-screen">
       {banner ? (
         <View style={{ paddingHorizontal: 12, paddingTop: 8 }}>
-          <OfflineBanner banner={banner} now={now} onRetry={retry} />
+          <OfflineBanner banner={banner} now={now} onRetry={onRetry} />
         </View>
       ) : null}
-      <HudStrip view={view} />
+      <HudStrip view={view} demo={demo} />
       <View style={{ flex: 1, flexDirection: side ? "row" : "column" }}>
         <View
           style={{ flex: 1, minHeight: 260 }}
