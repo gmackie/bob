@@ -538,29 +538,57 @@ test('the PR title carries the issue key once', async t => {
   assert.equal(forge.state.calls.find(c => c[0] === 'openPullRequest')[1].title, 'BOB-1: Task 1');
 });
 
-test('forgePort closePullRequest comments, then closes, and errors carry only the HTTP status', async () => {
+test('forgePort closePullRequest closes, then comments best-effort, and errors carry only the HTTP status', async () => {
   const seen = [];
-  let failOn = null;
+  let fail = {};
   const transport = async (url, init) => {
     seen.push({ url, method: init.method, auth: init.headers.authorization, redirect: init.redirect, signal: init.signal instanceof AbortSignal, body: init.body ? JSON.parse(init.body) : null });
-    if (failOn && url.endsWith(failOn)) return new Response('{"message":"secret-token git-token leaked"}', { status: 500, headers: { 'x-token': 'git-token' } });
+    const hit = Object.keys(fail).find(path => url.endsWith(path));
+    if (hit && fail[hit] === 'network') throw new TypeError('fetch failed');
+    if (hit) return new Response('{"message":"secret-token git-token leaked"}', { status: fail[hit], headers: { 'x-token': 'git-token' } });
     if (url.endsWith('/issues/7/comments')) return Response.json({ id: 1 }, { status: 201 });
     if (url.endsWith('/pulls/7')) return Response.json({ number: 7, state: 'closed' });
     return new Response(null, { status: 404 });
   };
   const forge = forgePort({ forgejo: { instanceUrl: 'https://git.example/', token: 'git-token' }, fetch: transport });
-  await forge.closePullRequest('gmackie/bob', 7, 'Superseded by attempt a2 (retry). Closed by Bob coordination.');
+  assert.deepEqual(await forge.closePullRequest('gmackie/bob', 7, 'Superseded by attempt a2 (retry). Closed by Bob coordination.'), { comment: 'posted' });
   assert.deepEqual(seen.map(s => [s.method, s.url, s.body]), [
-    ['POST', 'https://git.example/api/v1/repos/gmackie/bob/issues/7/comments', { body: 'Superseded by attempt a2 (retry). Closed by Bob coordination.' }],
     ['PATCH', 'https://git.example/api/v1/repos/gmackie/bob/pulls/7', { state: 'closed' }],
+    ['POST', 'https://git.example/api/v1/repos/gmackie/bob/issues/7/comments', { body: 'Superseded by attempt a2 (retry). Closed by Bob coordination.' }],
   ]);
   assert(seen.every(s => s.redirect === 'manual' && s.signal && s.auth === 'token git-token'));
-  for (const [path, label] of [['/issues/7/comments', 'pull request comment'], ['/pulls/7', 'close pull request']]) {
-    failOn = path; seen.length = 0;
-    const error = await forge.closePullRequest('gmackie/bob', 7, 'x').then(() => null, e => e);
-    assert.equal(error.message, `${label}: HTTP 500`);
-    assert.equal(error.status, 500);
-    assert.doesNotMatch(JSON.stringify({ ...error, message: error.message, stack: error.stack }), /git-token|secret/);
-    if (path === '/issues/7/comments') assert.equal(seen.length, 1, 'no close after a failed comment');
+
+  // A failed close throws (the driver retries) and does not comment.
+  fail = { '/pulls/7': 500 }; seen.length = 0;
+  const error = await forge.closePullRequest('gmackie/bob', 7, 'x').then(() => null, e => e);
+  assert.equal(error.message, 'close pull request: HTTP 500');
+  assert.equal(error.status, 500);
+  assert.doesNotMatch(JSON.stringify({ ...error, message: error.message, stack: error.stack }), /git-token|secret/);
+  assert.equal(seen.length, 1, 'no comment after a failed close');
+
+  // A refused or failed comment never undoes or blocks the close (production: a
+  // write:repository token without write:issue gets 403 on comments).
+  for (const [status, expected] of [[403, 'skipped (HTTP 403)'], [500, 'skipped (HTTP 500)'], ['network', 'skipped (network error)']]) {
+    fail = { '/issues/7/comments': status }; seen.length = 0;
+    const result = await forge.closePullRequest('gmackie/bob', 7, 'x');
+    assert.deepEqual(result, { comment: expected });
+    assert.doesNotMatch(JSON.stringify(result), /git-token|secret/);
+    assert.deepEqual(seen.map(s => s.method), ['PATCH', 'POST']);
   }
+});
+
+test('a superseded PR is still closed when the comment is refused, and the skip is recorded', async t => {
+  const f = setup(t);
+  const forge = fakeForge({
+    async closePullRequest(repo, number, comment) {
+      forge.state.calls.push(['closePullRequest', number, comment]); forge.state.prs[number].state = 'closed';
+      return { comment: 'skipped (HTTP 403)' };
+    },
+  });
+  const next = await failAndRetry(f, forge);
+  await pass(f, forge);
+  assert.deepEqual((await pass(f, forge)).results.map(r => r.outcome), ['superseded-pr-closed']);
+  assert.equal(forge.state.prs[7].state, 'closed');
+  const recorded = JSON.parse(releaseOf(f, 'attempt-1').data).supersededPullRequest;
+  assert.deepEqual(recorded, { supersededBy: next, number: 7, outcome: 'closed', comment: 'skipped (HTTP 403)', at: recorded.at });
 });

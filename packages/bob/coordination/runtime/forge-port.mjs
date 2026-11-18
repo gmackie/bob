@@ -82,11 +82,19 @@ export function forgePort({ forgejo, forgegraph, fetch: transport = fetch, timeo
       const pr = await json(await git('GET', `${repoPath(repo)}/pulls/${number}`), 'pull request');
       return { state: pr.state, merged: pr.merged === true, mergeSha: pr.merge_commit_sha ?? null, headSha: pr?.head?.sha ?? null, headRepo: pr?.head?.repo?.full_name ?? null, mergeable: pr.mergeable !== false };
     },
-    /** BOB-88: comments on the PR, then closes it. The caller checks it is open and not
-     * merged first; this never merges or reopens anything. */
+    /** BOB-88: closes the PR, then comments why. The caller checks it is open and not
+     * merged first; this never merges or reopens anything. A failed close throws. The
+     * comment is best-effort: Forgejo needs write:issue for it, which a release token
+     * scoped to write:repository lacks (HTTP 403), and a missing comment must not leave a
+     * superseded PR open. Returns { comment: 'posted' | 'skipped (<reason>)' }. */
     async closePullRequest(repo, number, comment) {
-      await json(await git('POST', `${repoPath(repo)}/issues/${number}/comments`, { body: comment }), 'pull request comment');
       await json(await git('PATCH', `${repoPath(repo)}/pulls/${number}`, { state: 'closed' }), 'close pull request');
+      try {
+        const response = await git('POST', `${repoPath(repo)}/issues/${number}/comments`, { body: comment });
+        return { comment: response.ok ? 'posted' : `skipped (HTTP ${response.status})` };
+      } catch (error) {
+        return { comment: `skipped (${error?.name === 'TimeoutError' ? 'timeout' : 'network error'})` };
+      }
     },
     async combinedStatus(repo, sha) {
       const body = await json(await git('GET', `${repoPath(repo)}/commits/${sha}/status`), 'commit status');
