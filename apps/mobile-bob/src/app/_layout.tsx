@@ -115,6 +115,7 @@ const PHONE_SCREEN_TITLES: readonly (readonly [string, string])[] = [
   ["home", "Home"],
   ["attention", "Attention"],
   ["arcade", "Arcade"],
+  ["arcade/demo", "Arcade (demo)"],
   ["attention/browse", "SDLC"],
   ["attention/[itemId]", "Item"],
   ["tasks", "Tasks"],
@@ -330,7 +331,7 @@ function MainPane({
   }
 
   if (target.type === "arcade") {
-    return <TabletArcadePane />;
+    return <TabletArcadePane demo={target.demo} />;
   }
 
   if (target.type === "today") {

@@ -292,6 +292,7 @@ describe("tablet shell model", () => {
       leftTab: "recent-sessions",
       target: { type: "arcade" },
     });
+    expect(getShellStateForPath("/arcade/demo").target).toEqual({ type: "arcade", demo: true });
     expect(getShellModeForTarget({ type: "arcade" }, "ooda")).toBe("ooda");
     expect(isNativeTabletShellTarget({ type: "arcade" })).toBe(true);
   });

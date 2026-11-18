@@ -49,6 +49,10 @@ describe("floorScene", () => {
     }
   });
 
+  it("uses the wide floor on an iPad in portrait", () => {
+    expect(floorScene(view, { width: 720, height: 1200 }).orientation).toBe("wide");
+  });
+
   it("collapses a crowded station into an overflow counter", () => {
     const crowd = viewOf(snapshot(Array.from({ length: 30 }, (_, i) => ({ itemId: `c${String(i).padStart(2, "0")}`, state: "running" as const }))));
     const scene = floorScene(crowd, { width: 1024, height: 400 });

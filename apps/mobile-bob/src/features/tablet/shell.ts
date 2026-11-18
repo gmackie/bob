@@ -43,8 +43,8 @@ export type TabletShellTarget =
   | { type: "provider"; provider: ProviderKey }
   | { type: "task-lane"; lane: TaskLaneKey }
   | { type: "settings" }
-  // Bob Arcade: the live SDLC floor (BOB-92).
-  | { type: "arcade" };
+  // Bob Arcade: the live SDLC floor (BOB-92). demo plays the scripted feed (dev builds only).
+  | { type: "arcade"; demo?: boolean };
 
 export interface TabletShellState {
   mode: TabletShellMode;
@@ -291,11 +291,11 @@ export function getShellStateForPath(
     };
   }
 
-  if (path === "/arcade") {
+  if (path === "/arcade" || path === "/arcade/demo") {
     return {
       mode: currentMode,
       leftTab: getDefaultLeftRailTab(currentMode),
-      target: { type: "arcade" },
+      target: path === "/arcade/demo" ? { type: "arcade", demo: true } : { type: "arcade" },
     };
   }
 

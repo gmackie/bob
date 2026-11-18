@@ -148,12 +148,14 @@ const Parcel = memo(function Parcel({
     else bob.value = 0;
   }, [parcel.marker, reduced, bob]);
 
-  const pos = useAnimatedStyle(() => ({ transform: [{ translateX: x.value - size.w / 2 }, { translateY: y.value - size.h / 2 }] }));
+  // Position with left/top, not a translate: Reanimated's entering/exiting animations own
+  // the transform while they run, so a translated parcel would flash at the origin.
+  const pos = useAnimatedStyle(() => ({ left: x.value - size.w / 2, top: y.value - size.h / 2 }));
   const markerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bob.value }] }));
-  const ring = parcel.attention === "ok" ? (selected ? "#ffffff" : "transparent") : ATTENTION_COLOR[parcel.attention];
+  const edge = parcel.attention === "ok" ? (selected ? "#ffffff" : "transparent") : ATTENTION_COLOR[parcel.attention];
 
   return (
-    <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(14)} exiting={reduced ? undefined : FadeOut.duration(250)} style={[{ position: "absolute", left: 0, top: 0 }, pos]}>
+    <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(14)} exiting={reduced ? undefined : FadeOut.duration(250)} style={[{ position: "absolute" }, pos]}>
       <Pressable
         onPress={() => onPress(parcel.itemId)}
         accessibilityRole="button"
@@ -166,7 +168,7 @@ const Parcel = memo(function Parcel({
           borderRadius: 5,
           backgroundColor: parcelFill(parcel.hue),
           borderWidth: 2,
-          borderColor: ring,
+          borderColor: edge,
           alignItems: "center",
           justifyContent: "center",
         }}

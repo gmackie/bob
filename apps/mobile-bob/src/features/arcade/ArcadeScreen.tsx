@@ -3,9 +3,8 @@
 // does not open a second socket.
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { useGlobalSearchParams } from "expo-router";
 import { useReducedMotion } from "react-native-reanimated";
-import { beatLine, createBeatLog, floorScene, floorSummary, hud } from "@bob/arcade";
+import { beatLine, createBeatLog, floorScene, floorSummary, hud, WIDE_MIN_WIDTH } from "@bob/arcade";
 import { rows, RELEASE_STAGE_PRESENTATION, STATE_PRESENTATION } from "@bob/sdlc-view";
 import type { EdgeView } from "@bob/sdlc-view";
 
@@ -22,7 +21,11 @@ import { playHaptic } from "./haptics";
 import { useDemoEdge } from "./use-demo-edge";
 
 const MONO = "Menlo";
-const SIDE_PANEL_MIN_WIDTH = 700;
+/**
+ * The Needs-you side panel takes 300pt, and the floor wants WIDE_MIN_WIDTH beside it: so
+ * iPad landscape gets the panel, iPad portrait keeps the full width for the wide floor.
+ */
+const SIDE_PANEL_MIN_WIDTH = 300 + WIDE_MIN_WIDTH;
 
 function HudStrip({ view, demo }: { view: EdgeView; demo: boolean }) {
   const h = hud(view);
@@ -80,8 +83,7 @@ function ItemPanel({ view, itemId, onClose, onOpenItem }: { view: EdgeView; item
         <Pressable
           onPress={() => onOpenItem(itemId)}
           accessibilityRole="button"
-          className="mt-1 items-center rounded-xl py-2 active:opacity-70"
-          style={{ backgroundColor: colors.accent }}
+          style={({ pressed }) => ({ marginTop: 4, alignItems: "center", borderRadius: 12, paddingVertical: 8, backgroundColor: colors.accent, opacity: pressed ? 0.7 : 1 })}
           testID="arcade-open-item"
         >
           <Text style={{ color: colors.accentForeground, fontWeight: "700" }}>Open item</Text>
@@ -100,7 +102,7 @@ function NeedsYou({ view, onSelect }: { view: EdgeView; onSelect: (itemId: strin
         <Text style={{ color: colors.muted, fontSize: 13 }}>Nothing is waiting on you. Tap a parcel to inspect it.</Text>
       ) : (
         entries.map((e) => (
-          <Pressable key={e.itemId} onPress={() => onSelect(e.itemId)} accessibilityRole="button" accessibilityLabel={`${e.title}, ${e.stateLabel}`} className="rounded-xl px-3 py-2 active:opacity-70" style={{ backgroundColor: colors.card }}>
+          <Pressable key={e.itemId} onPress={() => onSelect(e.itemId)} accessibilityRole="button" accessibilityLabel={`${e.title}, ${e.stateLabel}`} style={({ pressed }) => ({ borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.card, opacity: pressed ? 0.7 : 1 })}>
             <Text style={{ color: colors.foreground, fontWeight: "600" }} numberOfLines={1}>{e.title}</Text>
             <Text style={{ color: ATTENTION_COLOR[e.attention], fontSize: 12 }} numberOfLines={1}>{e.question ? `“${e.question}”` : e.stateLabel}</Text>
           </Pressable>
@@ -123,10 +125,9 @@ export function DemoArcadeScreen() {
   return <ArcadeView view={view} banner={null} now={Date.now()} demo />;
 }
 
-/** The iPad shell's Arcade pane (no router Slot there, so it reads the global params). */
-export function TabletArcadePane() {
-  const { demo } = useGlobalSearchParams<{ demo?: string }>();
-  return __DEV__ && demo === "1" ? <DemoArcadeScreen /> : <ArcadeScreen />;
+/** The iPad shell's Arcade pane: /arcade, or /arcade/demo for the scripted feed in dev builds. */
+export function TabletArcadePane({ demo = false }: { demo?: boolean }) {
+  return __DEV__ && demo ? <DemoArcadeScreen /> : <ArcadeScreen />;
 }
 
 function ArcadeView({

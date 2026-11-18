@@ -24,6 +24,14 @@ const BARE = [BL, "gray" + "scale", "inv" + "ert", "se" + "pia", "drop-sh" + "ad
 /** Utilities that need a value: only the word followed by -<value> is a utility. */
 const VALUED = ["bright" + "ness", "con" + "trast", "satu" + "rate", "hue-ro" + "tate"];
 const BACKDROP = "back" + "drop";
+/**
+ * BOB-92: two more bare words whose generated CSS react-native-css cannot read (confirmed by
+ * compiling each candidate's CSS with react-native-css): the focus-outline word and the
+ * rotate/scale/translate shorthand word, as bare tokens. The arcade folder needs the second
+ * as a style key, so styles.css leaves that folder out of class scanning (an `@source not`
+ * rule) and this guard skips it too.
+ */
+const MORE_BARE = ["ri" + "ng", "trans" + "form"];
 
 // Tailwind candidates are delimited by anything that cannot be part of a class name.
 const BEFORE = String.raw`(?<![A-Za-z0-9_\-])`;
@@ -32,16 +40,21 @@ const SUFFIX = String.raw`-(?:[A-Za-z0-9]+|\[[^\]\s]*\])`;
 const HAZARD = new RegExp(
   [
     `${BEFORE}-?(?:${BARE.join("|")})(?:${SUFFIX})?${AFTER}(?!-)`,
+    `${BEFORE}(?:${MORE_BARE.join("|")})${AFTER}(?!-)`,
     `${BEFORE}-?(?:${VALUED.join("|")})${SUFFIX}${AFTER}(?!-)`,
     `${BEFORE}${BACKDROP}-[A-Za-z0-9\\-\\[\\]]+`,
   ].join("|"),
   "g",
 );
 
+/** Folders styles.css leaves out of Tailwind's scan (`@source not "./x"`), as absolute paths. */
+const STYLES = readFileSync(path.join(SRC, "styles.css"), "utf8");
+const UNSCANNED = [...STYLES.matchAll(/@source\s+not\s+"([^"]+)"/g)].map((m) => path.resolve(SRC, m[1]!));
+
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) return entry.name === "node_modules" ? [] : sourceFiles(full);
+    if (entry.isDirectory()) return entry.name === "node_modules" || UNSCANNED.includes(full) ? [] : sourceFiles(full);
     return /\.(ts|tsx)$/.test(entry.name) ? [full] : [];
   });
 }
@@ -58,6 +71,11 @@ describe("Tailwind build hazards", () => {
       `${BACKDROP}-filter`, `${BACKDROP}-opacity-50`, `${VALUED[0]}-50`, `-${VALUED[3]}-15`,
     ]);
     expect(hazards(`items.filter(Boolean); onBlur(); ${BL}Radius; in ${VALUED[1]} to; is${BARE[2]}ed`)).toEqual([]);
+  });
+
+  it("keeps the arcade folder out of Tailwind's scan (BOB-92)", () => {
+    expect(UNSCANNED).toContain(path.join(SRC, "features", "arcade"));
+    expect(hazards(`style={{ ${MORE_BARE[1]}: [] }}; const ${MORE_BARE[0]} = 1; string; ${MORE_BARE[1]}er`)).toEqual([MORE_BARE[1], MORE_BARE[0]]);
   });
 
   it("no mobile source file contains a filter-family utility as a standalone token", () => {

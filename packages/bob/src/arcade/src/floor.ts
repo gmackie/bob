@@ -86,10 +86,13 @@ export interface FloorScene {
 }
 
 export interface FloorOptions {
-  /** Default: wide when the box is wider than tall. */
+  /** Default: wide when the box is at least WIDE_MIN_WIDTH across (iPad, landscape phone, web) or wider than tall. */
   orientation?: Orientation;
   scope?: Scope;
 }
+
+/** A belt of 8 stations needs about this much width before columns beat rows (iPad portrait qualifies). */
+export const WIDE_MIN_WIDTH = 560;
 
 const ATTENTION_RANK: Record<Attention, number> = { needs_human: 0, failed: 1, stalled: 2, ok: 3 };
 const MARKER: Record<Attention, Marker> = { needs_human: "!", failed: "✕", stalled: "?", ok: null };
@@ -137,7 +140,7 @@ const byAttention = (a: Omit<FloorParcel, "x" | "y">, b: Omit<FloorParcel, "x" |
 export function floorScene(view: EdgeView, box: { width: number; height: number }, options: FloorOptions = {}): FloorScene {
   const width = Math.max(1, box.width);
   const height = Math.max(1, box.height);
-  const orientation: Orientation = options.orientation ?? (width >= height ? "wide" : "tall");
+  const orientation: Orientation = options.orientation ?? (width >= WIDE_MIN_WIDTH || width >= height ? "wide" : "tall");
   const scope = options.scope ?? {};
   const all = rows(view).filter((r) => inScope(r, scope)).map(parcelFor);
 
