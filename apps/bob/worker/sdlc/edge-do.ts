@@ -6,6 +6,7 @@ import { AttemptEdge, tailResponse } from "./attempt-edge";
 import { attachUser, greet, greetedSockets, handleCommand, ingestResponse, parseCommandMessage, parseHello, parseWatchMessage } from "./edge-sockets";
 import { CI_POLL_MS, fgCiSourceFromEnv, type FgEnv } from "./fg";
 import { SDLC_USER_HEADER, viewerList } from "./routes";
+import { parseShippedRequest, ShippedEdge } from "./shipped";
 import { durableObjectSql } from "./sql";
 import { fetchBizPulseRepos } from "./topology";
 
@@ -28,6 +29,8 @@ export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
   private readonly controller: EdgeController;
   /** Watches, the in-memory live tail and CI detail (BOB-80). Nothing of it is stored. */
   private readonly attempt: AttemptEdge;
+  /** Opt-in "shipped today" entries (BOB-95). */
+  private readonly shipped: ShippedEdge;
 
   constructor(ctx: DurableObjectState, env: SdlcEdgeEnv) {
     super(ctx, env);
@@ -40,8 +43,14 @@ export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
       // SDLC push alerts go to every viewer, sent in the background so ingest never waits on them.
       alertRecipients: () => viewerList(this.env.SDLC_VIEWER_USER_IDS),
       notify: (deliveries) => ctx.waitUntil(sendAlertsThroughBob(this.env, deliveries)),
+      onShipped: (entries) => this.shipped.publish(entries),
     });
     const store = this.controller.store;
+    this.shipped = new ShippedEdge({
+      sockets: () => ctx.getWebSockets(),
+      recent: (now) => store.shipped.recent(now),
+      viewerIds: () => this.env.SDLC_VIEWER_USER_IDS,
+    });
     this.attempt = new AttemptEdge({
       sockets: () => ctx.getWebSockets(),
       item: (id) => store.item(id),
@@ -82,6 +91,7 @@ export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
       if (this.attempt.watch(ws, watch)) await this.armCiPoll();
       return;
     }
+    if (parseShippedRequest(message)) { this.shipped.request(ws); return; }
     const command = parseCommandMessage(message);
     if (command) handleCommand(this.controller, ws, command, this.env.SDLC_VIEWER_USER_IDS, Date.now());
   }
