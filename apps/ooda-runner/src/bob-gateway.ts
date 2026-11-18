@@ -34,7 +34,7 @@ import {
 import { ProxyControl } from "./proxy-control";
 import { UsagePoller } from "./budget/usage-poller";
 import { NativeSessionTracker } from "./budget/native-session";
-import { releaseBranchFromStaleWorktrees } from "./worktree-prepare.js";
+import { assertValidWorktreeBranch, INVALID_BRANCH_ERROR, releaseBranchFromStaleWorktrees, worktreeDirectoryName } from "./worktree-prepare.js";
 import {
   commitTrailer,
   commitTrailerInstruction,
@@ -1175,6 +1175,23 @@ export class BobGatewayConnector {
       })
       .catch(() => null);
 
+    if (session.branch !== undefined) {
+      try {
+        await assertValidWorktreeBranch((cwd, args) => this.git(cwd, args), homedir(), session.branch);
+      } catch {
+        const failure = {
+          code: "INVALID_BRANCH", phase: "worktree_admission", modelStarted: false, retryable: false,
+          error: INVALID_BRANCH_ERROR,
+        };
+        console.error(`[bob-gw] branch admission failed for session ${session.sessionId}`);
+        this.sendStatus(session.sessionId, "error", failure);
+        this.sendEvent(session.sessionId, "error", "system", failure);
+        await this.bobReporter.finishRun(bobRunId, "failed", failure).catch(() => {});
+        this.activeSessions.delete(session.sessionId);
+        return;
+      }
+    }
+
     // When the server mapped a repo + branch, run in an isolated git worktree
     // off that repo so the agent never touches the runner's own checkout and so
     // we can push the branch + open a PR. Otherwise fall back to the legacy dir.
@@ -1457,7 +1474,7 @@ export class BobGatewayConnector {
     baseBranch: string,
   ): Promise<WorktreeContext> {
     const repoName = basename(repoPath);
-    const safeBranch = branch.replace(/[^a-zA-Z0-9._-]+/g, "-");
+    const safeBranch = worktreeDirectoryName(branch);
     const wtPath = join(homedir(), ".bob", "worktrees", repoName, safeBranch);
 
     await this.git(repoPath, ["fetch", "origin", baseBranch]).catch(() => {});

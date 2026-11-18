@@ -34,11 +34,20 @@ export function slugify(text: string): string {
 
 /**
  * Build the feature branch for a task run: `bob/<identifier>/<slugified title>`.
- * `identifier` is the short work-item identifier (e.g. a planning identifier
- * like "BOB-27", or the first 8 chars of a work-item UUID for dispatch).
+ * Preserve the complete external identity with reversible escaping. Merely
+ * slugifying it would make `a:b`, `a/b` and `a-b` share a force-pushed branch.
+ * Existing alphanumeric, underscore and hyphen identifiers stay unchanged.
  */
 export function generateBranchName(identifier: string, title: string): string {
-  return `bob/${identifier}/${slugify(title)}`;
+  if (!identifier)
+    throw new Error("Work-item identifier is required for branch naming");
+  // encodeURIComponent leaves dots and a few Git-special characters intact.
+  // Escape those too so identities cannot introduce .lock, .. or ref syntax.
+  const safeIdentifier = encodeURIComponent(identifier).replace(
+    /[.!'()*~]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `bob/${safeIdentifier}/${slugify(title) || "task"}`;
 }
 
 /**
@@ -48,7 +57,9 @@ export function generateBranchName(identifier: string, title: string): string {
  */
 const TRACKER_IDENTIFIER = /^[A-Z]{2,10}-\d+$/;
 
-export function isTrackerIdentifier(value: string | null | undefined): value is string {
+export function isTrackerIdentifier(
+  value: string | null | undefined,
+): value is string {
   return typeof value === "string" && TRACKER_IDENTIFIER.test(value);
 }
 
@@ -68,16 +79,25 @@ export function trackerIdentifierOf(item: {
   sourceMetadata?: unknown;
 }): string | null {
   if (item.externalProvider !== "linear") return null;
-  const meta = item.sourceMetadata as Record<string, unknown> | null | undefined;
+  const meta = item.sourceMetadata as
+    | Record<string, unknown>
+    | null
+    | undefined;
   const recorded = meta?.trackerIdentifier;
-  if (isTrackerIdentifier(recorded as string | undefined)) return recorded as string;
+  if (isTrackerIdentifier(recorded as string | undefined))
+    return recorded as string;
   if (isTrackerIdentifier(item.externalId)) return item.externalId;
-  const fromUrl = /\/issue\/([A-Z]{2,10}-\d+)(?:[/?#]|$)/.exec(item.externalUrl ?? "");
+  const fromUrl = /\/issue\/([A-Z]{2,10}-\d+)(?:[/?#]|$)/.exec(
+    item.externalUrl ?? "",
+  );
   return fromUrl?.[1] ?? null;
 }
 
 /** Feature branch for a tracker-imported task: `bob/GMA-612-<slugified title>`. */
-export function generateTrackerBranchName(identifier: string, title: string): string {
+export function generateTrackerBranchName(
+  identifier: string,
+  title: string,
+): string {
   const slug = slugify(title);
   return slug ? `bob/${identifier}-${slug}` : `bob/${identifier}`;
 }

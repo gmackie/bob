@@ -161,6 +161,13 @@ describe("execution task runtime helpers", () => {
 });
 
 describe("branchForTask", () => {
+  it("preserves an external intake identity while escaping its Git-unsafe punctuation", () => {
+    const identifier = "bizpulse:2026-10-05:startup:connector_failure:restore-connection";
+    const branch = branchForTask({ identifier, title: "Restore connection", externalProvider: "bizpulse" });
+    expect(branch).not.toContain(":");
+    expect(decodeURIComponent(branch.split("/")[1] ?? "")).toBe(identifier);
+  });
+
   it("names a Kanbanger-imported task's branch after its identifier so the tracker links it", () => {
     expect(
       branchForTask({ identifier: "GMA-612", title: "Fix the login redirect", externalProvider: "linear" }),

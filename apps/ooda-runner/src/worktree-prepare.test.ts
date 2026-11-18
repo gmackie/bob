@@ -23,9 +23,10 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { releaseBranchFromStaleWorktrees } from "./worktree-prepare.js";
+import { assertValidWorktreeBranch, INVALID_BRANCH_ERROR, releaseBranchFromStaleWorktrees, worktreeDirectoryName } from "./worktree-prepare.js";
+import { generateBranchName } from "../../../packages/bob/src/work-items/src/branch-name";
 
 let root: string;
 let repo: string;
@@ -46,6 +47,44 @@ beforeEach(() => {
 });
 
 afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+it("creates real worktrees for escaped intake IDs and distinct retry branches", async () => {
+  const branch = generateBranchName("bizpulse:2026-10-05:startup:connector_failure:restore-connection", "Restore connection");
+  const branches = [branch, `${branch}-a2`, `${branch}-a3`];
+  for (const ref of branches) {
+    await assertValidWorktreeBranch(runGit, repo, ref);
+    git(repo, ["worktree", "add", "-b", ref, join(root, worktreeDirectoryName(ref)), "master"]);
+  }
+  for (const ref of branches) expect(git(repo, ["worktree", "list", "--porcelain"])).toContain(`branch refs/heads/${ref}`);
+});
+
+it("accepts the newline-terminated Git output returned by the real runner", async () => {
+  const rawGit = async (cwd: string, args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" });
+  await expect(assertValidWorktreeBranch(rawGit, repo, "bob/item/valid-task")).resolves.toBeUndefined();
+});
+
+it("keeps formerly colliding directory names separate without unbounded filenames", () => {
+  const refs = ["bob/a%3Ab/task", "bob/a-3Ab/task", "bob/a/b-task", "bob/a-b/task", "bob/" + "x".repeat(230)];
+  const names = refs.map(worktreeDirectoryName);
+  expect(new Set(names).size).toBe(refs.length);
+  for (const [index, name] of names.entries()) {
+    expect(name).not.toMatch(/[\\/]/);
+    expect(Buffer.byteLength(name)).toBeLessThan(255);
+    expect(worktreeDirectoryName(refs[index]!)).toBe(name);
+  }
+});
+
+it("uses Git admission without leaking branch text or mutating any ref", async () => {
+  const calls: string[][] = [];
+  const recordingGit = async (cwd: string, args: string[]) => { calls.push(args); return git(cwd, args); };
+  await expect(assertValidWorktreeBranch(recordingGit, repo, "bob/private:invalid/task")).rejects.toThrow(INVALID_BRANCH_ERROR);
+  expect(calls).toEqual([["check-ref-format", "--branch", "bob/private:invalid/task"]]);
+  expect(git(repo, ["for-each-ref", "--format=%(refname)", "refs/heads/bob/"])).toBe("");
+  const fakeGit = vi.fn().mockResolvedValue("master");
+  await expect(assertValidWorktreeBranch(fakeGit, repo, "@{-1}")).rejects.toThrow(INVALID_BRANCH_ERROR);
+  await expect(assertValidWorktreeBranch(fakeGit, repo, "bob/" + "é".repeat(120))).rejects.toThrow(INVALID_BRANCH_ERROR);
+  expect(fakeGit).toHaveBeenCalledTimes(1);
+});
 
 describe("releaseBranchFromStaleWorktrees", () => {
   it("frees a branch held by a worktree whose directory was deleted", async () => {

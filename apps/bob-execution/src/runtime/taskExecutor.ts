@@ -167,7 +167,8 @@ export async function gatewayRequest(
  * The run's feature branch. A Kanbanger/Linear-imported task whose identifier
  * is the tracker's (`GMA-612`) gets `bob/GMA-612-<slug>` so Kanbanger and
  * ForgeGraph can link the branch, its CI and its deploys to the issue; every
- * other task keeps the historical `bob/<identifier>/<slug>` shape unchanged.
+ * other task uses `bob/<escaped identifier>/<slug>`, preserving safe historical
+ * identifiers while keeping external intake punctuation out of Git ref syntax.
  */
 export function branchForTask(
   task: Pick<PlanningTask, "identifier" | "title" | "externalProvider">,

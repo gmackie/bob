@@ -19,6 +19,7 @@ afterEach(() => {
 /** git stub: `ahead` commits on the branch; a non-empty net diff when ahead > 0. */
 function gitStub(ahead: number) {
   return vi.fn(async (_cwd: string, args: string[]) => {
+    if (args[0] === "check-ref-format") return args[2]!;
     if (args[0] === "rev-list") return `${ahead}\n`;
     if (args[0] === "diff") throw new Error("differs");
     if (args[0] === "remote") return "https://git.example/owner/repo.git\n";

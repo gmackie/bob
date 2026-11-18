@@ -2315,6 +2315,9 @@ export class Relay {
           error?: string;
           reason?: string;
           message?: string;
+          phase?: string;
+          modelStarted?: boolean;
+          retryable?: boolean;
           pullRequestUrl?: string;
           branch?: string;
           baseBranch?: string;
@@ -2323,6 +2326,8 @@ export class Relay {
     const errorMessage =
       summary?.error ?? summary?.message ?? summary?.reason ?? undefined;
     const isError = msg.status === "error" || msg.status === "failed";
+    const branchAdmissionBlocked = isError && summary?.code === "INVALID_BRANCH" &&
+      summary.phase === "worktree_admission" && summary.modelStarted === false && summary.retryable === false;
 
     // Learn "this host can't run that agent" from a spawn failure so the next
     // pending-delivery tick doesn't hand it the same kind of work again.
@@ -2415,9 +2420,15 @@ export class Relay {
         if (taskRun.workItemId) {
           await db
             .update(workItems)
-            .set({ status: msg.status === "completed" ? "in_review" : "ready" })
+            .set({ status: msg.status === "completed" ? "in_review" : branchAdmissionBlocked ? "blocked" : "ready" })
             .where(eq(workItems.id, taskRun.workItemId));
         }
+      }
+
+      // Public dispatches can link a work item without creating a task_run.
+      // A deterministic admission failure must stop their provider loop too.
+      if (branchAdmissionBlocked && !taskRun?.workItemId && session.workItemId) {
+        await db.update(workItems).set({ status: "blocked" }).where(eq(workItems.id, session.workItemId));
       }
 
       // Bridge: update agent_runs for dashboard (idempotent)
