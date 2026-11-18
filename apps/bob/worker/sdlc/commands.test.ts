@@ -26,7 +26,7 @@ function harness(options: Partial<EdgeControllerOptions> = {}) {
   const sql = options.sql ?? nodeSqlitePort();
   let clock = 1_000_000;
   const all: Socket[] = [];
-  const make = () => new EdgeController({ sql, sockets: () => greetedSockets(all), now: () => clock, newEpoch: () => "e1", ...options });
+  const make = () => new EdgeController({ sql, sockets: () => greetedSockets(all), now: () => clock, newEpoch: () => "e1", logLine: () => {}, ...options });
   const controller = make();
   const log = () => {};
   /** A socket as the DO accepts it (user id attached), greeted unless told otherwise. */
@@ -359,5 +359,53 @@ describe("ingest results validation", () => {
     for (const results of [{}, "x", [null], [{ commandId: "a", ok: true }], [{ commandId: "a", ok: false, error: { code: "c" } }], Array.from({ length: 501 }, () => ok("a"))]) {
       expect(parseBatch({ ...base, results })).toBeNull();
     }
+  });
+});
+
+describe("command decision log (BOB-89)", () => {
+  const logged = () => {
+    const lines: string[] = [];
+    const h = harness({ logLine: (line) => { lines.push(line); } });
+    return { h, lines, parsed: () => lines.map((l) => JSON.parse(l) as Record<string, unknown>) };
+  };
+
+  it("logs one line per decision: accepted, replayed for a re-sent commandId, rejected with its code", () => {
+    const { h, parsed } = logged();
+    h.ingest();
+    const s = h.connect("u1");
+    h.send(s, pause("log-a"));
+    h.send(s, pause("log-a"));
+    h.send(s, { type: "command", commandId: "log-b", operation: "Nope" });
+    h.send(h.connect("u9"), pause("log-c"));
+    expect(parsed()).toEqual([
+      { event: "sdlc_edge_command", commandId: "log-a", operation: "ControlPlan", outcome: "accepted" },
+      { event: "sdlc_edge_command", commandId: "log-a", operation: "ControlPlan", outcome: "replayed" },
+      { event: "sdlc_edge_command", commandId: "log-b", operation: "Nope", outcome: "rejected", code: "invalid" },
+      { event: "sdlc_edge_command", commandId: "log-c", operation: "ControlPlan", outcome: "rejected", code: "forbidden" },
+    ]);
+  });
+
+  it("logs a coordinator-offline refusal, the case a lost send could not be told apart from", () => {
+    const { h, parsed } = logged();
+    h.send(h.connect("u1"), pause("log-off"));
+    expect(parsed()).toEqual([{ event: "sdlc_edge_command", commandId: "log-off", operation: "ControlPlan", outcome: "rejected", code: "coordinator-offline" }]);
+  });
+
+  it("never logs input values: not the answer, item, attempt or prompt of a ResolveInput, nor the user id", () => {
+    const { h, lines } = logged();
+    h.ingest();
+    const reply = h.send(h.connect("u1"), {
+      type: "command", commandId: "log-r", operation: "ResolveInput",
+      input: { itemId: "item-secret", attemptId: "attempt-secret", promptId: "prompt-secret", answer: JSON.stringify({ q: "answer-secret" }) },
+    });
+    expect(reply).toMatchObject({ type: "commandRejected", code: "invalid" });
+    expect(lines).toHaveLength(1);
+    for (const value of ["item-secret", "attempt-secret", "prompt-secret", "answer-secret", "u1"]) expect(lines[0]).not.toContain(value);
+  });
+
+  it("a logger that throws never fails the command", () => {
+    const h = harness({ logLine: () => { throw new Error("log sink down"); } });
+    h.ingest();
+    expect(h.send(h.connect("u1"), pause("log-t"))).toMatchObject({ type: "commandAccepted", commandId: "log-t" });
   });
 });

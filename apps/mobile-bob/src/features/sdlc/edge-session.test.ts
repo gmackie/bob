@@ -1,7 +1,7 @@
 import type { ItemSnapshot } from "@bob/sdlc-view";
 import { describe, expect, it } from "vitest";
 
-import { asAttemptMessage, createSession, reconnectDelay } from "./edge-session";
+import { ACK_TIMEOUT_MS, asAttemptMessage, createSession, reconnectDelay } from "./edge-session";
 import type {SocketHandlers} from "./edge-session";
 import { item, must, plan, TOPOLOGY } from "./test-fixtures";
 
@@ -178,5 +178,70 @@ describe("asAttemptMessage", () => {
     expect(asAttemptMessage({ type: "ci", itemId: "i", available: false, reason: "no\u001b[2K ci", at: "now" })).toMatchObject({ reason: "no ci" });
     expect(asAttemptMessage({ type: "tailUnavailable", itemId: "i", reason: "\u009b31mquiet" })).toEqual({ type: "tailUnavailable", itemId: "i", reason: "quiet" });
     expect(asAttemptMessage({ type: "tail", frame: { itemId: "i" } })).toBeNull();
+  });
+});
+
+describe("command answer deadline (BOB-89)", () => {
+  function ackHarness() {
+    const sockets: { handlers: SocketHandlers; sent: unknown[]; closed: boolean }[] = [];
+    const timers: { fn: () => void; ms: number }[] = [];
+    let id = 0;
+    let clock = 1_000;
+    const session = createSession({
+      open: (handlers) => {
+        const s = { handlers, sent: [] as unknown[], closed: false };
+        sockets.push(s);
+        return { send: (d) => s.sent.push(JSON.parse(d)), close: () => { s.closed = true; } };
+      },
+      newId: () => `cmd-${++id}`,
+      now: () => clock,
+      random: () => 0.5,
+      setTimer: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+      clearTimer: () => undefined,
+    });
+    const last = () => must(sockets.at(-1), "socket");
+    return { session, sockets, timers, last, advance: (ms: number) => { clock += ms; } };
+  }
+  const pause = { operation: "ControlPlan", input: { planId: "p1", expectedVersion: 2, action: "pause" } } as const;
+
+  it("replaces a socket that never answers a command, and resends it with the same commandId", () => {
+    const h = ackHarness();
+    h.session.start();
+    const first = h.last();
+    first.handlers.onOpen();
+    h.session.send(pause, "Pause");
+    const deadline = must(h.timers.find((t) => t.ms === ACK_TIMEOUT_MS), "deadline");
+    h.advance(ACK_TIMEOUT_MS);
+    deadline.fn();
+    expect(first.closed).toBe(true);
+    expect(h.sockets).toHaveLength(2);
+    h.last().handlers.onOpen();
+    expect(h.last().sent.filter((m) => (m as { type: string }).type === "command")).toEqual([expect.objectContaining({ commandId: "cmd-1" })]);
+    expect(h.session.state.connection).toBe("live");
+  });
+
+  it("keeps a socket that answers in time", () => {
+    const h = ackHarness();
+    h.session.start();
+    h.last().handlers.onOpen();
+    h.session.send(pause, "Pause");
+    h.last().handlers.onMessage(JSON.stringify({ type: "commandAccepted", commandId: "cmd-1" }));
+    h.advance(ACK_TIMEOUT_MS);
+    must(h.timers.find((t) => t.ms === ACK_TIMEOUT_MS), "deadline").fn();
+    expect(h.sockets).toHaveLength(1);
+    expect(h.last().closed).toBe(false);
+    expect(h.session.state.commands.entries["cmd-1"]?.status).toBe("accepted");
+  });
+
+  it("does nothing once stopped", () => {
+    const h = ackHarness();
+    h.session.start();
+    h.last().handlers.onOpen();
+    h.session.send(pause, "Pause");
+    const deadline = must(h.timers.find((t) => t.ms === ACK_TIMEOUT_MS), "deadline");
+    h.session.stop();
+    h.advance(ACK_TIMEOUT_MS);
+    deadline.fn();
+    expect(h.sockets).toHaveLength(1);
   });
 });

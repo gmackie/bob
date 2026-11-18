@@ -42,6 +42,21 @@ export interface EdgeControllerOptions {
    */
   alertRecipients?: () => string[];
   notify?: (deliveries: SdlcAlertDelivery[]) => void;
+  /** One structured line per command decision (BOB-89); console.log in the DO. */
+  logLine?: (line: string) => void;
+}
+
+/**
+ * What the edge did with a client's command: queued it, answered a re-sent commandId from
+ * the outbox or results, or refused it (with its code). Ids and the operation only: never
+ * the input (a ResolveInput answer is user text), and never the user id.
+ */
+export interface CommandDecisionLog {
+  event: "sdlc_edge_command";
+  commandId: string;
+  operation: string | null;
+  outcome: "accepted" | "replayed" | "rejected";
+  code?: CommandRejectCode;
 }
 
 /** The exporter polls this often while commands are queued, or for ACTIVE_POLL_WINDOW_MS after one was sent or answered. */
@@ -92,6 +107,7 @@ export class EdgeController {
   private readonly tierOf: (command: CommandInput) => Tier;
   private readonly alertRecipients: () => string[];
   private readonly notify?: (deliveries: SdlcAlertDelivery[]) => void;
+  private readonly logLine: (line: string) => void;
 
   constructor(options: EdgeControllerOptions) {
     this.store = new EdgeStore(options.sql, options.newEpoch);
@@ -104,6 +120,7 @@ export class EdgeController {
     this.tierOf = options.tierOf ?? defaultTierOf;
     this.alertRecipients = options.alertRecipients ?? (() => []);
     this.notify = options.notify;
+    this.logLine = options.logLine ?? ((line) => console.log(line));
   }
 
   /**
@@ -158,11 +175,18 @@ export class EdgeController {
    * queued (conflict); then coordinator online, a ResolveInput against the item's pending
    * prompt (invalid), tier + confirmation, outbox size (in all,
    * then the user's). Accepted commands are stored before the reply. Replies to `socket` only.
+   * Every decision is logged as one CommandDecisionLog line (BOB-89).
    */
   command(socket: EdgeSocket, raw: unknown, sender: CommandSender): CommandStatusMessage {
     const commandId = typeof (raw as { commandId?: unknown } | null)?.commandId === "string" ? (raw as { commandId: string }).commandId.slice(0, 200) : "";
+    const operationRaw = (raw as { operation?: unknown } | null)?.operation;
+    const operation = typeof operationRaw === "string" ? operationRaw.slice(0, 40) : null;
+    const decided = (outcome: CommandDecisionLog["outcome"], code?: CommandRejectCode) => {
+      const line: CommandDecisionLog = { event: "sdlc_edge_command", commandId, operation, outcome, ...(code ? { code } : {}) };
+      try { this.logLine(JSON.stringify(line)); } catch { /* logging never fails a command */ }
+    };
     const reply = (message: CommandStatusMessage) => { try { socket.send(JSON.stringify(message)); } catch { /* closed */ } return message; };
-    const reject = (code: CommandRejectCode, message: string) => reply({ type: "commandRejected", commandId, code, message });
+    const reject = (code: CommandRejectCode, message: string) => { decided("rejected", code); return reply({ type: "commandRejected", commandId, code, message }); };
     if (sender.userId === null || !sender.viewer) return reject("forbidden", "Not allowed to send commands.");
     const command = parseClientCommand(raw);
     if (!command) return reject("invalid", "Malformed command or unknown operation.");
@@ -174,6 +198,7 @@ export class EdgeController {
       if (known.hash !== null && known.hash !== commandHash(input)) {
         return reject("conflict", "This command id was already used for a different command.");
       }
+      decided("replayed");
       return known.result ? reply({ type: "commandResult", ...known.result }) : reply({ type: "commandAccepted", commandId: command.commandId });
     }
     const now = this.now();
@@ -191,6 +216,7 @@ export class EdgeController {
       return reject("outbox-full", `You have ${COMMAND_LIMITS.maxQueuedPerUser} commands waiting for the coordinator; wait for some to finish.`);
     }
     this.outbox.enqueue({ commandId: command.commandId, actor: sender.userId, queuedAt: now, ...input });
+    decided("accepted");
     return reply({ type: "commandAccepted", commandId: command.commandId });
   }
 
