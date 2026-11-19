@@ -108,7 +108,7 @@ export function attentionEntries(view: EdgeView, scope: Scope = {}): AttentionEn
 }
 
 /** The first pending question as shown on one line: agent text, so terminal controls are stripped. */
-function firstQuestion(row: Row): string | null {
+export function firstQuestion(row: Row): string | null {
   const question = row.item.pendingInput?.questions[0]?.question;
   return question === undefined ? null : stripTerminalControls(question);
 }

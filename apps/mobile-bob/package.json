@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@better-auth/expo": "catalog:",
+    "@bob/arcade": "workspace:*",
     "@bob/config": "workspace:*",
     "@bob/notifications": "workspace:*",
     "@bob/sdlc-view": "workspace:*",

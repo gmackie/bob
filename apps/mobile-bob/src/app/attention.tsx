@@ -22,6 +22,20 @@ export default function AttentionScreen() {
       <OfflineBanner banner={banner} now={now} onRetry={retry} />
 
       <Pressable
+        onPress={() => router.push("/arcade")}
+        accessibilityRole="button"
+        testID="sdlc-attention-arcade"
+        className="mb-3 flex-row items-center justify-between rounded-2xl px-4 py-3 active:opacity-70"
+        style={{ backgroundColor: "#17130e", borderWidth: 1, borderColor: colors.accent }}
+      >
+        <View>
+          <Text className="text-base font-semibold" style={{ color: colors.accent }}>▶ Arcade</Text>
+          <Text className="text-muted text-xs">Watch agents work the SDLC live</Text>
+        </View>
+        <Text className="text-accent text-lg">›</Text>
+      </Pressable>
+
+      <Pressable
         onPress={() => router.push(browseHref({}))}
         accessibilityRole="button"
         className="mb-4 flex-row items-center justify-between rounded-2xl border px-4 py-3 active:opacity-70"

@@ -4,6 +4,14 @@
 @import "nativewind/theme";
 
 /*
+ * Bob Arcade (BOB-92) styles itself with React Native style objects only. Its animated
+ * views need the style key that Tailwind also treats as a utility, and react-native-css
+ * cannot read that utility's CSS (nor the focus-outline one a variable name produced),
+ * so the arcade folder is left out of class scanning. Keep className out of it.
+ */
+@source not "./features/arcade";
+
+/*
  * Fix: NativeWind v5 preview + Tailwind v4 text color resolution.
  *
  * react-native-css 3.0.1 can't resolve CSS variables for the `color`

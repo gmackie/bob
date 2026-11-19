@@ -249,6 +249,9 @@ importers:
       '@bob/api':
         specifier: workspace:*
         version: link:../../packages/bob/src/api
+      '@bob/arcade':
+        specifier: workspace:*
+        version: link:../../packages/bob/src/arcade
       '@bob/auth':
         specifier: workspace:*
         version: link:../../packages/bob/src/auth
@@ -766,6 +769,9 @@ importers:
       '@better-auth/expo':
         specifier: 'catalog:'
         version: 1.4.0-beta.9(better-auth@1.4.0-beta.9(@cloudflare/workers-types@4.20260426.1)(@electric-sql/pglite@0.3.16)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.1)(@prisma/client@5.22.0(prisma@5.22.0))(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.9.0)(pg@8.20.0)(postgres@3.4.9)(prisma@5.22.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(expo-constants@55.0.14)(expo-crypto@55.0.19(expo@55.0.15))(expo-linking@55.0.13)(expo-secure-store@55.0.13(expo@55.0.15))(expo-web-browser@55.0.14(expo@55.0.15)(react-native@0.83.9(@babel/core@7.29.6)(@react-native/metro-config@0.85.2(@babel/core@7.29.6))(@types/react@19.1.17)(react@19.2.8)))
+      '@bob/arcade':
+        specifier: workspace:*
+        version: link:../../packages/bob/src/arcade
       '@bob/config':
         specifier: workspace:*
         version: link:../../packages/bob/src/config
@@ -1448,6 +1454,25 @@ importers:
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@26.4.1)(@vitest/coverage-v8@4.1.5)(jsdom@26.1.0)(vite@8.2.2(@types/node@26.4.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0))
+
+  packages/bob/src/arcade:
+    dependencies:
+      '@bob/sdlc-view':
+        specifier: workspace:*
+        version: link:../sdlc-view
+    devDependencies:
+      '@bob/tsconfig':
+        specifier: workspace:*
+        version: link:../../../../tooling/bob-typescript
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.17
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.17)(jsdom@26.1.0)(vite@8.2.2(@types/node@22.19.17)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0))
 
   packages/bob/src/auth:
     dependencies:
@@ -4685,6 +4710,7 @@ packages:
   '@opentelemetry/propagator-jaeger@2.11.0':
     resolution: {integrity: sha512-RUOqgoIqXOPQTOhpBrs07Y8sBlxVoLY5Fka6ueZ0prW+k6fWQsba/nHDY4gm+gmfuwtRqbX5Y9YKhDvktjbIqQ==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Package no longer supported. See https://github.com/open-telemetry/opentelemetry-js/pull/7077
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -4721,18 +4747,21 @@ packages:
   '@opentelemetry/sdk-trace-base@2.11.0':
     resolution: {integrity: sha512-H19x/TX/LZdqiYOjM7fqtSxwlplC5pgelavqbQdHbhdq0q/AI/TGkM2dfGuuynTXmJPeF2HoZVoPDu+TGoW78A==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-base@2.9.0':
     resolution: {integrity: sha512-cp9zmTl62R8PJrpvFcmc8N2JQU/xfa0S+61q511Nji+QxCfZ8Ifvg7H27G8cANe4crg4RTrWsVvanHiXjSp6ag==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-node@2.11.0':
     resolution: {integrity: sha512-CuvCMJmZxswhNLlM2LfuLOW3h3fZujA4hsG4B+Sz4dX2zvaXO8Ng74cnDHWD64gLszTlhiG3c0iNUjj4g+0/sA==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 

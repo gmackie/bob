@@ -42,6 +42,7 @@ import { TaskLaneTablePane } from "~/components/tablet/TaskLaneTablePane";
 import { TasksDashboard } from "~/components/tablet/TasksDashboard";
 import { WorkItemPane } from "~/components/tablet/WorkItemPane";
 import { AuthGate } from "~/features/auth/auth-gate";
+import { TabletArcadePane } from "~/features/arcade/ArcadeScreen";
 import { ChatScreenView } from "~/features/chat/chat-screen";
 import {
   OodaConversationProvider,
@@ -113,6 +114,8 @@ function firstRouteParam(
 const PHONE_SCREEN_TITLES: readonly (readonly [string, string])[] = [
   ["home", "Home"],
   ["attention", "Attention"],
+  ["arcade", "Arcade"],
+  ["arcade/demo", "Arcade (demo)"],
   ["attention/browse", "SDLC"],
   ["attention/[itemId]", "Item"],
   ["tasks", "Tasks"],
@@ -325,6 +328,10 @@ function MainPane({
         onOpenInspector={onOpenInspector}
       />
     );
+  }
+
+  if (target.type === "arcade") {
+    return <TabletArcadePane demo={target.demo} />;
   }
 
   if (target.type === "today") {
@@ -594,6 +601,15 @@ function TabletLayout() {
     selectSession,
     selectWorkItem,
   ]);
+
+  const handleOpenArcade = useCallback(() => {
+    clearDetailState();
+    setShell((prev) => ({
+      ...prev,
+      target: { type: "arcade" },
+    }));
+    router.replace(appendWorkspaceParam("/arcade", selectedWorkspaceId));
+  }, [clearDetailState, router, selectedWorkspaceId]);
 
   const handleOpenSettings = useCallback(() => {
     clearDetailState();
@@ -900,6 +916,7 @@ function TabletLayout() {
                 onOpenSession={handleOpenSession}
                 onRefresh={gateway.refresh}
                 onOpenSettings={handleOpenSettings}
+                onOpenArcade={handleOpenArcade}
               />
             </View>
           ) : null}
@@ -1023,6 +1040,7 @@ function TabletLayout() {
                 onOpenSession={closeDrawerThen(handleOpenSession)}
                 onRefresh={gateway.refresh}
                 onOpenSettings={closeDrawerThen(handleOpenSettings)}
+                onOpenArcade={closeDrawerThen(handleOpenArcade)}
               />
             </View>
           </Modal>
