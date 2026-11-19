@@ -1,0 +1,34 @@
+appId: com.gmacko.bob.dev
+name: Open Chat through the active phone or tablet shell
+---
+- runFlow:
+    when:
+      visible:
+        id: "mobile-tab-chat"
+    commands:
+      - tapOn:
+          id: "mobile-tab-chat"
+- runFlow:
+    when:
+      visible:
+        id: "tablet-shell"
+    commands:
+      # Compact iPad layouts put the sidebar in a drawer.
+      - runFlow:
+          when:
+            visible:
+              id: "tablet-menu-button"
+          commands:
+            - tapOn:
+                id: "tablet-menu-button"
+      - extendedWaitUntil:
+          visible:
+            id: "tablet-mode-ooda"
+          timeout: 10000
+      - tapOn:
+          id: "tablet-mode-ooda"
+# This also fails clearly if neither shell navigated to Chat.
+- extendedWaitUntil:
+    visible: "Start a new thought|Hold to talk|Connect once to start a conversation"
+    timeout: 30000
+- assertNotVisible: "Connect once to start a conversation"

@@ -1,0 +1,49 @@
+appId: com.gmacko.bob.dev
+name: Core conversation and microphone permission on phone and iPad
+# Supply the installed app's endpoint and the signed-in review account's cookie
+# (or dev bearer token) via Maestro -e. No credentials are stored in this flow.
+env:
+  OODA_API_URL: ""
+  OODA_AUTH_COOKIE: ""
+  OODA_AUTH_TOKEN: ""
+---
+# Fail before UI automation if the required backend is unavailable.
+- runScript: helpers/require-ooda.js
+- launchApp:
+    clearState: false
+    permissions:
+      microphone: unset
+- runFlow: 00-dismiss-logbox.yaml
+- runFlow: helpers/open-chat.yaml
+- runFlow:
+    when:
+      visible: "Start a new thought"
+    commands:
+      - tapOn: "Start a new thought"
+- extendedWaitUntil:
+    visible: "Hold to talk"
+    timeout: 30000
+- assertVisible:
+    text: "Hold to talk"
+    enabled: true
+# The microphone control exists only after a conversation has been loaded.
+- longPressOn: "Hold to talk"
+- extendedWaitUntil:
+    visible: ".*[Mm]icrophone.*"
+    timeout: 10000
+- tapOn: "Allow|OK"
+# Some iOS devices request speech recognition after microphone permission.
+- runFlow:
+    when:
+      visible: ".*[Ss]peech [Rr]ecognition.*"
+    commands:
+      - tapOn: "Allow|OK"
+- assertNotVisible: "Microphone permission is required for voice input."
+- assertNotVisible: "Speech recognition is not available on this device."
+- tapOn: "Keyboard"
+- assertVisible: "Type a message..."
+- inputText: "Core flow review draft"
+- assertVisible: "Core flow review draft"
+# Do not send a review draft to an agent.
+- tapOn: "Voice"
+- assertVisible: "Hold to talk"

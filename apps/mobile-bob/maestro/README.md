@@ -29,10 +29,50 @@ maestro --device <udid> test apps/mobile-bob/maestro/ipad-02-navigation.yaml
 is the fastest way to find the right selector when a flow cannot find an
 element.
 
+## Core conversation review (phone and iPad)
+
+`core-flow.yaml` requires the OODA API, in addition to the Bob server used by
+navigation and task screens. A reachable Bob server or WebSocket gateway alone
+is insufficient. For local development, start OODA with
+`pnpm --filter @gmacko/ooda-web dev` after configuring its database and auth.
+Build/start the mobile app with `OODA_API_URL` pointing at that API. Development
+otherwise defaults to `http://localhost:3001`; on a physical device use a host
+reachable from the device. Setting Maestro's environment does **not** reconfigure
+the installed app.
+
+Sign in to a dedicated review account with `conversation_read` and
+`conversation_write` rollout capabilities. Use the same account for preflight:
+
+```sh
+maestro --device <udid> test \
+  -e OODA_API_URL="$OODA_API_URL" \
+  -e OODA_AUTH_COOKIE="$OODA_AUTH_COOKIE" \
+  apps/mobile-bob/maestro/core-flow.yaml
+```
+
+For dev auth bypass, supply `OODA_AUTH_TOKEN` instead of `OODA_AUTH_COOKIE`.
+Keep credentials out of committed files and shared command logs. Preflight
+checks rollout and authenticated conversation listing before launching the app;
+an unavailable gateway, auth failure, or disabled rollout fails the run rather
+than skipping Chat. The API must be reachable from both Maestro's host and the
+simulator. UI readiness checks also catch app-side connectivity failures.
+
+The flow preserves sign-in, opens Chat via the active shell, creates a thought
+if necessary, and waits for the enabled voice composer. It resets microphone
+permission to `unset` to exercise the iOS permission prompt, then checks a typed
+draft without sending it. Use an English iOS simulator with speech recognition
+available; enable Siri/dictation if required. Speech permission may also be
+requested on devices without on-device recognition. Review runs may create an
+empty conversation in the review account.
+
+Run the preflight's isolated regression checks with
+`node --test apps/mobile-bob/maestro/helpers/require-ooda.test.cjs`.
+
 ## What each covers
 
 | Flow | Device | Covers |
 |------|--------|--------|
+| `core-flow.yaml` | both | OODA preflight, shell-aware Chat navigation, conversation readiness, microphone permission, and keyboard draft. |
 | `00-dismiss-logbox.yaml` | both | Clears the dev-only LogBox toast that parks over the tab bar. Run it first from other flows. |
 | `01-tabs.yaml` | phone | Every tab reaches its destination; More offers the overflow and nothing the tab bar already shows. |
 | `02-titles-and-detail.yaml` | phone | Human titles on every screen; detail opens from a list; the active tab returns to its root. |
@@ -42,7 +82,16 @@ element.
 
 ## Selectors
 
-Prefer `id:` on the tab bar (`mobile-tab-home`, `mobile-tab-tasks`, …). Text
+Prefer `id:` selectors. Phone flows use the tab bar (`mobile-tab-home`,
+`mobile-tab-tasks`, `mobile-tab-chat`, …). The iPad shell has different controls:
+`tablet-mode-ooda`, `tablet-mode-planning`, `tablet-mode-tasks`,
+`tablet-tab-conversations`, and `tablet-sidebar-settings`. Compact tablet layouts
+first need `tablet-menu-button` to open the sidebar. An iPad in a narrow window
+can render the phone shell, so choose selectors by visible shell, not device name.
+`helpers/open-chat.yaml` handles these cases for core review runs. Do not run
+phone-only navigation flows against the tablet sidebar.
+
+Text
 matching is a case-insensitive regex, so `assertNotVisible: "planning"` also
 matches the title "Planning" — assert the title you expect instead of the one
 you do not.
