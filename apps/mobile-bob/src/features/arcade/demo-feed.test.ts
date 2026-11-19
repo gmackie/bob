@@ -16,7 +16,8 @@ describe("demoFeed", () => {
       const next = reduce(view, d);
       expect(next.needsResync).toBe(false);
       for (const [id, item] of Object.entries(next.items)) {
-        const before = view.items[id]!;
+        const before = view.items[id];
+        if (!before) throw new Error(`delta introduced unknown item ${id}`);
         if (before.state !== item.state) expect(allowed.has(`${before.state}>${item.state}`)).toBe(true);
       }
       log.push(sdlcBeats(view, next, 0));

@@ -122,7 +122,8 @@ export function ArcadeScreen({ onOpenItem }: { onOpenItem?: (itemId: string) => 
 /** Dev-only: the Arcade over a scripted feed (demo-feed.ts), for screenshots and the wall demo. */
 export function DemoArcadeScreen() {
   const view = useDemoEdge();
-  return <ArcadeView view={view} banner={null} now={Date.now()} demo />;
+  const now = useNow();
+  return <ArcadeView view={view} banner={null} now={now} demo />;
 }
 
 /** The iPad shell's Arcade pane: /arcade, or /arcade/demo for the scripted feed in dev builds. */
@@ -171,7 +172,9 @@ function ArcadeView({
     }, EFFECT_TTL_MS);
     return () => clearTimeout(id);
   }, [effects]);
-  useSyncExternalStore(log.subscribe, log.version);
+  const subscribeLog = useCallback((listener: () => void) => log.subscribe(listener), [log]);
+  const logVersion = useCallback(() => log.version(), [log]);
+  useSyncExternalStore(subscribeLog, logVersion);
   const ticker = log.recent(4);
 
   const [box, setBox] = useState<{ width: number; height: number } | null>(null);
@@ -201,13 +204,13 @@ function ArcadeView({
           style={{ flex: 1, minHeight: 260 }}
           onLayout={(e) => {
             const { width, height } = e.nativeEvent.layout;
-            setBox((cur) => (cur && cur.width === width && cur.height === height ? cur : { width, height }));
+            setBox((cur) => (cur?.width === width && cur.height === height ? cur : { width, height }));
           }}
           accessible={false}
         >
           {waiting ? (
             <Text style={{ color: colors.muted, padding: 16 }}>Waiting for the first snapshot…</Text>
-          ) : scene && scene.parcels.length === 0 && scene.overflow.length === 0 ? (
+          ) : scene?.parcels.length === 0 && scene.overflow.length === 0 ? (
             <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
               <Text style={{ fontFamily: MONO, color: STAGE.labelLit, letterSpacing: 2 }}>FLOOR IDLE</Text>
               <Text style={{ color: colors.muted, marginTop: 6, textAlign: "center" }}>No plan is running. Dispatch a plan and its issues roll onto the belt.</Text>

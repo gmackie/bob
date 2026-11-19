@@ -49,7 +49,7 @@ const HAZARD = new RegExp(
 
 /** Folders styles.css leaves out of Tailwind's scan (`@source not "./x"`), as absolute paths. */
 const STYLES = readFileSync(path.join(SRC, "styles.css"), "utf8");
-const UNSCANNED = [...STYLES.matchAll(/@source\s+not\s+"([^"]+)"/g)].map((m) => path.resolve(SRC, m[1]!));
+const UNSCANNED = [...STYLES.matchAll(/@source\s+not\s+"([^"]+)"/g)].map((m) => path.resolve(SRC, m[1] ?? ""));
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

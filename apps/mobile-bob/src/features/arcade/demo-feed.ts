@@ -12,6 +12,13 @@ interface Step {
 }
 
 const REPOS = ["bob", "forgegraph", "kanbanger"] as const;
+
+/** Index into a list the script built itself; an out-of-range index is a bug in the script. */
+function at<T>(list: readonly T[], index: number): T {
+  const value = list[index];
+  if (value === undefined) throw new Error(`demo feed: index ${index} out of range`);
+  return value;
+}
 const ITEMS = 9;
 const ids = Array.from({ length: ITEMS }, (_, i) => `demo-${i}`);
 const identifier = (i: number) => `BOB-${101 + i}`;
@@ -25,7 +32,7 @@ function planSnapshot(epoch: string): PlanSnapshot {
       items: ids.map((itemId, i) => ({
         itemId,
         issue: { integrationId: "kanbanger", workspaceId: "demo", teamId: "demo", projectId: "demo", issueId: itemId, identifier: identifier(i) },
-        target: { environmentId: "demo", projectId: "demo", repository: { integrationId: "forgegraph", repositoryId: REPOS[i % REPOS.length]! } },
+        target: { environmentId: "demo", projectId: "demo", repository: { integrationId: "forgegraph", repositoryId: at(REPOS, i % REPOS.length) } },
         completionTarget: "production-verified",
       })),
       dependencies: [],
@@ -60,7 +67,7 @@ export function demoSchedule(): Step[] {
   for (let tick = 0; out.length < queues.reduce((n, q) => n + q.length, 0); tick++) {
     queues.forEach((q, i) => {
       const k = tick - i * 2;
-      if (k >= 0 && k < q.length) out.push(q[k]!);
+      if (k >= 0 && k < q.length) out.push(at(q, k));
     });
   }
   return out;
@@ -78,7 +85,8 @@ export function demoFeed(epoch: string, seenAt: number): DemoFeed {
     ids.map((itemId) => [itemId, { itemId, planId: plan.planId, resourceVersion: 1, state: "pending", release: null, achievedMilestones: [], operationIds: [], evidenceRefs: [] }]),
   );
   const deltas: EdgeMessage[] = demoSchedule().map((s, n) => {
-    const prev = items.get(ids[s.item]!)!;
+    const prev = items.get(at(ids, s.item));
+    if (!prev) throw new Error(`demo feed: no item ${s.item}`);
     const next: ItemSnapshot = {
       ...prev,
       resourceVersion: prev.resourceVersion + 1,

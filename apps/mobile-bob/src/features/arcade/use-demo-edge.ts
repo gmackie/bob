@@ -17,7 +17,10 @@ export function useDemoEdge(): EdgeView {
     let timer: ReturnType<typeof setTimeout>;
     const tick = () => {
       if (i === -1) setView(reduce(emptyView(), feed.snapshot));
-      else if (i < feed.deltas.length) setView((v) => reduce(v, feed.deltas[i]!));
+      else {
+        const delta = feed.deltas[i];
+        if (delta) setView((v) => reduce(v, delta));
+      }
       i++;
       if (i > feed.deltas.length) {
         // A new epoch: the screen treats it as a fresh baseline, as with a reset edge.
