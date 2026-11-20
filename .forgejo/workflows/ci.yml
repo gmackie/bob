@@ -135,6 +135,9 @@ jobs:
       - name: Validate the debug overlay border stays off the CPU
         run: node --test scripts/verify-debug-overlay.test.mjs
 
+      - name: Validate the deploy report waits for this commit's Worker version
+        run: node --test scripts/forgegraph-deploy-report.test.mjs
+
       # Drives the real reaper against real dirs and real processes. The bug it
       # guards was entirely in what the script did to the OS, so this must run
       # on a Linux runner where the /proc path is the one exercised.
