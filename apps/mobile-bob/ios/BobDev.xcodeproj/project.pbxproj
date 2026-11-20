@@ -9,15 +9,47 @@
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		350BDDD5DF8544B1B1A16DE4 /* libPods-BobDev.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DF04FAD393031CCF84F8BAEA /* libPods-BobDev.a */; };
+		36FA580A639F7E9B870E6E30 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6C71B36AFBB0A9A2AABC3068 /* SwiftUI.framework */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
+		4252697EFB0963D166B6981E /* BobItemAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 615785E1BF50F7961F39A924 /* BobItemAttributes.swift */; };
+		7334544E9C3B88E7051A0A18 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C787FFD81D8AEF9EC4CBF3D7 /* Foundation.framework */; };
+		79D07AD7609B9A7B81A1A343 /* BobLiveActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34F6B399EE4E4C20CB3F0F07 /* BobLiveActivityBundle.swift */; };
 		98A031FEBE1244C54FE40557 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B9D721411B4FA49DE23421A1 /* PrivacyInfo.xcprivacy */; };
 		9F92324077F2A5D11BEBCD8C /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 783C164A3A6974341BDAD0E4 /* ExpoModulesProvider.swift */; };
+		A94484CFAD76FB569A18A7AC /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B8A4558FCA69D3AF5DFD4825 /* WidgetKit.framework */; };
+		AF2E464A03BF69DF541D885F /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DBC935768F5F859E617DC799 /* ActivityKit.framework */; };
+		B35DB19D0F4DB581AF04D96F /* BobItemLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E93E5DAF2C0AAB775289995 /* BobItemLiveActivity.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
+		EEBF7FEA55FC23BF7ACDECE6 /* BobLiveActivityWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4CACF2414D66B53F8F3E2C52 /* BobLiveActivityWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 		F11748462D0722830044C1D9 /* StateAccessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748452D0722830044C1D9 /* StateAccessor.swift */; };
 		F11748472D0722830044C1D9 /* DebugBridgeCore in Frameworks */ = {isa = PBXBuildFile; productRef = F117484A2D0722830044C1D9 /* DebugBridgeCore */; };
 		F11748482D0722830044C1D9 /* DebugBridgeUI in Frameworks */ = {isa = PBXBuildFile; productRef = F117484B2D0722830044C1D9 /* DebugBridgeUI */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A3E80BC3A7067F23358F849C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8EF3F720FF88C4BA6AF7F9CD;
+			remoteInfo = BobLiveActivityWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		E960449BBD9E6D8DCA2CC011 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				EEBF7FEA55FC23BF7ACDECE6 /* BobLiveActivityWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		08E0075DCD06D624470D3DC8 /* Pods-BobDev.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BobDev.release.xcconfig"; path = "Target Support Files/Pods-BobDev/Pods-BobDev.release.xcconfig"; sourceTree = "<group>"; };
@@ -26,10 +58,19 @@
 		13B07F961A680F5B00A75B9A /* BobDev.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BobDev.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = BobDev/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = BobDev/Info.plist; sourceTree = "<group>"; };
+		34F6B399EE4E4C20CB3F0F07 /* BobLiveActivityBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BobLiveActivityBundle.swift; sourceTree = "<group>"; };
+		4CACF2414D66B53F8F3E2C52 /* BobLiveActivityWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BobLiveActivityWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		615785E1BF50F7961F39A924 /* BobItemAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BobItemAttributes.swift; sourceTree = "<group>"; };
+		6C71B36AFBB0A9A2AABC3068 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		6E93E5DAF2C0AAB775289995 /* BobItemLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BobItemLiveActivity.swift; sourceTree = "<group>"; };
 		783C164A3A6974341BDAD0E4 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-BobDev/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = BobDev/SplashScreen.storyboard; sourceTree = "<group>"; };
+		B8A4558FCA69D3AF5DFD4825 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		B9D721411B4FA49DE23421A1 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = BobDev/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
+		C328C9D5B8AF3DB6430C0EE0 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C787FFD81D8AEF9EC4CBF3D7 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		DBC935768F5F859E617DC799 /* ActivityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ActivityKit.framework; path = System/Library/Frameworks/ActivityKit.framework; sourceTree = SDKROOT; };
 		DF04FAD393031CCF84F8BAEA /* libPods-BobDev.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-BobDev.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = BobDev/AppDelegate.swift; sourceTree = "<group>"; };
@@ -45,6 +86,17 @@
 				350BDDD5DF8544B1B1A16DE4 /* libPods-BobDev.a in Frameworks */,
 				F11748472D0722830044C1D9 /* DebugBridgeCore in Frameworks */,
 				F11748482D0722830044C1D9 /* DebugBridgeUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F9EB9A10285A34DC4B04E0E4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7334544E9C3B88E7051A0A18 /* Foundation.framework in Frameworks */,
+				A94484CFAD76FB569A18A7AC /* WidgetKit.framework in Frameworks */,
+				36FA580A639F7E9B870E6E30 /* SwiftUI.framework in Frameworks */,
+				AF2E464A03BF69DF541D885F /* ActivityKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -71,6 +123,10 @@
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				DF04FAD393031CCF84F8BAEA /* libPods-BobDev.a */,
+				6B843DCCD0E0D25F77143249 /* iOS */,
+				B8A4558FCA69D3AF5DFD4825 /* WidgetKit.framework */,
+				6C71B36AFBB0A9A2AABC3068 /* SwiftUI.framework */,
+				DBC935768F5F859E617DC799 /* ActivityKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -81,6 +137,26 @@
 				E58D46458CFAA532256174BD /* BobDev */,
 			);
 			name = ExpoModulesProviders;
+			sourceTree = "<group>";
+		};
+		58ABA8241FF7AE8E772D90A5 /* BobLiveActivityWidget */ = {
+			isa = PBXGroup;
+			children = (
+				34F6B399EE4E4C20CB3F0F07 /* BobLiveActivityBundle.swift */,
+				6E93E5DAF2C0AAB775289995 /* BobItemLiveActivity.swift */,
+				615785E1BF50F7961F39A924 /* BobItemAttributes.swift */,
+				C328C9D5B8AF3DB6430C0EE0 /* Info.plist */,
+			);
+			name = BobLiveActivityWidget;
+			path = BobLiveActivityWidget;
+			sourceTree = "<group>";
+		};
+		6B843DCCD0E0D25F77143249 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				C787FFD81D8AEF9EC4CBF3D7 /* Foundation.framework */,
+			);
+			name = iOS;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -99,6 +175,7 @@
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				BD584DC51D0A419B7109ED26 /* Pods */,
 				4697937D47F47CB0CFF2DE7F /* ExpoModulesProviders */,
+				58ABA8241FF7AE8E772D90A5 /* BobLiveActivityWidget */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -109,6 +186,7 @@
 			isa = PBXGroup;
 			children = (
 				13B07F961A680F5B00A75B9A /* BobDev.app */,
+				4CACF2414D66B53F8F3E2C52 /* BobLiveActivityWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -157,10 +235,12 @@
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
 				BEF79AF077B04692BF940360 /* [Expo Dev Launcher] Strip Local Network Keys for Release */,
 				18C19AE8596572D298A16FAF /* [CP] Embed Pods Frameworks */,
+				E960449BBD9E6D8DCA2CC011 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				E2EC48F08BD98D5134A49453 /* PBXTargetDependency */,
 			);
 			name = BobDev;
 			packageProductDependencies = (
@@ -170,6 +250,23 @@
 			productName = BobDev;
 			productReference = 13B07F961A680F5B00A75B9A /* BobDev.app */;
 			productType = "com.apple.product-type.application";
+		};
+		8EF3F720FF88C4BA6AF7F9CD /* BobLiveActivityWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EB23D7453B316A9F85467634 /* Build configuration list for PBXNativeTarget "BobLiveActivityWidget" */;
+			buildPhases = (
+				680614D3D08CB04F5B7DD3E5 /* Sources */,
+				F9EB9A10285A34DC4B04E0E4 /* Frameworks */,
+				2A9F918BB2AE2D37FF92C60E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BobLiveActivityWidget;
+			productName = BobLiveActivityWidget;
+			productReference = 4CACF2414D66B53F8F3E2C52 /* BobLiveActivityWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -203,6 +300,7 @@
 			projectRoot = "";
 			targets = (
 				13B07F861A680F5B00A75B9A /* BobDev */,
+				8EF3F720FF88C4BA6AF7F9CD /* BobLiveActivityWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -216,6 +314,13 @@
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
 				98A031FEBE1244C54FE40557 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2A9F918BB2AE2D37FF92C60E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -384,7 +489,26 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		680614D3D08CB04F5B7DD3E5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				79D07AD7609B9A7B81A1A343 /* BobLiveActivityBundle.swift in Sources */,
+				B35DB19D0F4DB581AF04D96F /* BobItemLiveActivity.swift in Sources */,
+				4252697EFB0963D166B6981E /* BobItemAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E2EC48F08BD98D5134A49453 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = BobLiveActivityWidget;
+			target = 8EF3F720FF88C4BA6AF7F9CD /* BobLiveActivityWidget */;
+			targetProxy = A3E80BC3A7067F23358F849C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		12003D4C1AB0EFB5FA99148D /* Release-production */ = {
@@ -517,6 +641,89 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+		29244C311085D5560D89093B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = P4SWQXAB5H;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BobLiveActivityWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gmacko.bob.dev.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		5AB3527869449A2E8075A461 /* Release-production */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = P4SWQXAB5H;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BobLiveActivityWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gmacko.bob.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = "Release-production";
+		};
+		768D618A8CABC7AED4A0FA13 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = P4SWQXAB5H;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BobLiveActivityWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gmacko.bob.dev.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -696,6 +903,16 @@
 				83CBBA201A601CBA00E9B192 /* Debug */,
 				83CBBA211A601CBA00E9B192 /* Release */,
 				12003D4C1AB0EFB5FA99148D /* Release-production */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		EB23D7453B316A9F85467634 /* Build configuration list for PBXNativeTarget "BobLiveActivityWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				768D618A8CABC7AED4A0FA13 /* Release */,
+				29244C311085D5560D89093B /* Debug */,
+				5AB3527869449A2E8075A461 /* Release-production */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

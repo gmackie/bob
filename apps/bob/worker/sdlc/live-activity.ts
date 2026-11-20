@@ -3,9 +3,11 @@
 // out which activities' content changed and hands those sends to apns.ts in the background.
 import {
   isActivityToken,
+  isLiveActivityApp,
   LIVE_ACTIVITY_LIMITS,
   liveActivityContent,
   type ItemSnapshot,
+  type LiveActivityApp,
   type LiveActivityContent,
   type LiveActivityRegistration,
   type PlanSnapshot,
@@ -14,13 +16,21 @@ import { mayWatch, readAttachment, type AttachedSocket } from "./edge-sockets";
 import type { SqlPort } from "./sql";
 
 export const LIVE_ACTIVITY_SCHEMA = [
-  "CREATE TABLE IF NOT EXISTS sdlc_live_activities (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, item_id TEXT NOT NULL, created_at INTEGER NOT NULL, sent_at INTEGER, sent_json TEXT)",
+  "CREATE TABLE IF NOT EXISTS sdlc_live_activities (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, item_id TEXT NOT NULL, created_at INTEGER NOT NULL, sent_at INTEGER, sent_json TEXT, app TEXT)",
   "CREATE INDEX IF NOT EXISTS sdlc_live_activities_by_user ON sdlc_live_activities (user_id, created_at)",
 ];
+
+/** GMA-774 added `app`; a DO whose table predates it gets the column here. Runs after LIVE_ACTIVITY_SCHEMA. */
+export function migrateLiveActivities(sql: SqlPort): void {
+  const columns = sql.exec<{ name: string }>("PRAGMA table_info(sdlc_live_activities)").map((c) => c.name);
+  if (!columns.includes("app")) sql.exec("ALTER TABLE sdlc_live_activities ADD COLUMN app TEXT");
+}
 
 /** One APNs liveactivity push to make. */
 export interface LiveActivitySend {
   token: string;
+  /** The app the token was registered from; null means the edge's configured APNS_BUNDLE_ID. */
+  app: LiveActivityApp | null;
   event: "update" | "end";
   content: LiveActivityContent;
   /** 10 when the item newly needs you or the activity ends, else 5 (APNs budgets priority 10). */
@@ -32,19 +42,21 @@ export interface LiveActivitySend {
 /** A registration is small; anything longer is ignored unread. */
 export const MAX_REGISTRATION_CHARS = 1024;
 
-/** Parses `{type:"liveActivity", itemId, token: hex|null}`; anything else is null. */
+/** Parses `{type:"liveActivity", itemId, token: hex|null, app?}`; anything else (an unknown app included) is null. */
 export function parseLiveActivityRegistration(message: string | ArrayBuffer): LiveActivityRegistration | null {
   if (typeof message !== "string" || message.length > MAX_REGISTRATION_CHARS) return null;
   let value: unknown;
   try { value = JSON.parse(message); } catch { return null; }
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  const { type, itemId, token } = value as Record<string, unknown>;
+  const { type, itemId, token, app } = value as Record<string, unknown>;
   if (type !== "liveActivity" || typeof itemId !== "string" || itemId.length === 0 || itemId.length > 200) return null;
-  if (token === null) return { type: "liveActivity", itemId, token: null };
-  return isActivityToken(token) ? { type: "liveActivity", itemId, token: token.toLowerCase() } : null;
+  if (app !== undefined && !isLiveActivityApp(app)) return null;
+  const from = app === undefined ? {} : { app };
+  if (token === null) return { type: "liveActivity", itemId, token: null, ...from };
+  return isActivityToken(token) ? { type: "liveActivity", itemId, token: token.toLowerCase(), ...from } : null;
 }
 
-type Row = { token: string; user_id: string; item_id: string; created_at: number; sent_at: number | null; sent_json: string | null };
+type Row = { token: string; user_id: string; item_id: string; created_at: number; sent_at: number | null; sent_json: string | null; app: string | null };
 
 export interface LiveActivityEdgeOptions {
   sql: SqlPort;
@@ -76,9 +88,9 @@ export class LiveActivityEdge {
     }
     sql.transaction(() => {
       sql.exec(
-        "INSERT INTO sdlc_live_activities (token, user_id, item_id, created_at, sent_at, sent_json) VALUES (?, ?, ?, ?, NULL, NULL) " +
-          "ON CONFLICT (token) DO UPDATE SET user_id = excluded.user_id, item_id = excluded.item_id, created_at = excluded.created_at, sent_at = NULL, sent_json = NULL",
-        message.token, userId, message.itemId, now,
+        "INSERT INTO sdlc_live_activities (token, user_id, item_id, created_at, sent_at, sent_json, app) VALUES (?, ?, ?, ?, NULL, NULL, ?) " +
+          "ON CONFLICT (token) DO UPDATE SET user_id = excluded.user_id, item_id = excluded.item_id, created_at = excluded.created_at, sent_at = NULL, sent_json = NULL, app = excluded.app",
+        message.token, userId, message.itemId, now, message.app ?? null,
       );
       sql.exec(
         "DELETE FROM sdlc_live_activities WHERE token IN (SELECT token FROM sdlc_live_activities WHERE user_id = ? ORDER BY created_at DESC, token LIMIT -1 OFFSET ?)",
@@ -99,7 +111,7 @@ export class LiveActivityEdge {
    */
   flush(now: number): LiveActivitySend[] {
     const { sql } = this.options;
-    const rows = sql.exec<Row>("SELECT token, user_id, item_id, created_at, sent_at, sent_json FROM sdlc_live_activities");
+    const rows = sql.exec<Row>("SELECT token, user_id, item_id, created_at, sent_at, sent_json, app FROM sdlc_live_activities");
     if (rows.length === 0) return [];
     const viewers = this.options.viewerIds();
     const sends: LiveActivitySend[] = [];
@@ -120,6 +132,7 @@ export class LiveActivityEdge {
         const subject = content.issue ?? content.repository ?? "An item";
         sends.push({
           token: row.token,
+          app: isLiveActivityApp(row.app) ? row.app : null,
           event: content.ended ? "end" : "update",
           content,
           priority: urgent ? 10 : 5,

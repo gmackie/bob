@@ -1,10 +1,10 @@
 // BOB-96: Live Activity registrations and the updates planned after each ingest; the APNs sender.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LIVE_ACTIVITY_LIMITS, type ItemSnapshot, type PlanSnapshot } from "@bob/sdlc-view";
-import { apnsConfigFromEnv, liveActivityPayload, liveActivitySender, providerToken, resetApnsTokenCache, sendLiveActivities, type ApnsConfig } from "./apns";
+import { apnsConfigFromEnv, apnsTarget, liveActivityPayload, liveActivitySender, providerToken, resetApnsTokenCache, sendLiveActivities, type ApnsConfig } from "./apns";
 import { EdgeController } from "./controller";
 import { attachUser, greet, greetedSockets } from "./edge-sockets";
-import { LiveActivityEdge, parseLiveActivityRegistration, type LiveActivitySend } from "./live-activity";
+import { LIVE_ACTIVITY_SCHEMA, LiveActivityEdge, migrateLiveActivities, parseLiveActivityRegistration, type LiveActivitySend } from "./live-activity";
 import type { IngestBatch } from "./store";
 import { nodeSqlitePort } from "./test-helpers/node-sqlite";
 
@@ -50,8 +50,8 @@ function harness() {
     if (greeted) greet(controller, s, { cursor: null, epoch: null }, () => {});
     return s;
   };
-  const register = (s: ReturnType<typeof fakeSocket>, itemId: string, token: string | null) =>
-    edge.register(s, parseLiveActivityRegistration(JSON.stringify({ type: "liveActivity", itemId, token }))!, clock);
+  const register = (s: ReturnType<typeof fakeSocket>, itemId: string, token: string | null, app?: string) =>
+    edge.register(s, parseLiveActivityRegistration(JSON.stringify({ type: "liveActivity", itemId, token, app }))!, clock);
   return {
     edge, ingest, connect, register, handed, sql,
     heartbeat: () => ingest({ kind: "heartbeat" }),
@@ -68,6 +68,37 @@ describe("registration (BOB-96)", () => {
       expect(parseLiveActivityRegistration(JSON.stringify(bad))).toBeNull();
     }
     expect(parseLiveActivityRegistration("x".repeat(2000))).toBeNull();
+  });
+
+  it("accepts only Bob's own apps (GMA-774)", () => {
+    expect(parseLiveActivityRegistration(JSON.stringify({ type: "liveActivity", itemId: "i1", token: TOKEN, app: "com.gmacko.bob.dev" }))).toEqual({ type: "liveActivity", itemId: "i1", token: TOKEN, app: "com.gmacko.bob.dev" });
+    expect(parseLiveActivityRegistration(JSON.stringify({ type: "liveActivity", itemId: "i1", token: null, app: "com.gmacko.bob" }))).toEqual({ type: "liveActivity", itemId: "i1", token: null, app: "com.gmacko.bob" });
+    for (const app of ["com.evil.app", "", 1, null, "toString"]) {
+      expect(parseLiveActivityRegistration(JSON.stringify({ type: "liveActivity", itemId: "i1", token: TOKEN, app }))).toBeNull();
+    }
+  });
+
+  it("sends each token to the app it was registered from; re-registering moves it (GMA-774)", () => {
+    const h = harness();
+    const s = h.connect("u1");
+    h.register(s, "i1", TOKEN, "com.gmacko.bob.dev");
+    h.register(s, "i2", TOKEN2);
+    h.heartbeat();
+    const sends = h.handed.flat();
+    expect(sends.find((x) => x.token === TOKEN)!.app).toBe("com.gmacko.bob.dev");
+    expect(sends.find((x) => x.token === TOKEN2)!.app).toBeNull();
+    h.register(s, "i1", TOKEN, "com.gmacko.bob");
+    expect(h.sql.exec<{ app: string }>("SELECT app FROM sdlc_live_activities WHERE token = ?", TOKEN)[0]!.app).toBe("com.gmacko.bob");
+  });
+
+  it("adds the app column to a table created before it (GMA-774)", () => {
+    const sql = nodeSqlitePort();
+    sql.exec("CREATE TABLE sdlc_live_activities (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, item_id TEXT NOT NULL, created_at INTEGER NOT NULL, sent_at INTEGER, sent_json TEXT)");
+    sql.exec("INSERT INTO sdlc_live_activities VALUES (?, 'u1', 'i1', 1, NULL, NULL)", TOKEN);
+    for (const statement of LIVE_ACTIVITY_SCHEMA) sql.exec(statement);
+    migrateLiveActivities(sql);
+    migrateLiveActivities(sql); // idempotent
+    expect(sql.exec<{ token: string; app: string | null }>("SELECT token, app FROM sdlc_live_activities")).toEqual([{ token: TOKEN, app: null }]);
   });
 
   it("refuses sockets that may not watch", () => {
@@ -173,7 +204,7 @@ async function testKey(): Promise<{ pem: string; publicKey: CryptoKey }> {
   return { pem, publicKey: pair.publicKey };
 }
 const content = { issue: "BOB-1", repository: "bob", state: "running" as const, label: "Running", stage: 1, needsYou: false, failed: false, ended: false };
-const send = (over: Partial<LiveActivitySend> = {}): LiveActivitySend => ({ token: TOKEN, event: "update", content, priority: 5, alert: null, ...over });
+const send = (over: Partial<LiveActivitySend> = {}): LiveActivitySend => ({ token: TOKEN, app: null, event: "update", content, priority: 5, alert: null, ...over });
 
 describe("APNs sender (BOB-96)", () => {
   afterEach(() => resetApnsTokenCache());
@@ -183,6 +214,14 @@ describe("APNs sender (BOB-96)", () => {
     expect(apnsConfigFromEnv({ ...env, APNS_KEY_ID: "" })).toBeNull();
     expect(apnsConfigFromEnv(env)!.host).toBe("https://api.push.apple.com");
     expect(apnsConfigFromEnv({ ...env, APNS_ENVIRONMENT: "sandbox" })!.host).toBe("https://api.sandbox.push.apple.com");
+  });
+
+  it("routes a registered app to its own topic and environment, else the configured default (GMA-774)", () => {
+    const config = { bundleId: "app.bob", host: "https://apns.test" };
+    expect(apnsTarget(config, { app: null })).toEqual(config);
+    expect(apnsTarget(config, { app: "com.gmacko.bob" })).toEqual({ bundleId: "com.gmacko.bob", host: "https://api.push.apple.com" });
+    expect(apnsTarget(config, { app: "com.gmacko.bob.dev" })).toEqual({ bundleId: "com.gmacko.bob.dev", host: "https://api.sandbox.push.apple.com" });
+    expect(apnsTarget(config, { app: "com.gmacko.bob.preview" })).toEqual({ bundleId: "com.gmacko.bob.preview", host: "https://api.sandbox.push.apple.com" });
   });
 
   it("signs an ES256 provider token that verifies", async () => {
@@ -211,12 +250,14 @@ describe("APNs sender (BOB-96)", () => {
       if (String(url).endsWith("ef".repeat(32))) return new Response(null, { status: 410 });
       return new Response(null, { status: 200 });
     }) as unknown as typeof fetch;
-    const result = await sendLiveActivities(config, [send(), send({ token: TOKEN2, priority: 10 }), send({ token: "ef".repeat(32) })], { fetch: fakeFetch, now: () => 1_000 });
-    expect({ ...result, dead: [...result.dead].sort() }).toEqual({ sent: 1, failed: 2, dead: [TOKEN2, "ef".repeat(32)].sort() });
+    const result = await sendLiveActivities(config, [send(), send({ token: TOKEN2, priority: 10 }), send({ token: "ef".repeat(32) }), send({ token: "12".repeat(32), app: "com.gmacko.bob.dev" })], { fetch: fakeFetch, now: () => 1_000 });
+    expect({ ...result, dead: [...result.dead].sort() }).toEqual({ sent: 2, failed: 2, dead: [TOKEN2, "ef".repeat(32)].sort() });
     expect(calls[0]!.url).toBe(`https://apns.test/3/device/${TOKEN}`);
     expect(calls[0]!.headers).toMatchObject({ "apns-push-type": "liveactivity", "apns-topic": "app.bob.push-type.liveactivity", "apns-priority": "5" });
     expect(calls[0]!.headers.authorization).toMatch(/^bearer [\w-]+\.[\w-]+\.[\w-]+$/);
     expect(calls[1]!.headers["apns-priority"]).toBe("10");
+    expect(calls[3]!.url).toBe(`https://api.sandbox.push.apple.com/3/device/${"12".repeat(32)}`);
+    expect(calls[3]!.headers["apns-topic"]).toBe("com.gmacko.bob.dev.push-type.liveactivity");
   });
 
   it("without config sends nothing and logs counts only", async () => {

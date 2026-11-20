@@ -11,8 +11,25 @@ import type { ItemState } from "./generated/contract";
 import type { ItemSnapshot, PlanSnapshot } from "./model";
 import { itemAttention, STATE_PRESENTATION } from "./presentation";
 
-/** Client → edge: register (token) or stop (token null) the activity for an item. */
-export interface LiveActivityRegistration { type: "liveActivity"; itemId: string; token: string | null }
+/**
+ * Client → edge: register (token) or stop (token null) the activity for an item. `app` is
+ * the registering app's bundle id; without it the edge's configured APNS_BUNDLE_ID is used.
+ */
+export interface LiveActivityRegistration { type: "liveActivity"; itemId: string; token: string | null; app?: LiveActivityApp }
+
+/**
+ * The iOS apps that may register activities, and the APNs environment their tokens belong
+ * to. This follows the aps-environment entitlement in apps/mobile-bob/app.config.js: only
+ * the production variant is "production"; dev and preview builds get sandbox tokens.
+ */
+export const LIVE_ACTIVITY_APPS = {
+  "com.gmacko.bob": "production",
+  "com.gmacko.bob.preview": "sandbox",
+  "com.gmacko.bob.dev": "sandbox",
+} as const;
+export type LiveActivityApp = keyof typeof LIVE_ACTIVITY_APPS;
+export const isLiveActivityApp = (value: unknown): value is LiveActivityApp =>
+  typeof value === "string" && Object.prototype.hasOwnProperty.call(LIVE_ACTIVITY_APPS, value);
 
 /** The stage dots on the activity, in order. */
 export const LIVE_ACTIVITY_STAGES = ["Queued", "Agent", "CI", "Review", "Deploy", "Shipped"] as const;

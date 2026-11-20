@@ -7,11 +7,14 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 import { useFocusEffect } from "expo-router";
 import * as Crypto from "expo-crypto";
-import type { CommandInput, Confirmation } from "@bob/sdlc-view";
+import type { CommandInput, Confirmation, EdgeView, LiveActivityContent } from "@bob/sdlc-view";
 
 import { getBaseUrl } from "~/utils/base-url";
 import { authClient } from "~/utils/auth";
+import { BobLiveActivity } from "../../../modules/bob-live-activity";
 import { createEdgeLifecycle } from "./edge-lifecycle";
+import { createLiveActivityController } from "./live-activity";
+import type { LiveActivityController } from "./live-activity";
 import { createSession } from "./edge-session";
 import type { SessionState } from "./edge-session";
 import { edgeSocketHeaders, edgeSocketUrl, rnWebSocketOpener } from "./edge-socket";
@@ -28,12 +31,48 @@ const lifecycle = createEdgeLifecycle({
       AppState.addEventListener("change", (next) => lifecycle.appStateChanged(next));
     }
     const apiBase = getBaseUrl();
-    return createSession({
+    const session = createSession({
       open: rnWebSocketOpener(edgeSocketUrl(apiBase), () => edgeSocketHeaders(apiBase, authClient.getCookie())),
       newId: () => Crypto.randomUUID(),
     });
+    // Followed items' Live Activities track the app's view while it is fresher than the last push.
+    session.subscribe((next) => liveActivities().viewChanged(next.view));
+    return session;
   },
 });
+
+let liveActivityController: LiveActivityController | null = null;
+/** The one Live Activity controller; its registrations go over whichever session is current (GMA-774). */
+function liveActivities(): LiveActivityController {
+  liveActivityController ??= createLiveActivityController(BobLiveActivity, (registration) => {
+    // The /arcade/demo feed's items (dev builds) are local; their activities never reach the edge.
+    if (__DEV__ && registration.itemId.startsWith("demo-")) return;
+    lifecycle.get().registerLiveActivity(registration);
+  });
+  return liveActivityController;
+}
+
+/** Dev builds: drive followed activities from a local view (the /arcade/demo feed) instead of the edge. */
+export function useLiveActivityPreview(view: EdgeView): void {
+  useEffect(() => { liveActivities().viewChanged(view); }, [view]);
+}
+
+export interface LiveActivityState {
+  /** This build and device can show Live Activities, and the user allows them for Bob. */
+  supported: boolean;
+  following: boolean;
+  follow: () => Promise<void>;
+  stop: () => Promise<void>;
+}
+
+/** Follow one item on the lock screen and Dynamic Island. */
+export function useLiveActivity(itemId: string, content: LiveActivityContent | null): LiveActivityState {
+  const c = liveActivities();
+  const following = useSyncExternalStore((listener) => c.subscribe(listener), () => c.following().has(itemId));
+  const follow = useCallback(async () => { if (content) await c.follow(itemId, content); }, [c, itemId, content]);
+  const stop = useCallback(() => c.stop(itemId), [c, itemId]);
+  return { supported: c.supported && content !== null, following, follow, stop };
+}
 
 /**
  * The signed-in account, from the auth gate (null: signed out). Signing out or switching

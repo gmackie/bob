@@ -11,7 +11,8 @@ import type { EdgeView } from "@bob/sdlc-view";
 import { attentionEntries, bannerFor, firstQuestion, releaseReason } from "~/features/sdlc/attention-model";
 import type { Banner } from "~/features/sdlc/commands-model";
 import { ATTENTION_COLOR, OfflineBanner } from "~/features/sdlc/components";
-import { useNow, useSdlcEdge } from "~/features/sdlc/use-sdlc-edge";
+import { contentFor } from "~/features/sdlc/live-activity";
+import { useLiveActivity, useLiveActivityPreview, useNow, useSdlcEdge } from "~/features/sdlc/use-sdlc-edge";
 import { colors } from "~/lib/colors";
 
 import type { LiveEffect } from "./arcade-model";
@@ -123,7 +124,34 @@ export function ArcadeScreen({ onOpenItem }: { onOpenItem?: (itemId: string) => 
 export function DemoArcadeScreen() {
   const view = useDemoEdge();
   const now = useNow();
-  return <ArcadeView view={view} banner={null} now={now} demo />;
+  return (
+    <View className="flex-1">
+      <ArcadeView view={view} banner={null} now={now} demo />
+      <DemoLiveActivityToggle view={view} />
+    </View>
+  );
+}
+
+const DEMO_FOLLOW_ITEM = "demo-0";
+
+/** Dev demo only: follow the first demo item on the lock screen; the scripted feed moves it (GMA-774). */
+function DemoLiveActivityToggle({ view }: { view: EdgeView }) {
+  useLiveActivityPreview(view);
+  const live = useLiveActivity(DEMO_FOLLOW_ITEM, contentFor(view, DEMO_FOLLOW_ITEM));
+  if (!live.supported) return null;
+  return (
+    <Pressable
+      testID="arcade-demo-live-activity"
+      onPress={() => void (live.following ? live.stop() : live.follow()).catch(() => undefined)}
+      accessibilityRole="button"
+      className="rounded-full border px-3 py-2 active:opacity-80"
+      style={{ position: "absolute", bottom: 96, right: 16, backgroundColor: colors.card, borderColor: live.following ? colors.accent : colors.border }}
+    >
+      <Text className="text-xs font-semibold" style={{ color: live.following ? colors.accent : colors.secondaryForeground }}>
+        {live.following ? "Lock Screen: following · stop" : "Follow on Lock Screen"}
+      </Text>
+    </Pressable>
+  );
 }
 
 /** The iPad shell's Arcade pane: /arcade, or /arcade/demo for the scripted feed in dev builds. */

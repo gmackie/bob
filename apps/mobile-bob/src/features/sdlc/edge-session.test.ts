@@ -85,6 +85,27 @@ describe("edge session", () => {
     ]);
   });
 
+  it("sends Live Activity registrations now when live, else the latest per item on the next socket (GMA-774)", () => {
+    const h = harness();
+    h.session.start();
+    const token = "ab".repeat(32);
+    h.session.registerLiveActivity({ type: "liveActivity", itemId: "i1", token: "00".repeat(32), app: "com.gmacko.bob.dev" });
+    h.session.registerLiveActivity({ type: "liveActivity", itemId: "i1", token, app: "com.gmacko.bob.dev" });
+    h.session.registerLiveActivity({ type: "liveActivity", itemId: "i2", token: null, app: "com.gmacko.bob.dev" });
+    expect(h.last().sent).toEqual([]);
+    h.last().handlers.onOpen();
+    expect(h.last().sent.slice(1)).toEqual([
+      { type: "liveActivity", itemId: "i1", token, app: "com.gmacko.bob.dev" },
+      { type: "liveActivity", itemId: "i2", token: null, app: "com.gmacko.bob.dev" },
+    ]);
+    h.session.registerLiveActivity({ type: "liveActivity", itemId: "i3", token });
+    expect(h.last().sent.at(-1)).toEqual({ type: "liveActivity", itemId: "i3", token });
+    h.last().handlers.onClose();
+    must(h.timers.at(-1), "timer")();
+    h.last().handlers.onOpen();
+    expect(h.last().sent).toEqual([{ type: "hello", cursor: null, epoch: null }]); // already delivered, not repeated
+  });
+
   it("asks once for a snapshot after a seq gap", () => {
     const h = harness();
     h.session.start();
