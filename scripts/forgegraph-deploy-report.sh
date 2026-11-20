@@ -11,6 +11,12 @@
 # answers 200, and the serving version did not change while checking. Any
 # failed check, or a non-2xx callback, exits non-zero.
 #
+# Cloudflare can report the previous version as serving for a few seconds
+# after `wrangler deploy` returns (GMA-775: run 1672 deployed 28e68c5 and was
+# recorded failed). The serving-version and stamp check is retried
+# STAMP_ATTEMPTS times (default 12), STAMP_RETRY_SECONDS apart (default 5),
+# and fails only if this commit never serves.
+#
 # Env: GITHUB_SHA, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT, FG_API_TOKEN (a platform
 # token or this repository's deploy token), CLOUDFLARE_API_TOKEN/ACCOUNT_ID.
 # WRANGLER overrides the wrangler command (default: pnpm exec wrangler).
@@ -23,6 +29,17 @@ fi
 status="$1" app="$2" worker="$3" detail="$4"
 : "${GITHUB_SHA:?}" "${GITHUB_RUN_ID:?}" "${FG_API_TOKEN:?FG_API_TOKEN is required}"
 read -r -a wrangler <<< "${WRANGLER:-pnpm exec wrangler}"
+
+stamped() {
+  "${wrangler[@]}" versions view "$1" --name "$worker" --json |
+    node -e '
+      const d = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+      const stamp = (d.resources?.bindings ?? []).filter(
+        (b) => b.name === "FG_COMMIT_HASH" && b.type === "plain_text",
+      );
+      process.exit(stamp.length === 1 && stamp[0].text === process.argv[1] ? 0 : 1);
+    ' "$GITHUB_SHA"
+}
 
 serving_version() {
   "${wrangler[@]}" deployments status --name "$worker" --json |
@@ -42,18 +59,16 @@ export REPORT_EXECUTION_ID="${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT:-1}"
 export REPORT_VERSION="" REPORT_HEALTH_URL="" REPORT_CHECKED_AT="" REPORT_MESSAGE=""
 
 if [ "$status" = success ]; then
-  REPORT_VERSION="$(serving_version)"
-  "${wrangler[@]}" versions view "$REPORT_VERSION" --name "$worker" --json |
-    node -e '
-      const d = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
-      const stamp = (d.resources?.bindings ?? []).filter(
-        (b) => b.name === "FG_COMMIT_HASH" && b.type === "plain_text",
-      );
-      if (stamp.length !== 1 || stamp[0].text !== process.argv[1]) {
-        console.error(`serving version is not stamped FG_COMMIT_HASH=${process.argv[1]}`);
-        process.exit(1);
-      }
-    ' "$GITHUB_SHA"
+  attempts="${STAMP_ATTEMPTS:-12}"
+  for attempt in $(seq 1 "$attempts"); do
+    REPORT_VERSION="$(serving_version)" && stamped "$REPORT_VERSION" && break
+    if [ "$attempt" = "$attempts" ]; then
+      echo "serving version is not stamped FG_COMMIT_HASH=${GITHUB_SHA} after $attempts checks" >&2
+      exit 1
+    fi
+    echo "stamp attempt $attempt: the version serving 100% is not this commit yet"
+    sleep "${STAMP_RETRY_SECONDS:-5}"
+  done
 
   code=000
   for attempt in $(seq 1 12); do
