@@ -5,6 +5,10 @@ standalone `packages/bob/coordination` package, independently of the Cloudflare
 web deployment. Node 24 or newer is required. No additional execution daemon
 or scheduler is installed.
 
+For second-environment enrollment, explicit cross-host handoff and live acceptance,
+see the [gmacko-mini rollout checklist](gmacko-mini.md) (BOB-56). Its recorded
+preflight is not evidence of a completed deployment.
+
 ## Artifact and storage
 
 Package a clean, published revision's `packages/bob/coordination` directory,
