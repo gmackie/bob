@@ -14,7 +14,7 @@ import {
 } from "@bob/sdlc-view";
 import { ALERT_SCHEMA, AlertLedger, type ItemAlert } from "./alerts";
 import { migrateOutbox, OUTBOX_SCHEMA } from "./outbox";
-import { LIVE_ACTIVITY_SCHEMA } from "./live-activity";
+import { LIVE_ACTIVITY_SCHEMA, migrateLiveActivities } from "./live-activity";
 import { SHIPPED_SCHEMA, ShippedLedger } from "./shipped";
 import type { SqlPort } from "./sql";
 
@@ -156,6 +156,7 @@ export class EdgeStore {
     sql.transaction(() => {
       for (const statement of SCHEMA) sql.exec(statement);
       migrateOutbox(sql);
+      migrateLiveActivities(sql);
       if (this.read(META_KEYS.epoch) === undefined) {
         this.write(META_KEYS.epoch, newEpoch());
         this.write(META_KEYS.watermark, 0);

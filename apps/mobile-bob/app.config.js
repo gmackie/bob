@@ -159,6 +159,8 @@ module.exports = ({ config }) => {
       infoPlist: {
         CFBundleDisplayName: getAppName(),
         ITSAppUsesNonExemptEncryption: false,
+        // GMA-774: the SDLC item Live Activity (widget extension ios/BobLiveActivityWidget).
+        NSSupportsLiveActivities: true,
         "UISupportedInterfaceOrientations~ipad": [
           "UIInterfaceOrientationPortrait",
           "UIInterfaceOrientationPortraitUpsideDown",

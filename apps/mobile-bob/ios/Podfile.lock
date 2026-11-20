@@ -1,4 +1,6 @@
 PODS:
+  - BobLiveActivity (1.0.0):
+    - ExpoModulesCore
   - boost (1.84.0)
   - DoubleConversion (1.1.6)
   - EASClient (55.0.5):
@@ -3333,6 +3335,7 @@ PODS:
     - ZXingObjC/Core
 
 DEPENDENCIES:
+  - BobLiveActivity (from `../modules/bob-live-activity/ios`)
   - "boost (from `../../../node_modules/.pnpm/react-native@0.83.9_@babel+core@7.29.6_@react-native+metro-config@0.85.2_@babel+core@7._24b2c3e7b7e5cc2720580072172ec63d/node_modules/react-native/third-party-podspecs/boost.podspec`)"
   - "DoubleConversion (from `../../../node_modules/.pnpm/react-native@0.83.9_@babel+core@7.29.6_@react-native+metro-config@0.85.2_@babel+core@7._24b2c3e7b7e5cc2720580072172ec63d/node_modules/react-native/third-party-podspecs/DoubleConversion.podspec`)"
   - "EASClient (from `../../../node_modules/.pnpm/expo-eas-client@55.0.5/node_modules/expo-eas-client/ios`)"
@@ -3477,6 +3480,8 @@ SPEC REPOS:
     - ZXingObjC
 
 EXTERNAL SOURCES:
+  BobLiveActivity:
+    :path: "../modules/bob-live-activity/ios"
   boost:
     :podspec: "../../../node_modules/.pnpm/react-native@0.83.9_@babel+core@7.29.6_@react-native+metro-config@0.85.2_@babel+core@7._24b2c3e7b7e5cc2720580072172ec63d/node_modules/react-native/third-party-podspecs/boost.podspec"
   DoubleConversion:
@@ -3730,6 +3735,7 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/react-native@0.83.9_@babel+core@7.29.6_@react-native+metro-config@0.85.2_@babel+core@7._24b2c3e7b7e5cc2720580072172ec63d/node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
+  BobLiveActivity: 4807c1efdd865f3f5adf54d7279e17116350f9b5
   boost: 7e761d76ca2ce687f7cc98e698152abd03a18f90
   DoubleConversion: cb417026b2400c8f53ae97020b2be961b59470cb
   EASClient: 8077eb9af46cc7ad3ad216cec12d2bf5763cca13

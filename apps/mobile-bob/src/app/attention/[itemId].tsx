@@ -9,7 +9,8 @@ import { globalDisabledReason, latestFor, outcomeText } from "~/features/sdlc/co
 import { ActionButtons, ATTENTION_COLOR, OfflineBanner, Section } from "~/features/sdlc/components";
 import { itemTarget, planTarget } from "~/features/sdlc/confirm-model";
 import { AnswerSheet } from "~/features/sdlc/sheets";
-import { useNow, useSdlcEdge, useWatchItem } from "~/features/sdlc/use-sdlc-edge";
+import { contentFor } from "~/features/sdlc/live-activity";
+import { useLiveActivity, useNow, useSdlcEdge, useWatchItem } from "~/features/sdlc/use-sdlc-edge";
 import { colors } from "~/lib/colors";
 
 const CI_COLOR: Record<string, string> = {
@@ -29,6 +30,8 @@ export default function SdlcItemScreen() {
   useWatchItem(itemId || null);
   const now = useNow();
   const [answering, setAnswering] = useState(false);
+  const liveActivity = useLiveActivity(itemId, contentFor(state.view, itemId));
+  const [liveActivityError, setLiveActivityError] = useState<string | null>(null);
   const banner = bannerFor(state.view, state.connection, now, state.error);
   const detail = itemDetail(state.view, itemId);
   const ctx = { connection: state.connection, banner, hasView: state.view.epoch !== null, commands: state.commands };
@@ -70,6 +73,26 @@ export default function SdlcItemScreen() {
             <Text className="text-accent text-xs">Open issue ↗</Text>
           </Pressable>
         ) : null}
+        {liveActivity.supported ? (
+          <Pressable
+            testID="sdlc-live-activity"
+            onPress={() => {
+              setLiveActivityError(null);
+              (liveActivity.following ? liveActivity.stop() : liveActivity.follow()).catch((error: unknown) =>
+                setLiveActivityError(error instanceof Error ? error.message : String(error)),
+              );
+            }}
+            accessibilityRole="button"
+            accessibilityState={{ selected: liveActivity.following }}
+            className="mt-3 h-10 flex-row items-center justify-center rounded-xl border active:opacity-80"
+            style={{ borderColor: liveActivity.following ? colors.accent : colors.border }}
+          >
+            <Text className="text-sm font-semibold" style={{ color: liveActivity.following ? colors.accent : colors.secondaryForeground }}>
+              {liveActivity.following ? "Following on Lock Screen · Stop" : "Follow on Lock Screen"}
+            </Text>
+          </Pressable>
+        ) : null}
+        {liveActivityError ? <Text className="mt-1 text-xs" style={{ color: colors.danger }}>{liveActivityError}</Text> : null}
 
         {pending ? (
           <Section title="Waiting for your answer">

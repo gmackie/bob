@@ -4,7 +4,7 @@
 // commands plus the watch re-sent on every new socket. The socket is injected, so node
 // tests drive it without a network. Ported from the web edge-client and bob-tui session.
 import { emptyView, reduce, stripTerminalControls } from "@bob/sdlc-view";
-import type {CiMessage, ClientCommand, CommandInput, Confirmation, EdgeMessage, EdgeView, TailFrame, WatchMessage} from "@bob/sdlc-view";
+import type {CiMessage, ClientCommand, CommandInput, Confirmation, EdgeMessage, EdgeView, LiveActivityRegistration, TailFrame, WatchMessage} from "@bob/sdlc-view";
 
 import {
   asCommandStatus,
@@ -153,6 +153,11 @@ export interface Session {
   send(command: CommandInput, label: string, confirm?: Confirmation): string;
   /** Watch one item's attempt detail; null stops. Re-sent on every new socket. */
   watch(itemId: string | null): void;
+  /**
+   * Register an iOS Live Activity's push token for an item (token null: stop it). Sent now
+   * when the socket is live, else on the next socket; only the latest per item is kept.
+   */
+  registerLiveActivity(registration: LiveActivityRegistration): void;
   subscribe(listener: (state: SessionState) => void): () => void;
 }
 
@@ -169,6 +174,8 @@ export function createSession(options: SessionOptions): Session {
   let timer: unknown;
   let resyncRequested = false;
   let watched: string | null = null;
+  /** Live Activity registrations not yet written to a live socket, latest per item. */
+  const unsentActivities = new Map<string, LiveActivityRegistration>();
   /** commandId → when it was written to the current socket, until the edge answers it. */
   const unacked = new Map<string, number>();
   let ackTimer: unknown;
@@ -240,6 +247,8 @@ export function createSession(options: SessionOptions): Session {
         write(helloFor(state.view));
         for (const command of commandsToResend(state.commands)) writeCommand(command);
         if (watched) write({ type: "watch", itemId: watched } satisfies WatchMessage);
+        for (const registration of unsentActivities.values()) write(registration);
+        unsentActivities.clear();
       },
       onMessage(data) {
         if (!mine()) return;
@@ -317,6 +326,10 @@ export function createSession(options: SessionOptions): Session {
       watched = itemId;
       set({ attempt: itemId ? { itemId, tail: null, ci: null, tailUnavailable: null } : null });
       write({ type: "watch", itemId } satisfies WatchMessage);
+    },
+    registerLiveActivity(registration) {
+      if (socket && isOpen) { unsentActivities.delete(registration.itemId); write(registration); }
+      else unsentActivities.set(registration.itemId, registration);
     },
     subscribe(listener) {
       listeners.add(listener);

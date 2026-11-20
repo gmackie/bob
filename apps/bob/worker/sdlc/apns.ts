@@ -2,7 +2,11 @@
 // Bob's other pushes go through Expo, which does not carry Live Activity updates, so this
 // needs its own APNs key: APNS_TEAM_ID, APNS_KEY_ID, APNS_PRIVATE_KEY (the .p8, a secret),
 // APNS_BUNDLE_ID, and APNS_ENVIRONMENT ("production" for TestFlight/App Store, else "sandbox").
+// The bundle and environment are the default for tokens registered without an app; a token
+// registered from one of LIVE_ACTIVITY_APPS goes to that app's topic and environment (one
+// team key signs for every app and both environments).
 // Without them, nothing is sent and one line says so. Tokens are never logged.
+import { LIVE_ACTIVITY_APPS } from "@bob/sdlc-view";
 import type { LiveActivitySend } from "./live-activity";
 
 export interface ApnsEnv {
@@ -74,6 +78,12 @@ export function liveActivityPayload(send: LiveActivitySend, nowMs: number): Reco
   };
 }
 
+/** Where one send goes: the registering app's topic and environment, else the configured default. */
+export function apnsTarget(config: Pick<ApnsConfig, "bundleId" | "host">, send: Pick<LiveActivitySend, "app">): { bundleId: string; host: string } {
+  if (send.app === null) return { bundleId: config.bundleId, host: config.host };
+  return { bundleId: send.app, host: APNS_HOSTS[LIVE_ACTIVITY_APPS[send.app]] };
+}
+
 export interface ApnsResult { sent: number; failed: number; dead: string[] }
 /** APNs reasons that mean the token will never work again. */
 const DEAD_REASONS = new Set(["BadDeviceToken", "Unregistered", "DeviceTokenNotForTopic", "ExpiredToken"]);
@@ -89,12 +99,13 @@ export async function sendLiveActivities(
   const result: ApnsResult = { sent: 0, failed: 0, dead: [] };
   await Promise.all(sends.map(async (send) => {
     try {
-      const response = await doFetch(`${config.host}/3/device/${send.token}`, {
+      const { bundleId, host } = apnsTarget(config, send);
+      const response = await doFetch(`${host}/3/device/${send.token}`, {
         method: "POST",
         headers: {
           authorization: `bearer ${jwt}`,
           "apns-push-type": "liveactivity",
-          "apns-topic": `${config.bundleId}.push-type.liveactivity`,
+          "apns-topic": `${bundleId}.push-type.liveactivity`,
           "apns-priority": String(send.priority),
           "content-type": "application/json",
         },
