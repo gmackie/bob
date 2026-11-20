@@ -321,7 +321,7 @@ test('forgePort sends tokens only to configured hosts, never follows redirects, 
 
 test('release facts move Kanbanger to review and done, never regressing a closed issue', async t => {
   const f = setup(t), forge = fakeForge();
-  forge.state.deployments = [{ id: 'dep-1', status: 'active', historyStatus: 'active', commitSha: sha('e'), createdAt: '2026-11-15T12:05:00Z' }];
+  forge.state.deployments = [{ id: 'dep-1', status: 'active', historyStatus: 'active', commitSha: sha('e'), createdAt: '2026-11-15T12:05:00Z', versionId: 'v1' }];
   await succeed(f);
   for (let i = 0; i < 5; i++) await pass(f, forge);
   const issue = { id: 'item-1', identifier: 'BOB-1', team: { id: 'GMA', key: 'GMA' }, project: { id: 'bob' }, state: { id: 'started', name: 'In Progress', type: 'started' } };
@@ -373,7 +373,7 @@ test('a deployment replaced by a rollback is never production evidence', async t
   forge.state.ancestors[sha('1')] = [sha('1')];
   forge.state.deployments = [
     { id: 'dep-2', status: 'active', historyStatus: 'active', commitSha: sha('1'), createdAt: '2026-11-15T12:10:00Z' }, // rollback to pre-merge
-    { id: 'dep-1', status: 'rolled_back', historyStatus: 'superseded', commitSha: sha('e'), createdAt: '2026-11-15T12:05:00Z' },
+    { id: 'dep-1', status: 'rolled_back', historyStatus: 'superseded', commitSha: sha('e'), createdAt: '2026-11-15T12:05:00Z', versionId: 'v1' },
   ];
   await pass(f, forge);
   assert.equal(getItem(f).release.stage, 'deploying');
@@ -384,7 +384,7 @@ test('an in-progress deployment waits without churning the item, then times out'
   const f = setup(t), forge = fakeForge();
   await succeed(f);
   for (let i = 0; i < 4; i++) await pass(f, forge);
-  forge.state.deployments = [{ id: 'dep-1', status: 'health_checking', commitSha: sha('e'), createdAt: '2026-11-15T12:05:00Z' }];
+  forge.state.deployments = [{ id: 'dep-1', status: 'health_checking', commitSha: sha('e'), createdAt: '2026-11-15T12:05:00Z', versionId: 'v1' }];
   await pass(f, forge, clock += 60_000);
   const version = getItem(f).resourceVersion;
   assert.equal(getItem(f).release.deploymentId, 'dep-1');
@@ -591,4 +591,63 @@ test('a superseded PR is still closed when the comment is refused, and the skip 
   assert.equal(forge.state.prs[7].state, 'closed');
   const recorded = JSON.parse(releaseOf(f, 'attempt-1').data).supersededPullRequest;
   assert.deepEqual(recorded, { supersededBy: next, number: 7, outcome: 'closed', comment: 'skipped (HTTP 403)', at: recorded.at });
+});
+
+test('production requires healthy evidence and a nonempty artifact for the live revision', async t => {
+  const f = setup(t), forge = fakeForge();
+  await succeed(f);
+  for (let i = 0; i < 4; i++) await pass(f, forge);
+  forge.state.deployments = [{ id: 'dep-1', status: 'active', commitSha: sha('e'), createdAt: '2026-11-15T12:05:00Z', versionId: 'v1' }];
+  for (const health of ['unknown', 'degraded', 'critical', null]) {
+    forge.state.health = health;
+    await pass(f, forge, clock += 60_000);
+    assert.equal(getItem(f).state, 'deploying', String(health));
+  }
+  forge.state.health = 'healthy';
+  forge.state.deployments[0].versionId = ' ';
+  await pass(f, forge, clock += 60_000);
+  assert.equal(getItem(f).state, 'deploying', 'missing artifact');
+  forge.state.deployments[0].versionId = 'v1';
+  await pass(f, forge, clock += 60_000);
+  assert.equal(getItem(f).state, 'completed');
+  const effect = JSON.parse(f.service.db.prepare("SELECT payload FROM coordination_issue_effect WHERE fact='production-verified'").get().payload);
+  assert.equal(effect.artifactRef, 'v1');
+  assert.equal(effect.deployedSha, sha('e'));
+  assert.equal(effect.health, 'healthy');
+  assert.equal(effect.verifiedAt, new Date(clock).toISOString());
+});
+
+test('rollback during the health read cannot certify the former deployment', async t => {
+  const f = setup(t), forge = fakeForge();
+  await succeed(f);
+  for (let i = 0; i < 4; i++) await pass(f, forge);
+  forge.state.deployments = [{ id: 'dep-1', status: 'active', commitSha: sha('e'), createdAt: '2026-11-15T12:05:00Z', versionId: 'v1' }];
+  forge.health = async () => { forge.state.deployments = []; return 'healthy'; };
+  await pass(f, forge, clock += 60_000);
+  assert.equal(getItem(f).state, 'deploying');
+  assert.equal(f.service.db.prepare("SELECT COUNT(*) AS n FROM coordination_issue_effect WHERE fact='production-verified'").get().n, 0);
+});
+
+test('rollback revokes production readiness and skips a delayed issue closure', async t => {
+  const f = setup(t, { items: [item(), item('item-2')], dependencies: [{ upstreamItemId: 'item-1', downstreamItemId: 'item-2', requiredMilestone: 'production-verified' }] }), forge = fakeForge();
+  forge.state.deployments = [{ id: 'dep-1', status: 'active', commitSha: sha('e'), createdAt: '2026-11-15T12:05:00Z', versionId: 'v1' }];
+  await succeed(f);
+  for (let i = 0; i < 5; i++) await pass(f, forge);
+  assert.equal(getItem(f, 'item-2').state, 'ready');
+  call(f.service, 'RequestDeployment', { contractVersion: '1', commandId: 'rollback', itemId: 'item-1', action: 'rollback', artifactRef: 'dep-1', stageRef: 'production' });
+  await pass(f, forge);
+  assert.equal(getItem(f).state, 'failed');
+  assert(!getItem(f).achievedMilestones.includes('production-verified'));
+  assert.equal(getItem(f, 'item-2').state, 'pending');
+  // Isolate the already queued closure. No network write may occur for it.
+  f.service.db.prepare("UPDATE coordination_issue_effect SET status='delivered' WHERE fact != 'production-verified'").run();
+  const database = f.service.db.prepare('PRAGMA database_list').all().find(row => row.name === 'main').file;
+  const restarted = new ExecutionCoordinator({ database, context: baseContext });
+  let result;
+  try {
+    result = await deliverIssueEffect(restarted, { integrationId: 'kanbanger', resolveIssue() { assert.fail('stale closure must not contact Kanbanger'); } });
+  } finally { restarted.close(); }
+  assert.equal(result.outcome, 'skipped');
+  assert.equal(result.fact, 'production-verified');
+
 });

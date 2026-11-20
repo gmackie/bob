@@ -380,9 +380,10 @@ export class ExecutionCoordinator extends Coordinator {
     const rows = this.db.prepare('SELECT snapshot FROM coordination_item WHERE tenant=? AND owner=? AND plan_id=?').all(this.tenant, this.owner, planId);
     const items = new Map(rows.map(row => { const s = JSON.parse(row.snapshot); return [s.itemId, s]; }));
     for (const snapshot of items.values()) {
-      if (snapshot.state !== 'pending') continue;
+      if (!['pending', 'ready'].includes(snapshot.state) || snapshot.currentAttemptId) continue;
       const dependencies = definition.dependencies.filter(edge => edge.downstreamItemId === snapshot.itemId);
-      if (dependencies.every(edge => items.get(edge.upstreamItemId).achievedMilestones.includes(edge.requiredMilestone))) this.storeSnapshot({ ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state: 'ready' }, randomUUID());
+      const state = dependencies.every(edge => items.get(edge.upstreamItemId).achievedMilestones.includes(edge.requiredMilestone)) ? 'ready' : 'pending';
+      if (state !== snapshot.state) this.storeSnapshot({ ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state }, randomUUID());
     }
   }
   /** Network work is deliberately outside the SQLite transaction. Expired leases

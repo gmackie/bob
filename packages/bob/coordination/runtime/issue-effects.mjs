@@ -56,9 +56,12 @@ export function releaseCommentFor(id, payload, issue) {
   if (payload.headSha) lines.push(`- Head: \`${payload.headSha}\``);
   if (payload.mergeSha) lines.push(`- Merge commit: \`${payload.mergeSha}\``);
   if (payload.appSlug) lines.push(`- ForgeGraph app: \`${payload.appSlug}\`${payload.deploymentId ? `, production deployment \`${payload.deploymentId}\`` : ''}`);
+  if (payload.artifactRef) lines.push(`- Artifact: \`${payload.artifactRef}\``);
+  if (payload.deployedSha) lines.push(`- Deployed commit: \`${payload.deployedSha}\``);
+  if (payload.verifiedAt) lines.push(`- Health: ${payload.health} at ${payload.verifiedAt}`);
   if (payload.note) lines.push(`- Note: ${payload.note}`);
   lines.push('', payload.fact === 'production-verified'
-    ? 'A production deployment containing the merge is active and app health is not critical, so Bob marked the issue done.'
+    ? 'The active production deployment contains the merge, has a recorded artifact and reports healthy app health, so Bob marked the issue done.'
     : payload.fact === 'review-ready' ? 'CI is green on the exact head. Bob moved the issue to review; it is done only after production is verified.'
       : payload.fact === 'rolled-back' ? 'Bob moved the issue back to in progress.'
       : 'Bob changed no issue state for this step.', '', effectMarker(id));
@@ -145,6 +148,15 @@ export async function deliverIssueEffect(coordinator, client, { now = Date.now()
   }
   if (!coordinator.context.issueProjects.some(project => ['integrationId', 'workspaceId', 'teamId', 'projectId'].every(key => project[key] === payload.issue[key]))) {
     return { ...base, outcome: settle(coordinator, row, token, { now, outcome: 'rejected', error: 'Issue project is outside the trusted policy' }), error: { code: 'Forbidden' } };
+  }
+  // A queued closure is evidence for one attempt and one verified deployment only.
+  // Recheck after retries/restarts so rollback cannot be overwritten by delayed closure.
+  if (payload.fact === 'production-verified') {
+    const { snapshot } = coordinator.item(payload.itemId);
+    if (snapshot.currentAttemptId !== payload.attemptId || snapshot.state !== 'completed'
+      || snapshot.release?.stage !== 'production-verified' || snapshot.release.deploymentId !== payload.deploymentId) {
+      return { ...base, outcome: settle(coordinator, row, token, { now, outcome: 'skipped', error: 'Production verification is no longer current' }) };
+    }
   }
   let result;
   try {
