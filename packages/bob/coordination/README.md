@@ -443,9 +443,16 @@ revision, artifact, health and verification time alongside attempt/PR/deployment
 links. This is an observation across APIs, not an atomic ForgeGraph health receipt.
 A queued closure is skipped if its attempt or verified deployment is no longer
 current. Explicit rollback removes production readiness and queues reopening.
+Issue effects serialize by integration/workspace/issue identity while a delivery
+lease is live. A closure invalidated during delivery queues durable compensation,
+including when its lease was reclaimed. Delivered rollback effects recheck the
+external issue every minute until a newer attempt or completed delivery supersedes
+them. This repairs late writes after a worker crash or lease expiry; comments keep
+their idempotency marker. Reopening failures retry with backoff. This is eventual
+reconciliation: the remote API does not offer an atomic fence against local state.
 
 This increment does not establish full BOB-41 acceptance. External rollback and
-post-verification health monitoring, reconciliation of prematurely closed issues,
+post-verification health monitoring,
 repeat verification effects after rollback/repair, cross-host attempt handoff,
 TriggerPlan scheduling, and ForgeC runtime adapter
 parity remain outstanding. Generated schemas and SQL are not proof that runtime

@@ -651,3 +651,81 @@ test('rollback revokes production readiness and skips a delayed issue closure', 
   assert.equal(result.fact, 'production-verified');
 
 });
+
+for (const expired of [false, true]) test(`in-flight closure is repaired after rollback (expired lease: ${expired})`, async t => {
+  const f = setup(t), forge = fakeForge();
+  forge.state.deployments = [{ id: 'dep-1', status: 'active', commitSha: sha('e'), createdAt: '2026-11-15T12:05:00Z', versionId: 'v1' }];
+  await succeed(f);
+  for (let i = 0; i < 5; i++) await pass(f, forge);
+  f.service.db.prepare("UPDATE coordination_issue_effect SET status='delivered' WHERE fact != 'production-verified'").run();
+  const states = [{ id: 'started', name: 'In Progress', type: 'started' }, { id: 'done', name: 'Done', type: 'completed' }];
+  const issue = { id: 'item-1', identifier: 'BOB-1', team: { id: 'GMA', key: 'GMA' }, project: { id: 'bob' }, state: states[0] };
+  let resume, entered;
+  const waiting = new Promise(resolve => { entered = resolve; });
+  const paused = new Promise(resolve => { resume = resolve; });
+  const comments = [];
+  let pause = true;
+  const client = {
+    integrationId: 'kanbanger',
+    async resolveIssue() { return structuredClone(issue); },
+    async workflowStates() { return states; },
+    async updateIssueState(id, stateId) {
+      if (stateId === 'done' && pause) { pause = false; entered(); await paused; }
+      issue.state = states.find(s => s.id === stateId);
+      return { state: issue.state };
+    },
+    async issueComments() { return comments.map(body => ({ body })); },
+    async createComment(id, body) { comments.push(body); },
+  };
+  const database = f.service.db.prepare('PRAGMA database_list').all().find(row => row.name === 'main').file;
+  const other = new ExecutionCoordinator({ database, context: baseContext });
+  t.after(() => other.close());
+  const now = T0 + 10_000_000;
+  const closure = deliverIssueEffect(f.service, client, { now, leaseMs: 1000 });
+  await waiting;
+  call(other, 'RequestDeployment', { contractVersion: '1', commandId: 'rollback', itemId: 'item-1', action: 'rollback', artifactRef: 'dep-1', stageRef: 'production' });
+  await advanceReleases(other, forge, { now });
+  const later = now + (expired ? 2000 : 1);
+  if (expired) {
+    // Recovery takes the expired closure lease and delivers rollback before the
+    // original HTTP write returns. The original worker must still compensate.
+    for (let i = 0; i < 3; i++) await deliverIssueEffect(other, client, { now: later });
+    assert.equal(issue.state.id, 'started');
+  } else {
+    assert.deepEqual(await deliverIssueEffect(other, client, { now: later }), { delivered: false });
+  }
+  resume();
+  const result = await closure;
+  assert.equal(result.outcome, expired ? 'lease-lost' : 'skipped');
+  assert.equal(issue.state.id, 'done', 'the remote write really did arrive late');
+  const repairs = [];
+  for (let i = 0; i < 4; i++) repairs.push(await deliverIssueEffect(other, client, { now: later + 1 }));
+  assert.equal(issue.state.id, 'started', JSON.stringify(repairs));
+  assert.equal(getItem(f).state, 'failed');
+
+  // A remote write can even complete after its process dies. Persisted rollback
+  // reconciliation must repair it after restart, without another command.
+  issue.state = states[1];
+  const restarted = new ExecutionCoordinator({ database, context: baseContext });
+  try {
+    await deliverIssueEffect(restarted, client, { now: later + 120_000 });
+    assert.equal(issue.state.id, 'started');
+  } finally { restarted.close(); }
+  const commentCount = comments.length;
+  issue.state = states[1];
+  client.workflowStates = async () => [];
+  const retryAt = later + 240_000;
+  const unavailable = await deliverIssueEffect(other, client, { now: retryAt });
+  assert.equal(unavailable.outcome, 'retry', 'a missing reopen state must remain recoverable');
+  client.workflowStates = async () => states;
+  await deliverIssueEffect(other, client, { now: retryAt + 2_000_000 });
+  assert.equal(issue.state.id, 'started');
+  assert.equal(comments.length, commentCount, 'reconciliation does not duplicate audit comments');
+  const failed = getItem(f);
+  call(other, 'RetryItem', { contractVersion: '1', commandId: 'retry', itemId: 'item-1', expectedVersion: failed.resourceVersion, previousAttemptId: 'attempt-1', reason: 'repair' });
+  issue.state = states[1];
+  const retired = await deliverIssueEffect(other, client, { now: retryAt + 4_000_000 });
+  assert.equal(retired.outcome, 'skipped');
+  assert.equal(retired.fact, 'rolled-back');
+  assert.equal(issue.state.id, 'done', 'an old rollback cannot change the new attempt lifecycle');
+});

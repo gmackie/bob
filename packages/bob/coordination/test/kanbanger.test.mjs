@@ -140,10 +140,13 @@ test('drain sets In Progress on admission, comments receipts, never sets Done an
   assert.equal(fake.issues.get(issueUuid).stateId, states[1].id);
   f.reopen();
   assert.equal(effects(f.service)[0].status, 'pending');
-  assert.equal((await deliverIssueEffect(f.service, client, { now: 1500 })).outcome, 'delivered'); // the receipt comment; admitted row still leased
+  assert.equal((await deliverIssueEffect(f.service, client, { now: 1500 })).delivered, false); // the same issue remains leased across restart
   assert.equal((await deliverIssueEffect(f.service, client, { now: 1600 })).delivered, false);
   const replayed = await deliverIssueEffect(f.service, client, { now: 61001 });
   assert.equal(replayed.outcome, 'delivered'); assert.equal(replayed.action, 'state-unchanged');
+  const receiptEffect = await deliverIssueEffect(f.service, client, { now: 61002 });
+  assert.equal(receiptEffect.outcome, 'delivered');
+  assert.equal(receiptEffect.fact, 'execution-succeeded');
   // A crash between comment creation and settle is detected by its marker.
   call(f.service, 'RequestExecution', request(f.planId, '2', 'item-2')); await f.service.dispatchOne(port);
   call(f.service, 'RecordExecutionReceipt', receipt(request(f.planId, '2', 'item-2'), 'failed'));
