@@ -6,6 +6,7 @@ export default defineConfig({
   test: {
     passWithNoTests: true,
     testTimeout: 30_000,
+    globalSetup: ["./src/__tests__/global-setup.ts"],
     setupFiles: ["./src/__tests__/setup.ts"],
   },
 });

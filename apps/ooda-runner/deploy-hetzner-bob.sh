@@ -90,6 +90,8 @@ export PATH="/nix/var/nix/profiles/default/bin:/home/bob/.local/bin:/usr/local/b
 require_node_24 "deploy toolchain" "node"
 pnpm install --frozen-lockfile --filter @gmacko/ooda-runner...
 pnpm --filter @gmacko/ooda-runner typecheck
+# Vitest isolates HOME and runner state and asserts ~/.bob-runner is unchanged;
+# this validation is safe to run as the service user.
 pnpm --filter @gmacko/ooda-runner test
 pnpm --filter @gmacko/ooda-runner build
 REMOTE_SCRIPT
