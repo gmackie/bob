@@ -1,5 +1,6 @@
 import { ITEM_STATES, type ItemState, type Milestone, type PlanState, type ReleaseStage } from "./generated/contract";
 import { itemAttention, type Attention } from "./presentation";
+import { newerIssue, type TrackedIssue } from "./issues";
 
 export interface RepositoryRef { integrationId: string; repositoryId: string }
 export interface ExecutionTarget { environmentId: string; projectId: string; repository: RepositoryRef }
@@ -73,6 +74,8 @@ export interface EdgeView {
   plans: Record<string, PlanSnapshot>;
   items: Record<string, ItemSnapshot>;
   topology: TopologyRepo[];
+  /** Every open Kanbanger issue the coordinator mirrors (BOB-99), by issue UUID. */
+  issues: Record<string, TrackedIssue>;
   /**
    * When the edge last heard from the coordinator: the edge's own receive time
    * (Date.now() in the edge), not the coordinator's clock. isOffline() compares it
@@ -90,11 +93,13 @@ export interface EdgeView {
  * broadcast as they happen.
  */
 export type EdgeMessage =
-  | { type: "snapshot"; epoch: string; seq: number; plans: PlanSnapshot[]; items: ItemSnapshot[]; topology: TopologyRepo[]; coordinatorSeenAt: number | null }
-  | { type: "delta"; seq: number; plans: PlanSnapshot[]; items: ItemSnapshot[]; coordinatorSeenAt: number | null }
+  /** issues is absent from an edge older than BOB-99. */
+  | { type: "snapshot"; epoch: string; seq: number; plans: PlanSnapshot[]; items: ItemSnapshot[]; topology: TopologyRepo[]; coordinatorSeenAt: number | null; issues?: TrackedIssue[] }
+  /** issues: upserts by version; issuesRemoved: ids a full sync no longer lists (BOB-99). */
+  | { type: "delta"; seq: number; plans: PlanSnapshot[]; items: ItemSnapshot[]; coordinatorSeenAt: number | null; issues?: TrackedIssue[]; issuesRemoved?: string[] }
   | { type: "status"; coordinatorSeenAt: number | null };
 
-export const emptyView = (): EdgeView => ({ epoch: null, seq: 0, plans: {}, items: {}, topology: [], coordinatorSeenAt: null, needsResync: false });
+export const emptyView = (): EdgeView => ({ epoch: null, seq: 0, plans: {}, items: {}, topology: [], issues: {}, coordinatorSeenAt: null, needsResync: false });
 const newer = <T extends { resourceVersion: number }>(current: T | undefined, next: T) => !current || next.resourceVersion > current.resourceVersion;
 const later = (a: number | null, b: number | null) => (a === null ? b : b === null ? a : Math.max(a, b));
 /** Plans in these states never live in the view. */
@@ -127,11 +132,16 @@ export function reduce(view: EdgeView, message: EdgeMessage): EdgeView {
   }
   for (const i of message.items) if (!evicted.has(i.planId) && newer(items[i.itemId], i)) items[i.itemId] = i;
   if (evicted.size) for (const [id, i] of Object.entries(items)) if (evicted.has(i.planId)) delete items[id];
+  // A snapshot from an edge older than BOB-99 has no issues field: keep none rather than stale ones.
+  const issues = snapshot ? {} : { ...view.issues };
+  for (const issue of message.issues ?? []) if (newerIssue(issues[issue.id], issue)) issues[issue.id] = issue;
+  if (message.type === "delta") for (const id of message.issuesRemoved ?? []) delete issues[id];
   return {
     ...base,
     seq: message.seq,
     plans,
     items,
+    issues,
     // Liveness never moves backwards, not even on a snapshot: an edge that was evicted
     // has not heard from the coordinator yet, and must not make a live coordinator look offline.
     coordinatorSeenAt: later(view.coordinatorSeenAt, message.coordinatorSeenAt),

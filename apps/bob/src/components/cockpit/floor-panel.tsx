@@ -7,12 +7,14 @@
  * coordinator transition. Motion level "minimal" freezes it (the page kills transitions).
  */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { beatLine, chooseDesks, createBeatLog, desks as deskCards, effectFor, EFFECT_TTL_MS, expire, floorScene, floorSummary, hud, PARCEL_TONE, sameDesks, sdlcBeats, shippedToday } from "./floor-model";
-import type { EdgeView, FloorParcel, LiveEffect } from "./floor-model";
+import { beatLine, chooseDesks, createBeatLog, desks as deskCards, effectFor, EFFECT_TTL_MS, expire, floorScene, floorSummary, hud, PARCEL_TONE, projectBoard, sameDesks, sdlcBeats, shippedToday } from "./floor-model";
+import type { BoardRow, EdgeView, FloorParcel, LiveEffect } from "./floor-model";
 
+import { bannerFor } from "~/components/sdlc/sdlc-page-model";
 import { useSdlcEdge } from "~/components/sdlc/use-sdlc-edge";
 
 import { DesksRow } from "./desks-row";
+import { IssuePanel, ProjectBoard } from "./project-board";
 
 /** Which items get a desk, sticky across views: an unchanged choice keeps the same array. */
 /** `now` should change rarely (a minute clock): it re-judges stalls and so re-chooses desks. */
@@ -40,7 +42,10 @@ const ATTENTION_RING = { needs_human: "#e7a505", failed: "#ef5350", stalled: "#f
 const TONE = { good: "#7dffb0", info: "#6fb4ff", warn: "#ffd27a", bad: "#ff6b6b" } as const;
 
 export function FloorPanel() {
-  const { view, attempt, watchDesks, watching, followShipped, shipped } = useSdlcEdge();
+  const { view, attempt, watchDesks, watching, followShipped, shipped, connection, commands, send } = useSdlcEdge();
+  // BOB-99: the projects board scopes the Floor to one Kanbanger project; an issue parcel opens its panel.
+  const [project, setProject] = useState<BoardRow | null>(null);
+  const [issueId, setIssueId] = useState<string | null>(null);
   const now = useClock(15_000);
   const deskIds = useDeskIds(view, Math.floor(now / 60_000) * 60_000);
   useEffect(() => watchDesks(deskIds), [watchDesks, deskIds]);
@@ -88,7 +93,12 @@ export function FloorPanel() {
 
   // Ages and stalls move by the minute (BOB-101); re-laying out every tick would restart transitions.
   const clock = Math.floor(now / 60_000) * 60_000;
-  const scene = useMemo(() => (box ? floorScene(view, box, { orientation: "wide", now: clock }) : null), [view, box, clock]);
+  const projectId = project?.kanbanger ? project.projectId : undefined;
+  const scene = useMemo(() => (box ? floorScene(view, box, { orientation: "wide", now: clock, ...(projectId ? { projectId } : {}) }) : null), [view, box, clock, projectId]);
+  const hasIssues = Object.keys(view.issues).length > 0;
+  const board = useMemo(() => (hasIssues ? projectBoard(view, clock) : null), [view, hasIssues, clock]);
+  const issue = issueId ? view.issues[issueId] : undefined;
+  const context = { connection, banner: bannerFor(view, connection, now), hasView: view.epoch !== null, commands };
   const counts = hud(view, {}, clock);
   const at = new Map<string, FloorParcel>(scene ? scene.parcels.map((p) => [p.itemId, p] as const) : []);
   const gap = effects.some((e) => e.kind === "static");
@@ -113,6 +123,14 @@ export function FloorPanel() {
         <span title="Reached production since local midnight">TODAY <b className="text-[13px] text-[#7dffb0]">{today ?? "–"}</b></span>
         <span className="ml-auto truncate normal-case tracking-normal">{log.recent(1)[0] ? beatLine(log.recent(1)[0]!) : ""}</span>
       </div>
+      {board ? (
+        <ProjectBoard
+          board={board}
+          selected={project?.projectId ?? null}
+          onSelect={(row) => { setProject(row); setIssueId(null); }}
+        />
+      ) : null}
+      {project ? <div className="px-3 pb-1 font-mono text-[11px] text-[#ffd27a]">{project.name}{scene && scene.backlog > 0 ? <span className="ml-3 text-[#8a7758]">BACKLOG {scene.backlog}</span> : null}</div> : null}
       <div ref={boxRef} className="relative h-[260px] overflow-hidden">
         {view.epoch === null ? (
           <div className="p-4 font-mono text-xs text-white/40">waiting for the SDLC edge…</div>
@@ -158,7 +176,9 @@ export function FloorPanel() {
             {scene.parcels.map((p) => (
               <a
                 key={p.itemId}
-                href={`/sdlc?item=${encodeURIComponent(p.itemId)}`}
+                // An issue parcel opens its panel below the floor (BOB-99); an item opens /sdlc.
+                href={p.kind === "issue" ? `#issue-${p.itemId}` : `/sdlc?item=${encodeURIComponent(p.itemId)}`}
+                onClick={p.kind === "issue" ? (event) => { event.preventDefault(); setIssueId(p.itemId); } : undefined}
                 title={p.accessibilityLabel}
                 aria-label={p.accessibilityLabel}
                 className="absolute left-0 top-0 flex flex-col justify-center rounded-[5px] pl-[7px] pr-[3px] font-mono leading-tight transition-transform duration-700 ease-[cubic-bezier(.2,.9,.25,1.15)] hover:brightness-110"
@@ -183,7 +203,8 @@ export function FloorPanel() {
               </a>
             ))}
             {effects
-              .filter((e) => e.kind !== "static")
+              // An effect for an item not drawn on this floor (another project's) is skipped.
+              .filter((e) => e.kind !== "static" && (!e.itemId || at.has(e.itemId)))
               .map((e) => {
                 const p = e.itemId ? at.get(e.itemId) : undefined;
                 return (
@@ -201,6 +222,7 @@ export function FloorPanel() {
           </>
         ) : null}
       </div>
+      {issue ? <IssuePanel view={view} issue={issue} now={clock} context={context} send={send} onClose={() => setIssueId(null)} /> : null}
       {view.epoch === null ? null : <DesksRow desks={desks} now={now} />}
     </section>
   );

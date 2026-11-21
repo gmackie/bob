@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyView, reduce, type EdgeMessage, type EdgeView, type ItemSnapshot, type PlanSnapshot } from "@bob/sdlc-view";
+import { emptyView, reduce, type EdgeMessage, type EdgeView, type IssueBatch, type ItemSnapshot, type PlanSnapshot, type TrackedIssue } from "@bob/sdlc-view";
 import { DeltaLog, EdgeStore, MAX_INGEST_BYTES, parseBatch, type IngestBatch } from "./store";
 import { durableObjectSql } from "./sql";
 import { nodeSqlitePort } from "./test-helpers/node-sqlite";
@@ -131,6 +131,42 @@ describe("EdgeStore stateSince (BOB-101)", () => {
     s.apply(batch({ kind: "snapshot", watermark: 4 }), 100);
     s.apply(batch({ fromSequence: 4, watermark: 5, items: [{ ...item("c", 1, "running"), stateSince: 1 }] }), 250);
     expect(since(s, "c")).toBe(250);
+  });
+});
+
+describe("EdgeStore issues (BOB-99)", () => {
+  const issue = (id: string, version: number, over: Partial<TrackedIssue> = {}): TrackedIssue => ({
+    id, key: `BOB-${id}`, title: `Issue ${id}`, url: null, state: { name: "In Progress", type: "started" }, project: { id: "p1", name: "Bob" },
+    team: "GMA", updatedAt: version, pr: null, dispatchable: false, version, ...over,
+  });
+  const batchOf = (upserts: TrackedIssue[], complete?: string[]): IssueBatch => ({ contractVersion: "1", upserts, ...(complete ? { complete: { ids: complete } } : {}) });
+  it("stores issues by version and sends only what changed, as the next delta", () => {
+    const s = store();
+    s.apply(batch({ kind: "snapshot", watermark: 1 }), 100);
+    const first = s.applyIssues(batchOf([issue("1", 10), issue("2", 10)]), 200);
+    expect(first).toMatchObject({ stored: 2, removed: 0, message: { type: "delta", seq: 2, plans: [], items: [], coordinatorSeenAt: 200 } });
+    expect(first.message?.issues?.map((i) => i.id)).toEqual(["1", "2"]);
+    const again = s.applyIssues(batchOf([issue("1", 10), issue("2", 9), issue("3", 5)]), 300);
+    expect(again.stored).toBe(1);
+    expect(again.message?.issues?.map((i) => i.id)).toEqual(["3"]);
+    expect(s.applyIssues(batchOf([issue("1", 10)]), 400).message).toBeNull();
+    expect(s.meta().seq).toBe(3);
+    expect(s.snapshot(null).issues?.map((i) => i.id)).toEqual(["1", "2", "3"]);
+  });
+  it("removes issues a full sync no longer lists, keeping ones upserted in the same batch", () => {
+    const s = store();
+    s.applyIssues(batchOf([issue("1", 1), issue("2", 1), issue("3", 1)]), 100);
+    const sync = s.applyIssues(batchOf([issue("4", 1)], ["1"]), 200);
+    expect(sync).toMatchObject({ stored: 1, removed: 2 });
+    expect(sync.message?.issuesRemoved?.sort()).toEqual(["2", "3"]);
+    expect(s.snapshot(null).issues?.map((i) => i.id)).toEqual(["1", "4"]);
+    expect(s.issueCount()).toBe(2);
+  });
+  it("keeps issues across a coordinator snapshot of plans and items", () => {
+    const s = store();
+    s.applyIssues(batchOf([issue("1", 1)]), 100);
+    s.apply(batch({ kind: "snapshot", watermark: 4, items: [item("a", 1)] }), 200);
+    expect(s.snapshot(null).issues?.map((i) => i.id)).toEqual(["1"]);
   });
 });
 

@@ -78,6 +78,7 @@ const error = (status: number, message: string) => Response.json({ error: messag
 
 /**
  * POST /api/sdlc/ingest: the coordinator exporter's batches, by bearer token.
+ * POST /api/sdlc/issues: the coordinator's Kanbanger mirror (BOB-99), same bearer token.
  * POST /api/sdlc/tail: the coordinator tail relay's live frames (BOB-80), by the same
  *   bearer token, capped at MAX_TAIL_BYTES; relayed to watchers, never stored.
  * GET /api/sdlc/ws: a websocket for a user on SDLC_VIEWER_USER_IDS: a browser by session
@@ -104,6 +105,19 @@ export async function handleSdlcRoute(
     const body = await readCapped(request.body, MAX_INGEST_BYTES);
     if (!body) return error(413, "batch too large");
     return stub().fetch("https://sdlc-edge/ingest", {
+      method: "POST",
+      body,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  if (pathname === "/api/sdlc/issues") {
+    // BOB-99: the coordinator's Kanbanger mirror, by the same bearer token as ingest.
+    if (!bearerMatches(request.headers.get("authorization"), env.SDLC_EDGE_INGEST_TOKEN)) return error(401, "unauthorized");
+    if (request.method !== "POST") return error(405, "method not allowed");
+    const body = await readCapped(request.body, MAX_INGEST_BYTES);
+    if (!body) return error(413, "batch too large");
+    return stub().fetch("https://sdlc-edge/issues", {
       method: "POST",
       body,
       headers: { "content-type": "application/json" },

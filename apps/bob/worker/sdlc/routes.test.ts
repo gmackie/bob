@@ -89,6 +89,25 @@ describe("handleSdlcRoute: configuration", () => {
   });
 });
 
+describe("handleSdlcRoute: issues (BOB-99)", () => {
+  const issues = (body: BodyInit, headers: Record<string, string> = { authorization: `Bearer ${TOKEN}` }) =>
+    req("/api/sdlc/issues", { method: "POST", body, headers });
+  it("needs the ingest bearer token, POST, and at most MAX_INGEST_BYTES", async () => {
+    const e = env();
+    expect((await route(issues("{}", {}), e)).status).toBe(401);
+    expect((await route(issues("{}", { authorization: "Bearer nope" }), e)).status).toBe(401);
+    expect((await route(req("/api/sdlc/issues", { headers: { authorization: `Bearer ${TOKEN}` } }), e)).status).toBe(405);
+    expect((await route(issues("x".repeat(MAX_INGEST_BYTES + 1)), e)).status).toBe(413);
+    expect(e.SDLC_EDGE.calls).toEqual([]);
+  });
+  it("forwards an authorised body to the Durable Object's /issues", async () => {
+    const e = env();
+    const body = JSON.stringify({ contractVersion: "1", upserts: [] });
+    expect((await route(issues(body), e)).status).toBe(200);
+    expect(e.SDLC_EDGE.calls).toEqual([{ path: "/issues", method: "POST", body, upgrade: null, cookie: null }]);
+  });
+});
+
 describe("handleSdlcRoute: ingest", () => {
   it("answers 401 without the exact bearer token and forwards nothing", async () => {
     const e = env();

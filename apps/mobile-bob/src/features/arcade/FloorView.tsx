@@ -279,7 +279,9 @@ export function FloorView({
         <Parcel key={p.itemId} parcel={p} size={scene.parcel} reduced={reduced} selected={p.itemId === selectedItemId} onPress={onPressParcel} />
       ))}
       {effects
-        .filter((e) => e.kind !== "static")
+        // An item's effect plays on its parcel; one whose parcel is not on this floor (another
+        // project's, or behind an overflow counter) is skipped rather than drawn mid-floor.
+        .filter((e) => e.kind !== "static" && (!e.itemId || at.has(e.itemId)))
         .map((e) => {
           const p = e.itemId ? at.get(e.itemId) : undefined;
           return <EffectSprite key={e.beatId} effect={e} x={p?.x ?? center.x} y={p?.y ?? center.y} reduced={reduced} />;

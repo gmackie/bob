@@ -3,7 +3,7 @@
 // → sdlcBeats() → floorScene() pipeline as the live edge, so the demo exercises the real
 // code. Items and identifiers are fake; the screen labels the feed DEMO.
 import type { DeskDetail } from "@bob/arcade";
-import type { CiPhase, EdgeMessage, ItemSnapshot, ItemState, Milestone, PlanSnapshot, ReleaseStage } from "@bob/sdlc-view";
+import type { CiPhase, EdgeMessage, ItemSnapshot, ItemState, Milestone, PlanSnapshot, ReleaseStage, TrackedIssue } from "@bob/sdlc-view";
 
 interface Step {
   item: number;
@@ -81,6 +81,48 @@ export interface DemoFeed {
   deltas: EdgeMessage[];
 }
 
+const DAY = 24 * 3_600_000;
+type DemoIssueSpec = [key: string, title: string, project: string, state: TrackedIssue["state"], pr: [TrackedPr["state"], TrackedPr["checks"]] | null, ageDays: number];
+type TrackedPr = NonNullable<TrackedIssue["pr"]>;
+const PROJECTS: Record<string, string> = { demo: "Bob", "demo-forge": "ForgeGraph", "demo-edu": "EducateOS" };
+const TODO = { name: "Todo", type: "unstarted" as const };
+const DOING = { name: "In Progress", type: "started" as const };
+const REVIEW = { name: "In Review", type: "started" as const };
+const BACKLOG = { name: "Backlog", type: "backlog" as const };
+/** Kanbanger issues around the scripted items (BOB-99), so the demo opens on a projects board. Fake keys and titles. */
+const DEMO_ISSUES: DemoIssueSpec[] = [
+  ["FORGE-401", "Deploy history pagination", "demo-forge", REVIEW, ["open", "success"], 0.2],
+  ["FORGE-402", "Hyperdrive tunnel health probe", "demo-forge", REVIEW, ["merged", "success"], 9],
+  ["FORGE-403", "Receipts for manual targets", "demo-forge", DOING, ["open", "pending"], 0.1],
+  ["FORGE-404", "CI watch misses fast failures", "demo-forge", DOING, ["open", "failure"], 1],
+  ["FORGE-405", "Stage drift report", "demo-forge", REVIEW, null, 21],
+  ["FORGE-406", "Node agent upgrade", "demo-forge", TODO, null, 2],
+  ["FORGE-407", "Self-host guide refresh", "demo-forge", BACKLOG, null, 40],
+  ["SCHO-301", "Gradebook export", "demo-edu", DOING, null, 0.5],
+  ["SCHO-302", "Parent portal sign-in", "demo-edu", DOING, null, 12],
+  ["SCHO-303", "Attendance sync", "demo-edu", REVIEW, ["open", "success"], 3],
+  ["SCHO-304", "Timetable import", "demo-edu", TODO, null, 1],
+  ["BOB-120", "Arcade project board", "demo", DOING, ["open", "pending"], 0.05],
+  ["BOB-121", "Lock Screen stage track", "demo", BACKLOG, null, 5],
+];
+
+/** Demo issues stamped against `seenAt` (ids are fixed fake UUIDs). */
+export function demoIssues(seenAt: number): TrackedIssue[] {
+  return DEMO_ISSUES.map(([key, title, project, state, pr, ageDays], i) => ({
+    id: `00000000-0000-4000-8000-${String(900 + i).padStart(12, "0")}`,
+    key,
+    title,
+    url: null,
+    state,
+    project: { id: project, name: PROJECTS[project] ?? project },
+    team: key.split("-")[0] ?? null,
+    updatedAt: Math.round(seenAt - ageDays * DAY),
+    pr: pr ? { repo: `demo/${project}`, number: 40 + i, url: `https://git.forgegraf.com/demo/${project}/pulls/${40 + i}`, state: pr[0], checks: pr[1], headSha: null, checkedAt: seenAt } : null,
+    dispatchable: project === "demo",
+    version: 1,
+  }));
+}
+
 /** The whole demo run for one epoch: every item starts pending, then the schedule plays. */
 export function demoFeed(epoch: string, seenAt: number): DemoFeed {
   const plan = planSnapshot(epoch);
@@ -113,7 +155,7 @@ export function demoFeed(epoch: string, seenAt: number): DemoFeed {
     return { type: "delta", seq: n + 2, plans: [], items: [next], coordinatorSeenAt: seenAt };
   });
   return {
-    snapshot: { type: "snapshot", epoch, seq: 1, plans: [plan], items: ids.map((id) => ({ itemId: id, planId: plan.planId, resourceVersion: 1, state: "pending" as const, release: null, achievedMilestones: [], operationIds: [], evidenceRefs: [], stateSince: seenAt })), topology: [], coordinatorSeenAt: seenAt },
+    snapshot: { type: "snapshot", epoch, seq: 1, plans: [plan], items: ids.map((id) => ({ itemId: id, planId: plan.planId, resourceVersion: 1, state: "pending" as const, release: null, achievedMilestones: [], operationIds: [], evidenceRefs: [], stateSince: seenAt })), topology: [], coordinatorSeenAt: seenAt, issues: demoIssues(seenAt) },
     deltas,
   };
 }

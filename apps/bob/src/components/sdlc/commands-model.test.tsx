@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { itemCommands, planCommands, type CommandOption, type CoordinatorOperation, type ItemSnapshot, type PlanSnapshot } from "@bob/sdlc-view";
+import { issueCommands, itemCommands, planCommands, type CommandOption, type CoordinatorOperation, type ItemSnapshot, type PlanSnapshot } from "@bob/sdlc-view";
 
 import { ActionsPanel } from "./actions-panel";
 import {
@@ -16,6 +16,7 @@ import {
   parseCommandStatus,
   planTarget,
   reduceCommands,
+  resourceIdOf,
   typedConfirmationOk,
   type ActionContext,
   type CommandsState,
@@ -238,5 +239,19 @@ describe("ActionsPanel", () => {
   });
   it("draws nothing for a resource with no actions and no history", () => {
     expect(renderToStaticMarkup(<ActionsPanel label="x" resourceId="r" options={[]} target="t" context={live()} send={() => null} />)).toBe("");
+  });
+});
+
+describe("issue commands (BOB-99)", () => {
+  const issue = {
+    id: "00000000-0000-4000-8000-000000000001", key: "FORGE-1", title: "t", url: null, state: { name: "In Progress", type: "started" as const },
+    project: { id: "p", name: "ForgeGraph" }, team: "GMA", updatedAt: 0, pr: null, dispatchable: true, version: 1,
+  };
+  it("keys each move by target and tracks the issue as the resource", () => {
+    const options = issueCommands(issue);
+    expect(options.map((o) => o.label)).toEqual(["Dispatch to an agent", "Move to Todo", "Move to In Review", "Move to Done", "Move to Canceled"]);
+    const buttons = actionButtons(options, { connection: "live", banner: null, hasView: true, commands: emptyCommands() });
+    expect(new Set(buttons.map((b) => b.key)).size).toBe(options.length);
+    expect(resourceIdOf(options[1]!.command)).toBe(issue.id);
   });
 });

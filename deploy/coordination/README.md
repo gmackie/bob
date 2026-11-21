@@ -162,6 +162,65 @@ to turn the relay off; dispatch and the exporter keep running.
   and `Authorization` on `/ws` (the relay logs `outcome: "t3-rejected"` with
   the HTTP status if not; the one-time `wsTicket` fallback is not implemented).
 
+### Kanbanger issue mirror and issue commands (BOB-99)
+
+An `issues` block in `edge.json` puts every open Kanbanger issue, from every
+project, on Bob's floor, and turns on two issue commands. Like `tail`, it is a
+block, not a worker flag; an older release ignores it.
+
+```json
+{
+  "endpoint": "https://<bob-host>/api/sdlc/ingest",
+  "checkpoint": "/home/bob/.bob/coordination/edge.sqlite",
+  "tokenEnv": "BOB_SDLC_EDGE_TOKEN",
+  "commands": { "operations": ["ControlPlan", "RetryItem", "CancelItem", "ReconcileItem", "ResolveInput", "SetIssueState", "DispatchIssue"] },
+  "tail": {},
+  "issues": { "intervalMs": 30000, "fullSyncMs": 600000, "dispatch": { "executionProfileId": "<profile>" } }
+}
+```
+
+- `issues` is `{}` or any of `intervalMs` (5000–600000, default 30000),
+  `fullSyncMs` (60000–86400000, default 600000) and `dispatch`. Any other key, or
+  an out-of-range value, makes the whole file invalid.
+- **Mirror** (`runtime/issue-mirror.mjs`): every loop the worker steps it. Every
+  `intervalMs` it reads issues updated since its cursor (minus 2 minutes); every
+  `fullSyncMs` it reads every issue not Done/Canceled plus those Done/Canceled
+  in the last 24 h, and ends with the full id list so the edge drops the rest.
+  It POSTs `IssueBatch` bodies (`packages/bob/src/sdlc-view/src/issues.ts`) to
+  `<edge origin>/api/sdlc/issues` with the ingest token, at most 400 issues per
+  request, and only issues whose version moved. Its state (cursor, sync times,
+  last-sent versions, PR cache) is in its own `issue_mirror_*` tables in the
+  edge checkpoint (`edge.sqlite`), never in the coordinator database. Only key,
+  title (≤160 characters), state, project, team, https URL and the PR state
+  cross; no descriptions, comments or assignees. Logs carry `step: "issues"`
+  with counts only. A failure backs off (to 60 s) and never stops dispatch.
+- **PR join:** an issue's first attachment that is a pull request on the
+  `--release` config's Forgejo instance (`forgejo.instanceUrl`) is read with
+  that config's `forgejo.token`: state, merged, head SHA and, for open PRs, the
+  head's combined commit status. Open PRs are re-read at most every 5 minutes
+  unless the issue changes; merged and closed PRs are final. A failed read keeps
+  the last copy. Without `--release`, every issue's `pr` is null.
+- **`SetIssueState`** `{ issueId, target }` (target `todo`, `in_progress`,
+  `in_review`, `done` or `canceled`) moves the issue to its team's state of
+  that name (else the first state of the matching type), adds the comment
+  "Moved to <state> from the Bob Arcade." (no user ids), and has the mirror
+  re-read the issue on its next step. It is written with the worker's
+  `kanbanger.json` credential; the Bob user id is recorded as the command's
+  actor only. An issue already in that state is left alone. Kanbanger
+  refusals are final; Kanbanger outages are retried like other commands.
+- **`DispatchIssue`** `{ issueId }` runs only with `issues.dispatch` (and
+  `--release`, for the base revision): for an issue whose team and project are
+  one of the context's `issueProjects`, it creates a one-item plan (target: the
+  context's `forgegraph` target; completion `production`), starts it and
+  requests its first execution with `dispatch.executionProfileId`, the default
+  branch's head as base and branch `bob/<KEY>-<slug>`; the issue description
+  is the instructions. Every id derives from the commandId, so a re-delivered
+  command replays. `dispatch.repository` (`owner/repo`) overrides the
+  repository the base revision is read from; otherwise the `--release`
+  `repositories` map, then the target's repositoryId. Without `dispatch` it
+  answers `NotSupported`.
+- Both commands also need to be listed in `commands.operations`.
+
 If either file is missing or invalid, the worker logs `step: "edge"`,
 `outcome: "configuration-unavailable"` once and keeps dispatching without the
 exporter. Edge outages log `outcome: "unavailable"` and back off; they never

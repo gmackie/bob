@@ -1,15 +1,22 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, realpathSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
 import { CoordinationError } from './coordinator.mjs';
+import { parseIssuesConfig, policyProjectFor } from './issue-mirror.mjs';
 
 const HEARTBEAT_MS = 30_000;
 /** While commands flow, the exporter contacts the edge this often instead of every 30 s. */
 export const FAST_POLL_MS = 2_000;
 const MIN_POLL_MS = 1_000;
-/** Coordinator operations the edge may relay; mirrors RELAYED_OPERATIONS in
- * packages/bob/src/sdlc-view/src/commands.ts. */
-export const RELAYED_OPERATIONS = Object.freeze(['ControlPlan', 'RetryItem', 'CancelItem', 'ReconcileItem', 'ResolveInput', 'RequestRelease', 'RequestDeployment']);
+/** Operations the edge may relay; mirrors RELAYED_OPERATIONS in
+ * packages/bob/src/sdlc-view/src/commands.ts. SetIssueState and DispatchIssue (BOB-99) are
+ * run by the exporter itself (runIssueCommand), not by principal.admit. */
+export const RELAYED_OPERATIONS = Object.freeze(['ControlPlan', 'RetryItem', 'CancelItem', 'ReconcileItem', 'ResolveInput', 'RequestRelease', 'RequestDeployment', 'SetIssueState', 'DispatchIssue']);
+const ISSUE_OPERATIONS = new Set(['SetIssueState', 'DispatchIssue']);
+/** Mirrors ISSUE_TARGETS in sdlc-view issues.ts. */
+export const ISSUE_TARGETS = Object.freeze(['todo', 'in_progress', 'in_review', 'done', 'canceled']);
+const isUuid = v => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 /** Operations keyed by attemptId whose request has no itemId: the exporter sends the edge's
  * itemId as expectItemId and the coordinator checks the attempt belongs to that item. */
 const ATTEMPT_KEYED = new Set(['ResolveInput', 'RequestRelease']);
@@ -46,6 +53,10 @@ export function parseCommandInput(operation, input) {
       if (!isId(input.itemId) || !DEPLOYMENT_ACTIONS.has(input.action) || !isId(input.artifactRef) || !isId(input.stageRef)) return null;
       if (input.deploymentRef !== undefined && !isId(input.deploymentRef)) return null;
       return { itemId: input.itemId, action: input.action, artifactRef: input.artifactRef, stageRef: input.stageRef, ...(input.deploymentRef !== undefined ? { deploymentRef: input.deploymentRef } : {}) };
+    case 'SetIssueState':
+      return isUuid(input.issueId) && ISSUE_TARGETS.includes(input.target) ? { issueId: input.issueId, target: input.target } : null;
+    case 'DispatchIssue':
+      return isUuid(input.issueId) ? { issueId: input.issueId } : null;
     default:
       return null;
   }
@@ -72,6 +83,38 @@ export function classifyCommandError(error) {
   }
   return { final: false, error: error instanceof CoordinationError ? { code: error.code, message: error.message, retryable: true } : INTERNAL_ERROR };
 }
+
+/** Kanbanger state names per ISSUE_TARGETS, case-insensitive; type fallbacks in pickWorkflowState. */
+const TARGET_NAMES = Object.freeze({ todo: ['todo'], in_progress: ['in progress'], in_review: ['in review'], done: ['done'], canceled: ['canceled', 'cancelled'] });
+/** The team's workflow state for a SetIssueState target: by name, else by type (lowest position first). */
+export function pickWorkflowState(states, target) {
+  const named = states.find(state => TARGET_NAMES[target]?.includes(String(state.name).trim().toLowerCase()));
+  if (named) return named;
+  const sorted = [...states].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  const review = state => /review/i.test(state.name);
+  switch (target) {
+    case 'todo': return sorted.find(state => state.type === 'unstarted') ?? null;
+    case 'in_progress': return sorted.find(state => state.type === 'started' && !review(state)) ?? null;
+    case 'in_review': return sorted.find(state => state.type === 'started' && review(state)) ?? null;
+    case 'done': return sorted.find(state => state.type === 'completed') ?? null;
+    case 'canceled': return sorted.find(state => state.type === 'canceled') ?? null;
+    default: return null;
+  }
+}
+/** A branch name for a dispatched issue: `bob/<KEY>-<slug>`, lowercase slug, ≤ 80 characters. */
+export function dispatchBranch(key, title) {
+  const slug = String(title ?? '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50).replace(/-+$/, '');
+  return `bob/${key}${slug ? `-${slug}` : ''}`;
+}
+/** Kanbanger said no (not a transport failure): final. Everything else follows classifyCommandError. */
+function classifyIssueError(error) {
+  if (typeof error?.code === 'string' && error.code.startsWith('Kanbanger') && error.code !== 'KanbangerUnavailable' && error.retryable !== true) {
+    return { final: true, error: { code: error.code, message: String(error.message).slice(0, 500), retryable: false } };
+  }
+  if (error?.code === 'IssueNotFound' && error.retryable !== true) return { final: true, error: { code: 'IssueNotFound', message: 'Kanbanger issue not found', retryable: false } };
+  return classifyCommandError(error);
+}
+const succeeded = (commandId, resourceId) => ({ contractVersion: '1', operationId: randomUUID(), commandId, state: 'succeeded', resourceId, resourceVersion: 0 });
 const PAGE = 50, EVENTS = 100;
 // Terminal plans (completed, cancelled) reach the edge through change batches when
 // they finish; snapshots carry only the plans that can still move.
@@ -83,7 +126,10 @@ const LIVE_PLAN_STATES = ['draft', 'active', 'paused', 'cancelling'];
  * the edge returns run in-process under that edge principal (its own coordinator,
  * defaulting to the exporting one) and its operation allowlist; results ride the
  * next batch. Without it, every relayed command is answered Forbidden. */
-export function edgeExporter({ coordinator, endpoint, token, checkpoint, fetch: send = fetch, timeoutMs = 5000, now = Date.now, maxBytes = MAX_BATCH_BYTES, commands, log = line => console.error(JSON.stringify(line)) }) {
+/** issues (BOB-99): { kanbanger, mirror?, dispatch?, forge?, repositories? } runs SetIssueState
+ * (kanbanger) and DispatchIssue (also dispatch: { executionProfileId, repository? } and forge:
+ * a forgePort for the base revision). Without it both are answered NotSupported. */
+export function edgeExporter({ coordinator, endpoint, token, checkpoint, fetch: send = fetch, timeoutMs = 5000, now = Date.now, maxBytes = MAX_BATCH_BYTES, commands, issues, log = line => console.error(JSON.stringify(line)) }) {
   const url = new URL(endpoint);
   if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/api/sdlc/ingest') throw new Error('Edge needs an HTTPS /api/sdlc/ingest endpoint');
   if (!/^[A-Za-z0-9_-]{32,256}$/.test(token ?? '') || !checkpoint || checkpoint === ':memory:') throw new Error('Invalid edge configuration');
@@ -177,11 +223,87 @@ export function edgeExporter({ coordinator, endpoint, token, checkpoint, fetch: 
 
   /** Runs one relayed command. Never throws: every outcome is a CommandResult, or null
    * for a transient failure (nothing is stored; the edge re-sends the command later). */
+  /** SetIssueState: move the issue to the team's state for the target, comment, and refresh the mirror. */
+  async function setIssueState(commandId, { issueId, target }) {
+    const kanbanger = issues.kanbanger;
+    const issue = await kanbanger.resolveIssue(issueId);
+    const state = pickWorkflowState(await kanbanger.workflowStates(issue.team.id), target);
+    if (!state) return failure(commandId, 'IssueStateUnavailable', `The issue's team has no state for ${target}`, false);
+    // Already there (a retry after it applied, or a stale screen): no second write or comment.
+    if (issue.state?.id !== state.id) {
+      await kanbanger.updateIssueState(issueId, state.id);
+      await kanbanger.createComment(issueId, `Moved to ${state.name} from the Bob Arcade.`);
+    }
+    issues.mirror?.refresh(issueId);
+    return { commandId, ok: true, operation: succeeded(commandId, issueId) };
+  }
+
+  /**
+   * DispatchIssue: a one-item plan for the issue, started, and its first execution requested,
+   * all under the edge principal (so Kanbanger issue admission applies). Every id derives from
+   * the commandId, so a re-delivered command replays instead of creating a second plan.
+   */
+  async function dispatchIssue(commandId, { issueId }, actor) {
+    const { kanbanger, dispatch, forge } = issues;
+    if (!dispatch) return failure(commandId, 'NotSupported', 'Dispatch is not configured on this coordinator (edge.json issues.dispatch)', false);
+    if (!forge) return failure(commandId, 'NotSupported', 'Dispatch needs the worker --release config to read the base revision', false);
+    const node = await kanbanger.mirrorIssue(issueId);
+    if (!node) return failure(commandId, 'IssueNotFound', 'Kanbanger issue not found', false);
+    if (['completed', 'canceled'].includes(node.state?.type)) return failure(commandId, 'InvalidTransition', 'The issue is already closed', false);
+    const policy = principal.context;
+    const project = policyProjectFor(policy, node);
+    if (!project) return failure(commandId, 'Forbidden', "The issue's project is outside the coordinator policy", false);
+    const target = (policy.targets ?? []).find(t => t.repository?.integrationId === 'forgegraph');
+    const repositories = { ...(policy.release?.repositories ?? {}), ...(issues.repositories ?? {}) };
+    const repo = target && (dispatch.repository ?? repositories[target.repository.repositoryId] ?? (target.repository.repositoryId.includes('/') ? target.repository.repositoryId : null));
+    if (!target || !repo) return failure(commandId, 'NotSupported', 'No ForgeGraph target with a known repository in the coordinator policy', false);
+    const h = createHash('sha256').update(commandId).digest('hex').slice(0, 24);
+    const itemId = `issue-${node.identifier}-${h.slice(0, 12)}`;
+    const issueSnapshotRef = `kanbanger:${node.identifier}:${h.slice(0, 12)}`;
+    const issueRef = { integrationId: 'kanbanger', workspaceId: project.workspaceId, teamId: project.teamId, projectId: project.projectId, issueId: node.id, identifier: node.identifier };
+    const admit = (name, body, key) => (principal.admit ?? principal.call).call(principal, name, { contractVersion: '1', ...body }, { idempotencyKey: key, actor });
+    const created = await admit('CreatePlan', { commandId: `dispatch-${h}-create`, plan: { items: [{ itemId, issue: issueRef, target, issueSnapshotRef, completionTarget: 'production' }], dependencies: [], concurrencyLimit: 1 } }, `dispatch-${h}-create`);
+    const planId = created.resourceId;
+    await admit('ControlPlan', { commandId: `dispatch-${h}-start`, planId, expectedVersion: 1, action: 'start' }, `dispatch-${h}-start`);
+    const baseRevision = await forge.branchHead(repo, await forge.defaultBranch(repo));
+    if (!baseRevision) return failure(commandId, 'BaseRevisionUnavailable', `No head commit for ${repo}'s default branch`, false);
+    const description = (await kanbanger.issueDescription(issueId)).trim();
+    const title = typeof node.title === 'string' && node.title.trim() ? node.title.trim() : node.identifier;
+    const request = {
+      requestId: `dispatch-${h}-request`, attemptId: `dispatch-${h}-attempt`, itemId, planId, planVersion: 2, issueSnapshotRef, target,
+      work: {
+        title: `${node.identifier}: ${title}`.slice(0, 240),
+        instructions: (description || `Implement Kanbanger issue ${node.identifier}: ${title}.`).slice(0, 16000),
+        acceptanceCriteria: [`Meet the acceptance criteria of Kanbanger issue ${node.identifier}${typeof node.url === 'string' && node.url.startsWith('https://') ? ` (${node.url})` : ''}.`.slice(0, 2000)],
+      },
+      workspace: { baseRevision, branch: dispatchBranch(node.identifier, title) },
+      executionProfileId: dispatch.executionProfileId,
+    };
+    const operation = await admit('RequestExecution', request, request.requestId);
+    issues.mirror?.refresh(issueId);
+    const { error, ...rest } = operation;
+    return { commandId, ok: true, operation: error == null ? rest : operation };
+  }
+
+  async function runIssueCommand(command, input) {
+    const commandId = command.commandId;
+    if (!issues?.kanbanger) return failure(commandId, 'NotSupported', 'Issue commands are not configured on this coordinator (edge.json issues)', false);
+    try {
+      return command.operation === 'SetIssueState' ? await setIssueState(commandId, input) : await dispatchIssue(commandId, input, command.actor);
+    } catch (error) {
+      const { final, error: reported } = classifyIssueError(error);
+      if (final) return failure(commandId, reported.code, reported.message, reported.retryable);
+      log({ at: new Date(now()).toISOString(), step: 'edge', outcome: 'command-transient', commandId, operation: command.operation, code: reported.code });
+      return null;
+    }
+  }
+
   async function run(command) {
     const commandId = command.commandId;
     if (!allowed.has(command.operation)) return failure(commandId, 'Forbidden', 'Operation is outside the edge principal policy', false);
     const input = parseCommandInput(command.operation, command.input);
     if (!input) return failure(commandId, 'InvalidRequest', 'Command input is invalid', false);
+    if (ISSUE_OPERATIONS.has(command.operation)) return runIssueCommand(command, input);
     // ResolveInputRequest and ReleaseRequest have no itemId: the coordinator checks it names the attempt's item.
     const keyed = ATTEMPT_KEYED.has(command.operation);
     const { itemId: expectItemId, ...attemptBody } = keyed ? input : {};
@@ -266,7 +388,9 @@ export function parseTailConfig(tail) {
   return { postIntervalMs: tail.postIntervalMs ?? 2000 };
 }
 
-/** edge.json: { endpoint, checkpoint, tokenEnv, commands?: { operations: [...] }, tail?: {...} }.
+/** edge.json: { endpoint, checkpoint, tokenEnv, commands?: { operations: [...] }, tail?: {...}, issues?: {...} }.
+ * `issues` (BOB-99, parseIssuesConfig) turns on the Kanbanger issue mirror and the issue
+ * commands; it is returned as `issues` and is not an exporter option.
  * `commands` enables the command channel; its operations are the edge principal's
  * allowlist, a non-empty subset of RELAYED_OPERATIONS. The principal's context is
  * the worker's own --context policy (see deploy/coordination/README.md). `tail`
@@ -275,7 +399,8 @@ export function loadEdgeConfig(path, env = process.env) {
   const config = JSON.parse(readFileSync(path, 'utf8'));
   if (typeof config.tokenEnv !== 'string' || !/^[A-Z][A-Z0-9_]*$/.test(config.tokenEnv)) throw new Error('Edge tokenEnv is required');
   const tail = parseTailConfig(config.tail);
-  const loaded = { endpoint: config.endpoint, checkpoint: config.checkpoint, token: env[config.tokenEnv], ...(tail ? { tail } : {}) };
+  const issues = parseIssuesConfig(config.issues);
+  const loaded = { endpoint: config.endpoint, checkpoint: config.checkpoint, token: env[config.tokenEnv], ...(tail ? { tail } : {}), ...(issues ? { issues } : {}) };
   if (config.commands === undefined) return loaded;
   if (!isRecord(config.commands) || Object.keys(config.commands).some(key => key !== 'operations') || !validOperations(config.commands.operations)) throw new Error('Edge commands.operations must be a non-empty, unique subset of ' + RELAYED_OPERATIONS.join(', '));
   return { ...loaded, commands: { operations: [...config.commands.operations] } };
