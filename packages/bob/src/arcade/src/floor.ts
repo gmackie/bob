@@ -55,6 +55,8 @@ export interface FloorParcel {
   itemId: string;
   /** The tracker identifier (BOB-91), else the issue id. */
   label: string;
+  /** What fits on a compact parcel: the identifier's number ("91"), else the label. */
+  short: string;
   stationId: StationId;
   state: ItemState;
   stateLabel: string;
@@ -73,8 +75,12 @@ export interface FloorParcel {
 
 export interface FloorOverflow { stationId: StationId; count: number; x: number; y: number }
 
+export type Density = "normal" | "compact";
+
 export interface FloorScene {
   orientation: Orientation;
+  /** compact when the floor shrank its parcels to fit a crowd (FloorOptions.density "auto"). */
+  density: Density;
   width: number;
   height: number;
   parcel: { w: number; h: number };
@@ -89,6 +95,11 @@ export interface FloorOptions {
   /** Default: wide when the box is at least WIDE_MIN_WIDTH across (iPad, landscape phone, web) or wider than tall. */
   orientation?: Orientation;
   scope?: Scope;
+  /**
+   * Parcel size. "auto" switches to compact parcels when a belt station holds more items
+   * than normal parcels can show, before it falls back to an overflow counter. Default normal.
+   */
+  density?: Density | "auto";
 }
 
 /** A belt of 8 stations needs about this much width before columns beat rows (iPad portrait qualifies). */
@@ -121,6 +132,7 @@ function parcelFor(row: Row): Omit<FloorParcel, "x" | "y"> {
   return {
     itemId: row.item.itemId,
     label: label(row),
+    short: /(\d+)$/.exec(label(row))?.[1] ?? label(row),
     stationId,
     state: row.item.state,
     stateLabel,
@@ -137,6 +149,18 @@ function parcelFor(row: Row): Omit<FloorParcel, "x" | "y"> {
 const byAttention = (a: Omit<FloorParcel, "x" | "y">, b: Omit<FloorParcel, "x" | "y">) =>
   ATTENTION_RANK[a.attention] - ATTENTION_RANK[b.attention] || a.label.localeCompare(b.label) || a.itemId.localeCompare(b.itemId);
 
+// Slots per belt station: rows under the belt (wide) or columns beside it (tall).
+const WIDE_BELT_Y = PAD + 30;
+const TALL_BELT_X = PAD + 74;
+const slotsWide = (p: { h: number }, beltBottom: number) => {
+  const firstY = WIDE_BELT_Y + 14 + p.h / 2;
+  return Math.max(1, Math.floor((beltBottom - firstY + p.h / 2) / (p.h + GAP)));
+};
+const slotsTall = (p: { w: number }, width: number) => {
+  const firstX = TALL_BELT_X + 14 + p.w / 2;
+  return Math.max(1, Math.floor((width - PAD - firstX + p.w / 2) / (p.w + GAP)));
+};
+
 export function floorScene(view: EdgeView, box: { width: number; height: number }, options: FloorOptions = {}): FloorScene {
   const width = Math.max(1, box.width);
   const height = Math.max(1, box.height);
@@ -150,7 +174,13 @@ export function floorScene(view: EdgeView, box: { width: number; height: number 
 
   const belt = FLOOR_STATIONS.filter((s) => s.kind === "belt");
   const bins = FLOOR_STATIONS.filter((s) => s.kind === "bin");
-  const parcel = orientation === "wide" ? { w: 64, h: 24 } : { w: 66, h: 24 };
+  const beltBottom = height - BIN_BAND;
+  const normal = orientation === "wide" ? { w: 64, h: 24 } : { w: 66, h: 24 };
+  const compact = orientation === "wide" ? { w: 40, h: 16 } : { w: 42, h: 16 };
+  const fits = (p: { w: number; h: number }) => (orientation === "wide" ? slotsWide(p, height - BIN_BAND) : slotsTall(p, width));
+  const crowded = Math.max(0, ...belt.map((s) => byStation.get(s.id)!.length)) > fits(normal);
+  const density: Density = options.density === "compact" || (options.density === "auto" && crowded) ? "compact" : "normal";
+  const parcel = density === "compact" ? compact : normal;
   const stations: FloorStationNode[] = [];
   const parcels: FloorParcel[] = [];
   const overflow: FloorOverflow[] = [];
@@ -164,15 +194,14 @@ export function floorScene(view: EdgeView, box: { width: number; height: number 
     if (list.length > shown) overflow.push({ stationId: id, count: list.length - shown, ...slots[shown]! });
   };
 
-  const beltBottom = height - BIN_BAND;
   let beltLine: FloorScene["belt"];
 
   if (orientation === "wide") {
     const colW = (width - PAD * 2) / belt.length;
-    const beltY = PAD + 30;
+    const beltY = WIDE_BELT_Y;
     beltLine = { x1: PAD, y1: beltY, x2: width - PAD, y2: beltY };
     const firstY = beltY + 14 + parcel.h / 2;
-    const rowsFit = Math.max(1, Math.floor((beltBottom - firstY + parcel.h / 2) / (parcel.h + GAP)));
+    const rowsFit = slotsWide(parcel, beltBottom);
     belt.forEach((s, i) => {
       const x = PAD + colW * (i + 0.5);
       const list = byStation.get(s.id)!;
@@ -180,12 +209,11 @@ export function floorScene(view: EdgeView, box: { width: number; height: number 
       place(s.id, Array.from({ length: rowsFit }, (_, r) => ({ x, y: firstY + r * (parcel.h + GAP) })));
     });
   } else {
-    const labelW = 74;
     const rowH = (beltBottom - PAD) / belt.length;
-    const beltX = PAD + labelW;
+    const beltX = TALL_BELT_X;
     beltLine = { x1: beltX, y1: PAD, x2: beltX, y2: beltBottom };
     const firstX = beltX + 14 + parcel.w / 2;
-    const colsFit = Math.max(1, Math.floor((width - PAD - firstX + parcel.w / 2) / (parcel.w + GAP)));
+    const colsFit = slotsTall(parcel, width);
     belt.forEach((s, i) => {
       const y = PAD + rowH * (i + 0.5);
       const list = byStation.get(s.id)!;
@@ -206,7 +234,7 @@ export function floorScene(view: EdgeView, box: { width: number; height: number 
     place(s.id, Array.from({ length: fit }, (_, c) => ({ x: startX + c * (parcel.w + GAP), y: binY + 16 + parcel.h / 2 })));
   });
 
-  return { orientation, width, height, parcel, belt: beltLine, stations, parcels, overflow };
+  return { orientation, density, width, height, parcel, belt: beltLine, stations, parcels, overflow };
 }
 
 /** The scene as text, one line per non-empty station: the screen-reader view of the floor. */

@@ -90,7 +90,7 @@ function CockpitInner() {
           <AgentStage sessions={status.sessions} feeds={feeds} feedVersion={feedVersion} ops={ops} />
           <PrPipelines status={status} ops={ops} />
         </div>
-        <FloorPanel />
+        <FloorPanel onCue={(kind) => burstQueueRef.current.push(kind)} />
         <Timeline24h status={status} />
       </div>
     </div>

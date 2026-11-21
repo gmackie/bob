@@ -4,10 +4,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
-import { beatLine, createBeatLog, desks as deskCards, floorScene, floorSummary, hud, shippedToday, WIDE_MIN_WIDTH } from "@bob/arcade";
-import type { Desk } from "@bob/arcade";
+import { beatLine, ciMeter, createBeatLog, desks as deskCards, floorScene, floorSummary, hud, shippedToday, WIDE_MIN_WIDTH } from "@bob/arcade";
+import type { AttemptDetailLike, Desk } from "@bob/arcade";
 import { rows, RELEASE_STAGE_PRESENTATION, STATE_PRESENTATION } from "@bob/sdlc-view";
-import type { EdgeView } from "@bob/sdlc-view";
+import type { EdgeView, Scope } from "@bob/sdlc-view";
 
 import { attentionEntries, bannerFor, firstQuestion, releaseReason } from "~/features/sdlc/attention-model";
 import type { Banner } from "~/features/sdlc/commands-model";
@@ -17,11 +17,13 @@ import { useLiveActivity, useLiveActivityPreview, useNow, useSdlcEdge, useShippe
 import { colors } from "~/lib/colors";
 
 import type { LiveEffect } from "./arcade-model";
-import { EFFECT_TTL_MS, expire, step } from "./arcade-model";
+import { EFFECT_TTL_MS, expire, step, stepAttempts } from "./arcade-model";
 import { demoDeskDetail } from "./demo-feed";
 import { DesksView } from "./DesksView";
 import { FloorView, STAGE } from "./FloorView";
+import type { ParcelMeter } from "./FloorView";
 import { playHaptic } from "./haptics";
+import { ScopeChips, useFloorScope } from "./ScopeChips";
 import { useDemoEdge } from "./use-demo-edge";
 import { useDeskIds } from "./use-desk-ids";
 
@@ -32,8 +34,11 @@ const MONO = "Menlo";
  */
 const SIDE_PANEL_MIN_WIDTH = 300 + WIDE_MIN_WIDTH;
 
-function HudStrip({ view, demo, today }: { view: EdgeView; demo: boolean; today: number | null }) {
-  const h = hud(view);
+type Attempts = Readonly<Record<string, AttemptDetailLike | undefined>>;
+const NO_ATTEMPTS: Attempts = {};
+
+function HudStrip({ view, scope, demo, today }: { view: EdgeView; scope: Scope; demo: boolean; today: number | null }) {
+  const h = hud(view, scope);
   const cells: [string, number | string, string][] = [
     ["AGENTS", h.agents, "#ffd27a"],
     ["IN FLIGHT", h.inFlight, "#ffd27a"],
@@ -123,7 +128,8 @@ function NeedsYou({ view, onSelect }: { view: EdgeView; onSelect: (itemId: strin
 export function ArcadeScreen({ onOpenItem }: { onOpenItem?: (itemId: string) => void }) {
   const { state, retry } = useSdlcEdge();
   const now = useNow();
-  const ids = useDeskIds(state.view);
+  const [scope, setScope] = useFloorScope(state.view);
+  const ids = useDeskIds(state.view, scope);
   // Only desks inside the session's watch set get live detail, so only those are drawn.
   const watching = useWatchDesks(ids);
   const shipped = useShipped();
@@ -138,6 +144,9 @@ export function ArcadeScreen({ onOpenItem }: { onOpenItem?: (itemId: string) => 
       now={now}
       desks={desks}
       today={shipped ? shippedToday(shipped, now) : null}
+      attempts={state.attempts}
+      scope={scope}
+      onScope={setScope}
       onRetry={retry}
       onOpenItem={onOpenItem}
     />
@@ -148,13 +157,16 @@ export function ArcadeScreen({ onOpenItem }: { onOpenItem?: (itemId: string) => 
 export function DemoArcadeScreen() {
   const view = useDemoEdge();
   const now = useNow(DEMO_TICK_MS);
-  const ids = useDeskIds(view);
+  const [scope, setScope] = useFloorScope(view);
+  const ids = useDeskIds(view, scope);
   const tick = Math.floor(now / DEMO_TICK_MS);
-  const desks = useMemo(() => deskCards(view, ids, (id) => demoDeskDetail(view.items[id]?.state, id, tick, now), now), [view, ids, tick, now]);
+  // One scripted detail record per tick, fed to the desks and to the floor's attempt beats alike.
+  const attempts = useMemo(() => Object.fromEntries(ids.map((id) => [id, demoDeskDetail(view.items[id]?.state, id, tick, now)])), [view, ids, tick, now]);
+  const desks = useMemo(() => deskCards(view, ids, (id) => attempts[id], now), [view, ids, attempts, now]);
   const today = Object.values(view.items).filter((i) => i.state === "completed").length;
   return (
     <View style={{ flex: 1 }}>
-      <ArcadeView view={view} banner={null} now={now} desks={desks} today={today} demo />
+      <ArcadeView view={view} banner={null} now={now} desks={desks} today={today} attempts={attempts} scope={scope} onScope={setScope} demo />
       <DemoLiveActivityToggle view={view} />
     </View>
   );
@@ -194,6 +206,9 @@ function ArcadeView({
   now,
   desks,
   today,
+  attempts = NO_ATTEMPTS,
+  scope,
+  onScope,
   onRetry,
   onOpenItem,
   demo = false,
@@ -203,6 +218,10 @@ function ArcadeView({
   now: number;
   desks: Desk[];
   today: number | null;
+  /** Live detail per watched item (tail, CI): drives motion between transitions. */
+  attempts?: Attempts;
+  scope: Scope;
+  onScope: (scope: Scope) => void;
   onRetry?: () => void;
   onOpenItem?: (itemId: string) => void;
   demo?: boolean;
@@ -225,6 +244,29 @@ function ArcadeView({
     setEffects(out.effects);
     playHaptic(out.haptic);
   }, [view, log]);
+  // Attempt stream: new tail lines and CI phases for watched items, between transitions.
+  const [typing, setTyping] = useState<Record<string, number>>({});
+  const prevAttempts = useRef<Attempts | null>(null);
+  const issues = useMemo(() => new Map(rows(view).map((r) => [r.item.itemId, r.issue.identifier ?? r.issue.issueId] as const)), [view]);
+  useEffect(() => {
+    const prev = prevAttempts.current;
+    prevAttempts.current = attempts;
+    if (!prev || prev === attempts) return;
+    const t = Date.now();
+    const out = stepAttempts(log, prev, attempts, (id) => issues.get(id), effectsRef.current, t);
+    if (!out.beats.length) return;
+    effectsRef.current = out.effects;
+    setEffects(out.effects);
+    if (Object.keys(out.activity).length) setTyping((cur) => ({ ...cur, ...out.activity }));
+    playHaptic(out.haptic);
+    // A new view alone (same attempts) returns early above: issues is only read, never a trigger.
+  }, [attempts, issues, log]);
+  const meters = useMemo(() => {
+    const out: Record<string, ParcelMeter | null> = {};
+    for (const [id, d] of Object.entries(attempts)) out[id] = ciMeter(d?.ci);
+    return out;
+  }, [attempts]);
+
   useEffect(() => {
     if (!effects.length) return undefined;
     const id = setTimeout(() => {
@@ -236,11 +278,12 @@ function ArcadeView({
   const subscribeLog = useCallback((listener: () => void) => log.subscribe(listener), [log]);
   const logVersion = useCallback(() => log.version(), [log]);
   useSyncExternalStore(subscribeLog, logVersion);
-  const ticker = log.recent(4);
+  // Activity beats only move things; they never take a ticker line.
+  const ticker = log.recent(24).filter((b) => b.kind !== "agent.activity").slice(0, 4);
 
   const [box, setBox] = useState<{ width: number; height: number } | null>(null);
   const [screenWidth, setScreenWidth] = useState(0);
-  const scene = useMemo(() => (box ? floorScene(view, box) : null), [view, box]);
+  const scene = useMemo(() => (box ? floorScene(view, box, { scope, density: "auto" }) : null), [view, box, scope]);
   const [selected, setSelected] = useState<string | null>(null);
   const select = useCallback((itemId: string) => setSelected((cur) => (cur === itemId ? null : itemId)), []);
   const side = screenWidth >= SIDE_PANEL_MIN_WIDTH;
@@ -259,7 +302,8 @@ function ArcadeView({
           <OfflineBanner banner={banner} now={now} onRetry={onRetry} />
         </View>
       ) : null}
-      <HudStrip view={view} demo={demo} today={today} />
+      <HudStrip view={view} scope={scope} demo={demo} today={today} />
+      <ScopeChips view={view} scope={scope} onScope={onScope} />
       <View style={{ flex: 1, flexDirection: side ? "row" : "column" }}>
         <View
           style={{ flex: 1, minHeight: 260 }}
@@ -278,7 +322,7 @@ function ArcadeView({
             </View>
           ) : scene ? (
             <View accessibilityLabel={floorSummary(scene).join(". ")}>
-              <FloorView scene={scene} effects={effects} reduced={reduced} selectedItemId={selected} onPressParcel={select} />
+              <FloorView scene={scene} effects={effects} reduced={reduced} selectedItemId={selected} onPressParcel={select} typing={typing} meters={meters} />
             </View>
           ) : null}
         </View>

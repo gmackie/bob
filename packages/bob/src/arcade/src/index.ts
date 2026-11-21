@@ -5,3 +5,5 @@ export * from "./floor";
 export * from "./effects";
 export * from "./hud";
 export * from "./desks";
+export * from "./attempt-beats";
+export * from "./scopes";
