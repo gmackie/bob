@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { emptyView, type CommandInput, type Confirmation, type EdgeView } from "@bob/sdlc-view";
+import { emptyView, type CommandInput, type Confirmation, type EdgeView, type ShippedEntry } from "@bob/sdlc-view";
 
 import { emptyAttempt, type AttemptState } from "./attempt-model";
 import { emptyCommands, type CommandsState } from "./commands-model";
@@ -32,6 +32,14 @@ export interface SdlcEdge {
   attempt: AttemptState;
   /** Watch an item's attempt detail; null stops. Re-sent after every reconnect. */
   watch: (itemId: string | null) => void;
+  /** Also watch these items for the Arcade desks (BOB-98), within the edge's cap. */
+  watchDesks: (itemIds: readonly string[]) => void;
+  /** The ids watched on this socket, the watched item first; desks outside it get no detail. */
+  watching: readonly string[];
+  /** Ask for shipped-today entries (BOB-95). */
+  followShipped: () => void;
+  /** Shipped entries, newest first; null until the edge answers followShipped(). */
+  shipped: readonly ShippedEntry[] | null;
 }
 
 export function useSdlcEdge(): SdlcEdge {
@@ -39,6 +47,8 @@ export function useSdlcEdge(): SdlcEdge {
   const [connection, setConnection] = useState<EdgeConnection>("connecting");
   const [commands, setCommands] = useState<CommandsState>(emptyCommands);
   const [attempt, setAttempt] = useState<AttemptState>(emptyAttempt);
+  const [shipped, setShipped] = useState<readonly ShippedEntry[] | null>(null);
+  const [watching, setWatching] = useState<readonly string[]>([]);
   const clientRef = useRef<EdgeClient | null>(null);
 
   useEffect(() => {
@@ -55,6 +65,7 @@ export function useSdlcEdge(): SdlcEdge {
       onView: setView,
       onCommands: setCommands,
       onAttempt: setAttempt,
+      onShipped: setShipped,
     });
     clientRef.current = client;
 
@@ -95,7 +106,19 @@ export function useSdlcEdge(): SdlcEdge {
 
   const send = useCallback<SendCommand>((command, label, confirm) => clientRef.current?.send(command, label, confirm) ?? null, []);
 
-  const watch = useCallback((itemId: string | null) => clientRef.current?.watch(itemId), []);
+  const watch = useCallback((itemId: string | null) => {
+    const client = clientRef.current;
+    if (!client) return;
+    client.watch(itemId);
+    setWatching(client.watching);
+  }, []);
+  const watchDesks = useCallback((itemIds: readonly string[]) => {
+    const client = clientRef.current;
+    if (!client) return;
+    client.watchDesks(itemIds);
+    setWatching(client.watching);
+  }, []);
+  const followShipped = useCallback(() => clientRef.current?.followShipped(), []);
 
-  return { view, connection, commands, send, attempt, watch };
+  return { view, connection, commands, send, attempt, watch, watchDesks, watching, followShipped, shipped };
 }

@@ -4,7 +4,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
-import { beatLine, createBeatLog, floorScene, floorSummary, hud, WIDE_MIN_WIDTH } from "@bob/arcade";
+import { beatLine, createBeatLog, desks as deskCards, floorScene, floorSummary, hud, shippedToday, WIDE_MIN_WIDTH } from "@bob/arcade";
+import type { Desk } from "@bob/arcade";
 import { rows, RELEASE_STAGE_PRESENTATION, STATE_PRESENTATION } from "@bob/sdlc-view";
 import type { EdgeView } from "@bob/sdlc-view";
 
@@ -12,14 +13,17 @@ import { attentionEntries, bannerFor, firstQuestion, releaseReason } from "~/fea
 import type { Banner } from "~/features/sdlc/commands-model";
 import { ATTENTION_COLOR, OfflineBanner } from "~/features/sdlc/components";
 import { contentFor } from "~/features/sdlc/live-activity";
-import { useLiveActivity, useLiveActivityPreview, useNow, useSdlcEdge } from "~/features/sdlc/use-sdlc-edge";
+import { useLiveActivity, useLiveActivityPreview, useNow, useSdlcEdge, useShipped, useWatchDesks } from "~/features/sdlc/use-sdlc-edge";
 import { colors } from "~/lib/colors";
 
 import type { LiveEffect } from "./arcade-model";
 import { EFFECT_TTL_MS, expire, step } from "./arcade-model";
+import { demoDeskDetail } from "./demo-feed";
+import { DesksView } from "./DesksView";
 import { FloorView, STAGE } from "./FloorView";
 import { playHaptic } from "./haptics";
 import { useDemoEdge } from "./use-demo-edge";
+import { useDeskIds } from "./use-desk-ids";
 
 const MONO = "Menlo";
 /**
@@ -28,9 +32,9 @@ const MONO = "Menlo";
  */
 const SIDE_PANEL_MIN_WIDTH = 300 + WIDE_MIN_WIDTH;
 
-function HudStrip({ view, demo }: { view: EdgeView; demo: boolean }) {
+function HudStrip({ view, demo, today }: { view: EdgeView; demo: boolean; today: number | null }) {
   const h = hud(view);
-  const cells: [string, number, string][] = [
+  const cells: [string, number | string, string][] = [
     ["AGENTS", h.agents, "#ffd27a"],
     ["IN FLIGHT", h.inFlight, "#ffd27a"],
     ["CI", h.ci, "#6fb4ff"],
@@ -38,6 +42,8 @@ function HudStrip({ view, demo }: { view: EdgeView; demo: boolean }) {
     ["DEPLOYING", h.deploying, "#6fb4ff"],
     ["SHIPPED", h.shipped, "#7dffb0"],
     ["FAILED", h.failed, h.failed ? "#ff6b6b" : "#ffd27a"],
+    // Reached production since local midnight (BOB-95); a dash until the edge answers.
+    ["TODAY", today ?? "–", "#7dffb0"],
   ];
   return (
     <View
@@ -117,22 +123,45 @@ function NeedsYou({ view, onSelect }: { view: EdgeView; onSelect: (itemId: strin
 export function ArcadeScreen({ onOpenItem }: { onOpenItem?: (itemId: string) => void }) {
   const { state, retry } = useSdlcEdge();
   const now = useNow();
-  return <ArcadeView view={state.view} banner={bannerFor(state.view, state.connection, now, state.error)} now={now} onRetry={retry} onOpenItem={onOpenItem} />;
+  const ids = useDeskIds(state.view);
+  // Only desks inside the session's watch set get live detail, so only those are drawn.
+  const watching = useWatchDesks(ids);
+  const shipped = useShipped();
+  const desks = useMemo(
+    () => deskCards(state.view, ids.filter((id) => watching.includes(id)), (id) => state.attempts[id], now),
+    [state.view, state.attempts, ids, watching, now],
+  );
+  return (
+    <ArcadeView
+      view={state.view}
+      banner={bannerFor(state.view, state.connection, now, state.error)}
+      now={now}
+      desks={desks}
+      today={shipped ? shippedToday(shipped, now) : null}
+      onRetry={retry}
+      onOpenItem={onOpenItem}
+    />
+  );
 }
 
 /** Dev-only: the Arcade over a scripted feed (demo-feed.ts), for screenshots and the wall demo. */
 export function DemoArcadeScreen() {
   const view = useDemoEdge();
-  const now = useNow();
+  const now = useNow(DEMO_TICK_MS);
+  const ids = useDeskIds(view);
+  const tick = Math.floor(now / DEMO_TICK_MS);
+  const desks = useMemo(() => deskCards(view, ids, (id) => demoDeskDetail(view.items[id]?.state, id, tick, now), now), [view, ids, tick, now]);
+  const today = Object.values(view.items).filter((i) => i.state === "completed").length;
   return (
-    <View className="flex-1">
-      <ArcadeView view={view} banner={null} now={now} demo />
+    <View style={{ flex: 1 }}>
+      <ArcadeView view={view} banner={null} now={now} desks={desks} today={today} demo />
       <DemoLiveActivityToggle view={view} />
     </View>
   );
 }
 
 const DEMO_FOLLOW_ITEM = "demo-0";
+const DEMO_TICK_MS = 1_100;
 
 /** Dev demo only: follow the first demo item on the lock screen; the scripted feed moves it (GMA-774). */
 function DemoLiveActivityToggle({ view }: { view: EdgeView }) {
@@ -163,6 +192,8 @@ function ArcadeView({
   view,
   banner,
   now,
+  desks,
+  today,
   onRetry,
   onOpenItem,
   demo = false,
@@ -170,6 +201,8 @@ function ArcadeView({
   view: EdgeView;
   banner: Banner | null;
   now: number;
+  desks: Desk[];
+  today: number | null;
   onRetry?: () => void;
   onOpenItem?: (itemId: string) => void;
   demo?: boolean;
@@ -226,7 +259,7 @@ function ArcadeView({
           <OfflineBanner banner={banner} now={now} onRetry={onRetry} />
         </View>
       ) : null}
-      <HudStrip view={view} demo={demo} />
+      <HudStrip view={view} demo={demo} today={today} />
       <View style={{ flex: 1, flexDirection: side ? "row" : "column" }}>
         <View
           style={{ flex: 1, minHeight: 260 }}
@@ -257,6 +290,7 @@ function ArcadeView({
           )
         ) : null}
       </View>
+      {waiting ? null : <DesksView desks={desks} width={screenWidth} now={now} reduced={reduced} selectedItemId={selected} onPressDesk={select} />}
       <View style={{ paddingHorizontal: 14, paddingBottom: 12, paddingTop: 4, minHeight: 68 }} accessibilityLabel="Recent floor events" testID="arcade-ticker">
         {ticker.map((b) => (
           <Text key={b.id} numberOfLines={1} style={{ fontFamily: MONO, fontSize: 11, color: STAGE.label }}>

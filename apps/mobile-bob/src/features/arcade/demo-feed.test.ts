@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createBeatLog, floorScene, sdlcBeats } from "@bob/arcade";
 import { emptyView, reduce, STATE_EDGES } from "@bob/sdlc-view";
 
-import { demoFeed } from "./demo-feed";
+import { demoDeskDetail, demoFeed } from "./demo-feed";
 
 describe("demoFeed", () => {
   it("is a valid edge script: contiguous deltas, real transitions, every item finishes", () => {
@@ -28,5 +28,20 @@ describe("demoFeed", () => {
     for (const k of ["item.advanced", "item.looped", "item.needs_human", "item.failed", "milestone"] as const) expect(kinds.has(k)).toBe(true);
     const scene = floorScene(view, { width: 390, height: 600 });
     expect(scene.parcels.length + scene.overflow.reduce((n, o) => n + o.count, 0)).toBe(9);
+  });
+});
+
+describe("demoDeskDetail (BOB-98)", () => {
+  it("scripts tail lines for agents, CI for checks, and a reason otherwise", () => {
+    const now = Date.parse("2026-11-20T12:00:00Z");
+    const running = demoDeskDetail("running", "demo-1", 3, now);
+    expect(running.tail?.lines.length).toBeGreaterThan(0);
+    expect(running.tail?.itemId).toBe("demo-1");
+    expect(demoDeskDetail("waiting-input", "demo-1", 3, now).tail?.lines.at(-1)).toMatch(/^asking:/);
+    const ci = demoDeskDetail("validating", "demo-2", 1, now).ci;
+    expect(ci?.available).toBe(true);
+    expect(demoDeskDetail("review", "demo-2", 1, now).ci).toMatchObject({ summary: "5/5 passed" });
+    expect(demoDeskDetail("reserved", "demo-3", 0, now)).toEqual({ tailUnavailable: "the agent has not started yet" });
+    expect(demoDeskDetail("running", "demo-1", 3, now)).toEqual(running);
   });
 });
