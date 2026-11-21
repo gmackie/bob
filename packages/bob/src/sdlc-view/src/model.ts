@@ -52,6 +52,12 @@ export interface ItemSnapshot {
   achievedMilestones: Milestone[];
   operationIds: string[];
   evidenceRefs: string[];
+  /**
+   * Stamped by the edge, not the coordinator (BOB-101): when the edge first saw the item in
+   * its current state, in the edge's clock (ms). Null when unknown: an item the edge first
+   * met in a snapshot, or one it held before it began stamping.
+   */
+  stateSince?: number | null;
 }
 /** A BizPulse repos.list row reduced to what the join needs. */
 export interface TopologyRepo { startupId: string; startupName: string; repoSlug: string }
@@ -153,14 +159,17 @@ export function projectFor(topology: TopologyRepo[], ref: RepositoryRef): { star
 export const repoKey = (ref: RepositoryRef) => `${ref.integrationId}:${ref.repositoryId}`;
 
 export interface Row { item: ItemSnapshot; plan: PlanSnapshot; target: ExecutionTarget; issue: IssueRef; startupId: string; startupName: string; attention: Attention }
-/** One row per item whose plan (and its definition of the item) the view has. */
-export function rows(view: EdgeView): Row[] {
+/**
+ * One row per item whose plan (and its definition of the item) the view has. With `now`,
+ * an item that has sat too long in an in-flight state reads as stalled (see itemAttention).
+ */
+export function rows(view: EdgeView, now?: number): Row[] {
   const out: Row[] = [];
   for (const item of Object.values(view.items)) {
     const plan = view.plans[item.planId];
     const def = plan?.definition.items.find((d) => d.itemId === item.itemId);
     if (!plan || !def) continue;
-    out.push({ item, plan, target: def.target, issue: def.issue, ...projectFor(view.topology, def.target.repository), attention: itemAttention(item) });
+    out.push({ item, plan, target: def.target, issue: def.issue, ...projectFor(view.topology, def.target.repository), attention: itemAttention(item, now) });
   }
   return out;
 }

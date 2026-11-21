@@ -11,6 +11,8 @@ export interface Hud {
   ci: number;
   /** Items that need a human (attention needs_human). */
   needsYou: number;
+  /** Items that have sat too long in a state the system should leave on its own (BOB-101). */
+  stalled: number;
   deploying: number;
   /** Items completed in plans still on the floor. */
   shipped: number;
@@ -19,9 +21,10 @@ export interface Hud {
 
 const IN_FLIGHT = new Set(["reserved", "execution-unknown", "running", "waiting-input", "validating", "review", "deploying"]);
 
-export function hud(view: EdgeView, scope: Scope = {}): Hud {
-  const out: Hud = { agents: 0, inFlight: 0, ci: 0, needsYou: 0, deploying: 0, shipped: 0, failed: 0 };
-  for (const row of rows(view)) {
+/** `now` turns on stall detection; without it `stalled` counts only execution-unknown items. */
+export function hud(view: EdgeView, scope: Scope = {}, now?: number): Hud {
+  const out: Hud = { agents: 0, inFlight: 0, ci: 0, needsYou: 0, stalled: 0, deploying: 0, shipped: 0, failed: 0 };
+  for (const row of rows(view, now)) {
     if (!inScope(row, scope)) continue;
     const s = row.item.state;
     if (s === "running") out.agents++;
@@ -31,6 +34,7 @@ export function hud(view: EdgeView, scope: Scope = {}): Hud {
     if (s === "completed") out.shipped++;
     if (s === "failed") out.failed++;
     if (row.attention === "needs_human") out.needsYou++;
+    if (row.attention === "stalled") out.stalled++;
   }
   return out;
 }
