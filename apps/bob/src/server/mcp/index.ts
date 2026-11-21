@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@bob/db/client";
 import { checkRateLimit, rateLimitResponse } from "@bob/api/rate-limit";
 import { auth } from "~/auth/server";
+import { withBizPulseTools } from "~/server/bizpulse/tools";
 import { makeOAuthStore } from "./store";
 import { json, makeOAuth } from "./oauth";
 import { makeTools, makeWorkspaceIdentity } from "./tools";
@@ -29,7 +30,7 @@ const identity = makeWorkspaceIdentity(db, async (request) => {
 const oauth = makeOAuth({ origin, store: makeOAuthStore(db), identity });
 const transport = makeMcpTransport(
   oauth,
-  makeTools(db, identity),
+  withBizPulseTools(makeTools(db, identity)),
   allowedOrigins,
 );
 export async function mcpRoute(request: Request): Promise<Response> {

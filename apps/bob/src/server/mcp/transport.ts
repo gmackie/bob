@@ -93,7 +93,7 @@ export function makeMcpTransport(
       case "ping":
         return result(id, {});
       case "tools/list":
-        return result(id, { tools: tools.list(grant) });
+        return result(id, { tools: await tools.list(grant) });
       case "tools/call": {
         if (
           typeof params.name !== "string" ||
