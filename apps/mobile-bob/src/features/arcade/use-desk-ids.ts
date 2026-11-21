@@ -4,12 +4,13 @@ import { useState } from "react";
 import { chooseDesks, sameDesks } from "@bob/arcade";
 import type { EdgeView } from "@bob/sdlc-view";
 
-export function useDeskIds(view: EdgeView): readonly string[] {
-  const [held, setHeld] = useState(() => ({ view, ids: chooseDesks(view) }));
-  if (held.view !== view) {
-    const next = chooseDesks(view, held.ids);
+/** `now` should change rarely (a minute clock): it re-judges stalls and so re-chooses desks. */
+export function useDeskIds(view: EdgeView, now: number): readonly string[] {
+  const [held, setHeld] = useState(() => ({ view, now, ids: chooseDesks(view, [], { now }) }));
+  if (held.view !== view || held.now !== now) {
+    const next = chooseDesks(view, held.ids, { now });
     const ids = sameDesks(next, held.ids) ? held.ids : next;
-    setHeld({ view, ids });
+    setHeld({ view, now, ids });
     return ids;
   }
   return held.ids;

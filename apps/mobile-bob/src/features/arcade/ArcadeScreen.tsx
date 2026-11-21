@@ -125,7 +125,7 @@ function NeedsYou({ view, onSelect }: { view: EdgeView; onSelect: (itemId: strin
 export function ArcadeScreen({ onOpenItem }: { onOpenItem?: (itemId: string) => void }) {
   const { state, retry } = useSdlcEdge();
   const now = useNow();
-  const ids = useDeskIds(state.view);
+  const ids = useDeskIds(state.view, Math.floor(now / 60_000) * 60_000);
   // Only desks inside the session's watch set get live detail, so only those are drawn.
   const watching = useWatchDesks(ids);
   const shipped = useShipped();
@@ -150,7 +150,7 @@ export function ArcadeScreen({ onOpenItem }: { onOpenItem?: (itemId: string) => 
 export function DemoArcadeScreen() {
   const view = useDemoEdge();
   const now = useNow(DEMO_TICK_MS);
-  const ids = useDeskIds(view);
+  const ids = useDeskIds(view, Math.floor(now / 60_000) * 60_000);
   const tick = Math.floor(now / DEMO_TICK_MS);
   const desks = useMemo(() => deskCards(view, ids, (id) => demoDeskDetail(view.items[id]?.state, id, tick, now), now), [view, ids, tick, now]);
   const today = Object.values(view.items).filter((i) => i.state === "completed").length;

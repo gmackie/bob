@@ -23,6 +23,9 @@ describe("deskRank", () => {
     expect(deskRank({ attention: "ok", item: { state: "running" } })).toBe(1);
     expect(deskRank({ attention: "ok", item: { state: "validating" } })).toBe(2);
     expect(deskRank({ attention: "ok", item: { state: "reserved" } })).toBe(3);
+    expect(deskRank({ attention: "stalled", item: { state: "execution-unknown" } })).toBe(4);
+    expect(deskRank({ attention: "stalled", item: { state: "running" } })).toBe(4);
+    expect(deskRank({ attention: "needs_human", item: { state: "validating" } })).toBe(0);
     for (const state of ["pending", "ready", "completed", "failed", "cancelled", "cancelling"] as const) {
       expect(deskRank({ attention: "needs_human", item: { state } })).toBeNull();
     }
@@ -77,6 +80,27 @@ describe("chooseDesks", () => {
     expect(chosen).toHaveLength(6);
     expect(chosen.at(-1)).toBe("zz");
     expect(chosen).not.toContain("i5");
+  });
+
+  it("gives stalled items desks only after every moving item, even ones it held before", () => {
+    const stuck = viewOf(snapshot([
+      { itemId: "s", state: "execution-unknown" },
+      ...Array.from({ length: 6 }, (_, i) => ({ itemId: `r${i}`, state: "reserved" as const })),
+    ]));
+    expect(chooseDesks(stuck, ["s"])).toEqual(["r0", "r1", "r2", "r3", "r4", "r5"]);
+    const few = viewOf(snapshot([{ itemId: "s", state: "execution-unknown" }, { itemId: "r", state: "reserved" }]));
+    expect(chooseDesks(few)).toEqual(["r", "s"]);
+  });
+
+  it("with now, ranks an item idle past its state's limit last", () => {
+    const H = 3_600_000;
+    const idle = viewOf(snapshot([
+      { itemId: "old", state: "validating", stateSince: NOW - 7 * H },
+      { itemId: "fresh", state: "reserved", stateSince: NOW - 60_000 },
+    ]));
+    expect(chooseDesks(idle)).toEqual(["old", "fresh"]);
+    expect(chooseDesks(idle, [], { now: NOW })).toEqual(["fresh", "old"]);
+    expect(desks(idle, ["old"], () => undefined, NOW)[0]?.attention).toBe("stalled");
   });
 
   it("drops desks whose item left or stopped working", () => {
@@ -134,6 +158,19 @@ describe("desks", () => {
     expect(a?.quiet).toBe(true);
     expect(c?.note).toBe("relay has not posted for this item");
     expect(q?.note).toBe("no pipeline yet");
+  });
+
+  it("tells apart desks that share an issue key and leaves unique keys alone", () => {
+    const shared = viewOf(snapshot([
+      { itemId: "B", state: "validating", identifier: "BOB-72" },
+      { itemId: "kill-recovery", state: "validating", identifier: "BOB-72" },
+      { itemId: "A", state: "validating", identifier: "BOB-71" },
+    ]));
+    const out = desks(shared, ["B", "kill-recovery", "A"], () => undefined, NOW);
+    expect(out.map((d) => d.label)).toEqual(["BOB-72 · B", "BOB-72 · kill-rec", "BOB-71"]);
+    expect(out[1]?.accessibilityLabel.startsWith("BOB-72 · kill-rec,")).toBe(true);
+    // A key is only ambiguous among the desks shown.
+    expect(desks(shared, ["B", "A"], () => undefined, NOW).map((d) => d.label)).toEqual(["BOB-72", "BOB-71"]);
   });
 
   it("ignores a tail for another item and skips items that left", () => {
