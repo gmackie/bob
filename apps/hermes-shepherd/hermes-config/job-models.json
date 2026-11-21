@@ -1,0 +1,6 @@
+{
+  "jobs": [
+    { "name": "Morning briefing", "provider": "openai-codex", "model": "gpt-5.6-terra" },
+    { "name": "Nightly vault wrap-up", "provider": "openai-codex", "model": "gpt-5.6-terra" }
+  ]
+}

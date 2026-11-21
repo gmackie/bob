@@ -1,14 +1,17 @@
 [Unit]
-Description=Check that Hermes produced today's daily briefing
+Description=Alert when Hermes scheduled jobs fail (model rejection) or the daily briefing is missing
 
 [Service]
 Type=oneshot
 User=bob
 Group=bob
 Environment=HOME=/home/bob
-ExecStart=/opt/bob/ops/hermes-daily-canary.sh
+Environment=HERMES_HOME=/home/bob/.hermes
+ExecStart=/usr/bin/python3 /opt/bob/ops/hermes-health-check.py
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=read-only
+ReadWritePaths=/home/bob/.hermes
 ProtectSystem=strict
-MemoryMax=64M
+MemoryMax=512M
+TimeoutStartSec=5min
