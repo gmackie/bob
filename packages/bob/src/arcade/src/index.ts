@@ -6,3 +6,5 @@ export * from "./effects";
 export * from "./hud";
 export * from "./desks";
 export * from "./board";
+export * from "./attempt-beats";
+export * from "./scopes";
