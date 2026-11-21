@@ -60,7 +60,8 @@ const TRACKER_IDENTIFIER = /^[A-Z]{2,10}-\d+$/;
 export function isTrackerIdentifier(
   value: string | null | undefined,
 ): value is string {
-  return typeof value === "string" && TRACKER_IDENTIFIER.test(value);
+  // JavaScript's $ also matches before a final newline; require the whole ID.
+  return typeof value === "string" && TRACKER_IDENTIFIER.exec(value)?.[0] === value;
 }
 
 /**
@@ -98,6 +99,10 @@ export function generateTrackerBranchName(
   identifier: string,
   title: string,
 ): string {
+  // Enforce the tracker alphabet here as well as at callers. Escaping an
+  // arbitrary external ID here would silently break tracker issue matching.
+  if (!isTrackerIdentifier(identifier))
+    throw new Error("A valid tracker identifier is required for branch naming");
   const slug = slugify(title);
   return slug ? `bob/${identifier}-${slug}` : `bob/${identifier}`;
 }
