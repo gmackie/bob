@@ -10,6 +10,7 @@ import { afterAll } from "vitest";
 const stateDir = mkdtempSync(join(tmpdir(), "ooda-runner-state-"));
 process.env.BOB_RUNNER_BUFFER_DIR = join(stateDir, "event-buffer");
 process.env.BOB_RUNNER_SUPERVISE_DIR = join(stateDir, "runs");
+process.env.BOB_RUNNER_BUDGET_SPOOL = join(stateDir, "budget", "usage-ledger.json");
 
 afterAll(() => {
   rmSync(stateDir, { recursive: true, force: true });
