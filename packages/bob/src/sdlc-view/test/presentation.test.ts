@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ITEM_STATES, MILESTONES, RELEASE_STAGES } from "../src/generated/contract";
-import { itemAttention, MILESTONE_LABEL, RELEASE_STAGE_PRESENTATION, STATE_EDGES, STATE_PRESENTATION } from "../src/presentation";
+import { itemAttention, MILESTONE_LABEL, STALL_AFTER_MS, stateAge, RELEASE_STAGE_PRESENTATION, STATE_EDGES, STATE_PRESENTATION } from "../src/presentation";
 
 describe("presentation spec", () => {
   it("covers every coordinator item state exactly", () => {
@@ -69,5 +69,32 @@ describe("presentation spec", () => {
         "cancelled->reserved",
       ].sort(),
     );
+  });
+});
+
+describe("stall (BOB-101)", () => {
+  const H = 3_600_000;
+  it("marks an in-flight item stalled once it outstays its state's limit", () => {
+    const since = 1_000_000;
+    expect(itemAttention({ state: "validating", stateSince: since }, since + 6 * H)).toBe("ok");
+    expect(itemAttention({ state: "validating", stateSince: since }, since + 6 * H + 1)).toBe("stalled");
+    expect(itemAttention({ state: "running", stateSince: since }, since + 25 * H)).toBe("stalled");
+  });
+  it("never stalls without a clock, without a stamp, or in states the system does not own", () => {
+    expect(itemAttention({ state: "validating", stateSince: 0 })).toBe("ok");
+    expect(itemAttention({ state: "validating", stateSince: null }, 10 ** 12)).toBe("ok");
+    for (const state of ["pending", "ready", "completed", "cancelled"] as const) {
+      expect(STALL_AFTER_MS[state]).toBeUndefined();
+      expect(itemAttention({ state, stateSince: 0 }, 10 ** 12)).toBe("ok");
+    }
+  });
+  it("keeps stronger attention over a stall", () => {
+    expect(itemAttention({ state: "validating", stateSince: 0, release: { stage: "checks-failed", autoMerge: false } }, 10 ** 12)).toBe("failed");
+    expect(itemAttention({ state: "review", stateSince: 0 }, 10 ** 12)).toBe("needs_human");
+  });
+  it("ages from the edge stamp", () => {
+    expect(stateAge({ stateSince: 100 }, 250)).toBe(150);
+    expect(stateAge({ stateSince: 300 }, 250)).toBe(0);
+    expect(stateAge({}, 250)).toBeNull();
   });
 });

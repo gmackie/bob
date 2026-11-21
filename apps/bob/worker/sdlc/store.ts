@@ -222,7 +222,7 @@ export class EdgeStore {
       // A fresh edge's first snapshot records what is already waiting without alerting on it.
       const baseline = snapshot && watermark === 0 && (this.sql.exec<{ n: number }>("SELECT count(*) AS n FROM items")[0]?.n ?? 0) === 0;
       if (snapshot) { this.sql.exec("DELETE FROM plans"); this.sql.exec("DELETE FROM items"); }
-      const { plans, items } = this.merge(batch);
+      const { plans, items } = this.merge(batch, previous, snapshot, now);
       const alerts = this.alerts.observe(items, previous, baseline, now);
       const shipped = this.shipped.observe(items, previous, baseline, (id) => this.plan(id), now);
       if (snapshot || plans.some((p) => TERMINAL_PLAN_STATES.has(p.state))) this.alerts.prune();
@@ -234,8 +234,13 @@ export class EdgeStore {
     });
   }
 
-  /** Writes the batch's resources by the rules above and returns the ones that took effect. */
-  private merge(batch: IngestBatch): { plans: PlanSnapshot[]; items: ItemSnapshot[] } {
+  /**
+   * Writes the batch's resources by the rules above and returns the ones that took effect.
+   * Each written item carries stateSince (BOB-101): kept while its state is unchanged, now
+   * when the state changes, and null when a snapshot brings an item the edge never held
+   * (it cannot know how long that item has been in its state).
+   */
+  private merge(batch: IngestBatch, previous: Map<string, ItemSnapshot>, snapshot: boolean, now: number): { plans: PlanSnapshot[]; items: ItemSnapshot[] } {
     const plans: PlanSnapshot[] = [], items: ItemSnapshot[] = [];
     const tombstone = (planId: string) => this.sql.exec<{ rv: number }>("SELECT rv FROM tombstones WHERE plan_id = ?", planId)[0]?.rv;
     for (const p of batch.plans) {
@@ -258,8 +263,11 @@ export class EdgeStore {
       if (tombstone(i.planId) !== undefined) continue;
       const stored = this.sql.exec<{ rv: number }>("SELECT rv FROM items WHERE id = ?", i.itemId)[0]?.rv;
       if (stored !== undefined && i.resourceVersion <= stored) continue;
-      this.sql.exec("INSERT INTO items (id, plan_id, rv, json) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET plan_id = excluded.plan_id, rv = excluded.rv, json = excluded.json", i.itemId, i.planId, i.resourceVersion, JSON.stringify(i));
-      items.push(i);
+      const held = previous.get(i.itemId);
+      const stateSince = held ? (held.state === i.state ? (held.stateSince ?? null) : now) : snapshot ? null : now;
+      const stamped: ItemSnapshot = { ...i, stateSince };
+      this.sql.exec("INSERT INTO items (id, plan_id, rv, json) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET plan_id = excluded.plan_id, rv = excluded.rv, json = excluded.json", i.itemId, i.planId, i.resourceVersion, JSON.stringify(stamped));
+      items.push(stamped);
     }
     return { plans, items };
   }

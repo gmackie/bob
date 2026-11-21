@@ -21,6 +21,8 @@ function at<T>(list: readonly T[], index: number): T {
   return value;
 }
 const ITEMS = 9;
+/** How often the demo plays a step (use-demo-edge), so the script can stamp believable ages. */
+export const DEMO_STEP_MS = 1_100;
 const ids = Array.from({ length: ITEMS }, (_, i) => `demo-${i}`);
 const identifier = (i: number) => `BOB-${101 + i}`;
 
@@ -83,7 +85,7 @@ export interface DemoFeed {
 export function demoFeed(epoch: string, seenAt: number): DemoFeed {
   const plan = planSnapshot(epoch);
   const items = new Map<string, ItemSnapshot>(
-    ids.map((itemId) => [itemId, { itemId, planId: plan.planId, resourceVersion: 1, state: "pending", release: null, achievedMilestones: [], operationIds: [], evidenceRefs: [] }]),
+    ids.map((itemId) => [itemId, { itemId, planId: plan.planId, resourceVersion: 1, state: "pending", release: null, achievedMilestones: [], operationIds: [], evidenceRefs: [], stateSince: seenAt }]),
   );
   const deltas: EdgeMessage[] = demoSchedule().map((s, n) => {
     const prev = items.get(at(ids, s.item));
@@ -92,6 +94,8 @@ export function demoFeed(epoch: string, seenAt: number): DemoFeed {
       ...prev,
       resourceVersion: prev.resourceVersion + 1,
       state: s.state,
+      // What the edge would stamp (BOB-101): when this step plays, if the state changed.
+      stateSince: s.state === prev.state ? prev.stateSince : seenAt + (n + 1) * DEMO_STEP_MS,
       pendingInput:
         s.state === "waiting-input"
           ? {
@@ -109,7 +113,7 @@ export function demoFeed(epoch: string, seenAt: number): DemoFeed {
     return { type: "delta", seq: n + 2, plans: [], items: [next], coordinatorSeenAt: seenAt };
   });
   return {
-    snapshot: { type: "snapshot", epoch, seq: 1, plans: [plan], items: ids.map((id) => ({ itemId: id, planId: plan.planId, resourceVersion: 1, state: "pending" as const, release: null, achievedMilestones: [], operationIds: [], evidenceRefs: [] })), topology: [], coordinatorSeenAt: seenAt },
+    snapshot: { type: "snapshot", epoch, seq: 1, plans: [plan], items: ids.map((id) => ({ itemId: id, planId: plan.planId, resourceVersion: 1, state: "pending" as const, release: null, achievedMilestones: [], operationIds: [], evidenceRefs: [], stateSince: seenAt })), topology: [], coordinatorSeenAt: seenAt },
     deltas,
   };
 }

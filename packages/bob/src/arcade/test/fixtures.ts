@@ -1,7 +1,7 @@
 import { emptyView, reduce } from "@bob/sdlc-view";
 import type { EdgeMessage, EdgeView, ItemSnapshot, ItemState, Milestone, PlanSnapshot, ReleaseStatus } from "@bob/sdlc-view";
 
-export interface Spec { itemId: string; state: ItemState; repo?: string; identifier?: string; release?: Partial<ReleaseStatus> & { stage: ReleaseStatus["stage"] }; milestones?: Milestone[]; rv?: number }
+export interface Spec { itemId: string; state: ItemState; repo?: string; identifier?: string; release?: Partial<ReleaseStatus> & { stage: ReleaseStatus["stage"] }; milestones?: Milestone[]; rv?: number; stateSince?: number | null }
 
 export function plan(planId: string, specs: Spec[], state: PlanSnapshot["state"] = "active", rv = 1): PlanSnapshot {
   return {
@@ -31,6 +31,7 @@ export function item(planId: string, s: Spec): ItemSnapshot {
     achievedMilestones: s.milestones ?? [],
     operationIds: [],
     evidenceRefs: [],
+    ...(s.stateSince !== undefined ? { stateSince: s.stateSince } : {}),
   };
 }
 

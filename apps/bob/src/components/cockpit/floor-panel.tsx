@@ -7,7 +7,7 @@
  * coordinator transition. Motion level "minimal" freezes it (the page kills transitions).
  */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { beatLine, chooseDesks, createBeatLog, desks as deskCards, effectFor, EFFECT_TTL_MS, expire, floorScene, floorSummary, hud, sameDesks, sdlcBeats, shippedToday } from "./floor-model";
+import { beatLine, chooseDesks, createBeatLog, desks as deskCards, effectFor, EFFECT_TTL_MS, expire, floorScene, floorSummary, hud, PARCEL_TONE, sameDesks, sdlcBeats, shippedToday } from "./floor-model";
 import type { EdgeView, FloorParcel, LiveEffect } from "./floor-model";
 
 import { useSdlcEdge } from "~/components/sdlc/use-sdlc-edge";
@@ -85,8 +85,10 @@ export function FloorPanel() {
   }, [effects]);
   useSyncExternalStore(log.subscribe, log.version, log.version);
 
-  const scene = useMemo(() => (box ? floorScene(view, box, { orientation: "wide" }) : null), [view, box]);
-  const counts = hud(view);
+  // Ages and stalls move by the minute (BOB-101); re-laying out every tick would restart transitions.
+  const clock = Math.floor(now / 60_000) * 60_000;
+  const scene = useMemo(() => (box ? floorScene(view, box, { orientation: "wide", now: clock }) : null), [view, box, clock]);
+  const counts = hud(view, {}, clock);
   const at = new Map<string, FloorParcel>(scene ? scene.parcels.map((p) => [p.itemId, p] as const) : []);
   const gap = effects.some((e) => e.kind === "static");
 
@@ -104,12 +106,13 @@ export function FloorPanel() {
         <span>IN FLIGHT <b className="text-[13px] text-[#ffd27a]">{counts.inFlight}</b></span>
         <span>CI <b className="text-[13px] text-[#6fb4ff]">{counts.ci}</b></span>
         <span>NEEDS YOU <b className="text-[13px]" style={{ color: counts.needsYou ? "#e7a505" : "#ffd27a" }}>{counts.needsYou}</b></span>
+        <span title="Sat too long where the system should have moved it on">STALLED <b className="text-[13px]" style={{ color: counts.stalled ? "#ff9f43" : "#ffd27a" }}>{counts.stalled}</b></span>
         <span>SHIPPED <b className="text-[13px] text-[#7dffb0]">{counts.shipped}</b></span>
         <span>FAILED <b className="text-[13px]" style={{ color: counts.failed ? "#ff6b6b" : "#ffd27a" }}>{counts.failed}</b></span>
         <span title="Reached production since local midnight">TODAY <b className="text-[13px] text-[#7dffb0]">{today ?? "–"}</b></span>
         <span className="ml-auto truncate normal-case tracking-normal">{log.recent(1)[0] ? beatLine(log.recent(1)[0]!) : ""}</span>
       </div>
-      <div ref={boxRef} className="relative h-[220px] overflow-hidden">
+      <div ref={boxRef} className="relative h-[260px] overflow-hidden">
         {view.epoch === null ? (
           <div className="p-4 font-mono text-xs text-white/40">waiting for the SDLC edge…</div>
         ) : scene ? (
@@ -157,16 +160,20 @@ export function FloorPanel() {
                 href={`/sdlc?item=${encodeURIComponent(p.itemId)}`}
                 title={p.accessibilityLabel}
                 aria-label={p.accessibilityLabel}
-                className="absolute left-0 top-0 flex items-center justify-center rounded-[5px] font-mono text-[10px] font-bold text-[#17130e] transition-transform duration-700 ease-[cubic-bezier(.2,.9,.25,1.15)] hover:brightness-110"
+                className="absolute left-0 top-0 flex flex-col justify-center rounded-[5px] pl-[7px] pr-[3px] font-mono leading-tight transition-transform duration-700 ease-[cubic-bezier(.2,.9,.25,1.15)] hover:brightness-110"
                 style={{
                   width: scene.parcel.w,
                   height: scene.parcel.h,
                   transform: `translate(${p.x - scene.parcel.w / 2}px, ${p.y - scene.parcel.h / 2}px)`,
-                  backgroundColor: `hsl(${p.hue} 58% 56%)`,
+                  backgroundColor: PARCEL_TONE[p.tone].fill,
+                  color: PARCEL_TONE[p.tone].ink,
                   border: `2px solid ${ATTENTION_RING[p.attention]}`,
                 }}
               >
-                {p.label}
+                {/* The repository, as a stripe: one repo's parcels still read as a family. */}
+                <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] rounded-l-[3px]" style={{ backgroundColor: `hsl(${p.hue} 70% 45%)` }} />
+                <span className="max-w-full truncate text-[10px] font-bold">{p.label}</span>
+                {p.sublabel || p.age ? <span className="max-w-full truncate text-[9px] opacity-75">{[p.sublabel, p.age].filter(Boolean).join(" · ")}</span> : null}
                 {p.marker ? (
                   <span className="absolute -right-1.5 -top-2 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-black" style={{ backgroundColor: ATTENTION_RING[p.attention], animation: p.marker === "!" ? "floor-bob .9s ease-in-out infinite" : undefined }}>
                     {p.marker}

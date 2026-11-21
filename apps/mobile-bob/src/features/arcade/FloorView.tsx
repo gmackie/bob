@@ -18,12 +18,13 @@ import Animated, {
   ZoomIn,
 } from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
+import { PARCEL_TONE } from "@bob/arcade";
 import type { FloorParcel, FloorScene } from "@bob/arcade";
 
 import { ATTENTION_COLOR } from "~/features/sdlc/components";
 
 import type { LiveEffect } from "./arcade-model";
-import { TONE_COLOR, parcelFill } from "./arcade-model";
+import { TONE_COLOR } from "./arcade-model";
 
 export const STAGE = {
   bg: "#120f0b",
@@ -153,6 +154,8 @@ const Parcel = memo(function Parcel({
   const pos = useAnimatedStyle(() => ({ left: x.value - size.w / 2, top: y.value - size.h / 2 }));
   const markerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bob.value }] }));
   const edge = parcel.attention === "ok" ? (selected ? "#ffffff" : "transparent") : ATTENTION_COLOR[parcel.attention];
+  const tone = PARCEL_TONE[parcel.tone];
+  const detail = [parcel.sublabel, parcel.age].filter(Boolean).join(" · ");
 
   return (
     <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(14)} exiting={reduced ? undefined : FadeOut.duration(250)} style={[{ position: "absolute" }, pos]}>
@@ -166,16 +169,25 @@ const Parcel = memo(function Parcel({
           width: size.w,
           height: size.h,
           borderRadius: 5,
-          backgroundColor: parcelFill(parcel.hue),
+          backgroundColor: tone.fill,
           borderWidth: 2,
           borderColor: edge,
-          alignItems: "center",
           justifyContent: "center",
+          paddingLeft: 7,
+          paddingRight: 3,
+          overflow: "hidden",
         }}
       >
-        <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, fontWeight: "700", color: STAGE.ink }}>
+        {/* The repository, as a stripe: one repo's parcels still read as a family. */}
+        <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: `hsl(${parcel.hue}, 70%, 45%)` }} />
+        <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, fontWeight: "700", color: tone.ink }}>
           {parcel.label}
         </Text>
+        {detail ? (
+          <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9, color: tone.ink, opacity: 0.75 }}>
+            {detail}
+          </Text>
+        ) : null}
       </Pressable>
       {parcel.marker ? (
         <Animated.View pointerEvents="none" style={[{ position: "absolute", right: -6, top: -9, width: 16, height: 16, borderRadius: 8, backgroundColor: ATTENTION_COLOR[parcel.attention], alignItems: "center", justifyContent: "center" }, markerStyle]}>
