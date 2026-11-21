@@ -7,16 +7,49 @@
  * coordinator transition. Motion level "minimal" freezes it (the page kills transitions).
  */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { beatLine, createBeatLog, effectFor, EFFECT_TTL_MS, expire, floorScene, floorSummary, hud, sdlcBeats } from "./floor-model";
+import { beatLine, chooseDesks, createBeatLog, desks as deskCards, effectFor, EFFECT_TTL_MS, expire, floorScene, floorSummary, hud, sameDesks, sdlcBeats, shippedToday } from "./floor-model";
 import type { EdgeView, FloorParcel, LiveEffect } from "./floor-model";
 
 import { useSdlcEdge } from "~/components/sdlc/use-sdlc-edge";
+
+import { DesksRow } from "./desks-row";
+
+/** Which items get a desk, sticky across views: an unchanged choice keeps the same array. */
+function useDeskIds(view: EdgeView): readonly string[] {
+  const [held, setHeld] = useState(() => ({ view, ids: chooseDesks(view) }));
+  if (held.view !== view) {
+    const next = chooseDesks(view, held.ids);
+    const ids = sameDesks(next, held.ids) ? held.ids : next;
+    setHeld({ view, ids });
+    return ids;
+  }
+  return held.ids;
+}
+
+function useClock(ms: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), ms);
+    return () => clearInterval(id);
+  }, [ms]);
+  return now;
+}
 
 const ATTENTION_RING = { needs_human: "#e7a505", failed: "#ef5350", stalled: "#f59e0b", ok: "transparent" } as const;
 const TONE = { good: "#7dffb0", info: "#6fb4ff", warn: "#ffd27a", bad: "#ff6b6b" } as const;
 
 export function FloorPanel() {
-  const { view } = useSdlcEdge();
+  const { view, attempt, watchDesks, watching, followShipped, shipped } = useSdlcEdge();
+  const now = useClock(15_000);
+  const deskIds = useDeskIds(view);
+  useEffect(() => watchDesks(deskIds), [watchDesks, deskIds]);
+  useEffect(() => followShipped(), [followShipped]);
+  const desks = useMemo(
+    () =>
+      deskCards(view, deskIds.filter((id) => watching.includes(id)), (id) => ({ tail: attempt.tails[id] ?? null, ci: attempt.ci[id] ?? null, tailUnavailable: attempt.unavailable[id] ?? null }), now),
+    [view, deskIds, watching, attempt, now],
+  );
+  const today = shipped ? shippedToday(shipped, now) : null;
   const boxRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState<{ width: number; height: number } | null>(null);
   useEffect(() => {
@@ -73,6 +106,7 @@ export function FloorPanel() {
         <span>NEEDS YOU <b className="text-[13px]" style={{ color: counts.needsYou ? "#e7a505" : "#ffd27a" }}>{counts.needsYou}</b></span>
         <span>SHIPPED <b className="text-[13px] text-[#7dffb0]">{counts.shipped}</b></span>
         <span>FAILED <b className="text-[13px]" style={{ color: counts.failed ? "#ff6b6b" : "#ffd27a" }}>{counts.failed}</b></span>
+        <span title="Reached production since local midnight">TODAY <b className="text-[13px] text-[#7dffb0]">{today ?? "–"}</b></span>
         <span className="ml-auto truncate normal-case tracking-normal">{log.recent(1)[0] ? beatLine(log.recent(1)[0]!) : ""}</span>
       </div>
       <div ref={boxRef} className="relative h-[220px] overflow-hidden">
@@ -159,6 +193,7 @@ export function FloorPanel() {
           </>
         ) : null}
       </div>
+      {view.epoch === null ? null : <DesksRow desks={desks} now={now} />}
     </section>
   );
 }

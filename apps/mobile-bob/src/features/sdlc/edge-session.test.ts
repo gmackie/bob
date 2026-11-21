@@ -85,6 +85,67 @@ describe("edge session", () => {
     ]);
   });
 
+  it("watches the focused item first, then desks, within the edge's cap, and writes only on change (BOB-98)", () => {
+    const h = harness();
+    h.session.start();
+    h.last().handlers.onOpen();
+    h.session.watch("f");
+    h.session.watchDesks(["d1", "f", "d2", "d3", "d4", "d5", "d6"]);
+    expect(h.session.state.watching).toEqual(["f", "d1", "d2", "d3", "d4", "d5"]);
+    expect(h.last().sent.at(-1)).toEqual({ type: "watch", itemIds: ["f", "d1", "d2", "d3", "d4", "d5"] });
+    const sent = h.last().sent.length;
+    h.session.watchDesks(["d1", "f", "d2", "d3", "d4", "d5", "d6"]);
+    h.session.watchDesks(["d1", "d2", "d3", "d4", "d5", "d7"]); // d7 is past the cap: same set
+    expect(h.last().sent).toHaveLength(sent);
+
+    const tail = (itemId: string, line: string) => ({ type: "tail", frame: { itemId, attemptId: "a", threadId: "t", lines: [line], threadStatus: "running", at: "x" } });
+    h.deliver(tail("d2", "desk"));
+    h.deliver(tail("f", "focus"));
+    h.deliver(tail("d6", "unwatched"));
+    expect(h.session.state.attempts.d2?.tail?.lines).toEqual(["desk"]);
+    expect(h.session.state.attempt?.tail?.lines).toEqual(["focus"]);
+    expect(h.session.state.attempts.d6).toBeUndefined();
+
+    // A desk that leaves drops its detail; one that stays keeps it.
+    h.session.watchDesks(["d2"]);
+    expect(h.last().sent.at(-1)).toEqual({ type: "watch", itemIds: ["f", "d2"] });
+    expect(Object.keys(h.session.state.attempts)).toEqual(["f", "d2"]);
+    expect(h.session.state.attempts.d2?.tail?.lines).toEqual(["desk"]);
+
+    // No desks: back to the single form the edge has always taken.
+    h.session.watchDesks([]);
+    expect(h.last().sent.at(-1)).toEqual({ type: "watch", itemId: "f" });
+    h.session.watch(null);
+    expect(h.last().sent.at(-1)).toEqual({ type: "watch", itemId: null });
+    expect(h.session.state.attempt).toBeNull();
+    expect(h.session.state.watching).toEqual([]);
+  });
+
+  it("re-sends the watch set and the shipped request on a new socket and folds shipped entries (BOB-95)", () => {
+    const h = harness();
+    h.session.start();
+    h.session.watchDesks(["a", "b"]);
+    h.session.followShipped();
+    h.last().handlers.onOpen();
+    expect(h.last().sent).toEqual([
+      { type: "hello", cursor: null, epoch: null },
+      { type: "watch", itemIds: ["a", "b"] },
+      { type: "shipped" },
+    ]);
+    const entry = (itemId: string, at: number) => ({ itemId, planId: "p", issue: `BOB-${itemId}`, repository: "bob", at });
+    h.deliver({ type: "shipped", replace: true, entries: [entry("a", 1)] });
+    h.deliver({ type: "shipped", replace: false, entries: [entry("b", 2)] });
+    expect(h.session.state.shipped?.map((e) => e.itemId)).toEqual(["b", "a"]);
+    expect(h.session.state.view.epoch).toBeNull();
+
+    h.last().handlers.onClose();
+    must(h.timers.shift(), "timer")();
+    h.last().handlers.onOpen();
+    expect(h.last().sent.slice(1)).toEqual([{ type: "watch", itemIds: ["a", "b"] }, { type: "shipped" }]);
+    h.deliver({ type: "shipped", replace: true, entries: [entry("c", 3)] });
+    expect(h.session.state.shipped?.map((e) => e.itemId)).toEqual(["c"]);
+  });
+
   it("sends Live Activity registrations now when live, else the latest per item on the next socket (GMA-774)", () => {
     const h = harness();
     h.session.start();

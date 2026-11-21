@@ -130,3 +130,25 @@ export function useNow(intervalMs = 15_000): number {
   }, [intervalMs]);
   return now;
 }
+
+/**
+ * Watches the Arcade desks' items (BOB-98) while the calling screen is mounted, after the
+ * focused item, within the edge's cap. Returns the session's watch set so the caller draws
+ * only desks that get live detail.
+ */
+export function useWatchDesks(itemIds: readonly string[]): readonly string[] {
+  const s = lifecycle.get();
+  const key = itemIds.join("\u0000");
+  useEffect(() => {
+    s.watchDesks(key ? key.split("\u0000") : []);
+  }, [s, key]);
+  useEffect(() => () => s.watchDesks([]), [s]);
+  return useSyncExternalStore((listener) => s.subscribe(listener), () => s.state.watching);
+}
+
+/** Opts the session into shipped-today entries (BOB-95); null until the edge answers. */
+export function useShipped(): SessionState["shipped"] {
+  const s = lifecycle.get();
+  useEffect(() => s.followShipped(), [s]);
+  return useSyncExternalStore((listener) => s.subscribe(listener), () => s.state.shipped);
+}

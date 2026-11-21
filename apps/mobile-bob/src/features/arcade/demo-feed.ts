@@ -2,7 +2,8 @@
 // It emits real EdgeMessages (a snapshot, then deltas) that go through the same reduce()
 // → sdlcBeats() → floorScene() pipeline as the live edge, so the demo exercises the real
 // code. Items and identifiers are fake; the screen labels the feed DEMO.
-import type { EdgeMessage, ItemSnapshot, ItemState, Milestone, PlanSnapshot, ReleaseStage } from "@bob/sdlc-view";
+import type { DeskDetail } from "@bob/arcade";
+import type { CiPhase, EdgeMessage, ItemSnapshot, ItemState, Milestone, PlanSnapshot, ReleaseStage } from "@bob/sdlc-view";
 
 interface Step {
   item: number;
@@ -111,4 +112,46 @@ export function demoFeed(epoch: string, seenAt: number): DemoFeed {
     snapshot: { type: "snapshot", epoch, seq: 1, plans: [plan], items: ids.map((id) => ({ itemId: id, planId: plan.planId, resourceVersion: 1, state: "pending" as const, release: null, achievedMilestones: [], operationIds: [], evidenceRefs: [] })), topology: [], coordinatorSeenAt: seenAt },
     deltas,
   };
+}
+
+const DEMO_WORK = [
+  "reading packages/bob/src/arcade/src/desks.ts",
+  "editing apps/mobile-bob/src/features/arcade/DesksView.tsx",
+  "running pnpm vitest run test/desks.test.ts",
+  "13 passed (13)",
+  "editing apps/bob/src/components/cockpit/wall.tsx",
+  "running pnpm typecheck",
+  "no errors",
+  "writing the PR description",
+];
+
+/**
+ * Dev demo only: scripted desk detail (tail lines, CI phases) for an item in the demo feed,
+ * advanced by `tick`. It goes through the same desks() as the live edge. The screen labels
+ * the feed DEMO, so no one takes it for real agent output.
+ */
+export function demoDeskDetail(state: ItemState | undefined, itemId: string, tick: number, now: number): DeskDetail {
+  const n = Number(itemId.replace(/\D/g, "")) || 0;
+  const at = new Date(now).toISOString();
+  if (state === "running" || state === "waiting-input") {
+    const end = ((tick + n * 3) % DEMO_WORK.length) + 1;
+    const lines = DEMO_WORK.slice(Math.max(0, end - 4), end);
+    if (state === "waiting-input") lines.push("asking: Ship behind a flag or straight to prod?");
+    return { tail: { itemId, attemptId: "a", threadId: "demo", lines, threadStatus: state === "running" ? "running" : "waiting", at } };
+  }
+  if (state === "validating" || state === "review" || state === "deploying") {
+    const names = ["install", "lint", "typecheck", "test", "build"];
+    const done = state === "validating" ? (tick + n) % names.length : names.length;
+    const failing = state === "validating" && n % 5 === 3 && done >= 3;
+    const phases: CiPhase[] = names.map((name, i) => ({
+      name,
+      status: i < done ? (failing && i === 3 ? "failed" : "passed") : i === done ? "running" : "queued",
+    }));
+    const passed = phases.filter((p) => p.status === "passed").length;
+    return {
+      ci: { type: "ci", itemId, available: true, sha: "demo", summary: `${passed}/${names.length} passed`, phases, at },
+      tailUnavailable: state === "validating" ? "the agent has finished; CI is running" : null,
+    };
+  }
+  return { tailUnavailable: "the agent has not started yet" };
 }

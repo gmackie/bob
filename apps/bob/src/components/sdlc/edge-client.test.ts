@@ -188,3 +188,39 @@ describe("command answer deadline (BOB-89)", () => {
     expect(h.client.overdue()).toBe(true);
   });
 });
+
+describe("createEdgeClient desks and shipped (BOB-98)", () => {
+  it("watches the item first, then desks, within the cap, writing only on change", () => {
+    const h = harness();
+    h.client.watch("f");
+    expect(h.sent.at(-1)).toEqual({ type: "watch", itemId: "f" });
+    h.client.watchDesks(["d1", "f", "d2", "d3", "d4", "d5", "d6"]);
+    expect(h.client.watching).toEqual(["f", "d1", "d2", "d3", "d4", "d5"]);
+    expect(h.sent.at(-1)).toEqual({ type: "watch", itemIds: ["f", "d1", "d2", "d3", "d4", "d5"] });
+    const count = h.sent.length;
+    h.client.watchDesks(["d1", "d2", "d3", "d4", "d5", "d9"]); // same set after the cap
+    expect(h.sent).toHaveLength(count);
+    h.client.watchDesks([]);
+    expect(h.sent.at(-1)).toEqual({ type: "watch", itemId: "f" });
+    h.client.watch(null);
+    expect(h.sent.at(-1)).toEqual({ type: "watch", itemId: null });
+    expect(h.client.watching).toEqual([]);
+  });
+
+  it("re-sends the set and the shipped request after the hello, and folds shipped entries", () => {
+    const sent: unknown[] = [];
+    const seen: unknown[] = [];
+    const client = createEdgeClient({ send: (d) => sent.push(JSON.parse(d)), onShipped: (s) => seen.push(s) });
+    client.watchDesks(["a", "b"]);
+    client.followShipped();
+    sent.length = 0;
+    client.opened();
+    expect(sent).toEqual([{ type: "hello", cursor: null, epoch: null }, { type: "watch", itemIds: ["a", "b"] }, { type: "shipped" }]);
+    const entry = (itemId: string, at: number) => ({ itemId, planId: "p", issue: null, repository: "bob", at });
+    expect(client.received(JSON.stringify({ type: "shipped", replace: true, entries: [entry("a", 1)] }))).toBe(true);
+    client.received(JSON.stringify({ type: "shipped", replace: false, entries: [entry("b", 2)] }));
+    expect(client.shipped?.map((e) => e.itemId)).toEqual(["b", "a"]);
+    expect(seen).toHaveLength(2);
+    expect(client.view.epoch).toBeNull();
+  });
+});
