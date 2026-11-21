@@ -12,6 +12,7 @@ import { kanbangerClient, kanbangerIssueResolver, loadKanbangerConfig } from './
 import { drainIssueEffects, backoffMs } from './issue-effects.mjs';
 import { advanceReleases } from './release.mjs';
 import { forgePort, loadReleaseConfig } from './forge-port.mjs';
+import { issueMirror } from './issue-mirror.mjs';
 
 const errorOf = error => ({ code: error?.code ?? 'InternalError', message: String(error?.message ?? error).slice(0, 500) });
 
@@ -57,12 +58,24 @@ export function budgetAdmission({ url, token, fetch: transport = fetch, timeoutM
   };
 }
 
+/** One self-paced issue-mirror pass (BOB-99) with its own capped backoff. Never throws; a
+ * failure is logged without its message and never stops dispatch. */
+async function stepMirror(mirror, state, log) {
+  if (!mirror || Date.now() < state.retryAt) return;
+  try { await mirror.step(); state.failures = 0; state.retryAt = 0; }
+  catch {
+    state.retryAt = Date.now() + Math.min(1000 * 2 ** Math.min(state.failures++, 6), 60000);
+    log({ at: new Date().toISOString(), step: 'issues', outcome: 'unavailable' });
+  }
+}
+
 /** tail: an optional tail relay (tail.mjs); it runs its own ~1 s loop beside dispatch and stops with it. */
+/** mirror: an optional Kanbanger issue mirror (issue-mirror.mjs); stepped every loop, self-paced. */
 /** release: optional { forge, policy } (BOB-82); each loop advances due releases after the Kanbanger drain. */
-export async function runWorker({ coordinator, port, kanbanger, flightdeck, edge, tail, release, intervalMs = 5000, signal, log = line => console.log(JSON.stringify(line)), random = Math.random, inProgressStateName, drainLimit = 10, admit }) {
+export async function runWorker({ coordinator, port, kanbanger, flightdeck, edge, tail, release, mirror, intervalMs = 5000, signal, log = line => console.log(JSON.stringify(line)), random = Math.random, inProgressStateName, drainLimit = 10, admit }) {
   if (!Number.isInteger(intervalMs) || intervalMs < 10 || intervalMs > 3600000) throw new Error('Invalid interval');
   const relay = tail?.run({ signal }).catch(() => {});
-  let failures = 0; const analytics = exporterState(), edgeState = exporterState();
+  let failures = 0; const analytics = exporterState(), edgeState = exporterState(), mirrorState = exporterState();
   log({ at: new Date().toISOString(), step: 'start', intervalMs });
   while (!signal?.aborted) {
     let worked = false, failed = false;
@@ -91,6 +104,7 @@ export async function runWorker({ coordinator, port, kanbanger, flightdeck, edge
     }
     await flushExporter('flightdeck', flightdeck, analytics, log);
     const edgeResult = await flushExporter('edge', edge, edgeState, log);
+    if (mirror) await stepMirror(mirror, mirrorState, log);
     failures = failed ? failures + 1 : 0;
     // Jittered: errors back off exponentially; idle waits ~intervalMs; work continues promptly.
     let delay = failed ? Math.min(backoffMs(failures - 1, random) / 5, 60000) : worked ? 0 : Math.round(intervalMs * (0.8 + 0.4 * random()));
@@ -118,19 +132,29 @@ async function main() {
     try { flightdeck = flightdeckExporter({ coordinator, ...loadFlightdeckConfig(values.flightdeck) }); }
     catch { console.error(JSON.stringify({ at: new Date().toISOString(), step: 'flightdeck', outcome: 'configuration-unavailable' })); }
   }
-  let edge, edgePrincipal, tail;
+  // --release <json> (BOB-82): { forgejo: { instanceUrl, token, reviewToken? }, forgegraph?: { baseUrl, token }, repositories?: { "<repositoryId>": "owner/repo" } }.
+  let release, releaseConfig;
+  if (values.release) {
+    releaseConfig = loadReleaseConfig(values.release);
+    release = { forge: forgePort(releaseConfig), policy: { ...(coordinator.context.release ?? {}), repositories: { ...(coordinator.context.release?.repositories ?? {}), ...(releaseConfig.repositories ?? {}) } } };
+  }
+  let edge, edgePrincipal, tail, mirror;
   if (values.edge) {
     try {
       const edgeConfig = loadEdgeConfig(values.edge);
       // The edge principal: the worker's trusted context, the configured relayed-operation
       // allowlist, its own connection, and the same Kanbanger issue admission as HTTP.
       if (edgeConfig.commands) edgePrincipal = new ExecutionCoordinator({ database: values.database, context: JSON.parse(readFileSync(values.context, 'utf8')), issueResolver: kanbangerIssueResolver(kanbanger) });
-      const { tail: tailConfig, ...exporterConfig } = edgeConfig;
-      edge = edgeExporter({ coordinator, ...exporterConfig, ...(edgeConfig.commands ? { commands: { ...edgeConfig.commands, coordinator: edgePrincipal } } : {}) });
+      const { tail: tailConfig, issues: issuesConfig, ...exporterConfig } = edgeConfig;
+      // BOB-99: the Kanbanger issue mirror (Forgejo PR join through the release config's
+      // token) and the issue commands, when edge.json has an `issues` block.
+      if (issuesConfig) mirror = issueMirror({ kanbanger, policy: coordinator.context, endpoint: edgeConfig.endpoint, token: edgeConfig.token, checkpoint: edgeConfig.checkpoint, forgejo: releaseConfig ? { instanceUrl: releaseConfig.forgejo.instanceUrl, token: releaseConfig.forgejo.token } : null, intervalMs: issuesConfig.intervalMs, fullSyncMs: issuesConfig.fullSyncMs });
+      const issues = issuesConfig ? { kanbanger, mirror, ...(issuesConfig.dispatch ? { dispatch: issuesConfig.dispatch } : {}), ...(release ? { forge: release.forge, repositories: release.policy.repositories } : {}) } : undefined;
+      edge = edgeExporter({ coordinator, ...exporterConfig, ...(edgeConfig.commands ? { commands: { ...edgeConfig.commands, coordinator: edgePrincipal } } : {}), ...(issues ? { issues } : {}) });
       // BOB-80 tail relay: same edge token, the worker's environment bindings and coordinator.
       if (tailConfig) tail = tailRelay({ coordinator, bindings, edge: { endpoint: edgeConfig.endpoint, token: edgeConfig.token }, postIntervalMs: tailConfig.postIntervalMs });
     } catch {
-      edgePrincipal?.close(); edgePrincipal = undefined; tail = undefined;
+      edgePrincipal?.close(); edgePrincipal = undefined; tail = undefined; mirror?.close(); mirror = undefined;
       console.error(JSON.stringify({ at: new Date().toISOString(), step: 'edge', outcome: 'configuration-unavailable' }));
     }
   }
@@ -143,14 +167,8 @@ async function main() {
     if (typeof budget.url !== 'string' || typeof budget.token !== 'string') throw Object.assign(new Error('Invalid budget configuration'), { code: 'InvalidRequest' });
     admit = budgetAdmission({ url: budget.url, token: budget.token, log: line => console.log(JSON.stringify(line)) });
   }
-  // --release <json> (BOB-82): { forgejo: { instanceUrl, token, reviewToken? }, forgegraph?: { baseUrl, token }, repositories?: { "<repositoryId>": "owner/repo" } }.
-  let release;
-  if (values.release) {
-    const config = loadReleaseConfig(values.release);
-    release = { forge: forgePort(config), policy: { ...(coordinator.context.release ?? {}), repositories: { ...(coordinator.context.release?.repositories ?? {}), ...(config.repositories ?? {}) } } };
-  }
-  try { await runWorker({ coordinator, port, kanbanger, flightdeck, edge, tail, release, intervalMs, signal: controller.signal, inProgressStateName: config.inProgressStateName, admit }); }
-  finally { flightdeck?.close(); tail?.close(); edge?.close(); edgePrincipal?.close(); coordinator.close(); }
+  try { await runWorker({ coordinator, port, kanbanger, flightdeck, edge, tail, release, mirror, intervalMs, signal: controller.signal, inProgressStateName: config.inProgressStateName, admit }); }
+  finally { flightdeck?.close(); tail?.close(); edge?.close(); mirror?.close(); edgePrincipal?.close(); coordinator.close(); }
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {

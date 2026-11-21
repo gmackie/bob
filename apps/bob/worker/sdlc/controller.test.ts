@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TopologyRepo } from "@bob/sdlc-view";
+import type { TopologyRepo, TrackedIssue } from "@bob/sdlc-view";
 import { EdgeController, type EdgeControllerOptions } from "./controller";
 import type { IngestBatch } from "./store";
 import { nodeSqlitePort } from "./test-helpers/node-sqlite";
@@ -71,6 +71,24 @@ describe("EdgeController.ingest", () => {
     expect(types(resumer)).toEqual(["status"]);
     expect(edge.ingest(change)).toMatchObject({ accepted: true, watermark: 3 });
     expect(parsed(resumer).at(-1)).toMatchObject({ type: "delta", seq: seq + 1 });
+  });
+});
+
+describe("EdgeController.ingestIssues (BOB-99)", () => {
+  const issue = (id: string, version: number): TrackedIssue => ({
+    id, key: `BOB-${id}`, title: "t", url: null, state: { name: "Todo", type: "unstarted" }, project: null, team: null, updatedAt: version, pr: null, dispatchable: false, version,
+  });
+  it("broadcasts changed issues as a delta, resumes them by cursor, and puts them in snapshots", () => {
+    const h = harness(), edge = h.make(), client = h.socket();
+    edge.ingest(batch({ kind: "snapshot", watermark: 1 }));
+    expect(edge.ingestIssues({ contractVersion: "1", upserts: [issue("1", 5)] })).toEqual({ accepted: true, stored: 1, removed: 0 });
+    expect(parsed(client).at(-1)).toMatchObject({ type: "delta", seq: 2, issues: [{ id: "1" }] });
+    expect(edge.ingestIssues({ contractVersion: "1", upserts: [issue("1", 5)] })).toEqual({ accepted: true, stored: 0, removed: 0 });
+    expect(parsed(client)).toHaveLength(2);
+    const late = h.socket(); edge.hello(late, { cursor: 1, epoch: "epoch-1" });
+    expect(parsed(late)[0]).toMatchObject({ type: "delta", seq: 2, issues: [{ id: "1" }] });
+    const fresh = h.socket(); edge.hello(fresh, { cursor: null, epoch: null });
+    expect(parsed(fresh)[0]).toMatchObject({ type: "snapshot", issues: [{ id: "1" }] });
   });
 });
 

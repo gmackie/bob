@@ -6,3 +6,4 @@ export * from "./commands";
 export * from "./attempt";
 export * from "./shipped";
 export * from "./live-activity";
+export * from "./issues";

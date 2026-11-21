@@ -1,5 +1,5 @@
-import { inScope, RELEASE_STAGE_PRESENTATION, repoKey, rows, stateAge, STATE_PRESENTATION } from "@bob/sdlc-view";
-import type { Attention, EdgeView, ItemState, Row, Scope } from "@bob/sdlc-view";
+import { coordinatedIssueIds, inScope, issueAttention, issueStation, RELEASE_STAGE_PRESENTATION, repoKey, rows, stateAge, STATE_PRESENTATION } from "@bob/sdlc-view";
+import type { Attention, EdgeView, IssueStation, ItemState, Row, Scope, TrackedIssue } from "@bob/sdlc-view";
 
 /**
  * The Floor (BOB-91): the SDLC as a factory line. Each Kanbanger issue is a parcel riding
@@ -82,7 +82,12 @@ export interface FloorStationNode {
 }
 
 export interface FloorParcel {
+  /** A coordinator item, or a tracked Kanbanger issue no coordinator item draws (BOB-99). */
+  kind: "item" | "issue";
+  /** The item id, or for an issue its Kanbanger UUID: unique on the floor either way. */
   itemId: string;
+  /** The Kanbanger issue UUID for an issue parcel, else null. */
+  issueId: string | null;
   /** The tracker identifier (BOB-91), else the issue id. */
   label: string;
   /** Tells apart parcels that share a label (the item name), else null. */
@@ -90,7 +95,9 @@ export interface FloorParcel {
   /** How long the item has been in its state ("40m", "5h", "9d"), or null when unknown. */
   age: string | null;
   stationId: StationId;
-  state: ItemState;
+  /** The coordinator item state; null for an issue parcel (see stateLabel). */
+  state: ItemState | null;
+  /** The item state's label, or the issue's Kanbanger state name. */
   stateLabel: string;
   /** The release stage label (BOB-82), when the item has a release. */
   release: string | null;
@@ -118,9 +125,13 @@ export interface FloorScene {
   stations: FloorStationNode[];
   parcels: FloorParcel[];
   overflow: FloorOverflow[];
+  /** Backlog and triage issues in scope: counted, never drawn on the belt (BOB-99). */
+  backlog: number;
 }
 
 export interface FloorOptions {
+  /** Only this Kanbanger project's issues and the coordinator items whose plan issue is in it (BOB-99). */
+  projectId?: string;
   /** Default: wide when the box is at least WIDE_MIN_WIDTH across (iPad, landscape phone, web). */
   orientation?: Orientation;
   scope?: Scope;
@@ -164,7 +175,14 @@ export function shortAge(ms: number): string {
 }
 
 const label = (row: Row) => row.issue.identifier ?? row.issue.issueId;
-const clip = (text: string) => (text.length > SUBLABEL_MAX ? `${text.slice(0, SUBLABEL_MAX - 1)}…` : text);
+const clip = (text: string, max = SUBLABEL_MAX) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+/** A parcel's second line fits about 14 characters with the age beside it. */
+const TITLE_SUBLABEL_MAX = 14;
+const ISSUE_STATION: Record<Exclude<IssueStation, "backlog">, StationId> = {
+  queue: "queue", agents: "agents", ci: "ci", review: "review", deploy: "deploy", shipped: "shipped", scrap: "scrap", cancelled: "cancelled",
+};
+/** The repository an issue's parcel stripe stands for: its PR's repo, else its project. */
+const issueFamily = (issue: TrackedIssue) => issue.pr?.repo ?? issue.project?.name ?? issue.team ?? "kanbanger";
 
 type Placed = Omit<FloorParcel, "x" | "y">;
 
@@ -178,7 +196,9 @@ function parcelFor(row: Row, now: number | undefined): Placed {
   const age = ageMs === null ? null : shortAge(ageMs);
   const needs = attention === "needs_human" ? ", needs you" : attention === "failed" ? ", failed" : attention === "stalled" ? ", stalled" : "";
   return {
+    kind: "item",
     itemId: row.item.itemId,
+    issueId: null,
     label: label(row),
     sublabel: null,
     age,
@@ -195,12 +215,56 @@ function parcelFor(row: Row, now: number | undefined): Placed {
   };
 }
 
+function issueParcelFor(issue: TrackedIssue, stationId: StationId, now: number | undefined): Placed {
+  const attention = issueAttention(issue, now);
+  const age = now === undefined ? null : shortAge(Math.max(0, now - issue.updatedAt));
+  const repo = issueFamily(issue);
+  const pr = issue.pr ? `, PR #${issue.pr.number} ${issue.pr.state}${issue.pr.checks ? ` checks ${issue.pr.checks}` : ""}` : "";
+  const needs = attention === "failed" ? ", failed" : attention === "stalled" ? ", stalled" : "";
+  return {
+    kind: "issue",
+    itemId: issue.id,
+    issueId: issue.id,
+    label: issue.key,
+    sublabel: clip(issue.title, TITLE_SUBLABEL_MAX),
+    age,
+    stationId,
+    state: null,
+    stateLabel: issue.state.name,
+    release: null,
+    attention,
+    marker: MARKER[attention],
+    tone: TONE_OF[stationId],
+    hue: hueFor(repo),
+    repo,
+    accessibilityLabel: `${issue.key}, ${issue.title}, ${issue.project?.name ?? repo}, ${issue.state.name}${pr}${age ? `, untouched for ${age}` : ""}${needs}`,
+  };
+}
+
+/**
+ * Tracked issues in scope that no coordinator item draws, split into drawn parcels and the
+ * backlog count. `projectId` narrows to one Kanbanger project.
+ */
+function issueParcels(view: EdgeView, itemRows: Row[], projectId: string | undefined, now: number | undefined): { parcels: Placed[]; backlog: number } {
+  const coordinated = coordinatedIssueIds(itemRows);
+  const parcels: Placed[] = [];
+  let backlog = 0;
+  for (const issue of Object.values(view.issues ?? {})) {
+    if (coordinated.has(issue.id)) continue;
+    if (projectId !== undefined && issue.project?.id !== projectId) continue;
+    const station = issueStation(issue);
+    if (station === "backlog") { backlog++; continue; }
+    parcels.push(issueParcelFor(issue, ISSUE_STATION[station], now));
+  }
+  return { parcels, backlog };
+}
+
 /** Parcels that share a label (two attempts at one issue) show their item name under it. */
 function disambiguate(all: Placed[]): void {
   const seen = new Map<string, number>();
-  for (const p of all) seen.set(p.label, (seen.get(p.label) ?? 0) + 1);
+  for (const p of all) if (p.kind === "item") seen.set(p.label, (seen.get(p.label) ?? 0) + 1);
   for (const p of all) {
-    if ((seen.get(p.label) ?? 0) < 2) continue;
+    if (p.kind !== "item" || (seen.get(p.label) ?? 0) < 2) continue;
     p.sublabel = clip(p.itemId);
     p.accessibilityLabel = `${p.label} (${p.itemId})${p.accessibilityLabel.slice(p.label.length)}`;
   }
@@ -234,8 +298,12 @@ export function floorScene(view: EdgeView, box: { width: number; height: number 
   // it), and eight columns in 390pt truncate every label (BOB-101).
   const orientation: Orientation = options.orientation ?? (width >= WIDE_MIN_WIDTH ? "wide" : "tall");
   const scope = options.scope ?? {};
-  const all = rows(view, options.now).filter((r) => inScope(r, scope)).map((r) => parcelFor(r, options.now));
+  const itemRows = rows(view, options.now).filter((r) => inScope(r, scope) && (options.projectId === undefined || r.issue.projectId === options.projectId));
+  const all = itemRows.map((r) => parcelFor(r, options.now));
   disambiguate(all);
+  // Issues are de-duplicated against every coordinator item, not only those in scope.
+  const tracked = issueParcels(view, rows(view), options.projectId, options.now);
+  all.push(...tracked.parcels);
 
   const byStation = new Map<StationId, Placed[]>(FLOOR_STATIONS.map((s) => [s.id, []]));
   for (const p of all) byStation.get(p.stationId)!.push(p);
@@ -325,7 +393,7 @@ export function floorScene(view: EdgeView, box: { width: number; height: number 
     place(s.id, Array.from({ length: binCols * binRows }, (_, k) => ({ x: startX + (k % binCols) * (parcel.w + GAP), y: binY + 16 + parcel.h / 2 + Math.floor(k / binCols) * (parcel.h + GAP) })));
   });
 
-  return { orientation, width, height, parcel, belt: beltLine, stations, parcels, overflow };
+  return { orientation, width, height, parcel, belt: beltLine, stations, parcels, overflow, backlog: tracked.backlog };
 }
 
 /** The scene as text, one line per non-empty station: the screen-reader view of the floor. */
@@ -336,7 +404,7 @@ export function floorSummary(scene: FloorScene): string[] {
       const items = scene.parcels
         .filter((p) => p.stationId === s.id)
         .map((p) => {
-          const name = p.sublabel ? `${p.label} ${p.sublabel}` : p.label;
+          const name = p.kind === "item" && p.sublabel ? `${p.label} ${p.sublabel}` : p.label;
           return p.marker ? `${name} (${p.attention.replace("_", " ")})` : name;
         });
       const more = scene.overflow.find((o) => o.stationId === s.id);

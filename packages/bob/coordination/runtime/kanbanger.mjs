@@ -8,6 +8,8 @@ import { CoordinationError } from './coordinator.mjs';
 export const defaultKanbangerEndpoint = 'https://tasks.gmac.io/graphql';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const issueFields = 'id identifier title url state { id name type } team { id key name } project { id name }';
+// BOB-99 mirror: what a board needs, plus PR attachments. No description, comments or assignee.
+const mirrorFields = 'id identifier title url updatedAt archivedAt state { name type } team { id key } project { id name } attachments { nodes { url } }';
 
 export class KanbangerError extends CoordinationError {
   constructor(code, message, { status = 502, retryable = false } = {}) { super(code, message, status); this.retryable = retryable; }
@@ -98,6 +100,29 @@ export function kanbangerClient({ endpoint = defaultKanbangerEndpoint, token, in
       const data = await request('mutation BobCoordinationComment($issueId: String!, $body: String!) { commentCreate(input: { issueId: $issueId, body: $body }) { success comment { id } } }', { issueId, body });
       if (data.commentCreate?.success !== true || typeof data.commentCreate.comment?.id !== 'string') throw new KanbangerError('KanbangerRejected', 'Kanbanger did not create the comment', { retryable: true });
       return { id: data.commentCreate.comment.id };
+    },
+    /** BOB-99 mirror: one page of issues with the fields a board needs. `filter` is a
+     * Kanbanger IssueFilter (built by issue-mirror.mjs, never from edge input). */
+    async listIssues(filter, after = null, first = 100) {
+      const data = await request(`query BobMirrorIssues($filter: IssueFilter, $after: String, $first: Int) { issues(filter: $filter, after: $after, first: $first) { pageInfo { hasNextPage endCursor } nodes { ${mirrorFields} } } }`, { filter, after, first });
+      const page = data.issues;
+      if (!page || !Array.isArray(page.nodes)) throw new KanbangerError('KanbangerRejected', 'Kanbanger returned unexpected issues');
+      return { nodes: page.nodes, hasNextPage: page.pageInfo?.hasNextPage === true, endCursor: page.pageInfo?.endCursor ?? null };
+    },
+    /** BOB-99 mirror: one issue (UUID or identifier) with the mirror's fields, or null when it is gone. */
+    async mirrorIssue(reference) {
+      if (typeof reference !== 'string' || !reference || reference.length > 128) throw new KanbangerError('InvalidRequest', 'Invalid issue reference', { status: 400 });
+      try {
+        const data = await request(`query BobMirrorIssue($id: String!) { issue(id: $id) { ${mirrorFields} } }`, { id: reference });
+        return data.issue ?? null;
+      } catch (error) { if (error.code === 'IssueNotFound') return null; throw error; }
+    },
+    /** BOB-99 DispatchIssue: the issue's description (agent instructions), or ''. */
+    async issueDescription(issueId) {
+      requireUuid(issueId);
+      const data = await request('query BobDispatchIssue($id: String!) { issue(id: $id) { id description } }', { id: issueId });
+      if (!data.issue) throw new KanbangerError('IssueNotFound', 'Kanbanger issue not found', { status: 404 });
+      return typeof data.issue.description === 'string' ? data.issue.description : '';
     },
     async issueComments(issueId) {
       requireUuid(issueId);

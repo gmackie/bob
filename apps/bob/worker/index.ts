@@ -725,7 +725,7 @@ export default Sentry.withSentry(
         // SDLC edge: the coordinator exporter's ingest and the tail relay's frames (both by
         // bearer token), and the viewers' websocket (session, or a device API key from a
         // native client, then SDLC_VIEWER_USER_IDS), all to the SdlcEdge DO.
-        if (url.pathname === "/api/sdlc/ingest" || url.pathname === "/api/sdlc/tail" || url.pathname === "/api/sdlc/ws") {
+        if (url.pathname === "/api/sdlc/ingest" || url.pathname === "/api/sdlc/issues" || url.pathname === "/api/sdlc/tail" || url.pathname === "/api/sdlc/ws") {
           return handleSdlcRoute(
             request,
             runtimeEnv,

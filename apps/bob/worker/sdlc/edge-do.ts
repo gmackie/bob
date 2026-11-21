@@ -3,7 +3,7 @@ import { DurableObject } from "cloudflare:workers";
 import { EdgeController } from "./controller";
 import { sendAlertsThroughBob } from "./alert-send";
 import { AttemptEdge, tailResponse } from "./attempt-edge";
-import { attachUser, greet, greetedSockets, handleCommand, ingestResponse, parseCommandMessage, parseHello, parseWatchMessage } from "./edge-sockets";
+import { attachUser, greet, greetedSockets, handleCommand, ingestResponse, issuesResponse, parseCommandMessage, parseHello, parseWatchMessage } from "./edge-sockets";
 import { CI_POLL_MS, fgCiSourceFromEnv, type FgEnv } from "./fg";
 import { SDLC_USER_HEADER, viewerList } from "./routes";
 import { liveActivitySender, type ApnsEnv } from "./apns";
@@ -80,6 +80,10 @@ export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
     if (pathname === "/ingest" && request.method === "POST") {
       // routes.ts has already capped the body at MAX_INGEST_BYTES.
       return ingestResponse(this.controller, await request.text());
+    }
+    if (pathname === "/issues" && request.method === "POST") {
+      // routes.ts has already checked the bearer and capped the body at MAX_INGEST_BYTES (BOB-99).
+      return issuesResponse(this.controller, await request.text());
     }
     if (pathname === "/tail" && request.method === "POST") {
       // routes.ts has already checked the bearer and capped the body at MAX_TAIL_BYTES.

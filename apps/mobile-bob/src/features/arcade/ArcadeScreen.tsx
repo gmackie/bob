@@ -2,22 +2,23 @@
 // The same edge session as the Attention screens (use-sdlc-edge), so opening the Arcade
 // does not open a second socket.
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
-import { beatLine, createBeatLog, desks as deskCards, floorScene, floorSummary, hud, shippedToday, WIDE_MIN_WIDTH } from "@bob/arcade";
-import type { Desk } from "@bob/arcade";
-import { rows, RELEASE_STAGE_PRESENTATION, STATE_PRESENTATION } from "@bob/sdlc-view";
-import type { EdgeView } from "@bob/sdlc-view";
+import { beatLine, createBeatLog, desks as deskCards, floorScene, floorSummary, hud, projectBoard, shippedToday, WIDE_MIN_WIDTH } from "@bob/arcade";
+import type { BoardRow, Desk } from "@bob/arcade";
+import { coordinatedIssueIds, issueAttention, issueCommands, rows, RELEASE_STAGE_PRESENTATION, STATE_PRESENTATION } from "@bob/sdlc-view";
+import type { CommandOption, Confirmation, EdgeView, TrackedIssue } from "@bob/sdlc-view";
 
 import { attentionEntries, bannerFor, firstQuestion, releaseReason } from "~/features/sdlc/attention-model";
-import type { Banner } from "~/features/sdlc/commands-model";
-import { ATTENTION_COLOR, OfflineBanner } from "~/features/sdlc/components";
+import type { ActionContext, Banner } from "~/features/sdlc/commands-model";
+import { ActionButtons, ATTENTION_COLOR, OfflineBanner } from "~/features/sdlc/components";
 import { contentFor } from "~/features/sdlc/live-activity";
 import { useLiveActivity, useLiveActivityPreview, useNow, useSdlcEdge, useShipped, useWatchDesks } from "~/features/sdlc/use-sdlc-edge";
 import { colors } from "~/lib/colors";
 
 import type { LiveEffect } from "./arcade-model";
 import { EFFECT_TTL_MS, expire, step } from "./arcade-model";
+import { BoardView } from "./BoardView";
 import { demoDeskDetail } from "./demo-feed";
 import { DesksView } from "./DesksView";
 import { FloorView, STAGE } from "./FloorView";
@@ -102,6 +103,72 @@ function ItemPanel({ view, itemId, onClose, onOpenItem }: { view: EdgeView; item
   );
 }
 
+/** Issue actions on the live edge: the Attention screens' context and send. Absent in the demo. */
+interface IssueActions {
+  ctx: ActionContext;
+  send: (option: CommandOption, confirm?: Confirmation) => void;
+}
+
+const CHECKS_TEXT = { pending: "checks running", success: "checks passed", failure: "checks failed" } as const;
+
+function openUrl(url: string | null) {
+  if (url) void Linking.openURL(url).catch(() => undefined);
+}
+
+/** A tracked Kanbanger issue (BOB-99): what it is, its PR, links, and the issue actions. */
+function IssuePanel({ view, issue, now, actions, onClose }: { view: EdgeView; issue: TrackedIssue; now: number; actions?: IssueActions; onClose: () => void }) {
+  const attention = issueAttention(issue, now);
+  const coordinated = coordinatedIssueIds(rows(view)).has(issue.id);
+  const options = issueCommands(issue, coordinated);
+  const days = Math.floor((now - issue.updatedAt) / 86_400_000);
+  const pr = issue.pr;
+  return (
+    <View style={{ borderRadius: 14, backgroundColor: colors.card, padding: 14, gap: 6 }} testID="arcade-issue-panel">
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: ATTENTION_COLOR[attention] }} />
+        <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700" }}>{issue.key}</Text>
+        <Text style={{ flex: 1, color: colors.secondaryForeground, fontSize: 13 }} numberOfLines={1}>
+          {issue.project?.name ?? issue.team ?? ""}
+        </Text>
+        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close issue" hitSlop={10}>
+          <Text style={{ color: colors.muted, fontSize: 16 }}>✕</Text>
+        </Pressable>
+      </View>
+      <Text style={{ color: colors.foreground, fontSize: 14 }} numberOfLines={3}>{issue.title}</Text>
+      <Text style={{ color: colors.secondaryForeground, fontSize: 13 }}>
+        {issue.state.name} · {days <= 0 ? "changed today" : `untouched ${days}d`}
+        {attention === "stalled" ? " · stale" : ""}
+      </Text>
+      {pr ? (
+        <Text style={{ color: pr.checks === "failure" ? ATTENTION_COLOR.failed : colors.secondaryForeground, fontSize: 13 }}>
+          PR #{pr.number} · {pr.state === "merged" ? "merged, waiting for production" : pr.state === "closed" ? "closed" : pr.checks ? CHECKS_TEXT[pr.checks] : "no checks yet"}
+        </Text>
+      ) : (
+        <Text style={{ color: colors.muted, fontSize: 12 }}>No pull request linked.</Text>
+      )}
+      <View style={{ flexDirection: "row", gap: 8, marginTop: 2 }}>
+        {issue.url ? (
+          <Pressable onPress={() => openUrl(issue.url)} accessibilityRole="link" style={({ pressed }) => ({ borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 10, paddingVertical: 6, opacity: pressed ? 0.6 : 1 })}>
+            <Text style={{ color: colors.foreground, fontSize: 13 }}>Open in Kanbanger</Text>
+          </Pressable>
+        ) : null}
+        {pr ? (
+          <Pressable onPress={() => openUrl(pr.url)} accessibilityRole="link" style={({ pressed }) => ({ borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 10, paddingVertical: 6, opacity: pressed ? 0.6 : 1 })}>
+            <Text style={{ color: colors.foreground, fontSize: 13 }}>Open PR #{pr.number}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {actions ? (
+        <View style={{ marginTop: 6 }} testID="arcade-issue-actions">
+          <ActionButtons options={options} target={issue.key} ctx={actions.ctx} send={actions.send} />
+        </View>
+      ) : (
+        <Text style={{ color: colors.muted, fontSize: 12 }}>Actions are off in the demo.</Text>
+      )}
+    </View>
+  );
+}
+
 function NeedsYou({ view, onSelect }: { view: EdgeView; onSelect: (itemId: string) => void }) {
   const entries = attentionEntries(view).slice(0, 6);
   return (
@@ -123,7 +190,7 @@ function NeedsYou({ view, onSelect }: { view: EdgeView; onSelect: (itemId: strin
 
 /** The Arcade over the live SDLC edge. */
 export function ArcadeScreen({ onOpenItem }: { onOpenItem?: (itemId: string) => void }) {
-  const { state, retry } = useSdlcEdge();
+  const { state, retry, send } = useSdlcEdge();
   const now = useNow();
   const ids = useDeskIds(state.view);
   // Only desks inside the session's watch set get live detail, so only those are drawn.
@@ -133,15 +200,24 @@ export function ArcadeScreen({ onOpenItem }: { onOpenItem?: (itemId: string) => 
     () => deskCards(state.view, ids.filter((id) => watching.includes(id)), (id) => state.attempts[id], now),
     [state.view, state.attempts, ids, watching, now],
   );
+  const banner = bannerFor(state.view, state.connection, now, state.error);
+  const actions = useMemo<IssueActions>(
+    () => ({
+      ctx: { connection: state.connection, banner, hasView: state.view.epoch !== null, commands: state.commands },
+      send: (option, confirm) => void send(option.command, option.label, confirm),
+    }),
+    [state.connection, banner, state.view.epoch, state.commands, send],
+  );
   return (
     <ArcadeView
       view={state.view}
-      banner={bannerFor(state.view, state.connection, now, state.error)}
+      banner={banner}
       now={now}
       desks={desks}
       today={shipped ? shippedToday(shipped, now) : null}
       onRetry={retry}
       onOpenItem={onOpenItem}
+      actions={actions}
     />
   );
 }
@@ -198,6 +274,7 @@ function ArcadeView({
   today,
   onRetry,
   onOpenItem,
+  actions,
   demo = false,
 }: {
   view: EdgeView;
@@ -207,9 +284,15 @@ function ArcadeView({
   today: number | null;
   onRetry?: () => void;
   onOpenItem?: (itemId: string) => void;
+  actions?: IssueActions;
   demo?: boolean;
 }) {
   const reduced = useReducedMotion();
+  // BOB-99: with Kanbanger issues on the edge the Arcade opens on the projects board; a
+  // project opens its floor. Without issues (an older edge) it is the floor, as before.
+  const hasIssues = Object.keys(view.issues).length > 0;
+  const [project, setProject] = useState<BoardRow | null>(null);
+  const showBoard = hasIssues && project === null;
 
   // Beats and effects. The first view is a baseline (sdlcBeats never celebrates it).
   const log = useMemo(() => createBeatLog(80), []);
@@ -244,13 +327,18 @@ function ArcadeView({
   const [screenWidth, setScreenWidth] = useState(0);
   // Ages and stalls move by the minute; laying out the floor every tick would re-render every parcel.
   const clock = Math.floor(now / 60_000) * 60_000;
-  const scene = useMemo(() => (box ? floorScene(view, box, { now: clock }) : null), [view, box, clock]);
+  const projectId = project?.kanbanger ? project.projectId : undefined;
+  const scene = useMemo(() => (box ? floorScene(view, box, { now: clock, ...(projectId ? { projectId } : {}) }) : null), [view, box, clock, projectId]);
+  const board = useMemo(() => (hasIssues ? projectBoard(view, clock) : null), [view, hasIssues, clock]);
   const [selected, setSelected] = useState<string | null>(null);
   const select = useCallback((itemId: string) => setSelected((cur) => (cur === itemId ? null : itemId)), []);
   const side = screenWidth >= SIDE_PANEL_MIN_WIDTH;
   const waiting = view.epoch === null;
 
-  const panel = selected ? (
+  const selectedIssue = selected ? view.issues[selected] : undefined;
+  const panel = selectedIssue ? (
+    <IssuePanel view={view} issue={selectedIssue} now={clock} actions={actions} onClose={() => setSelected(null)} />
+  ) : selected ? (
     <ItemPanel view={view} itemId={selected} onClose={() => setSelected(null)} onOpenItem={onOpenItem} />
   ) : side ? (
     <NeedsYou view={view} onSelect={select} />
@@ -265,26 +353,49 @@ function ArcadeView({
       ) : null}
       <HudStrip view={view} demo={demo} today={today} clock={clock} />
       <View style={{ flex: 1, flexDirection: side ? "row" : "column" }}>
-        <View
-          style={{ flex: 1, minHeight: 260 }}
-          onLayout={(e) => {
-            const { width, height } = e.nativeEvent.layout;
-            setBox((cur) => (cur?.width === width && cur.height === height ? cur : { width, height }));
-          }}
-          accessible={false}
-        >
-          {waiting ? (
-            <Text style={{ color: colors.muted, padding: 16 }}>Waiting for the first snapshot…</Text>
-          ) : scene?.parcels.length === 0 && scene.overflow.length === 0 ? (
-            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
-              <Text style={{ fontFamily: MONO, color: STAGE.labelLit, letterSpacing: 2 }}>FLOOR IDLE</Text>
-              <Text style={{ color: colors.muted, marginTop: 6, textAlign: "center" }}>No plan is running. Dispatch a plan and its issues roll onto the belt.</Text>
-            </View>
-          ) : scene ? (
-            <View accessibilityLabel={floorSummary(scene).join(". ")}>
-              <FloorView scene={scene} effects={effects} reduced={reduced} selectedItemId={selected} onPressParcel={select} />
+        <View style={{ flex: 1 }}>
+          {project ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, paddingBottom: 4 }} testID="arcade-project-header">
+              <Pressable
+                onPress={() => { setProject(null); setSelected(null); }}
+                accessibilityRole="button"
+                accessibilityLabel="All projects"
+                hitSlop={8}
+                style={({ pressed }) => ({ borderRadius: 10, borderWidth: 1, borderColor: STAGE.dash, paddingHorizontal: 10, paddingVertical: 4, opacity: pressed ? 0.6 : 1 })}
+              >
+                <Text style={{ fontFamily: MONO, fontSize: 11, color: STAGE.labelLit }}>‹ ALL PROJECTS</Text>
+              </Pressable>
+              <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: 12, fontWeight: "700", color: "#e9dcc4" }}>
+                {project.name}
+              </Text>
+              {scene && scene.backlog > 0 ? <Text style={{ fontFamily: MONO, fontSize: 10, color: STAGE.label }}>BACKLOG {scene.backlog}</Text> : null}
             </View>
           ) : null}
+          <View
+            style={{ flex: 1, minHeight: 260 }}
+            onLayout={(e) => {
+              const { width, height } = e.nativeEvent.layout;
+              setBox((cur) => (cur?.width === width && cur.height === height ? cur : { width, height }));
+            }}
+            accessible={false}
+          >
+            {waiting ? (
+              <Text style={{ color: colors.muted, padding: 16 }}>Waiting for the first snapshot…</Text>
+            ) : showBoard && board ? (
+              <BoardView board={board} onOpenProject={(row) => { setSelected(null); setProject(row); }} />
+            ) : scene?.parcels.length === 0 && scene.overflow.length === 0 ? (
+              <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
+                <Text style={{ fontFamily: MONO, color: STAGE.labelLit, letterSpacing: 2 }}>FLOOR IDLE</Text>
+                <Text style={{ color: colors.muted, marginTop: 6, textAlign: "center" }}>
+                  {project ? "Nothing in flight in this project." : "No plan is running. Dispatch a plan and its issues roll onto the belt."}
+                </Text>
+              </View>
+            ) : scene ? (
+              <View accessibilityLabel={floorSummary(scene).join(". ")}>
+                <FloorView scene={scene} effects={effects} reduced={reduced} selectedItemId={selected} onPressParcel={select} />
+              </View>
+            ) : null}
+          </View>
         </View>
         {panel ? (
           side ? (

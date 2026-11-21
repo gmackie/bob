@@ -26,8 +26,10 @@ describe("demoFeed", () => {
     expect(Object.values(view.items).every((i) => i.state === "completed" || i.state === "failed")).toBe(true);
     const kinds = new Set(log.recent().map((b) => b.kind));
     for (const k of ["item.advanced", "item.looped", "item.needs_human", "item.failed", "milestone"] as const) expect(kinds.has(k)).toBe(true);
-    const scene = floorScene(view, { width: 390, height: 600 });
-    expect(scene.parcels.length + scene.overflow.reduce((n, o) => n + o.count, 0)).toBe(9);
+    // The demo project's floor: its 9 scripted items plus its one started issue (BOB-99).
+    const scene = floorScene(view, { width: 390, height: 600 }, { projectId: "demo" });
+    expect(scene.parcels.length + scene.overflow.reduce((n, o) => n + o.count, 0)).toBe(10);
+    expect(scene.backlog).toBe(1);
   });
 });
 
