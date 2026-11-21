@@ -32,13 +32,15 @@ const MONO = "Menlo";
  */
 const SIDE_PANEL_MIN_WIDTH = 300 + WIDE_MIN_WIDTH;
 
-function HudStrip({ view, demo, today }: { view: EdgeView; demo: boolean; today: number | null }) {
-  const h = hud(view);
+function HudStrip({ view, demo, today, clock }: { view: EdgeView; demo: boolean; today: number | null; clock: number }) {
+  const h = hud(view, {}, clock);
   const cells: [string, number | string, string][] = [
     ["AGENTS", h.agents, "#ffd27a"],
     ["IN FLIGHT", h.inFlight, "#ffd27a"],
     ["CI", h.ci, "#6fb4ff"],
     ["NEEDS YOU", h.needsYou, h.needsYou ? colors.accent : "#ffd27a"],
+    // Sat too long where the system should have moved it on (BOB-101).
+    ["STALLED", h.stalled, h.stalled ? "#ff9f43" : "#ffd27a"],
     ["DEPLOYING", h.deploying, "#6fb4ff"],
     ["SHIPPED", h.shipped, "#7dffb0"],
     ["FAILED", h.failed, h.failed ? "#ff6b6b" : "#ffd27a"],
@@ -240,7 +242,9 @@ function ArcadeView({
 
   const [box, setBox] = useState<{ width: number; height: number } | null>(null);
   const [screenWidth, setScreenWidth] = useState(0);
-  const scene = useMemo(() => (box ? floorScene(view, box) : null), [view, box]);
+  // Ages and stalls move by the minute; laying out the floor every tick would re-render every parcel.
+  const clock = Math.floor(now / 60_000) * 60_000;
+  const scene = useMemo(() => (box ? floorScene(view, box, { now: clock }) : null), [view, box, clock]);
   const [selected, setSelected] = useState<string | null>(null);
   const select = useCallback((itemId: string) => setSelected((cur) => (cur === itemId ? null : itemId)), []);
   const side = screenWidth >= SIDE_PANEL_MIN_WIDTH;
@@ -259,7 +263,7 @@ function ArcadeView({
           <OfflineBanner banner={banner} now={now} onRetry={onRetry} />
         </View>
       ) : null}
-      <HudStrip view={view} demo={demo} today={today} />
+      <HudStrip view={view} demo={demo} today={today} clock={clock} />
       <View style={{ flex: 1, flexDirection: side ? "row" : "column" }}>
         <View
           style={{ flex: 1, minHeight: 260 }}

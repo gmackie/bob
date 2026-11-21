@@ -49,6 +49,3 @@ export const TONE_COLOR = {
   warn: "#ffd27a",
   bad: "#ff6b6b",
 } as const;
-
-/** A repository hue as a parcel fill: saturated enough to read on the dark stage. */
-export const parcelFill = (hue: number) => `hsl(${hue}, 58%, 56%)`;
