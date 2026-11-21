@@ -17,12 +17,13 @@ import { DesksRow } from "./desks-row";
 import { IssuePanel, ProjectBoard } from "./project-board";
 
 /** Which items get a desk, sticky across views: an unchanged choice keeps the same array. */
-function useDeskIds(view: EdgeView): readonly string[] {
-  const [held, setHeld] = useState(() => ({ view, ids: chooseDesks(view) }));
-  if (held.view !== view) {
-    const next = chooseDesks(view, held.ids);
+/** `now` should change rarely (a minute clock): it re-judges stalls and so re-chooses desks. */
+function useDeskIds(view: EdgeView, now: number): readonly string[] {
+  const [held, setHeld] = useState(() => ({ view, now, ids: chooseDesks(view, [], { now }) }));
+  if (held.view !== view || held.now !== now) {
+    const next = chooseDesks(view, held.ids, { now });
     const ids = sameDesks(next, held.ids) ? held.ids : next;
-    setHeld({ view, ids });
+    setHeld({ view, now, ids });
     return ids;
   }
   return held.ids;
@@ -46,7 +47,7 @@ export function FloorPanel() {
   const [project, setProject] = useState<BoardRow | null>(null);
   const [issueId, setIssueId] = useState<string | null>(null);
   const now = useClock(15_000);
-  const deskIds = useDeskIds(view);
+  const deskIds = useDeskIds(view, Math.floor(now / 60_000) * 60_000);
   useEffect(() => watchDesks(deskIds), [watchDesks, deskIds]);
   useEffect(() => followShipped(), [followShipped]);
   const desks = useMemo(

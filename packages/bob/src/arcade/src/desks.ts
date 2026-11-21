@@ -24,11 +24,18 @@ const RANK: Partial<Record<ItemState, number>> = {
   "execution-unknown": 3,
 };
 
-/** An item's desk rank: needs-you first, then agents working, then checks, then starting; null for no desk. */
+/** Stalled items rank after every moving item, so a stale item never pushes out live work (BOB-102). */
+const STALLED_RANK = 4;
+
+/**
+ * An item's desk rank: needs-you first, then agents working, then checks, then starting,
+ * then anything stalled; null for no desk.
+ */
 export function deskRank(row: Pick<Row, "attention"> & { item: { state: ItemState } }): number | null {
   const base = RANK[row.item.state];
   if (base === undefined) return null;
-  return row.attention === "needs_human" ? 0 : base;
+  if (row.attention === "needs_human") return 0;
+  return row.attention === "stalled" ? STALLED_RANK : base;
 }
 
 export interface ChooseDesksOptions {
@@ -37,6 +44,8 @@ export interface ChooseDesksOptions {
   limit?: number;
   /** Ids that must not get a desk, e.g. slots already taken. */
   exclude?: readonly string[];
+  /** The time (epoch ms) to judge stalls by: items idle past STALL_AFTER_MS rank last. */
+  now?: number;
 }
 
 /**
@@ -51,7 +60,7 @@ export function chooseDesks(view: EdgeView, previous: readonly string[] = [], op
   const exclude = new Set(options.exclude ?? []);
   const prior = new Map(previous.map((id, i) => [id, i] as const));
   const ranked: { id: string; rank: number; kept: boolean }[] = [];
-  for (const row of rows(view)) {
+  for (const row of rows(view, options.now)) {
     if (exclude.has(row.item.itemId) || !inScope(row, options.scope ?? {})) continue;
     const rank = deskRank(row);
     if (rank !== null) ranked.push({ id: row.item.itemId, rank, kept: prior.has(row.item.itemId) });
@@ -113,17 +122,27 @@ const tailTime = (frame: TailFrame): number | null => {
  * are skipped. `detail` gives what the edge has sent per item.
  */
 export function desks(view: EdgeView, ids: readonly string[], detail: (itemId: string) => DeskDetail | undefined, now: number): Desk[] {
-  const byId = new Map(rows(view).map((r) => [r.item.itemId, r] as const));
-  const out: Desk[] = [];
-  for (const id of ids) {
+  const byId = new Map(rows(view, now).map((r) => [r.item.itemId, r] as const));
+  const shown = ids.flatMap((id) => {
     const row = byId.get(id);
-    if (!row) continue;
+    return row ? [row] : [];
+  });
+  // Two items on one issue (a retry, a split) would otherwise read the same (BOB-102).
+  const labelCount = new Map<string, number>();
+  for (const row of shown) {
+    const key = row.issue.identifier ?? row.issue.issueId;
+    labelCount.set(key, (labelCount.get(key) ?? 0) + 1);
+  }
+  const out: Desk[] = [];
+  for (const row of shown) {
+    const id = row.item.itemId;
     const d = detail(id) ?? {};
     const tail = d.tail && d.tail.itemId === id ? d.tail : null;
     const tailAt = tail ? tailTime(tail) : null;
     const ci = d.ci?.available ? { summary: d.ci.summary, phases: d.ci.phases } : null;
     const note = tail ? null : d.tailUnavailable ?? (d.ci && !d.ci.available ? d.ci.reason : null);
-    const label = row.issue.identifier ?? row.issue.issueId;
+    const key = row.issue.identifier ?? row.issue.issueId;
+    const label = (labelCount.get(key) ?? 0) > 1 ? `${key} · ${id.slice(0, 8)}` : key;
     const repo = row.target.repository.repositoryId;
     const stateLabel = STATE_PRESENTATION[row.item.state].label;
     const lines = tail ? tail.lines.slice(-DESK_LINES) : [];
