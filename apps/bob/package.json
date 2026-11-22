@@ -30,6 +30,7 @@
     "@gmacko/bob": "workspace:*",
     "@gmacko/bob-client": "workspace:*",
     "@gmacko/core": "workspace:*",
+    "@forgegraph/opium": "^0.1.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
     "@opentelemetry/resources": "^2.11.0",
     "@opentelemetry/sdk-node": "^0.222.0",

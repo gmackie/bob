@@ -288,6 +288,9 @@ importers:
       '@elevenlabs/client':
         specifier: ^0.13.0
         version: 0.13.1(@types/dom-mediacapture-record@1.0.22)
+      '@forgegraph/opium':
+        specifier: ^0.1.0
+        version: 0.1.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))
       '@gmacko/bob':
         specifier: workspace:*
         version: link:../../packages/bob
@@ -4283,6 +4286,17 @@ packages:
 
   '@forgegraph/log@0.1.2':
     resolution: {integrity: sha512-Eu2t2j+3ETyhqwsyzjgbOMMfn748ZSHkGDzKya0WwbcTeZCRMxkijv+u2Jt92h7Q/qHFnrXSqv0i5yCaXrBYhg==}
+
+  '@forgegraph/opium@0.1.0':
+    resolution: {integrity: sha512-YXwzWLkItXmsQs4Ng9HvN8do2acuNCqmyxQ+DRYA0leCYQKgMeaUXDxyj6GKwYflIW9XpbYVSXz0+TEso1U3Pg==}
+    engines: {node: '>=22.18'}
+    hasBin: true
+    peerDependencies:
+      '@better-auth/oauth-provider': '>=1.7.14 <2'
+      '@modelcontextprotocol/sdk': '>=1.25.2 <2'
+    peerDependenciesMeta:
+      '@better-auth/oauth-provider':
+        optional: true
 
   '@forgegraph/otel@0.1.8':
     resolution: {integrity: sha512-OCcv6tz3SL068Jd5OqL+kUpHyUgUdSWPoyu2zEFZqXZ7XQlFJm5/BCmiFXvu2MYxrfq1gjSeDFX13EP2rCvSyA==}
@@ -17159,6 +17173,10 @@ snapshots:
   '@forgegraph/check-events@0.1.7': {}
 
   '@forgegraph/log@0.1.2': {}
+
+  '@forgegraph/opium@0.1.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6)
 
   '@forgegraph/otel@0.1.8':
     dependencies:

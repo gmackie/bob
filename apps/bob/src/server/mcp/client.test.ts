@@ -34,6 +34,7 @@ it("interoperates with the official MCP Streamable HTTP client", async () => {
   });
   const transport = new StreamableHTTPClientTransport(new URL(grant.resource), {
     fetch: async (url, init) => handle(new Request(url, init)),
+    requestInit: { headers: { authorization: `Bearer ${"t".repeat(43)}` } },
   });
   const client = new Client({ name: "test", version: "1" });
   try {

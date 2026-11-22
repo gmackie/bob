@@ -19,7 +19,9 @@ function fixture(authorized = true) {
     authenticate: vi.fn(async () => (authorized ? grant : null)),
   } as unknown as ReturnType<typeof makeOAuth>;
   const tools = {
-    list: vi.fn(() => [{ name: "bob_list_projects" }]),
+    list: vi.fn(() => [
+      { name: "bob_list_projects", inputSchema: { type: "object" } },
+    ]),
     call: vi.fn(async () => ({ projects: [] })),
   };
   const handle = makeMcpTransport(oauth, tools);
@@ -35,6 +37,7 @@ function fixture(authorized = true) {
       new Request(grant.resource, {
         method: options.method ?? "POST",
         headers: {
+          Authorization: `Bearer ${"t".repeat(43)}`,
           "Content-Type": "application/json",
           Accept: "application/json, text/event-stream",
           ...options.headers,
@@ -118,7 +121,8 @@ describe("stateless Streamable HTTP MCP", () => {
         })
       ).status,
     ).toBe(406);
-    expect((await f.request([message("ping")])).status).toBe(400);
+    // JSON-RPC batches are answered (2025-03-26 allows them).
+    expect((await f.request([message("ping")])).status).toBe(200);
     expect((await f.request(null, { raw: "{" })).status).toBe(400);
     expect((await f.request(null, { raw: "x".repeat(40_000) })).status).toBe(
       413,
