@@ -286,8 +286,9 @@ describe("@gmacko/client e2e round-trip against stub server", () => {
     });
 
     expect(response.status).toBe(200);
+    // Effect 4.1 RpcSerialization labels NDJSON as application/x-ndjson.
     expect(response.headers.get("content-type")).toMatch(
-      /application\/ndjson/,
+      /application\/(x-)?ndjson/,
     );
 
     const text = await response.text();

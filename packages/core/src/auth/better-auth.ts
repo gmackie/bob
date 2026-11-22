@@ -71,9 +71,12 @@ function devMagicLinkBypass(enabled: boolean) {
             });
           }
           const token = generateMagicLinkToken();
+          // Same record the magicLink plugin (better-auth 1.7) writes and
+          // /magic-link/verify consumes: `magic-link:`-prefixed identifier and
+          // a strict { type, email, name } value.
           await ctx.context.internalAdapter.createVerificationValue({
-            identifier: token,
-            value: JSON.stringify({ email, name, attempt: 0 }),
+            identifier: `magic-link:${token}`,
+            value: JSON.stringify({ type: "magic-link", email, name }),
             expiresAt: new Date(Date.now() + 300 * 1000),
           });
           const realBaseURL = new URL(ctx.context.baseURL);
@@ -243,6 +246,14 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
           },
         };
 
+  // better-auth 1.7 validates the Drizzle schema against every plugin's
+  // tables on first use and fails auth entirely when one is missing. Register
+  // the sso plugin only when the schema carries its table: Bob's schema has no
+  // `ssoProviders`, so SSO was never reachable there (its endpoints failed on
+  // the missing model) and enabling it now would break every sign-in.
+  const ssoModel = opts.pluralizeTables ? "ssoProviders" : "ssoProvider";
+  const ssoAvailable = !opts.schema || Object.hasOwn(opts.schema, ssoModel);
+
   const config = {
      // see note on InitAuthOptions.db
     database: drizzleAdapter(opts.db as any, {
@@ -270,7 +281,7 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
       // POST /api/auth/sso/register; users then sign in by email domain. New
       // SSO users get a personal tenant from the shared user.create hook above,
       // same as GitHub/Google sign-ups.
-      sso(),
+      ...(ssoAvailable ? [sso()] : []),
     ],
     ...(emailAndPassword ? { emailAndPassword } : {}),
     socialProviders: {

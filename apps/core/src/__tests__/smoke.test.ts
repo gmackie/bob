@@ -279,7 +279,9 @@ describe("authenticated reference app database smoke", () => {
     const unsupported = await rpcCall("agent.run.list", {});
     expect(unsupported.status).toBe(200);
     const unsupportedFrame = JSON.parse((await unsupported.text()).trim());
-    expect(unsupportedFrame._tag).toBe("Defect");
+    // Effect 4.1 reports an unknown tag as a failed Exit frame (beta: Defect).
+    expect(unsupportedFrame._tag, JSON.stringify(unsupportedFrame)).toBe("Exit");
+    expect(unsupportedFrame.exit._tag).toBe("Failure");
     expect(JSON.stringify(unsupportedFrame)).toContain(
       "Unknown request tag: agent.run.list",
     );
