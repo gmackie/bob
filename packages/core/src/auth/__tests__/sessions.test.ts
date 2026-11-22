@@ -71,7 +71,7 @@ describe("@gmacko/auth Sessions service", () => {
     "validateToken rejects unknown tokens with SessionExpiredError",
     () =>
       Effect.gen(function* () {
-        const svc = yield* Sessions.asEffect();
+        const svc = yield* Sessions;
         const caught = yield* svc
           .validateToken("unknown_token")
           .pipe(
@@ -85,7 +85,7 @@ describe("@gmacko/auth Sessions service", () => {
 
   it.effect("validateToken returns userId + email for a valid token", () =>
     Effect.gen(function* () {
-      const svc = yield* Sessions.asEffect();
+      const svc = yield* Sessions;
       const result = yield* svc.validateToken(VALID_TOKEN);
       expect(result.userId).toBe(USER_ID);
       expect(result.email).toBe(USER_EMAIL);
@@ -96,7 +96,7 @@ describe("@gmacko/auth Sessions service", () => {
     "validateToken rejects expired tokens with SessionExpiredError",
     () =>
       Effect.gen(function* () {
-        const svc = yield* Sessions.asEffect();
+        const svc = yield* Sessions;
         const caught = yield* svc
           .validateToken(EXPIRED_TOKEN)
           .pipe(
@@ -110,7 +110,7 @@ describe("@gmacko/auth Sessions service", () => {
 
   it.effect("validateBearer returns null for missing header (no error)", () =>
     Effect.gen(function* () {
-      const svc = yield* Sessions.asEffect();
+      const svc = yield* Sessions;
       const result = yield* svc.validateBearer(null);
       expect(result).toBeNull();
     }).pipe(Effect.provide(authLayer)),
@@ -118,7 +118,7 @@ describe("@gmacko/auth Sessions service", () => {
 
   it.effect("validateBearer resolves a valid Bearer header", () =>
     Effect.gen(function* () {
-      const svc = yield* Sessions.asEffect();
+      const svc = yield* Sessions;
       const result = yield* svc.validateBearer(`Bearer ${VALID_TOKEN}`);
       expect(result).not.toBeNull();
       expect(result?.userId).toBe(USER_ID);
@@ -130,7 +130,7 @@ describe("@gmacko/auth Sessions service", () => {
     "validateBearer returns null when the Bearer value is whitespace only",
     () =>
       Effect.gen(function* () {
-        const svc = yield* Sessions.asEffect();
+        const svc = yield* Sessions;
         const result = yield* svc.validateBearer("Bearer   ");
         expect(result).toBeNull();
       }).pipe(Effect.provide(authLayer)),
@@ -138,7 +138,7 @@ describe("@gmacko/auth Sessions service", () => {
 
   it.effect("validateBearer returns null for non-Bearer schemes", () =>
     Effect.gen(function* () {
-      const svc = yield* Sessions.asEffect();
+      const svc = yield* Sessions;
       const result = yield* svc.validateBearer("Basic xyz");
       expect(result).toBeNull();
     }).pipe(Effect.provide(authLayer)),
@@ -165,7 +165,7 @@ describe("Sessions.validateRequest (signature-aware)", () => {
       } as unknown as Parameters<typeof layerBetterAuth>[0];
 
       const program = Effect.gen(function* () {
-        const sessions = yield* Sessions.asEffect();
+        const sessions = yield* Sessions;
         return yield* sessions.validateRequest(new Headers());
       }).pipe(
         Effect.provide(
@@ -192,7 +192,7 @@ describe("Sessions.validateRequest (signature-aware)", () => {
         api: { getSession: async () => null },
       } as unknown as Parameters<typeof layerBetterAuth>[0];
       const program = Effect.gen(function* () {
-        const sessions = yield* Sessions.asEffect();
+        const sessions = yield* Sessions;
         return yield* sessions
           .validateRequest(new Headers())
           .pipe(

@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 import { Thread, CreateThreadInput, UpdateThreadStatusInput } from "./schemas/thread";
 import { Branch, CreateBranchInput, SetActiveBranchInput } from "./schemas/branch";
 import { Message, CreateMessageInput, ChatInput } from "./schemas/message";

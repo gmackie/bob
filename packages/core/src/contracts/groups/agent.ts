@@ -2,7 +2,7 @@
 //
 // Five procedures — one of which (`agent.sendTurn`) is the first streaming
 // RPC in gmacko. The streaming declaration uses the `stream: true` flag on
-// `Rpc.make`; per Effect 4.0.0-beta.43 (`effect/unstable/rpc/Rpc.d.ts:287`)
+// `Rpc.make`; per Effect 4.0.0-beta.43 (`effect/rpc/Rpc.d.ts:287`)
 // the success schema is transparently wrapped in `RpcSchema.Stream<Success,
 // Error>` and the top-level `error` channel becomes `Schema.Never`. Error
 // shapes flow through the stream itself.
@@ -12,7 +12,7 @@
 //   - TurnInProgressError       — another turn is already running for this conversation.
 //   - AdapterSpawnError         — failed to start the adapter subprocess.
 //   - AdapterExitError          — adapter subprocess exited abnormally.
-// All four are `Schema.TaggedErrorClass` subclasses and hence Schema instances,
+// All four are `Schema.TaggedError` subclasses and hence Schema instances,
 // so they drop into `Schema.Union([...])` for the stream's error channel.
 //
 // Drift finding: `Schema.Union` takes an array literal (NOT a variadic
@@ -20,7 +20,7 @@
 // shapes typecheck fine inside the union at the error slot.
 
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 import {
   AdapterExitError,

@@ -14,13 +14,13 @@
 // breaking instrumented control flow when no exporter is wired.
 //
 // Real implementation deferred to Phase 7 (Bob migration).
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, Schema, Context } from "effect";
 
 export interface MetricLabels {
   readonly [key: string]: string | number;
 }
 
-export class MonitoringNotImplementedError extends Schema.TaggedErrorClass<MonitoringNotImplementedError>()(
+export class MonitoringNotImplementedError extends Schema.TaggedError<MonitoringNotImplementedError>()(
   "MonitoringNotImplementedError",
   {
     reason: Schema.String,
@@ -67,13 +67,13 @@ export interface TracingShape {
   ) => Effect.Effect<A, E | MonitoringNotImplementedError, R>;
 }
 
-export const Logger = ServiceMap.Service<LoggerShape>(
+export const Logger = Context.Service<LoggerShape>(
   "@gmacko/monitoring/Logger",
 );
-export const Metrics = ServiceMap.Service<MetricsShape>(
+export const Metrics = Context.Service<MetricsShape>(
   "@gmacko/monitoring/Metrics",
 );
-export const Tracing = ServiceMap.Service<TracingShape>(
+export const Tracing = Context.Service<TracingShape>(
   "@gmacko/monitoring/Tracing",
 );
 

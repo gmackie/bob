@@ -16,9 +16,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.2",
-    "drizzle-zod": "^0.8.3",
-    "zod": "catalog:",
+    "drizzle-orm": "0.45.4",
+    "drizzle-zod": "0.8.3",
+    "zod": "4.6.7",
     "@bob/schema": "workspace:*"
   },
   "devDependencies": {
@@ -26,8 +26,8 @@
     "@bob/prettier-config": "workspace:*",
     "@bob/tsconfig": "workspace:*",
     "eslint": "catalog:",
-    "prettier": "catalog:",
-    "typescript": "catalog:"
+    "prettier": "3.10.1",
+    "typescript": "7.0.2"
   },
   "prettier": "@bob/prettier-config"
 }

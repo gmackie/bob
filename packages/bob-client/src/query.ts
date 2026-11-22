@@ -3,7 +3,7 @@ import type {
   UseQueryOptions,
 } from "@tanstack/react-query";
 import { Effect } from "effect";
-import { RpcClient, type Rpc, type RpcGroup } from "effect/unstable/rpc";
+import { RpcClient, type Rpc, type RpcGroup } from "effect/rpc";
 import {
   OperationsRpc,
   NativeRpc,

@@ -13,7 +13,7 @@
 // to exercise the stub handlers via the real client/server dispatch path.
 import { describe, it, expect } from "vitest";
 import { Cause, Effect, Exit, Stream } from "effect";
-import { RpcSchema, RpcTest } from "effect/unstable/rpc";
+import { RpcSchema, RpcTest } from "effect/rpc";
 
 import { AgentSessionNotFoundError } from "@gmacko/core/agent/errors";
 

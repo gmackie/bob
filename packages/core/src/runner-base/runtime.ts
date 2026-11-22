@@ -17,7 +17,7 @@
 // Design decisions / drift notes:
 //   - `RpcClient.layerProtocolHttp({ url, transformClient? })` — the only
 //     supported options. Custom fetch flows in via the
-//     `FetchHttpClient.Fetch` ServiceMap reference (verified in 6F drift
+//     `FetchHttpClient.Fetch` Context reference (verified in 6F drift
 //     work). No `headers` option exists; per-request header injection
 //     happens through `transformClient`.
 //   - Per-request `X-Runner-Session` header injection: the
@@ -63,14 +63,14 @@ import {
   Schedule,
   Schema,
   Scope,
-  ServiceMap,
+  Context,
 } from "effect";
 import {
   FetchHttpClient,
   HttpClient,
   HttpClientRequest,
-} from "effect/unstable/http";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+} from "effect/http";
+import { RpcClient, RpcSerialization } from "effect/rpc";
 
 import { RunnerRpc, type TaskRunEventType } from "@gmacko/core/runner-protocol";
 
@@ -98,7 +98,7 @@ export interface StartOptions {
   readonly fetch?: typeof fetch;
 }
 
-export class RuntimeStartError extends Schema.TaggedErrorClass<RuntimeStartError>()(
+export class RuntimeStartError extends Schema.TaggedError<RuntimeStartError>()(
   "RuntimeStartError",
   {
     reason: Schema.String,
@@ -145,7 +145,7 @@ interface RuntimeState {
   readonly status: RunnerStatus;
 }
 
-export class RunnerRuntime extends ServiceMap.Service<
+export class RunnerRuntime extends Context.Service<
   RunnerRuntime,
   RunnerRuntimeShape
 >()("@gmacko/runner-base/RunnerRuntime") {}

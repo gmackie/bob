@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Schema, Effect } from "effect";
 
 export const WikiArticle = Schema.Struct({
   slug: Schema.String,
@@ -12,7 +12,7 @@ export const SynthesizeInput = Schema.Struct({
   threadId: Schema.String.check(Schema.isUUID()),
   branchId: Schema.String.check(Schema.isUUID()),
   title: Schema.String.check(Schema.isMinLength(1)),
-  tags: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
+  tags: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.sync(() => []))),
 });
 
 export const SynthesizeResult = Schema.Struct({

@@ -22,7 +22,7 @@ export interface DesktopMenuItem {
   readonly onClick: () => void;
 }
 
-export class DesktopShellNotImplementedError extends Schema.TaggedErrorClass<DesktopShellNotImplementedError>()(
+export class DesktopShellNotImplementedError extends Schema.TaggedError<DesktopShellNotImplementedError>()(
   "DesktopShellNotImplementedError",
   {
     reason: Schema.String,

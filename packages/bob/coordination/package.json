@@ -7,12 +7,13 @@
     "generate": "node scripts/generate.mjs --write",
     "check:generated": "node scripts/generate.mjs --check",
     "test": "node --test test/*.test.mjs",
-    "typecheck": "tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --lib ES2022,DOM generated/client.ts test/client-types.ts",
+    "typecheck": "tsc --ignoreConfig --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --lib ES2022,DOM generated/client.ts test/client-types.ts",
     "verify": "npm run check:generated && npm test && npm run typecheck",
     "coordinate": "node runtime/cli.mjs"
   },
   "devDependencies": {
-    "typescript": "5.9.3"
+    "@typescript/typescript6": "6.0.2",
+    "typescript": "7.0.2"
   },
   "bin": {
     "bob-coordinate": "runtime/cli.mjs",
@@ -20,13 +21,13 @@
     "bob-coordinate-worker": "runtime/worker.mjs"
   },
   "engines": {
-    "node": ">=24.0.0"
+    "node": "^26.13.1"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
-    "ws": "8.22.1"
+    "ws": "8.23.0"
   },
   "exports": {
     "./coordinator": "./runtime/coordinator.mjs",

@@ -118,7 +118,7 @@ describe("@gmacko/auth middleware resolveCurrentUser", () => {
     () =>
       Effect.gen(function* () {
         yield* Effect.promise(() => seedBase([TENANT_A], "admin"));
-        const apiKeys = yield* ApiKeys.asEffect();
+        const apiKeys = yield* ApiKeys;
         const issued = yield* apiKeys.issueKey({
           userId: USER_ID,
           tenantId: TENANT_A,
@@ -222,7 +222,7 @@ describe("@gmacko/auth middleware resolveCurrentUser", () => {
   it.effect("Revoked API key → UnauthorizedError", () =>
     Effect.gen(function* () {
       yield* Effect.promise(() => seedBase([TENANT_A]));
-      const apiKeys = yield* ApiKeys.asEffect();
+      const apiKeys = yield* ApiKeys;
       const issued = yield* apiKeys.issueKey({
         userId: USER_ID,
         tenantId: TENANT_A,

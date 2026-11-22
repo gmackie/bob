@@ -42,8 +42,8 @@ import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
 
 import { Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { HttpRouter } from "effect/http";
+import { RpcSerialization, RpcServer } from "effect/rpc";
 
 import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
 import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";

@@ -15,7 +15,7 @@ import { GmackoDb } from "@gmacko/core/db";
 import { CurrentUser } from "@gmacko/core/rpc/context";
 import { UnauthorizedError } from "@gmacko/core/rpc/errors";
 import { Effect, Layer } from "effect";
-import { HttpServerRequest } from "effect/unstable/http";
+import { HttpServerRequest } from "effect/http";
 
 /** Bob's existing keys are user-scoped and have no api_keys.tenant_id column.
  * Validate those keys against the shared columns, then resolve membership just

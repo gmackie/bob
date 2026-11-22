@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import ts from 'typescript';
+// TypeScript 7's typescript/unstable API has no transpileModule; keep TS 6 for this one transpile.
+import ts from '@typescript/typescript6';
 const source = readFileSync(new URL('../generated/client.ts', import.meta.url), 'utf8');
 const { outputText } = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } });
 const { createClient, ForgeError } = await import('data:text/javascript;base64,' + Buffer.from(outputText).toString('base64'));

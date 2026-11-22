@@ -26,15 +26,15 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "optionalDependencies": {
-    "playwright": "^1.52.0"
+    "playwright": "1.65.1"
   },
   "devDependencies": {
     "@bob/eslint-config": "workspace:*",
     "@bob/prettier-config": "workspace:*",
     "@bob/tsconfig": "workspace:*",
     "eslint": "catalog:",
-    "prettier": "catalog:",
-    "typescript": "catalog:"
+    "prettier": "3.10.1",
+    "typescript": "7.0.2"
   },
   "prettier": "@bob/prettier-config"
 }

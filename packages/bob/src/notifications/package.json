@@ -33,23 +33,23 @@
   "dependencies": {
     "@bob/config": "workspace:*",
     "@bob/work-items": "workspace:*",
-    "drizzle-orm": "^0.45.2",
-    "drizzle-zod": "^0.8.3",
-    "expo-constants": "~55.0.11",
-    "expo-device": "~55.0.12",
-    "expo-notifications": "~55.0.16",
-    "zod": "catalog:",
+    "drizzle-orm": "0.45.4",
+    "drizzle-zod": "0.8.3",
+    "expo-constants": "58.0.16",
+    "expo-device": "58.0.5",
+    "expo-notifications": "58.1.9",
+    "zod": "4.6.7",
     "@bob/schema": "workspace:*"
   },
   "devDependencies": {
     "@bob/eslint-config": "workspace:*",
     "@bob/prettier-config": "workspace:*",
     "@bob/tsconfig": "workspace:*",
-    "@types/react": "catalog:react19",
+    "@types/react": "19.3.0",
     "eslint": "catalog:",
-    "prettier": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "^4.1.11"
+    "prettier": "3.10.1",
+    "typescript": "7.0.2",
+    "vitest": "5.1.1"
   },
   "peerDependencies": {
     "expo": ">=52.0.0",

@@ -3,12 +3,12 @@
 // Services that need to read/write the database depend on `GmackoDb` and let
 // the composition root decide which driver (PGlite / postgres-js) provides it.
 // Use `layerGmackoDb(db)` to hoist a pre-built drizzle instance into a Layer.
-import { Layer, ServiceMap } from "effect";
+import { Layer, Context } from "effect";
 import type { getDb } from "./client.js";
 
 export type Db = Awaited<ReturnType<typeof getDb>>;
 
-export class GmackoDb extends ServiceMap.Service<GmackoDb, Db>()(
+export class GmackoDb extends Context.Service<GmackoDb, Db>()(
   "@gmacko/db/GmackoDb",
 ) {}
 

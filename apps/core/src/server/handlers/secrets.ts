@@ -21,8 +21,8 @@ import type { SessionSecretId } from "@gmacko/core/validators";
 export const secretsHandlerMap = SecretsRpc.middleware(AuthMiddleware).of({
   "secrets.create": ({ name, plaintext, policy, usesRemaining }) =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const secrets = yield* Secrets.asEffect();
+      const user = yield* CurrentUser;
+      const secrets = yield* Secrets;
       // Wire policy is `readonly` (Schema-decoded shape); the service's
       // `SessionSecretPolicy` is mutable. Clone arrays/records so we drop
       // the `readonly` brand without mutating in place.
@@ -63,8 +63,8 @@ export const secretsHandlerMap = SecretsRpc.middleware(AuthMiddleware).of({
 
   "secrets.list": () =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const secrets = yield* Secrets.asEffect();
+      const user = yield* CurrentUser;
+      const secrets = yield* Secrets;
       const list = yield* secrets.listForTenant(user.tenantId);
       return list.map((envelope) => ({
         id: envelope.id as string,
@@ -79,8 +79,8 @@ export const secretsHandlerMap = SecretsRpc.middleware(AuthMiddleware).of({
 
   "secrets.getEnvelope": ({ secretId }) =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const secrets = yield* Secrets.asEffect();
+      const user = yield* CurrentUser;
+      const secrets = yield* Secrets;
       const envelope = yield* secrets.getSecret({
         secretId: secretId as SessionSecretId,
         tenantId: user.tenantId,
@@ -98,8 +98,8 @@ export const secretsHandlerMap = SecretsRpc.middleware(AuthMiddleware).of({
 
   "secrets.decryptForUse": ({ secretId, templateId, args }) =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const secrets = yield* Secrets.asEffect();
+      const user = yield* CurrentUser;
+      const secrets = yield* Secrets;
       const result = yield* secrets.decryptForUse({
         secretId: secretId as SessionSecretId,
         tenantId: user.tenantId,
@@ -122,8 +122,8 @@ export const secretsHandlerMap = SecretsRpc.middleware(AuthMiddleware).of({
 
   "secrets.markUsed": ({ secretId, templateId, commandPrefix, success }) =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const secrets = yield* Secrets.asEffect();
+      const user = yield* CurrentUser;
+      const secrets = yield* Secrets;
       yield* secrets.markSecretUsed({
         secretId: secretId as SessionSecretId,
         tenantId: user.tenantId,
@@ -135,8 +135,8 @@ export const secretsHandlerMap = SecretsRpc.middleware(AuthMiddleware).of({
 
   "secrets.delete": ({ secretId }) =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const secrets = yield* Secrets.asEffect();
+      const user = yield* CurrentUser;
+      const secrets = yield* Secrets;
       yield* secrets.deleteSecret({
         secretId: secretId as SessionSecretId,
         tenantId: user.tenantId,

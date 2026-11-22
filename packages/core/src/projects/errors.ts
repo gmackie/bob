@@ -4,7 +4,7 @@
 //
 // Why this exists: see docs/plans/2026-04-25-phase7a-punchlist.md Task 7.
 //
-// Parity rule: every TaggedErrorClass declared in `projects.ts` is mirrored
+// Parity rule: every TaggedError declared in `projects.ts` is mirrored
 // here. The service module re-exports from this file, so a single import
 // path (`@gmacko/projects`) still works for in-tree code while
 // `@gmacko/contracts` and other client-bundle consumers import from
@@ -18,7 +18,7 @@ import { Schema } from "effect";
 // to keep this module dependency-free; the brand is enforced at the service-
 // method boundary so the tagged error doesn't need to re-run the brand
 // decoder at construct time.
-export class ProjectNotFoundError extends Schema.TaggedErrorClass<ProjectNotFoundError>()(
+export class ProjectNotFoundError extends Schema.TaggedError<ProjectNotFoundError>()(
   "ProjectNotFoundError",
   {
     tenantId: Schema.String,
@@ -29,7 +29,7 @@ export class ProjectNotFoundError extends Schema.TaggedErrorClass<ProjectNotFoun
   },
 ) {}
 
-export class ProjectSlugConflictError extends Schema.TaggedErrorClass<ProjectSlugConflictError>()(
+export class ProjectSlugConflictError extends Schema.TaggedError<ProjectSlugConflictError>()(
   "ProjectSlugConflictError",
   { tenantId: Schema.String, slug: Schema.String },
 ) {}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Effect, Layer } from "effect";
-import { Rpc, RpcGroup, RpcServer, RpcSerialization } from "effect/unstable/rpc";
+import { Rpc, RpcGroup, RpcServer, RpcSerialization } from "effect/rpc";
 import { Schema } from "effect";
 
 const PingRpc = Rpc.make("ping", {

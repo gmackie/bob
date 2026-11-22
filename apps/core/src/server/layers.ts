@@ -97,7 +97,7 @@ async function createServerLayers() {
   // ---------------------------------------------------------------------------
   // Per-process channel tag for agent events. Capturing the tag here (rather
   // than per-handler) ensures every Layer that publishes/subscribes to agent
-  // events shares the same Service identity at the ServiceMap level.
+  // events shares the same Service identity at the Context level.
   // ---------------------------------------------------------------------------
 
   const AgentEventsChannel = makeRealtimeChannelTag<AgentEvent>(

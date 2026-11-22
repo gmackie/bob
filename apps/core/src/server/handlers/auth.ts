@@ -53,7 +53,7 @@ const verificationUri = () => {
 export const authHandlerMap = AuthRpc.middleware(AuthMiddleware).of({
   "auth.whoAmI": () =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
+      const user = yield* CurrentUser;
       return {
         userId: user.userId as string,
         tenantId: user.tenantId as string,
@@ -64,8 +64,8 @@ export const authHandlerMap = AuthRpc.middleware(AuthMiddleware).of({
 
   "auth.listMemberships": () =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const tenancy = yield* Tenancy.asEffect();
+      const user = yield* CurrentUser;
+      const tenancy = yield* Tenancy;
       const memberships = yield* tenancy.listMemberships(user.userId);
       return memberships.map((m) => ({
         tenantId: m.tenantId as string,
@@ -75,8 +75,8 @@ export const authHandlerMap = AuthRpc.middleware(AuthMiddleware).of({
 
   "auth.resolveTenant": ({ tenantIdHint }) =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const tenancy = yield* Tenancy.asEffect();
+      const user = yield* CurrentUser;
+      const tenancy = yield* Tenancy;
       const membership = yield* tenancy.resolveForUser(
         user.userId,
         // Branded TenantId required by the service. The wire payload is a
@@ -95,8 +95,8 @@ export const authHandlerMap = AuthRpc.middleware(AuthMiddleware).of({
       // into the same error so the wire channel is single-typed.
       Effect.catchTag("NotAMemberError", (e) =>
         Effect.gen(function* () {
-          const tenancy = yield* Tenancy.asEffect();
-          const user = yield* CurrentUser.asEffect();
+          const tenancy = yield* Tenancy;
+          const user = yield* CurrentUser;
           const memberships = yield* tenancy.listMemberships(user.userId);
           return yield* Effect.fail(
             new TenantNotSelectedError({
@@ -113,8 +113,8 @@ export const authHandlerMap = AuthRpc.middleware(AuthMiddleware).of({
 
   "auth.issueApiKey": ({ name, permissions, ttlMs }) =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const apiKeys = yield* ApiKeys.asEffect();
+      const user = yield* CurrentUser;
+      const apiKeys = yield* ApiKeys;
       const issued = yield* apiKeys.issueKey({
         userId: user.userId,
         tenantId: user.tenantId,
@@ -131,8 +131,8 @@ export const authHandlerMap = AuthRpc.middleware(AuthMiddleware).of({
 
   "auth.listApiKeys": () =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const apiKeys = yield* ApiKeys.asEffect();
+      const user = yield* CurrentUser;
+      const apiKeys = yield* ApiKeys;
       const items = yield* apiKeys.listForUser(user.userId, user.tenantId);
       // Service returns `Date | null`; wire expects `DateTimeUtc | null`.
       const toDt = (d: Date | null) => (d ? DateTime.fromDateUnsafe(d) : null);
@@ -156,7 +156,7 @@ export const authHandlerMap = AuthRpc.middleware(AuthMiddleware).of({
       // current service we treat all calls as best-effort revoke and never
       // emit the error. If the caller passes a malformed id we still return
       // success because the UPDATE silently no-ops; no leakage of existence.
-      const apiKeys = yield* ApiKeys.asEffect();
+      const apiKeys = yield* ApiKeys;
       yield* apiKeys.revokeKey(apiKeyId as ApiKeyId);
       // Reference unused import to keep TS quiet about the contract's
       // declared error class (we don't construct it but the contract wires
@@ -166,7 +166,7 @@ export const authHandlerMap = AuthRpc.middleware(AuthMiddleware).of({
 
   "auth.startDeviceFlow": () =>
     Effect.gen(function* () {
-      const deviceCodes = yield* DeviceCodes.asEffect();
+      const deviceCodes = yield* DeviceCodes;
       const result = yield* deviceCodes.start();
       const expiresAt = DateTime.fromDateUnsafe(
         new Date(Date.now() + result.expiresInSeconds * 1000),
@@ -181,7 +181,7 @@ export const authHandlerMap = AuthRpc.middleware(AuthMiddleware).of({
 
   "auth.pollDeviceCode": ({ deviceCode }) =>
     Effect.gen(function* () {
-      const deviceCodes = yield* DeviceCodes.asEffect();
+      const deviceCodes = yield* DeviceCodes;
       const r = yield* deviceCodes.poll(deviceCode);
       // Wire schema needs the discriminated union {pending|approved|consumed|denied|expired}.
       // Service approved-with-plaintext maps to wire `consumed { apiKey }`.
@@ -208,8 +208,8 @@ export const authHandlerMap = AuthRpc.middleware(AuthMiddleware).of({
 
   "auth.approveDeviceCode": ({ userCode, tenantId }) =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const deviceCodes = yield* DeviceCodes.asEffect();
+      const user = yield* CurrentUser;
+      const deviceCodes = yield* DeviceCodes;
       yield* deviceCodes.approve({
         userCode,
         userId: user.userId,

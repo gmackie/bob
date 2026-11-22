@@ -1,5 +1,7 @@
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect } from "vitest";
+// Type-only: augments vitest's Assertion with the jest-dom matchers.
+import type {} from "@testing-library/jest-dom/vitest";
 
 // Note: We explicitly call `expect.extend` rather than relying on the
 // `@testing-library/jest-dom/vitest` side-effect entry point. With vitest

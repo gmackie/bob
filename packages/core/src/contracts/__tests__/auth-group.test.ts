@@ -14,7 +14,7 @@
 //      schema ever gets dropped from `Rpc.make`.
 import { describe, expect, it } from "vitest";
 import { Effect, Schema } from "effect";
-import { RpcTest } from "effect/unstable/rpc";
+import { RpcTest } from "effect/rpc";
 
 import { InvalidApiKeyError } from "@gmacko/core/auth/errors";
 

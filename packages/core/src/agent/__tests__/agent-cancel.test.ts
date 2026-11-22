@@ -80,7 +80,7 @@ describe("@gmacko/agent AgentSession.cancel + close", () => {
       const adapter = mockAdapter({ events, perEventDelayMs: 200 });
 
       return Effect.gen(function* () {
-        const svc = yield* AgentSession.asEffect();
+        const svc = yield* AgentSession;
         const { conversationId } = yield* svc.create({
           tenantId: TENANT_A,
           userId: USER_ID,
@@ -160,7 +160,7 @@ describe("@gmacko/agent AgentSession.cancel + close", () => {
       const adapter = mockAdapter({ events });
 
       return Effect.gen(function* () {
-        const svc = yield* AgentSession.asEffect();
+        const svc = yield* AgentSession;
         const { conversationId } = yield* svc.create({
           tenantId: TENANT_A,
           userId: USER_ID,
@@ -215,7 +215,7 @@ describe("@gmacko/agent AgentSession.cancel + close", () => {
     () => {
       const adapter = mockAdapter({ events: [] });
       return Effect.gen(function* () {
-        const svc = yield* AgentSession.asEffect();
+        const svc = yield* AgentSession;
         const { conversationId } = yield* svc.create({
           tenantId: TENANT_A,
           userId: USER_ID,

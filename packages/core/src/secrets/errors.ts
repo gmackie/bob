@@ -4,7 +4,7 @@
 //
 // Why this exists: see docs/plans/2026-04-25-phase7a-punchlist.md Task 7.
 //
-// Parity rule: every TaggedErrorClass declared in `secrets.ts` is mirrored
+// Parity rule: every TaggedError declared in `secrets.ts` is mirrored
 // here. The service module re-exports from this file, so a single import
 // path (`@gmacko/secrets`) still works for in-tree code while
 // `@gmacko/contracts` and other client-bundle consumers import from
@@ -18,17 +18,17 @@ import { Schema } from "effect";
 // `Schema.String` to keep this module dependency-free; the brand is enforced
 // at the service-method boundary so the tagged error doesn't need to re-run
 // the brand decoder at construct time.
-export class SecretNotFoundError extends Schema.TaggedErrorClass<SecretNotFoundError>()(
+export class SecretNotFoundError extends Schema.TaggedError<SecretNotFoundError>()(
   "SecretNotFoundError",
   { secretId: Schema.String, tenantId: Schema.String },
 ) {}
 
-export class SecretNameConflictError extends Schema.TaggedErrorClass<SecretNameConflictError>()(
+export class SecretNameConflictError extends Schema.TaggedError<SecretNameConflictError>()(
   "SecretNameConflictError",
   { tenantId: Schema.String, name: Schema.String },
 ) {}
 
-export class PolicyDeniedError extends Schema.TaggedErrorClass<PolicyDeniedError>()(
+export class PolicyDeniedError extends Schema.TaggedError<PolicyDeniedError>()(
   "PolicyDeniedError",
   {
     reason: Schema.Literals(["template", "argPrefix", "noTemplateId"]),
@@ -37,7 +37,7 @@ export class PolicyDeniedError extends Schema.TaggedErrorClass<PolicyDeniedError
   },
 ) {}
 
-export class MaxUsesExceededError extends Schema.TaggedErrorClass<MaxUsesExceededError>()(
+export class MaxUsesExceededError extends Schema.TaggedError<MaxUsesExceededError>()(
   "MaxUsesExceededError",
   { secretId: Schema.String, maxUses: Schema.Number },
 ) {}

@@ -43,22 +43,22 @@
   },
   "dependencies": {
     "@bob/schema": "workspace:*",
-    "@electric-sql/pglite": "^0.3.0",
+    "@electric-sql/pglite": "0.5.16",
     "@gmacko/core": "workspace:*",
-    "@neondatabase/serverless": "^0.10.4",
-    "drizzle-kit": "^0.31.10",
-    "drizzle-orm": "^0.45.2",
-    "pg": "^8.17.1"
+    "@neondatabase/serverless": "1.2.1",
+    "drizzle-kit": "0.31.11",
+    "drizzle-orm": "0.45.4",
+    "pg": "8.23.1"
   },
   "devDependencies": {
     "@bob/eslint-config": "workspace:*",
     "@bob/prettier-config": "workspace:*",
     "@bob/tsconfig": "workspace:*",
-    "@types/pg": "8.16.0",
+    "@types/pg": "8.23.1",
     "eslint": "catalog:",
-    "prettier": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "^4.1.11"
+    "prettier": "3.10.1",
+    "typescript": "7.0.2",
+    "vitest": "5.1.1"
   },
   "prettier": "@bob/prettier-config"
 }

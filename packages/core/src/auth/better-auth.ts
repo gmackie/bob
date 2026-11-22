@@ -1,4 +1,4 @@
-// Wraps better-auth as an Effect `ServiceMap.Service`.
+// Wraps better-auth as an Effect `Context.Service`.
 //
 // - `initAuth(opts)` constructs a `betterAuth(...)` instance mirroring Bob's
 //   config (drizzle adapter, github social provider, expo plugin, trusted
@@ -14,10 +14,10 @@
 import { expo } from "@better-auth/expo";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { sso } from "better-auth/plugins/sso";
+import { sso } from "@better-auth/sso";
 import { magicLink } from "better-auth/plugins";
 import { createAuthEndpoint } from "better-auth/api";
-import { Layer, ServiceMap } from "effect";import { z } from "zod/v4";
+import { Layer, Context } from "effect";import { z } from "zod/v4";
 
 import { qrPairing } from "./qr-pairing.js";
 
@@ -91,7 +91,7 @@ function devMagicLinkBypass(enabled: boolean) {
 
 export type AuthInstance = ReturnType<typeof betterAuth>;
 
-export class BetterAuth extends ServiceMap.Service<BetterAuth, AuthInstance>()(
+export class BetterAuth extends Context.Service<BetterAuth, AuthInstance>()(
   "@gmacko/auth/BetterAuth",
 ) {}
 
@@ -329,7 +329,7 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
       : {}),
   } satisfies BetterAuthOptions;
 
-  return betterAuth(config);
+  return betterAuth<BetterAuthOptions>(config);
 }
 
 /** Provide a pre-constructed `AuthInstance` as the `BetterAuth` service. */

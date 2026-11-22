@@ -4,12 +4,12 @@
 // Mirrors the `rpc-middleware.test.ts` shape: in-process RPC round-trip via
 // `RpcTest.makeClient`, with an `HttpServerRequest` synthesized from a WHATWG
 // `Request` (so `HttpServerRequest` is ambient at server-build time, which
-// `RpcServer.makeNoSerialization` captures via `Effect.services()`).
+// `RpcServer.makeNoSerialization` captures via `Effect.context()`).
 import { afterEach, beforeEach, describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, Layer, Schema } from "effect";
-import { Rpc, RpcGroup, RpcTest } from "effect/unstable/rpc";
-import { HttpServerRequest } from "effect/unstable/http";
+import { Rpc, RpcGroup, RpcTest } from "effect/rpc";
+import { HttpServerRequest } from "effect/http";
 
 import { UnauthorizedError } from "@gmacko/core/rpc/errors";
 import { RunnerSession } from "@gmacko/core/rpc/context";
@@ -44,7 +44,7 @@ const TestGroup = RpcGroup.make(WhoAmIRunnerRpc).middleware(
 const handlersLayer = TestGroup.toLayer({
   "test.runner.whoAmI": () =>
     Effect.gen(function* () {
-      const session = yield* RunnerSession.asEffect();
+      const session = yield* RunnerSession;
       return { deviceId: session.deviceId, tenantId: session.tenantId };
     }),
 });

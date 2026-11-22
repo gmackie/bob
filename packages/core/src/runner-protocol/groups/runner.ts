@@ -8,7 +8,7 @@
 // Procedures are strictly request/response (no streaming). Heartbeat / claim
 // loops live in @gmacko/runner-base, not in the wire protocol.
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 import {
   CapabilitySchema,

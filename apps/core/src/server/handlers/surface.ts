@@ -1,4 +1,4 @@
-import { RpcGroup, type Rpc } from "effect/unstable/rpc";
+import { RpcGroup, type Rpc } from "effect/rpc";
 import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
 import { AgentRpc } from "@gmacko/core/contracts/groups/agent";
 import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";

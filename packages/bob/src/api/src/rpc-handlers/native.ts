@@ -1,4 +1,4 @@
-import type { Rpc } from "effect/unstable/rpc";
+import type { Rpc } from "effect/rpc";
 import type * as Contract from "@gmacko/bob/contracts";
 
 import { and, eq, inArray, isNull, sql } from "@bob/db";

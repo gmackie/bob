@@ -7,7 +7,7 @@
 // or an `RpcClientError` for transport-level failures.
 
 import { Effect } from "effect";
-import { RpcClient } from "effect/unstable/rpc";
+import { RpcClient } from "effect/rpc";
 import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
 import type {
   ApiKeyIssueResultWire,

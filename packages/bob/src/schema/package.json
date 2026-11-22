@@ -64,13 +64,13 @@
   },
   "dependencies": {
     "@gmacko/core": "workspace:*",
-    "drizzle-orm": "^0.45.2",
-    "drizzle-zod": "^0.8.3",
-    "zod": "catalog:"
+    "drizzle-orm": "0.45.4",
+    "drizzle-zod": "0.8.3",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@bob/tsconfig": "workspace:*",
-    "typescript": "catalog:",
+    "typescript": "7.0.2",
     "@bob/eslint-config": "workspace:*",
     "eslint": "catalog:"
   }

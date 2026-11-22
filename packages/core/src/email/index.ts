@@ -8,7 +8,7 @@
 //
 // Real implementation deferred to Phase 7 (Bob migration). Drivers (SES,
 // Resend, SMTP) will land per concrete consumer needs.
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, Schema, Context } from "effect";
 
 export interface EmailAttachment {
   readonly filename: string;
@@ -26,7 +26,7 @@ export interface EmailMessage {
   readonly attachments?: readonly EmailAttachment[];
 }
 
-export class EmailNotImplementedError extends Schema.TaggedErrorClass<EmailNotImplementedError>()(
+export class EmailNotImplementedError extends Schema.TaggedError<EmailNotImplementedError>()(
   "EmailNotImplementedError",
   {
     reason: Schema.String,
@@ -40,7 +40,7 @@ export interface EmailShape {
   ) => Effect.Effect<{ messageId: string }, EmailNotImplementedError>;
 }
 
-export const Email = ServiceMap.Service<EmailShape>("@gmacko/email/Email");
+export const Email = Context.Service<EmailShape>("@gmacko/email/Email");
 
 const reason = "@gmacko/email: deferred to Phase 7 (Bob migration)";
 
