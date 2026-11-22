@@ -5,6 +5,7 @@ import { auth } from "~/auth/server";
 import { makeOAuthStore } from "./store";
 import { json, makeOAuth } from "./oauth";
 import { makeTools, makeWorkspaceIdentity } from "./tools";
+import { makeApps } from "./apps";
 import { makeMcpTransport } from "./transport";
 
 // A configured public origin prevents Host/forwarded-header poisoning of
@@ -26,11 +27,13 @@ const identity = makeWorkspaceIdentity(db, async (request) => {
   const session = await auth.api.getSession({ headers });
   return session ? { userId: session.user.id } : null;
 });
-const oauth = makeOAuth({ origin, store: makeOAuthStore(db), identity });
+const store = makeOAuthStore(db);
+const oauth = makeOAuth({ origin, store, identity });
 const transport = makeMcpTransport(
   oauth,
-  makeTools(db, identity),
+  makeTools(db, identity, { store, origin }),
   allowedOrigins,
+  makeApps(origin),
 );
 export async function mcpRoute(request: Request): Promise<Response> {
   const path = new URL(request.url).pathname;

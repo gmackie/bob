@@ -72,6 +72,7 @@
     "@types/react": "catalog:react19",
     "@types/react-dom": "catalog:react19",
     "@vitejs/plugin-rsc": "0.5.27",
+    "esbuild": "0.28.1",
     "react-server-dom-webpack": "19.2.8",
     "typescript": "catalog:",
     "vite": "8.0.16",

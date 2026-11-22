@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import { makeMcpTransport } from "./transport";
 import { makeOAuth } from "./oauth";
 import type { OAuthGrant } from "./types";
+import { makeApps } from "./apps";
+import { McpToolError } from "./errors";
 
 const grant: OAuthGrant = {
   id: "grant",
@@ -13,7 +15,7 @@ const grant: OAuthGrant = {
   expiresAt: new Date(Date.now() + 10000),
   revokedAt: null,
 };
-function fixture(authorized = true) {
+function fixture(authorized = true, apps?: ReturnType<typeof makeApps>) {
   const oauth = {
     resource: grant.resource,
     authenticate: vi.fn(async () => (authorized ? grant : null)),
@@ -22,7 +24,7 @@ function fixture(authorized = true) {
     list: vi.fn(() => [{ name: "bob_list_projects" }]),
     call: vi.fn(async () => ({ projects: [] })),
   };
-  const handle = makeMcpTransport(oauth, tools);
+  const handle = makeMcpTransport(oauth, tools, [], apps);
   const request = (
     body: unknown,
     options: {
@@ -140,5 +142,53 @@ describe("stateless Streamable HTTP MCP", () => {
     ).json();
     expect(r).toMatchObject({ result: { isError: true } });
     expect(JSON.stringify(r)).not.toContain("secret");
+    f.tools.call.mockRejectedValue(new McpToolError("Approve it first"));
+    expect(
+      await (
+        await f.request(
+          message("tools/call", { name: "bob_list_projects", arguments: {} }),
+        )
+      ).json(),
+    ).toMatchObject({
+      result: { isError: true, content: [{ text: "Approve it first" }] },
+    });
+  });
+  it("serves the MCP Apps views, and the SDLC view declares the edge socket's origin", async () => {
+    const f = fixture(true, makeApps("https://bob.example"));
+    const initialized = await (
+      await f.request(
+        message("initialize", {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "test", version: "1" },
+        }),
+      )
+    ).json();
+    expect(initialized).toMatchObject({
+      result: { capabilities: { tools: {}, resources: {} } },
+    });
+    const listed = (await (await f.request(message("resources/list"))).json()) as {
+      result: { resources: { uri: string; mimeType: string }[] };
+    };
+    expect(listed.result.resources.map((r) => r.uri)).toEqual([
+      "ui://bob/workspace.html",
+      "ui://bob/planning-review.html",
+      "ui://bob/sdlc.html",
+    ]);
+    const read = (await (
+      await f.request(message("resources/read", { uri: "ui://bob/sdlc.html" }))
+    ).json()) as {
+      result: { contents: { mimeType: string; text: string; _meta: unknown }[] };
+    };
+    expect(read.result.contents[0]).toMatchObject({
+      mimeType: "text/html;profile=mcp-app",
+      _meta: { ui: { csp: { connectDomains: ["wss://bob.example"] } } },
+    });
+    expect(read.result.contents[0]!.text).toContain("<title>Bob SDLC</title>");
+    expect(
+      await (
+        await f.request(message("resources/read", { uri: "ui://bob/nope" }))
+      ).json(),
+    ).toMatchObject({ error: { code: -32602 } });
   });
 });
