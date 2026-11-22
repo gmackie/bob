@@ -43,9 +43,112 @@ to `<file>.bak-<UTC stamp>` first, and only then restarts `hermes-gateway.servic
 It never touches other bob services. It exits non-zero unless the final
 `--check` reports `hermes config: in sync`.
 
-Then record the delivery in ForgeGraph like other manual bob targets:
-`forge evidence push` (suite `production:hetzner-bob:hermes-config`) and a
-`manual_deploy` receipt via `forge integration kanbanger receipt`.
+### ForgeGraph target: `hermes-systemd` (BOB-110)
+
+Hermes is a production target of the ForgeGraph app `bob`, registered on the
+server (not in `.forgegraph.yaml`) with `forge target add`, like
+`runner-systemd`, `coordinator-systemd` and `gateway-systemd`. Inspect it with
+`forge --json target list --stage production`:
+
+| Field | Value | Why |
+|---|---|---|
+| id | `49bbe1be-0f06-492f-ab52-61d6bc800336` | `targetId` in the receipt |
+| platform / node | `forgegraph-node` / `hetzner-bob` | |
+| `deliveryMode` | `manual` | delivery is the installer above, not `forge deploy` |
+| `watchPaths` | `apps/hermes-shepherd/` | only PRs that touch this directory owe Hermes a receipt |
+| `serviceName` | `hermes-daily-canary.service` | each run of the Hermes health check is a fresh systemd invocation; its InvocationID identifies the delivery |
+| `healthUrl` | `http://127.0.0.1:9119/api/status` | Hermes dashboard status (`gateway_running`), loopback only on hetzner-bob |
+| `evidenceSuite` | `production:hetzner-bob:hermes` | |
+| `completionGroup` | `hermes` | Hermes is rolled out alone |
+
+Before this target existed, a merged Hermes PR owed only the website Worker
+(`production-cf`), so the Worker deploy closed Hermes issues before Hermes was
+verified (BOB-108). Now a PR touching `apps/hermes-shepherd/` stays open in
+Kanbanger until a `hermes-systemd` receipt arrives. A PR that doesn't touch it
+reports `not_required` for this target. Check what a merged PR owes, without
+queueing anything:
+
+```bash
+forge --json receipts backfill --app bob --dry-run                       # every uncredited merged PR
+forge --json receipts backfill --app bob --dry-run \
+  --changeset <changeset-id> --expected-head <head-sha>                  # one PR
+```
+
+To change the target, use `forge target update`. To recreate it:
+
+```bash
+forge target add hermes-systemd --app bob --stage production --platform forgegraph-node \
+  --node 49db79fe-2dc1-4be4-97d7-05ffd56df7d0 \
+  --config '{"deliveryMode":"manual","completionGroup":"hermes","serviceName":"hermes-daily-canary.service","healthUrl":"http://127.0.0.1:9119/api/status","evidenceSuite":"production:hetzner-bob:hermes","watchPaths":["apps/hermes-shepherd/"]}'
+```
+
+### Recording a Hermes delivery
+
+Do this after the installer above has run for the merge commit. Every step is
+read-only on the node; nothing here restarts Hermes.
+
+1. **Wait for a Hermes check run after the install.** The receipt names one
+   `hermes-daily-canary.service` invocation that started after the install
+   finished. Use the next timer run (06:30 or 15:30 UTC). Don't start the unit
+   by hand: if Hermes is unhealthy, that run sends a real Telegram alert. The
+   run must have succeeded:
+
+   ```bash
+   forge node exec --node hetzner-bob 'systemctl show hermes-daily-canary.service \
+     -p InvocationID -p Result -p ExecMainStatus -p ExecMainStartTimestamp -p ExecMainExitTimestamp'
+   forge node exec --node hetzner-bob 'journalctl _SYSTEMD_INVOCATION_ID=<InvocationID> --no-pager -o cat'
+   ```
+
+   Pass: `Result=success`, `ExecMainStatus=0`, `ExecMainStartTimestamp` after
+   the install, and a `hermes-health-check: ok: jobs healthy and Daily/<date>.md present`
+   line. A failed run has already alerted. Fix Hermes, deliver again, and wait
+   for the next run.
+
+2. **Check the rest of Hermes and record the artifact:**
+
+   ```bash
+   forge node exec --node hetzner-bob "sudo $REL/apps/hermes-shepherd/ops/install-hermes-config.sh --check"  # hermes config: in sync
+   forge node exec --node hetzner-bob 'systemctl is-active hermes-gateway.service; curl -s http://127.0.0.1:9119/api/status'  # active; "gateway_running":true
+   forge node exec --node hetzner-bob "sudo -u bob git -C /home/bob/dev/gmacko-bob archive --format=tar $SHA apps/hermes-shepherd | sha256sum"
+   ```
+
+   The artifact is that sha256, the reproducible `git archive` of
+   `apps/hermes-shepherd` at the merge commit.
+
+3. **Persist the acceptance** against the merged PR's changeset. The external
+   run ID must be `hetzner-bob-systemd-<InvocationID>`:
+
+   ```bash
+   forge evidence push --changeset <merged-changeset-id> --suite production:hetzner-bob:hermes \
+     --external-run-id hetzner-bob-systemd-<InvocationID> --source gitea_ci \
+     --passed 4 --failed 0 --skipped 0 --total 4 --json   # canary ok, config in sync, gateway active, dashboard status
+   ```
+
+4. **File the receipt** (workspace owner/admin) with `forge integration kanbanger receipt --file receipt.json`:
+
+   ```json
+   {
+     "kind": "manual_deploy",
+     "changesetId": "<merged-changeset-id>",
+     "expectedHeadSha": "<reviewed PR head sha>",
+     "evidenceId": "<evidence id from step 3>",
+     "targetId": "49bbe1be-0f06-492f-ab52-61d6bc800336",
+     "invocationId": "<InvocationID>",
+     "artifact": "sha256:<archive sha256>"
+   }
+   ```
+
+   Each invocation can be registered once, for one changeset. When several
+   Hermes PRs ship together, file the receipt for the newest one. Then file
+   again with the same invocation and fresh evidence (taken within 5 minutes),
+   adding `"includedChangesetIds": [...]` for the others. See ForgeGraph
+   `docs/howto/kanbanger-delivery-receipts.md`.
+
+5. **Read back** the 202 response's `eventId` and `deploymentId`
+   (`manual:49bbe1be-…:<InvocationID>`), confirm
+   `forge --json receipts backfill --app bob --dry-run --changeset … --expected-head …`
+   no longer reports `manual_receipt_required` for `hermes-systemd`, and check
+   the Kanbanger issue.
 
 ## Alerts
 
