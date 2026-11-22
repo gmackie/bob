@@ -163,11 +163,13 @@ export function demoFeed(epoch: string, seenAt: number): DemoFeed {
 const DEMO_WORK = [
   "reading packages/bob/src/arcade/src/desks.ts",
   "editing apps/mobile-bob/src/features/arcade/DesksView.tsx",
-  "running pnpm vitest run test/desks.test.ts",
-  "13 passed (13)",
-  "editing apps/bob/src/components/cockpit/wall.tsx",
-  "running pnpm typecheck",
-  "no errors",
+  "$ pnpm vitest run test/desks.test.ts (exit 1)",
+  "1 failed, 12 passed (13): fixing the rank tie-break",
+  "editing packages/bob/src/arcade/src/desks.ts",
+  "$ pnpm vitest run test/desks.test.ts (exit 0)",
+  "$ pnpm typecheck (exit 0)",
+  "$ git commit -m \"arcade: sticky desks\" (exit 0)",
+  "$ git push (exit 0)",
   "writing the PR description",
 ];
 
@@ -195,7 +197,8 @@ export function demoDeskDetail(state: ItemState | undefined, itemId: string, tic
     }));
     const passed = phases.filter((p) => p.status === "passed").length;
     return {
-      ci: { type: "ci", itemId, available: true, sha: "demo", summary: `${passed}/${names.length} passed`, phases, at },
+      // A fresh sha per pass, as a real re-run would have: each pass is its own CI run.
+      ci: { type: "ci", itemId, available: true, sha: `demo-${Math.floor((tick + n) / names.length)}`, summary: `${passed}/${names.length} passed`, phases, at },
       tailUnavailable: state === "validating" ? "the agent has finished; CI is running" : null,
     };
   }

@@ -94,6 +94,8 @@ export interface FloorParcel {
   sublabel: string | null;
   /** How long the item has been in its state ("40m", "5h", "9d"), or null when unknown. */
   age: string | null;
+  /** What fits on a compact parcel: the identifier's number ("91"), else the label. */
+  short: string;
   stationId: StationId;
   /** The coordinator item state; null for an issue parcel (see stateLabel). */
   state: ItemState | null;
@@ -115,8 +117,12 @@ export interface FloorParcel {
 
 export interface FloorOverflow { stationId: StationId; count: number; x: number; y: number }
 
+export type Density = "normal" | "compact";
+
 export interface FloorScene {
   orientation: Orientation;
+  /** compact when the floor shrank its parcels to fit a crowd (FloorOptions.density "auto"). */
+  density: Density;
   width: number;
   height: number;
   parcel: { w: number; h: number };
@@ -137,6 +143,11 @@ export interface FloorOptions {
   scope?: Scope;
   /** The clock for ages and stalls (BOB-101). Without it parcels show no age and never stall. */
   now?: number;
+  /**
+   * Parcel size. "auto" switches to compact one-line parcels when a belt station holds more
+   * items than normal parcels can show, before it falls back to an overflow counter. Default normal.
+   */
+  density?: Density | "auto";
 }
 
 /** A belt of 8 stations needs about this much width before columns beat rows (iPad portrait qualifies). */
@@ -148,6 +159,8 @@ const PAD = 12;
 const GAP = 6;
 /** Parcels carry two lines (label, then item name and age). */
 const PARCEL_H = 34;
+/** A compact parcel's single line. */
+const COMPACT_H = 18;
 /** A tall floor's empty station is a thin labelled row, not an equal share of the height. */
 const EMPTY_ROW = 22;
 /** Room above and below a tall station's parcels. */
@@ -175,6 +188,8 @@ export function shortAge(ms: number): string {
 }
 
 const label = (row: Row) => row.issue.identifier ?? row.issue.issueId;
+/** "BOB-91" → "91": the part of a label a compact parcel has room for. */
+const shortOf = (text: string) => /(\d+)$/.exec(text)?.[1] ?? text;
 const clip = (text: string, max = SUBLABEL_MAX) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 /** A parcel's second line fits about 14 characters with the age beside it. */
 const TITLE_SUBLABEL_MAX = 14;
@@ -202,6 +217,7 @@ function parcelFor(row: Row, now: number | undefined): Placed {
     label: label(row),
     sublabel: null,
     age,
+    short: shortOf(label(row)),
     stationId,
     state: row.item.state,
     stateLabel,
@@ -228,6 +244,7 @@ function issueParcelFor(issue: TrackedIssue, stationId: StationId, now: number |
     label: issue.key,
     sublabel: clip(issue.title, TITLE_SUBLABEL_MAX),
     age,
+    short: shortOf(issue.key),
     stationId,
     state: null,
     stateLabel: issue.state.name,
@@ -312,88 +329,101 @@ export function floorScene(view: EdgeView, box: { width: number; height: number 
   const belt = FLOOR_STATIONS.filter((s) => s.kind === "belt");
   const bins = FLOOR_STATIONS.filter((s) => s.kind === "bin");
   const binsUsed = bins.some((s) => byStation.get(s.id)!.length > 0);
-  const stations: FloorStationNode[] = [];
-  const parcels: FloorParcel[] = [];
-  const overflow: FloorOverflow[] = [];
-  const worst = (list: Placed[]) => (list.length ? list[0]!.attention : null);
+  const normal: FloorScene["parcel"] =
+    orientation === "wide" ? { w: Math.round(Math.min(96, Math.max(56, (width - PAD * 2) / belt.length - 8))), h: PARCEL_H } : { w: 86, h: PARCEL_H };
+  // Compact parcels carry one line (the identifier's number), so a crowd fits before overflow.
+  const compact: FloorScene["parcel"] = orientation === "wide" ? { w: Math.max(40, Math.round(normal.w * 0.6)), h: COMPACT_H } : { w: 46, h: COMPACT_H };
 
-  const place = (id: StationId, slots: { x: number; y: number }[]) => {
-    const list = byStation.get(id)!;
-    const room = Math.max(1, slots.length);
-    const shown = list.length > room ? room - 1 : list.length;
-    list.slice(0, shown).forEach((p, i) => parcels.push({ ...p, ...slots[i]! }));
-    if (list.length > shown) overflow.push({ stationId: id, count: list.length - shown, ...slots[shown]! });
+  const layout = (parcel: FloorScene["parcel"]) => {
+    const stations: FloorStationNode[] = [];
+    const parcels: FloorParcel[] = [];
+    const overflow: FloorOverflow[] = [];
+    const worst = (list: Placed[]) => (list.length ? list[0]!.attention : null);
+
+    const place = (id: StationId, slots: { x: number; y: number }[]) => {
+      const list = byStation.get(id)!;
+      const room = Math.max(1, slots.length);
+      const shown = list.length > room ? room - 1 : list.length;
+      list.slice(0, shown).forEach((p, i) => parcels.push({ ...p, ...slots[i]! }));
+      if (list.length > shown) overflow.push({ stationId: id, count: list.length - shown, ...slots[shown]! });
+    };
+
+    // Bins sit in a band under the belt, each taking half its width, as tall as their rows.
+    const binW = (width - PAD * 2) / bins.length;
+    const binCols = Math.max(1, Math.floor((binW - GAP) / (parcel.w + GAP)));
+    const binRows = binsUsed ? Math.min(BIN_ROWS_MAX, Math.max(...bins.map((s) => Math.ceil(byStation.get(s.id)!.length / binCols)))) : 0;
+    const binBand = binsUsed ? 22 + binRows * (parcel.h + GAP) : BIN_BAND_EMPTY;
+    const beltBottom = height - binBand;
+    let beltLine: FloorScene["belt"];
+
+    if (orientation === "wide") {
+      const colW = (width - PAD * 2) / belt.length;
+      const beltY = PAD + 30;
+      beltLine = { x1: PAD, y1: beltY, x2: width - PAD, y2: beltY };
+      const firstY = beltY + 14 + parcel.h / 2;
+      const rowsFit = Math.max(1, Math.floor((beltBottom - firstY + parcel.h / 2) / (parcel.h + GAP)));
+      belt.forEach((s, i) => {
+        const x = PAD + colW * (i + 0.5);
+        const list = byStation.get(s.id)!;
+        stations.push({ id: s.id, label: s.label, kind: "belt", x, y: beltY, count: list.length, attention: worst(list) });
+        place(s.id, Array.from({ length: rowsFit }, (_, r) => ({ x, y: firstY + r * (parcel.h + GAP) })));
+      });
+    } else {
+      // Tall (iPhone): stations stack down a vertical belt. Empty ones collapse to a thin
+      // labelled row; stations with parcels get the height, wrapping onto more rows.
+      const labelW = 74;
+      const beltX = PAD + labelW;
+      const firstX = beltX + 14 + parcel.w / 2;
+      const cols = Math.max(1, Math.floor((width - PAD - (beltX + 14)) / (parcel.w + GAP)));
+      const pitch = parcel.h + GAP;
+      const counts = belt.map((s) => byStation.get(s.id)!.length);
+      const used = counts.filter((n) => n > 0).length;
+      const avail = beltBottom - PAD;
+      // A used station is rows × pitch − GAP + 2 × STATION_PAD high.
+      const budgetRows = Math.max(used, Math.floor((avail - (belt.length - used) * EMPTY_ROW - used * (STATION_PAD * 2 - GAP)) / pitch));
+      const rowsFor = allocateRows(counts.map((n) => Math.ceil(n / cols)), budgetRows);
+      const heights = rowsFor.map((r) => (r === 0 ? EMPTY_ROW : r * pitch - GAP + STATION_PAD * 2));
+      // Spare height goes back evenly, so a quiet floor still spans the box.
+      const spare = Math.max(0, avail - heights.reduce((a, b) => a + b, 0));
+      const grow = Math.min(spare / belt.length, 28);
+      let top = PAD;
+      belt.forEach((s, i) => {
+        const list = byStation.get(s.id)!;
+        const h = heights[i]! + grow;
+        const rowCount = rowsFor[i]!;
+        // The label and marker sit on the station's first row (or mid-band when it is empty).
+        const firstY = top + grow / 2 + STATION_PAD + parcel.h / 2;
+        const y = rowCount === 0 ? top + h / 2 : firstY;
+        stations.push({ id: s.id, label: s.label, kind: "belt", x: beltX, y, count: list.length, attention: worst(list) });
+        if (rowCount > 0) {
+          const slots = Array.from({ length: rowCount * cols }, (_, k) => ({ x: firstX + (k % cols) * (parcel.w + GAP), y: firstY + Math.floor(k / cols) * pitch }));
+          place(s.id, slots);
+        }
+        top += h;
+      });
+      beltLine = { x1: beltX, y1: PAD, x2: beltX, y2: Math.min(beltBottom, top) };
+    }
+
+    const binY = beltBottom + 6;
+    bins.forEach((s, i) => {
+      const x0 = PAD + binW * i;
+      const list = byStation.get(s.id)!;
+      stations.push({ id: s.id, label: s.label, kind: "bin", x: x0, y: binY, count: list.length, attention: worst(list) });
+      if (!list.length) return;
+      const startX = x0 + parcel.w / 2;
+      place(s.id, Array.from({ length: binCols * binRows }, (_, k) => ({ x: startX + (k % binCols) * (parcel.w + GAP), y: binY + 16 + parcel.h / 2 + Math.floor(k / binCols) * (parcel.h + GAP) })));
+    });
+    return { parcel, belt: beltLine, stations, parcels, overflow };
   };
 
-  const parcel: FloorScene["parcel"] =
-    orientation === "wide" ? { w: Math.round(Math.min(96, Math.max(56, (width - PAD * 2) / belt.length - 8))), h: PARCEL_H } : { w: 86, h: PARCEL_H };
-  // Bins sit in a band under the belt, each taking half its width, as tall as their rows.
-  const binW = (width - PAD * 2) / bins.length;
-  const binCols = Math.max(1, Math.floor((binW - GAP) / (parcel.w + GAP)));
-  const binRows = binsUsed ? Math.min(BIN_ROWS_MAX, Math.max(...bins.map((s) => Math.ceil(byStation.get(s.id)!.length / binCols)))) : 0;
-  const binBand = binsUsed ? 22 + binRows * (parcel.h + GAP) : BIN_BAND_EMPTY;
-  const beltBottom = height - binBand;
-  let beltLine: FloorScene["belt"];
-
-  if (orientation === "wide") {
-    const colW = (width - PAD * 2) / belt.length;
-    const beltY = PAD + 30;
-    beltLine = { x1: PAD, y1: beltY, x2: width - PAD, y2: beltY };
-    const firstY = beltY + 14 + parcel.h / 2;
-    const rowsFit = Math.max(1, Math.floor((beltBottom - firstY + parcel.h / 2) / (parcel.h + GAP)));
-    belt.forEach((s, i) => {
-      const x = PAD + colW * (i + 0.5);
-      const list = byStation.get(s.id)!;
-      stations.push({ id: s.id, label: s.label, kind: "belt", x, y: beltY, count: list.length, attention: worst(list) });
-      place(s.id, Array.from({ length: rowsFit }, (_, r) => ({ x, y: firstY + r * (parcel.h + GAP) })));
-    });
-  } else {
-    // Tall (iPhone): stations stack down a vertical belt. Empty ones collapse to a thin
-    // labelled row; stations with parcels get the height, wrapping onto more rows.
-    const labelW = 74;
-    const beltX = PAD + labelW;
-    const firstX = beltX + 14 + parcel.w / 2;
-    const cols = Math.max(1, Math.floor((width - PAD - (beltX + 14)) / (parcel.w + GAP)));
-    const pitch = parcel.h + GAP;
-    const counts = belt.map((s) => byStation.get(s.id)!.length);
-    const used = counts.filter((n) => n > 0).length;
-    const avail = beltBottom - PAD;
-    // A used station is rows × pitch − GAP + 2 × STATION_PAD high.
-    const budgetRows = Math.max(used, Math.floor((avail - (belt.length - used) * EMPTY_ROW - used * (STATION_PAD * 2 - GAP)) / pitch));
-    const rowsFor = allocateRows(counts.map((n) => Math.ceil(n / cols)), budgetRows);
-    const heights = rowsFor.map((r) => (r === 0 ? EMPTY_ROW : r * pitch - GAP + STATION_PAD * 2));
-    // Spare height goes back evenly, so a quiet floor still spans the box.
-    const spare = Math.max(0, avail - heights.reduce((a, b) => a + b, 0));
-    const grow = Math.min(spare / belt.length, 28);
-    let top = PAD;
-    belt.forEach((s, i) => {
-      const list = byStation.get(s.id)!;
-      const h = heights[i]! + grow;
-      const rowCount = rowsFor[i]!;
-      // The label and marker sit on the station's first row (or mid-band when it is empty).
-      const firstY = top + grow / 2 + STATION_PAD + parcel.h / 2;
-      const y = rowCount === 0 ? top + h / 2 : firstY;
-      stations.push({ id: s.id, label: s.label, kind: "belt", x: beltX, y, count: list.length, attention: worst(list) });
-      if (rowCount > 0) {
-        const slots = Array.from({ length: rowCount * cols }, (_, k) => ({ x: firstX + (k % cols) * (parcel.w + GAP), y: firstY + Math.floor(k / cols) * pitch }));
-        place(s.id, slots);
-      }
-      top += h;
-    });
-    beltLine = { x1: beltX, y1: PAD, x2: beltX, y2: Math.min(beltBottom, top) };
+  let density: Density = options.density === "compact" ? "compact" : "normal";
+  let laid = layout(density === "compact" ? compact : normal);
+  // auto: shrink only when a belt station spills into an overflow counter at normal size.
+  if (options.density === "auto" && laid.overflow.some((o) => belt.some((s) => s.id === o.stationId))) {
+    density = "compact";
+    laid = layout(compact);
   }
-
-  const binY = beltBottom + 6;
-  bins.forEach((s, i) => {
-    const x0 = PAD + binW * i;
-    const list = byStation.get(s.id)!;
-    stations.push({ id: s.id, label: s.label, kind: "bin", x: x0, y: binY, count: list.length, attention: worst(list) });
-    if (!list.length) return;
-    const startX = x0 + parcel.w / 2;
-    place(s.id, Array.from({ length: binCols * binRows }, (_, k) => ({ x: startX + (k % binCols) * (parcel.w + GAP), y: binY + 16 + parcel.h / 2 + Math.floor(k / binCols) * (parcel.h + GAP) })));
-  });
-
-  return { orientation, width, height, parcel, belt: beltLine, stations, parcels, overflow, backlog: tracked.backlog };
+  return { orientation, density, width, height, ...laid, backlog: tracked.backlog };
 }
 
 /** The scene as text, one line per non-empty station: the screen-reader view of the floor. */

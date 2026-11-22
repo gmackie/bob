@@ -1,15 +1,16 @@
 import { MILESTONE_LABEL, RELEASE_STAGE_PRESENTATION, STATE_PRESENTATION } from "@bob/sdlc-view";
 import type { ItemState, Milestone, ReleaseStage } from "@bob/sdlc-view";
 
+import type { AgentAction } from "./attempt-beats";
 import type { Beat } from "./beat";
 
 /**
  * The motion grammar (BOB-91): what each beat looks, feels and (later) sounds like.
  * A parcel's move along the belt is already the effect for an ordinary advance, so most
  * beats add nothing; outcomes get a celebration, problems get a mark. Outcomes are
- * celebrated, activity never is.
+ * celebrated, activity never is: live tail lines only raise a spark (no text, no haptic).
  */
-export type EffectKind = "burst" | "stamp" | "pulse" | "static";
+export type EffectKind = "burst" | "stamp" | "pulse" | "static" | "spark";
 export type Tone = "good" | "info" | "warn" | "bad";
 /** Maps onto expo-haptics: notification success/warning/error, impact light. */
 export type Haptic = "success" | "warning" | "error" | "light" | null;
@@ -36,6 +37,34 @@ const STAGE_EFFECT: Partial<Record<ReleaseStage, Omit<Effect, "beatId" | "itemId
   blocked: { kind: "stamp", text: "BLOCKED", tone: "warn", haptic: "warning" },
 };
 
+type Fx = Omit<Effect, "beatId" | "itemId">;
+
+/** Checks the agent runs itself: [running, passed, failed] labels. */
+const CHECK_TEXT: Partial<Record<AgentAction, [string, string, string]>> = {
+  test: ["TESTING", "TESTS ✓", "TESTS ✗"],
+  typecheck: ["TYPES…", "TYPES ✓", "TYPES ✗"],
+  lint: ["LINT…", "LINT ✓", "LINT ✗"],
+  build: ["BUILDING", "BUILD ✓", "BUILD ✗"],
+};
+
+function actionEffect(action: AgentAction, exit: number | null): Fx | null {
+  const check = CHECK_TEXT[action];
+  // The agent's own red tests are part of working, not a failure: warn, no haptic.
+  if (check) return exit === null ? { kind: "spark", text: check[0], tone: "info", haptic: null } : exit === 0 ? { kind: "pulse", text: check[1], tone: "good", haptic: null } : { kind: "pulse", text: check[2], tone: "warn", haptic: null };
+  switch (action) {
+    case "install":
+      return { kind: "spark", text: "DEPS", tone: "info", haptic: null };
+    case "commit":
+      return exit === null || exit === 0 ? { kind: "stamp", text: "COMMIT", tone: "good", haptic: null } : null;
+    case "push":
+      return exit === null || exit === 0 ? { kind: "stamp", text: "PUSHED", tone: "good", haptic: "light" } : { kind: "pulse", text: "PUSH ✗", tone: "warn", haptic: null };
+    case "git":
+      return null;
+    default:
+      return exit !== null && exit !== 0 ? { kind: "spark", text: "OOPS", tone: "warn", haptic: null } : null;
+  }
+}
+
 export function effectFor(beat: Beat): Effect | null {
   const base = { beatId: beat.id, itemId: beat.subject.itemId ?? null };
   const data = beat.data ?? {};
@@ -59,6 +88,21 @@ export function effectFor(beat: Beat): Effect | null {
       const e = to ? STAGE_EFFECT[to] : undefined;
       return e ? { ...base, ...e } : null;
     }
+    case "agent.activity":
+      return { ...base, kind: "spark", text: "", tone: "info", haptic: null };
+    case "agent.action": {
+      const e = actionEffect(data.action as AgentAction, typeof data.exit === "number" ? data.exit : null);
+      return e ? { ...base, ...e } : null;
+    }
+    case "ci.phase": {
+      const phase = String(data.phase ?? "").toUpperCase();
+      if (data.to === "running") return { ...base, kind: "spark", text: `▶ ${phase}`, tone: "info", haptic: null };
+      if (data.to === "passed") return { ...base, kind: "pulse", text: `✓ ${phase}`, tone: "good", haptic: null };
+      if (data.to === "failed") return { ...base, kind: "stamp", text: `✗ ${phase}`, tone: "bad", haptic: "error" };
+      return null;
+    }
+    case "ci.green":
+      return { ...base, kind: "burst", text: "GREEN", tone: "good", haptic: "success" };
     case "item.advanced":
     case "item.left":
       return null;
@@ -88,5 +132,13 @@ export function beatLine(beat: Beat): string {
       return `${who} · release ${d.from ? `${stage(d.from)} → ` : ""}${stage(d.to)}`;
     case "milestone":
       return `${who} · ${MILESTONE_LABEL[d.milestone as Milestone] ?? String(d.milestone)}`;
+    case "agent.activity":
+      return `${who} · agent ${d.thread ?? "working"} (+${d.lines ?? 0} lines)`;
+    case "agent.action":
+      return `${who} · ${String(d.line ?? d.action)}`;
+    case "ci.phase":
+      return `${who} · CI ${String(d.phase)} ${d.from ? `${String(d.from)} → ` : ""}${String(d.to)}`;
+    case "ci.green":
+      return `${who} · CI green (${String(d.phases)} phases)`;
   }
 }

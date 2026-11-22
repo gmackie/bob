@@ -2,8 +2,9 @@
  * A Beat is one real event, rendered exactly once (BOB-91). Lenses never invent motion:
  * everything that moves on an Arcade surface traces back to a Beat or to the current view.
  *
- * Slice 1 produces beats from the SDLC edge only (sdlc-beats.ts). Session, ForgeGraph and
- * budget beats join through the same envelope once the gateway forwards their payloads.
+ * Slice 1 produces beats from the SDLC edge (sdlc-beats.ts); slice 3 adds the attempt stream
+ * the edge sends for watched items (attempt-beats.ts): tail lines (session) and CI phases
+ * (forgegraph). Budget beats join through the same envelope later.
  */
 export type BeatSource = "session" | "sdlc" | "kanbanger" | "forgegraph" | "budget";
 
@@ -24,6 +25,14 @@ export type BeatKind =
   | "release.stage"
   /** The item achieved a milestone (execution-succeeded … production-verified). */
   | "milestone"
+  /** New tail lines arrived for a watched item: ambient motion only, never text (slice 3). */
+  | "agent.activity"
+  /** The agent ran a recognised command (tests, build, commit, push…), maybe with its exit code. */
+  | "agent.action"
+  /** One CI phase changed status (queued → running → passed / failed). */
+  | "ci.phase"
+  /** Every CI phase of the run is passed or skipped. */
+  | "ci.green"
   /** The source skipped events; the view is incomplete until it resyncs. Shown as static. */
   | "gap";
 
