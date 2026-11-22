@@ -1,6 +1,5 @@
-// Scope chips over the Arcade floor (BOB-91 slice 3): one per connected project and one per
-// repo, from @bob/arcade's floorScopes(), the same chips the web cockpit draws. A chip
-// narrows the floor, the HUD and the desks; tapping it again clears it.
+// Scope chips over the Arcade floor (BOB-91 slice 3): luminous arcade filter pills per
+// connected project and repo, from @bob/arcade's floorScopes().
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { floorScopes, liveScope } from "@bob/arcade";
@@ -30,21 +29,28 @@ function Chip({ chip, active, onPress }: { chip: FloorScopeChip; active: boolean
       style={({ pressed }) => ({
         flexDirection: "row",
         alignItems: "center",
-        gap: 5,
+        gap: 6,
         borderRadius: 999,
         borderWidth: 1,
-        borderColor: active ? STAGE.labelLit : STAGE.belt,
-        backgroundColor: active ? "#2a2116" : "transparent",
-        paddingHorizontal: 9,
-        paddingVertical: 3,
-        opacity: pressed ? 0.7 : 1,
+        borderColor: active ? STAGE.labelLit : "#3a2e20",
+        backgroundColor: active ? "#2c2215" : "#18130d",
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        opacity: pressed ? 0.72 : 1,
       })}
     >
-      {chip.hue !== null ? <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: `hsl(${chip.hue}, 70%, 45%)` }} /> : null}
-      <Text style={{ fontFamily: MONO, fontSize: 11, color: active ? STAGE.labelLit : STAGE.label }}>
-        {chip.label} {chip.count}
-        {chip.attention ? <Text style={{ color: "#e7a505" }}> !</Text> : null}
+      {chip.hue !== null ? (
+        <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: `hsl(${chip.hue}, 74%, 56%)` }} />
+      ) : (
+        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: active ? STAGE.labelLit : "#6a5638" }} />
+      )}
+      <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: active ? "800" : "600", color: active ? STAGE.labelLit : "#a89270" }}>
+        {chip.label}
       </Text>
+      <View style={{ borderRadius: 4, backgroundColor: "rgba(0,0,0,0.4)", paddingHorizontal: 4, paddingVertical: 0.5 }}>
+        <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: "700", color: active ? STAGE.labelLit : STAGE.label }}>{chip.count}</Text>
+      </View>
+      {chip.attention ? <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: "900", color: "#e7a505" }}>!</Text> : null}
     </Pressable>
   );
 }
@@ -55,11 +61,16 @@ export function ScopeChips({ view, scope, onScope }: { view: EdgeView; scope: Sc
   const project = (c: FloorScopeChip) => scope.startupId === c.scope.startupId;
   const repo = (c: FloorScopeChip) => scope.repoKey === c.scope.repoKey;
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingHorizontal: 14, paddingBottom: 6 }} testID="arcade-scopes">
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{ alignItems: "center", gap: 6, paddingHorizontal: 14, paddingBottom: 8 }}
+      testID="arcade-scopes"
+    >
       {projects.map((c) => (
         <Chip key={c.key} chip={c} active={project(c)} onPress={() => onScope(project(c) ? {} : c.scope)} />
       ))}
-      {projects.length && repos.length ? <View style={{ width: 1, marginHorizontal: 4, backgroundColor: STAGE.belt }} /> : null}
+      {projects.length && repos.length ? <View style={{ width: 1, height: 14, marginHorizontal: 4, backgroundColor: "#3a2f22" }} /> : null}
       {repos.map((c) => (
         <Chip key={c.key} chip={c} active={repo(c)} onPress={() => onScope(repo(c) ? (scope.startupId ? { startupId: scope.startupId } : {}) : c.scope)} />
       ))}

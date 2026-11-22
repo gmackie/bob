@@ -3,9 +3,10 @@
 // so every move on screen is a real coordinator transition. Under reduced motion they
 // jump, markers stop bobbing and effects show without travel.
 //
-// Slice 3 (BOB-91): between transitions, the attempt stream drives motion. A parcel whose
-// agent just wrote output wobbles and types; a parcel in CI carries a meter; sparks and
-// labels pop for named commands and CI phases; station glyphs animate while occupied.
+// Visual overhaul: retro-industrial brass & neon arcade stage powered by live WebSocket
+// streams — machined conveyor with rotating pulleys, bespoke pure-RN station machinery
+// (zero emojis), tactile cartridge parcels with segmented per-phase CI LEDs, radar sonar
+// halos for human attention, multi-color confetti shockwaves, and arcade rubber stamps.
 import { memo, useEffect, useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 import Animated, {
@@ -23,137 +24,258 @@ import Animated, {
 } from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
 import { PARCEL_TONE } from "@bob/arcade";
-import type { FloorParcel, FloorScene, StationId } from "@bob/arcade";
+import type { FloorParcel, FloorScene } from "@bob/arcade";
+import type { CiPhase } from "@bob/sdlc-view";
 
 import { ATTENTION_COLOR } from "~/features/sdlc/components";
 
 import type { LiveEffect } from "./arcade-model";
 import { METER_COLOR, TONE_COLOR } from "./arcade-model";
+import { STATION_GLOW, StationArt } from "./StationArt";
 
 export interface ParcelMeter {
   progress: number;
   state: keyof typeof METER_COLOR;
+  phases?: readonly CiPhase[];
 }
 
 export const STAGE = {
-  bg: "#120f0b",
-  belt: "#3a2f22",
-  dash: "#6a5638",
+  bg: "#100d09",
+  panel: "#17120d",
+  belt: "#241c13",
+  rail: "#6d5638",
+  dash: "#b89050",
   label: "#8a7758",
   labelLit: "#ffd27a",
   ink: "#17130e",
 } as const;
+
+const PHASE_LED: Record<CiPhase["status"], string> = {
+  queued: "#4b3e2e",
+  running: "#6fb4ff",
+  passed: "#7dffb0",
+  failed: "#ff6b6b",
+  skipped: "#3a2f22",
+  unknown: "#3a2f22",
+};
+
+const CONFETTI_COLORS = ["#7dffb0", "#ffd27a", "#6fb4ff", "#ff8ad8", "#d4850a", "#c39bff", "#ffffff"];
 
 const MONO = "Menlo";
 const SPRING = { damping: 18, stiffness: 140, mass: 0.9 };
 
 // ── Belt ─────────────────────────────────────────────────────────────────────
 
-/** The belt runs only while something is in flight: an idle floor looks idle. */
-function Belt({ scene, running, reduced }: { scene: FloorScene; running: boolean; reduced: boolean }) {
-  const { x1, y1, x2, y2 } = scene.belt;
-  const wide = scene.orientation === "wide";
-  const length = wide ? x2 - x1 : y2 - y1;
-  const shift = useSharedValue(0);
+function BeltPulley({ x, y, running, reduced }: { x: number; y: number; running: boolean; reduced: boolean }) {
+  const rot = useSharedValue(0);
   useEffect(() => {
-    if (running && !reduced) shift.value = withRepeat(withTiming(18, { duration: 900, easing: Easing.linear }), -1, false);
-    else shift.value = withTiming(0, { duration: 200 });
-  }, [running, reduced, shift]);
-  const dashes = useAnimatedStyle(() => ({ transform: [wide ? { translateX: shift.value } : { translateY: shift.value }] }));
-  const count = Math.ceil(length / 18) + 2;
-
+    if (running && !reduced) rot.value = withRepeat(withTiming(360, { duration: 1500, easing: Easing.linear }), -1, false);
+    else rot.value = withTiming(0, { duration: 200 });
+  }, [running, reduced, rot]);
+  const spoke = useAnimatedStyle(() => ({ transform: [{ rotate: `${rot.value}deg` }] }));
   return (
     <View
       pointerEvents="none"
       style={{
         position: "absolute",
-        left: wide ? x1 : x1 - 7,
-        top: wide ? y1 - 7 : y1,
-        width: wide ? length : 14,
-        height: wide ? 14 : length,
-        borderRadius: 7,
-        backgroundColor: STAGE.belt,
-        overflow: "hidden",
+        left: x - 9,
+        top: y - 9,
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        backgroundColor: "#1d1710",
+        borderWidth: 1.5,
+        borderColor: "#7c633f",
+        alignItems: "center",
+        justifyContent: "center",
       }}
     >
-      <Animated.View style={[{ position: "absolute", left: wide ? -18 : 6, top: wide ? 6 : -18, flexDirection: wide ? "row" : "column" }, dashes]}>
-        {Array.from({ length: count }, (_, i) => (
-          <View key={i} style={{ width: wide ? 8 : 2, height: wide ? 2 : 8, marginRight: wide ? 10 : 0, marginBottom: wide ? 0 : 10, backgroundColor: STAGE.dash }} />
-        ))}
+      <Animated.View style={[{ width: 12, height: 12, alignItems: "center", justifyContent: "center" }, spoke]}>
+        <View style={{ position: "absolute", width: 10, height: 1.5, borderRadius: 1, backgroundColor: "#b5945d" }} />
+        <View style={{ position: "absolute", width: 1.5, height: 10, borderRadius: 1, backgroundColor: "#b5945d" }} />
       </Animated.View>
+      <View style={{ position: "absolute", width: 4.5, height: 4.5, borderRadius: 2.5, backgroundColor: "#ffd27a" }} />
     </View>
+  );
+}
+
+/** Machined industrial conveyor belt: runs only while something is in flight. */
+function Belt({ scene, running, reduced }: { scene: FloorScene; running: boolean; reduced: boolean }) {
+  const { x1, y1, x2, y2 } = scene.belt;
+  const wide = scene.orientation === "wide";
+  const length = wide ? x2 - x1 : y2 - y1;
+  const shift = useSharedValue(0);
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    if (running && !reduced) {
+      shift.value = withRepeat(withTiming(18, { duration: 850, easing: Easing.linear }), -1, false);
+      pulse.value = withRepeat(withTiming(1, { duration: 2800, easing: Easing.linear }), -1, false);
+    } else {
+      shift.value = withTiming(0, { duration: 200 });
+      pulse.value = withTiming(0, { duration: 200 });
+    }
+  }, [running, reduced, shift, pulse]);
+  const dashes = useAnimatedStyle(() => ({ transform: [wide ? { translateX: shift.value } : { translateY: shift.value }] }));
+  const energy = useAnimatedStyle(() => ({
+    opacity: running && !reduced ? Math.sin(pulse.value * Math.PI) * 0.85 : 0,
+    transform: [wide ? { translateX: pulse.value * length - 14 } : { translateY: pulse.value * length - 14 }],
+  }));
+  const count = Math.ceil(length / 18) + 2;
+
+  return (
+    <>
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          left: wide ? x1 : x1 - 8,
+          top: wide ? y1 - 8 : y1,
+          width: wide ? length : 16,
+          height: wide ? 16 : length,
+          borderRadius: 8,
+          backgroundColor: STAGE.belt,
+          borderWidth: 1,
+          borderColor: running ? STAGE.rail : "#3e3123",
+          overflow: "hidden",
+        }}
+      >
+        {/* Subtle metallic inner track highlight */}
+        <View
+          style={{
+            position: "absolute",
+            left: wide ? 0 : 1,
+            right: wide ? 0 : undefined,
+            top: wide ? 1 : 0,
+            bottom: wide ? undefined : 0,
+            width: wide ? undefined : 1.5,
+            height: wide ? 1.5 : undefined,
+            backgroundColor: "#a08253",
+            opacity: 0.45,
+          }}
+        />
+        <Animated.View style={[{ position: "absolute", left: wide ? -18 : 5, top: wide ? 5 : -18, flexDirection: wide ? "row" : "column" }, dashes]}>
+          {Array.from({ length: count }, (_, i) => (
+            <View
+              key={i}
+              style={{
+                width: wide ? 7 : 4,
+                height: wide ? 4 : 7,
+                borderRadius: 1,
+                marginRight: wide ? 11 : 0,
+                marginBottom: wide ? 0 : 11,
+                backgroundColor: running ? STAGE.dash : "#5c4a33",
+                opacity: running ? 0.65 : 0.35,
+              }}
+            />
+          ))}
+        </Animated.View>
+        {/* Gliding golden energy pulse along the track while items are in flight */}
+        <Animated.View
+          style={[
+            {
+              position: "absolute",
+              left: wide ? 0 : 6,
+              top: wide ? 6 : 0,
+              width: wide ? 24 : 4,
+              height: wide ? 4 : 24,
+              borderRadius: 2,
+              backgroundColor: "#ffd27a",
+            },
+            energy,
+          ]}
+        />
+      </View>
+      <BeltPulley x={x1} y={y1} running={running} reduced={reduced} />
+      <BeltPulley x={x2} y={y2} running={running} reduced={reduced} />
+    </>
   );
 }
 
 // ── Stations ─────────────────────────────────────────────────────────────────
 
-/** One glyph per belt station; each moves only while its station holds items. */
-const GLYPH: Partial<Record<StationId, { char: string; motion: "spin" | "bob" | "shake" | "pulse" }>> = {
-  queue: { char: "📥", motion: "bob" },
-  ready: { char: "🏁", motion: "pulse" },
-  admit: { char: "🚪", motion: "bob" },
-  agents: { char: "🤖", motion: "bob" },
-  ci: { char: "⚙️", motion: "spin" },
-  review: { char: "🔍", motion: "pulse" },
-  deploy: { char: "🚀", motion: "shake" },
-  shipped: { char: "⭐", motion: "pulse" },
-};
+function StationBackdrop({ scene }: { scene: FloorScene }) {
+  const wide = scene.orientation === "wide";
+  const beltStations = scene.stations.filter((s) => s.kind === "belt");
+  const binStations = scene.stations.filter((s) => s.kind === "bin");
+  const colW = wide && beltStations.length ? (scene.width - 24) / beltStations.length : 0;
 
-function StationGlyph({ id, x, y, active, reduced }: { id: StationId; x: number; y: number; active: boolean; reduced: boolean }) {
-  const glyph = GLYPH[id];
-  const t = useSharedValue(0);
-  const motion = glyph?.motion;
-  useEffect(() => {
-    if (!active || reduced || !motion) {
-      t.value = withTiming(0, { duration: 150 });
-      return;
-    }
-    if (motion === "spin") t.value = withRepeat(withTiming(1, { duration: 2400, easing: Easing.linear }), -1, false);
-    else if (motion === "shake") t.value = withRepeat(withSequence(withTiming(1, { duration: 70 }), withTiming(-1, { duration: 70 })), -1, true);
-    else t.value = withRepeat(withSequence(withTiming(1, { duration: motion === "bob" ? 700 : 800 }), withTiming(0, { duration: motion === "bob" ? 700 : 800 })), -1, false);
-  }, [active, reduced, motion, t]);
-  const style = useAnimatedStyle(() => {
-    switch (motion) {
-      case "spin":
-        return { transform: [{ rotate: `${t.value * 360}deg` }] };
-      case "shake":
-        return { transform: [{ translateX: t.value * 0.8 }, { translateY: -t.value * 0.5 }] };
-      case "pulse":
-        return { transform: [{ scale: 1 + t.value * 0.15 }] };
-      default:
-        return { transform: [{ translateY: -t.value * 2 }] };
-    }
-  });
-  if (!glyph) return null;
   return (
-    <Animated.Text pointerEvents="none" style={[{ position: "absolute", left: x - 10, top: y - 10, width: 20, height: 20, fontSize: 14, lineHeight: 20, textAlign: "center", opacity: active ? 1 : 0.35 }, style]}>
-      {glyph.char}
-    </Animated.Text>
+    <>
+      {/* Soft ambient bay tint under occupied stations in wide mode */}
+      {wide
+        ? beltStations.map((s, idx) => {
+            const lit = s.count > 0;
+            const glow = s.attention && s.attention !== "ok" ? ATTENTION_COLOR[s.attention] : STATION_GLOW[s.id];
+            return (
+              <View
+                key={`bay-${s.id}`}
+                pointerEvents="none"
+                style={{
+                  position: "absolute",
+                  left: s.x - colW / 2,
+                  top: 2,
+                  width: colW,
+                  height: Math.max(0, scene.height - 32),
+                  borderLeftWidth: idx > 0 ? 1 : 0,
+                  borderLeftColor: "#261e15",
+                  backgroundColor: lit ? `${glow}0b` : "transparent",
+                }}
+              />
+            );
+          })
+        : null}
+
+      {/* Recessed divider above Scrap & Cancelled bins */}
+      {binStations[0] ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: 12,
+            right: 12,
+            top: binStations[0].y - 8,
+            height: 1,
+            backgroundColor: "#2f251a",
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 
 function Stations({ scene, reduced }: { scene: FloorScene; reduced: boolean }) {
   const wide = scene.orientation === "wide";
+
   return (
     <>
       {scene.stations.map((s) => {
         const lit = s.count > 0;
-        const color = s.attention && s.attention !== "ok" ? ATTENTION_COLOR[s.attention] : lit ? "#d4850a" : STAGE.belt;
+        const color = s.attention && s.attention !== "ok" ? ATTENTION_COLOR[s.attention] : lit ? STATION_GLOW[s.id] : "#5e4e3a";
         if (s.kind === "bin") {
           return (
-            <Text
+            <View
               key={s.id}
-              style={{ position: "absolute", left: s.x, top: s.y - 4, fontFamily: MONO, fontSize: 10, letterSpacing: 1, color: lit ? color : STAGE.label }}
+              pointerEvents="none"
+              style={{ position: "absolute", left: s.x, top: s.y - 4, flexDirection: "row", alignItems: "center", gap: 5 }}
             >
-              {s.label.toUpperCase()}
-              {lit ? ` ${s.count}` : ""}
-            </Text>
+              <View
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: 2,
+                  backgroundColor: lit ? (s.id === "scrap" ? "#ff6b6b" : "#9c8b73") : "#3b3023",
+                }}
+              />
+              <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: "700", letterSpacing: 1, color: lit ? (s.id === "scrap" ? "#ff6b6b" : "#c7b69b") : STAGE.label }}>
+                {s.label.toUpperCase()}
+                {lit ? ` ${s.count}` : ""}
+              </Text>
+            </View>
           );
         }
         return (
           <View key={s.id} pointerEvents="none">
-            <View style={{ position: "absolute", left: s.x - 11, top: s.y - 11, width: 22, height: 22, borderRadius: 11, backgroundColor: STAGE.bg, borderWidth: 2, borderColor: color }} />
-            <StationGlyph id={s.id} x={s.x} y={s.y} active={lit} reduced={reduced} />
+            <StationArt id={s.id} x={s.x} y={s.y} active={lit} color={color} reduced={reduced} />
             <Text
               numberOfLines={1}
               // "SHIPPED 15" outgrows the phone's label column; shrink it rather than cut the count (BOB-99).
@@ -163,9 +285,10 @@ function Stations({ scene, reduced }: { scene: FloorScene; reduced: boolean }) {
                 position: "absolute",
                 fontFamily: MONO,
                 fontSize: 10,
+                fontWeight: lit ? "800" : "600",
                 letterSpacing: 1,
                 color: lit ? STAGE.labelLit : STAGE.label,
-                ...(wide ? { left: s.x - 50, width: 100, textAlign: "center", top: s.y - 28 } : { left: 8, width: s.x - 20, textAlign: "right", top: s.y - 7 }),
+                ...(wide ? { left: s.x - 52, width: 104, textAlign: "center", top: s.y - 31 } : { left: 6, width: Math.max(24, s.x - 24), textAlign: "right", top: s.y - 7 }),
               }}
             >
               {s.label.toUpperCase()}
@@ -179,6 +302,54 @@ function Stations({ scene, reduced }: { scene: FloorScene; reduced: boolean }) {
 }
 
 // ── Parcels ──────────────────────────────────────────────────────────────────
+
+function SonarHalo({ width, height, color, reduced }: { width: number; height: number; color: string; reduced: boolean }) {
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    if (!reduced) pulse.value = withRepeat(withTiming(1, { duration: 1500, easing: Easing.out(Easing.quad) }), -1, false);
+    else pulse.value = 0;
+  }, [reduced, pulse]);
+  const style = useAnimatedStyle(() => ({
+    opacity: reduced ? 0.5 : (1 - pulse.value) * 0.75,
+    transform: [{ scaleX: 1 + pulse.value * 0.16 }, { scaleY: 1 + pulse.value * 0.3 }],
+  }));
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        {
+          position: "absolute",
+          left: -3,
+          top: -3,
+          width: width + 6,
+          height: height + 6,
+          borderRadius: 8,
+          borderWidth: 2,
+          borderColor: color,
+        },
+        style,
+      ]}
+    />
+  );
+}
+
+function CiScanline({ width, height, reduced }: { width: number; height: number; reduced: boolean }) {
+  const x = useSharedValue(-16);
+  useEffect(() => {
+    if (!reduced) x.value = withRepeat(withTiming(width + 16, { duration: 1650, easing: Easing.inOut(Easing.quad) }), -1, false);
+    else x.value = -16;
+  }, [width, reduced, x]);
+  const style = useAnimatedStyle(() => ({
+    opacity: reduced ? 0 : 0.45,
+    transform: [{ translateX: x.value }],
+  }));
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[{ position: "absolute", top: 0, bottom: 0, width: 12, height, backgroundColor: "#ffffff" }, style]}
+    />
+  );
+}
 
 const Parcel = memo(function Parcel({
   parcel,
@@ -205,7 +376,7 @@ const Parcel = memo(function Parcel({
   const working = typingAt !== undefined && (parcel.state === "running" || parcel.state === "waiting-input");
   useEffect(() => {
     if (!working || reduced) return;
-    wobble.value = withSequence(...Array.from({ length: 3 }, () => withSequence(withTiming(-2.5, { duration: 120 }), withTiming(2.5, { duration: 120 }))), withTiming(0, { duration: 120 }));
+    wobble.value = withSequence(...Array.from({ length: 3 }, () => withSequence(withTiming(-2.5, { duration: 115 }), withTiming(2.5, { duration: 115 }))), withTiming(0, { duration: 115 }));
   }, [typingAt, working, reduced, wobble]);
   const wobbleStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wobble.value}deg` }] }));
   const y = useSharedValue(parcel.y);
@@ -217,7 +388,7 @@ const Parcel = memo(function Parcel({
   }, [parcel.x, parcel.y, reduced, x, y]);
 
   useEffect(() => {
-    if (parcel.marker === "!" && !reduced) bob.value = withRepeat(withSequence(withTiming(-3, { duration: 450 }), withTiming(0, { duration: 450 })), -1, false);
+    if (parcel.marker === "!" && !reduced) bob.value = withRepeat(withSequence(withTiming(-3.5, { duration: 420 }), withTiming(0, { duration: 420 })), -1, false);
     else bob.value = 0;
   }, [parcel.marker, reduced, bob]);
 
@@ -225,49 +396,78 @@ const Parcel = memo(function Parcel({
   // the transform while they run, so a translated parcel would flash at the origin.
   const pos = useAnimatedStyle(() => ({ left: x.value - size.w / 2, top: y.value - size.h / 2 }));
   const markerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bob.value }] }));
-  const edge = parcel.attention === "ok" ? (selected ? "#ffffff" : "transparent") : ATTENTION_COLOR[parcel.attention];
+  const edge = parcel.attention === "ok" ? (selected ? "#ffffff" : "rgba(255,255,255,0.22)") : ATTENTION_COLOR[parcel.attention];
   const tone = PARCEL_TONE[parcel.tone];
+  const repoColor = `hsl(${parcel.hue}, 76%, 50%)`;
+  const ciRunning = Boolean(meter?.state === "running") || parcel.stationId === "ci";
   // A compact parcel has one line: the identifier's number.
   const detail = compact ? "" : [parcel.sublabel, parcel.age].filter(Boolean).join(" · ");
 
   return (
     <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(14)} exiting={reduced ? undefined : FadeOut.duration(250)} style={[{ position: "absolute" }, pos]}>
+      {parcel.attention === "needs_human" ? <SonarHalo width={size.w} height={size.h} color={ATTENTION_COLOR.needs_human} reduced={reduced} /> : null}
       <Animated.View style={wobbleStyle}>
-      <Pressable
-        onPress={() => onPress(parcel.itemId)}
-        accessibilityRole="button"
-        accessibilityLabel={parcel.accessibilityLabel}
-        hitSlop={6}
-        testID={`arcade-parcel-${parcel.itemId}`}
-        style={{
-          width: size.w,
-          height: size.h,
-          borderRadius: 5,
-          backgroundColor: tone.fill,
-          borderWidth: 2,
-          borderColor: edge,
-          justifyContent: "center",
-          paddingLeft: 7,
-          paddingRight: 3,
-          overflow: "hidden",
-        }}
-      >
-        {/* The repository, as a stripe: one repo's parcels still read as a family. */}
-        <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: `hsl(${parcel.hue}, 70%, 45%)` }} />
-        <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: compact ? 9 : 10, fontWeight: "700", color: tone.ink }}>
-          {compact ? parcel.short : parcel.label}
-        </Text>
-        {detail ? (
-          <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9, color: tone.ink, opacity: 0.75 }}>
-            {detail}
+        <Pressable
+          onPress={() => onPress(parcel.itemId)}
+          accessibilityRole="button"
+          accessibilityLabel={parcel.accessibilityLabel}
+          hitSlop={6}
+          testID={`arcade-parcel-${parcel.itemId}`}
+          style={{
+            width: size.w,
+            height: size.h,
+            borderRadius: 6,
+            backgroundColor: tone.fill,
+            borderWidth: parcel.attention !== "ok" || selected ? 2 : 1,
+            borderColor: edge,
+            justifyContent: "center",
+            paddingLeft: 9,
+            paddingRight: 4,
+            overflow: "hidden",
+            shadowColor: working ? repoColor : "#000000",
+            shadowOpacity: working ? 0.6 : 0.45,
+            shadowRadius: working ? 7 : 4,
+            shadowOffset: { width: 0, height: 2 },
+          }}
+        >
+          {/* Specular top highlight & bottom bevel for tactile cartridge feel */}
+          <View style={{ position: "absolute", left: 0, right: 0, top: 0, height: 2, backgroundColor: "rgba(255,255,255,0.32)" }} />
+          <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 2, backgroundColor: "rgba(0,0,0,0.18)" }} />
+          {/* The repository, as a luminous left tab: one repo's parcels read as a family. */}
+          <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, backgroundColor: repoColor }} />
+          {ciRunning && !reduced ? <CiScanline width={size.w} height={size.h} reduced={reduced} /> : null}
+          <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: compact ? 9 : 10, fontWeight: "800", color: tone.ink }}>
+            {compact ? parcel.short : parcel.label}
           </Text>
-        ) : null}
-      </Pressable>
+          {detail ? (
+            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9, color: tone.ink, opacity: 0.78 }}>
+              {detail}
+            </Text>
+          ) : null}
+        </Pressable>
       </Animated.View>
       {working && !reduced ? <TypingDots key={typingAt} hue={parcel.hue} width={size.w} /> : null}
       {meter ? <Meter meter={meter} width={size.w} height={size.h} reduced={reduced} /> : null}
       {parcel.marker ? (
-        <Animated.View pointerEvents="none" style={[{ position: "absolute", right: -6, top: -9, width: 16, height: 16, borderRadius: 8, backgroundColor: ATTENTION_COLOR[parcel.attention], alignItems: "center", justifyContent: "center" }, markerStyle]}>
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            {
+              position: "absolute",
+              right: -7,
+              top: -9,
+              width: 17,
+              height: 17,
+              borderRadius: 9,
+              borderWidth: 1,
+              borderColor: STAGE.ink,
+              backgroundColor: ATTENTION_COLOR[parcel.attention],
+              alignItems: "center",
+              justifyContent: "center",
+            },
+            markerStyle,
+          ]}
+        >
           <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: "900", color: STAGE.ink }}>{parcel.marker}</Text>
         </Animated.View>
       ) : null}
@@ -285,9 +485,29 @@ function TypingDots({ hue, width }: { hue: number; width: number }) {
   }, [fade]);
   const style = useAnimatedStyle(() => ({ opacity: fade.value }));
   return (
-    <Animated.View pointerEvents="none" style={[{ position: "absolute", top: -9, left: width / 2 - 13, width: 26, height: 9, borderRadius: 5, backgroundColor: STAGE.ink, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 2 }, style]}>
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        {
+          position: "absolute",
+          top: -11,
+          left: width / 2 - 15,
+          width: 30,
+          height: 11,
+          borderRadius: 6,
+          borderWidth: 1,
+          borderColor: "#4a3b28",
+          backgroundColor: "#14100b",
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 2.5,
+        },
+        style,
+      ]}
+    >
       {[0, 1, 2].map((i) => (
-        <TypingDot key={i} index={i} color={`hsl(${hue}, 90%, 72%)`} />
+        <TypingDot key={i} index={i} color={`hsl(${hue}, 92%, 74%)`} />
       ))}
     </Animated.View>
   );
@@ -296,43 +516,95 @@ function TypingDots({ hue, width }: { hue: number; width: number }) {
 function TypingDot({ index, color }: { index: number; color: string }) {
   const t = useSharedValue(0);
   useEffect(() => {
-    t.value = withDelay(index * 120, withRepeat(withSequence(withTiming(1, { duration: 300 }), withTiming(0, { duration: 300 })), 6, false));
+    t.value = withDelay(index * 110, withRepeat(withSequence(withTiming(1, { duration: 290 }), withTiming(0, { duration: 290 })), 6, false));
   }, [index, t]);
-  const style = useAnimatedStyle(() => ({ opacity: 0.45 + t.value * 0.55, transform: [{ translateY: -t.value * 2 }] }));
-  return <Animated.View style={[{ width: 3, height: 3, borderRadius: 1.5, backgroundColor: color }, style]} />;
+  const style = useAnimatedStyle(() => ({ opacity: 0.45 + t.value * 0.55, transform: [{ translateY: -t.value * 2.4 }] }));
+  return <Animated.View style={[{ width: 3.5, height: 3.5, borderRadius: 2, backgroundColor: color }, style]} />;
 }
 
-/** A thin CI meter under a parcel: fill is settled phases, colour is the run's state. */
+/** Segmented per-phase CI LED bar under a parcel (falls back to smooth progress bar when phases omitted). */
 function Meter({ meter, width, height, reduced }: { meter: ParcelMeter; width: number; height: number; reduced: boolean }) {
   const fill = useSharedValue(meter.progress);
+  const pulse = useSharedValue(1);
+  const phases = meter.phases?.slice(0, 8) ?? [];
+  const hasRunning = phases.some((p) => p.status === "running");
+
   useEffect(() => {
-    fill.value = reduced ? meter.progress : withTiming(meter.progress, { duration: 600 });
+    fill.value = reduced ? meter.progress : withTiming(meter.progress, { duration: 550 });
   }, [meter.progress, reduced, fill]);
-  const style = useAnimatedStyle(() => ({ width: `${Math.max(8, fill.value * 100)}%` }));
+
+  useEffect(() => {
+    if (hasRunning && !reduced) pulse.value = withRepeat(withSequence(withTiming(0.4, { duration: 420 }), withTiming(1, { duration: 420 })), -1, false);
+    else pulse.value = 1;
+  }, [hasRunning, reduced, pulse]);
+
+  const fillStyle = useAnimatedStyle(() => ({ width: `${Math.max(8, fill.value * 100)}%` }));
+  const runPipStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
+
+  if (phases.length) {
+    return (
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          left: 2,
+          top: height + 2,
+          width: width - 4,
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: "#090705",
+          flexDirection: "row",
+          gap: 1.5,
+          padding: 0.75,
+        }}
+      >
+        {phases.map((p, i) =>
+          p.status === "running" ? (
+            <Animated.View key={`${p.name}:${i}`} style={[{ flex: 1, borderRadius: 1.5, backgroundColor: PHASE_LED[p.status] }, runPipStyle]} />
+          ) : (
+            <View key={`${p.name}:${i}`} style={{ flex: 1, borderRadius: 1.5, backgroundColor: PHASE_LED[p.status] }} />
+          ),
+        )}
+      </View>
+    );
+  }
+
   return (
-    <View pointerEvents="none" style={{ position: "absolute", left: 2, top: height + 2, width: width - 4, height: 3, borderRadius: 2, backgroundColor: "#00000080", overflow: "hidden" }}>
-      <Animated.View style={[{ height: 3, borderRadius: 2, backgroundColor: METER_COLOR[meter.state] }, style]} />
+    <View pointerEvents="none" style={{ position: "absolute", left: 2, top: height + 2, width: width - 4, height: 3.5, borderRadius: 2, backgroundColor: "#090705", overflow: "hidden" }}>
+      <Animated.View style={[{ height: 3.5, borderRadius: 2, backgroundColor: METER_COLOR[meter.state] }, fillStyle]} />
     </View>
   );
 }
 
-/** Ambient sparks for live activity: a few dots up and out of the parcel, plus a small label. */
-const SPARK_DOTS = 5;
+/** Ambient sparks for live activity: glowing dots spraying up and out, plus a crisp pill tag. */
+const SPARK_DOTS = 7;
 
 function Sparks({ effect, x, y, reduced }: { effect: LiveEffect; x: number; y: number; reduced: boolean }) {
   const t = useSharedValue(reduced ? 1 : 0);
   useEffect(() => {
-    if (!reduced) t.value = withTiming(1, { duration: 800, easing: Easing.out(Easing.quad) });
+    if (!reduced) t.value = withTiming(1, { duration: 850, easing: Easing.out(Easing.quad) });
   }, [reduced, t]);
   const color = TONE_COLOR[effect.tone];
-  const label = useAnimatedStyle(() => ({ opacity: 1 - t.value * 0.9, transform: [{ translateY: -12 - t.value * 12 }] }));
+  const label = useAnimatedStyle(() => ({ opacity: 1 - t.value * 0.9, transform: [{ translateY: -14 - t.value * 14 }] }));
   return (
     <View pointerEvents="none" style={{ position: "absolute", left: x, top: y }}>
       {reduced ? null : Array.from({ length: SPARK_DOTS }, (_, i) => <SparkDot key={i} index={i} seed={effect.beatId} t={t} color={color} />)}
       {effect.text ? (
-        <Animated.Text style={[{ position: "absolute", left: -50, width: 100, textAlign: "center", fontFamily: MONO, fontSize: 9, fontWeight: "800", letterSpacing: 1, color, textShadowColor: "#000", textShadowRadius: 3 }, label]}>
-          {effect.text}
-        </Animated.Text>
+        <Animated.View
+          style={[
+            {
+              position: "absolute",
+              left: -52,
+              width: 104,
+              alignItems: "center",
+            },
+            label,
+          ]}
+        >
+          <View style={{ borderRadius: 999, borderWidth: 1, borderColor: `${color}88`, backgroundColor: "#14100be6", paddingHorizontal: 6, paddingVertical: 1 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: "800", letterSpacing: 1, color }}>{effect.text}</Text>
+          </View>
+        </Animated.View>
       ) : null}
     </View>
   );
@@ -343,15 +615,18 @@ function SparkDot({ index, seed, t, color }: { index: number; seed: string; t: S
   let h = 2166136261 ^ index;
   for (let k = 0; k < seed.length; k++) h = Math.imul(h ^ seed.charCodeAt(k), 16777619);
   const r = ((h >>> 0) % 1000) / 1000;
-  const angle = -Math.PI / 2 + (r - 0.5) * 2.4;
-  const dist = 12 + r * 14;
-  const style = useAnimatedStyle(() => ({ opacity: 1 - t.value, transform: [{ translateX: Math.cos(angle) * dist * t.value }, { translateY: -8 + Math.sin(angle) * dist * t.value }] }));
-  return <Animated.View style={[{ position: "absolute", left: -1.5, top: -1.5, width: 3, height: 3, borderRadius: 1.5, backgroundColor: color }, style]} />;
+  const angle = -Math.PI / 2 + (r - 0.5) * 2.5;
+  const dist = 14 + r * 18;
+  const style = useAnimatedStyle(() => ({
+    opacity: 1 - t.value,
+    transform: [{ translateX: Math.cos(angle) * dist * t.value }, { translateY: -8 + Math.sin(angle) * dist * t.value }, { scale: 1 - t.value * 0.6 }],
+  }));
+  return <Animated.View style={[{ position: "absolute", left: -2, top: -2, width: 4, height: 4, borderRadius: 2, backgroundColor: color }, style]} />;
 }
 
 // ── Effects ──────────────────────────────────────────────────────────────────
 
-const BURST_DOTS = 12;
+const BURST_DOTS = 16;
 
 function EffectSprite({ effect, x, y, reduced }: { effect: LiveEffect; x: number; y: number; reduced: boolean }) {
   if (effect.kind === "spark") return <Sparks effect={effect} x={x} y={y} reduced={reduced} />;
@@ -361,44 +636,113 @@ function EffectSprite({ effect, x, y, reduced }: { effect: LiveEffect; x: number
 function LabelSprite({ effect, x, y, reduced }: { effect: LiveEffect; x: number; y: number; reduced: boolean }) {
   const t = useSharedValue(reduced ? 1 : 0);
   useEffect(() => {
-    if (!reduced) t.value = withTiming(1, { duration: 1_200, easing: Easing.out(Easing.cubic) });
+    if (!reduced) t.value = withTiming(1, { duration: 1_300, easing: Easing.out(Easing.cubic) });
   }, [reduced, t]);
   const color = TONE_COLOR[effect.tone];
-  const label = useAnimatedStyle(() => ({ opacity: reduced ? 1 : 1 - Math.max(0, t.value - 0.6) / 0.4, transform: [{ translateY: -14 - t.value * 22 }, { scale: effect.kind === "stamp" ? 1.25 - 0.25 * Math.min(1, t.value * 4) : 1 }] }));
+  const isBurst = effect.kind === "burst";
+  const isStamp = effect.kind === "stamp";
+
+  const label = useAnimatedStyle(() => ({
+    opacity: reduced ? 1 : 1 - Math.max(0, t.value - 0.62) / 0.38,
+    transform: [
+      { translateY: isStamp ? -10 : -14 - t.value * 26 },
+      { scale: isStamp ? 1.5 - 0.5 * Math.min(1, t.value * 5) : isBurst ? 0.7 + 0.5 * Math.min(1, t.value * 3.5) : 1 },
+      { rotate: isStamp ? "-8deg" : "0deg" },
+    ],
+  }));
+
+  const ring = useAnimatedStyle(() => ({
+    opacity: (1 - t.value) * 0.85,
+    transform: [{ scale: 0.3 + t.value * 2.1 }],
+  }));
 
   return (
     <View pointerEvents="none" style={{ position: "absolute", left: x, top: y }}>
-      {effect.kind === "burst" && !reduced
-        ? Array.from({ length: BURST_DOTS }, (_, i) => <BurstDot key={i} index={i} t={t} color={color} />)
+      {(isBurst || effect.kind === "pulse") && !reduced ? (
+        <Animated.View
+          style={[
+            {
+              position: "absolute",
+              left: -18,
+              top: -18,
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              borderWidth: isBurst ? 2 : 1.2,
+              borderColor: color,
+            },
+            ring,
+          ]}
+        />
+      ) : null}
+      {isBurst && !reduced
+        ? Array.from({ length: BURST_DOTS }, (_, i) => <BurstDot key={i} index={i} t={t} color={CONFETTI_COLORS[i % CONFETTI_COLORS.length] ?? color} />)
         : null}
-      <Animated.Text
-        entering={FadeIn.duration(120)}
-        style={[{ position: "absolute", left: -60, width: 120, textAlign: "center", fontFamily: MONO, fontSize: effect.kind === "burst" ? 13 : 11, fontWeight: "900", letterSpacing: 1, color, textShadowColor: "#000", textShadowRadius: 4 }, label]}
-      >
-        {effect.text}
-      </Animated.Text>
+      <Animated.View entering={FadeIn.duration(110)} style={[{ position: "absolute", left: -68, width: 136, alignItems: "center" }, label]}>
+        <View
+          style={{
+            borderRadius: isStamp ? 5 : 999,
+            borderWidth: isStamp ? 2 : 1,
+            borderColor: color,
+            backgroundColor: "#14100be8",
+            paddingHorizontal: isStamp ? 7 : 8,
+            paddingVertical: isBurst ? 3 : 2,
+          }}
+        >
+          <Text style={{ fontFamily: MONO, fontSize: isBurst ? 13 : 11, fontWeight: "900", letterSpacing: 1.2, color }}>
+            {isBurst ? `★ ${effect.text}` : effect.text}
+          </Text>
+        </View>
+      </Animated.View>
     </View>
   );
 }
 
 function BurstDot({ index, t, color }: { index: number; t: SharedValue<number>; color: string }) {
   const angle = (index / BURST_DOTS) * Math.PI * 2;
+  const dist = 42 + (index % 3) * 14;
   const style = useAnimatedStyle(() => ({
     opacity: 1 - t.value,
-    transform: [{ translateX: Math.cos(angle) * 46 * t.value }, { translateY: Math.sin(angle) * 46 * t.value + 30 * t.value * t.value }],
+    transform: [
+      { translateX: Math.cos(angle) * dist * t.value },
+      { translateY: Math.sin(angle) * dist * t.value + 28 * t.value * t.value },
+      { rotate: `${t.value * (index % 2 ? 260 : -260)}deg` },
+    ],
   }));
-  return <Animated.View style={[{ position: "absolute", left: -2, top: -2, width: 4, height: 4, borderRadius: 2, backgroundColor: color }, style]} />;
+  return (
+    <Animated.View
+      style={[
+        {
+          position: "absolute",
+          left: -2.5,
+          top: -2.5,
+          width: index % 3 === 0 ? 6 : 4,
+          height: index % 3 === 0 ? 4 : 6,
+          borderRadius: index % 2 ? 2 : 1,
+          backgroundColor: color,
+        },
+        style,
+      ]}
+    />
+  );
 }
 
-/** RESYNCING: the honest way to show a gap. Static noise over the stage, no guessing. */
+/** RESYNCING: the honest way to show a gap. Retro CRT scanline static over the stage. */
 function StaticOverlay({ reduced }: { reduced: boolean }) {
   const o = useSharedValue(0.35);
   useEffect(() => {
-    if (!reduced) o.value = withRepeat(withSequence(withTiming(0.15, { duration: 70 }), withDelay(40, withTiming(0.4, { duration: 60 }))), 8, true);
+    if (!reduced) o.value = withRepeat(withSequence(withTiming(0.16, { duration: 70 }), withDelay(40, withTiming(0.42, { duration: 60 }))), 8, true);
   }, [reduced, o]);
   const style = useAnimatedStyle(() => ({ opacity: o.value }));
   return (
-    <Animated.View pointerEvents="none" style={[{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: "#8a8a8a" }, style]} />
+    <Animated.View
+      pointerEvents="none"
+      style={[{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: "#2a241d", alignItems: "center", justifyContent: "center" }, style]}
+    >
+      <View style={{ borderRadius: 6, borderWidth: 1.5, borderColor: "#ffd27a", backgroundColor: "#120f0b", paddingHorizontal: 12, paddingVertical: 5 }}>
+        <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: "900", letterSpacing: 2, color: "#ffd27a" }}>RESYNCING SIGNAL…</Text>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -432,11 +776,29 @@ export function FloorView({
 
   return (
     <View style={{ width: scene.width, height: scene.height }}>
+      <StationBackdrop scene={scene} />
       <Belt scene={scene} running={running} reduced={reduced} />
       <Stations scene={scene} reduced={reduced} />
       {scene.overflow.map((o) => (
-        <View key={`over-${o.stationId}`} pointerEvents="none" style={{ position: "absolute", left: o.x - scene.parcel.w / 2, top: o.y - scene.parcel.h / 2, width: scene.parcel.w, height: scene.parcel.h, borderRadius: 5, borderWidth: 1, borderColor: STAGE.dash, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ fontFamily: MONO, fontSize: 10, color: STAGE.labelLit }}>+{o.count}</Text>
+        <View
+          key={`over-${o.stationId}`}
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: o.x - scene.parcel.w / 2,
+            top: o.y - scene.parcel.h / 2,
+            width: scene.parcel.w,
+            height: scene.parcel.h,
+            borderRadius: 6,
+            borderWidth: 1,
+            borderStyle: "dashed",
+            borderColor: STAGE.rail,
+            backgroundColor: "#18130d",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: "700", color: STAGE.labelLit }}>+{o.count}</Text>
         </View>
       ))}
       {scene.parcels.map((p) => (

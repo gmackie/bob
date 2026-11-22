@@ -6,11 +6,10 @@
  * iPad draw; parcels slide with a CSS transform transition, so every move is a real
  * coordinator transition. Motion level "minimal" freezes it (the page kills transitions).
  *
- * Slice 3 (BOB-91): the attempt stream the same socket carries for watched items drives
- * motion between transitions. New tail lines make a parcel type and throw sparks; named
- * commands (tests, builds, commits, pushes) and CI phases pop labels; a green CI run
- * bursts confetti. Station sprites animate only while their station holds items, scope
- * chips narrow the floor to one project or repo, and the floor grows and densifies with load.
+ * Slice 3+ (BOB-91 visual overhaul): retro-industrial brass & neon arcade cabinet powered
+ * by the live WebSocket stream — machined conveyor with rotating pulleys, custom animated
+ * multi-tone station machinery, tactile cartridge parcels with live per-phase CI LEDs and
+ * laser scanlines, multi-shape confetti shockwaves, and miniature CRT agent workstations.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
@@ -23,6 +22,7 @@ import { DesksRow } from "./desks-row";
 import { IssuePanel, ProjectBoard } from "./project-board";
 import {
   beatLine,
+  beatTone,
   busiestStation,
   chooseDesks,
   ciBeats,
@@ -38,6 +38,7 @@ import {
   floorSummary,
   hud,
   issueLabels,
+  liveCiPhases,
   liveScope,
   PARCEL_TONE,
   projectBoard,
@@ -49,7 +50,7 @@ import {
 } from "./floor-model";
 import type { Beat, BoardRow, CiMessage, EdgeView, FloorParcel, FloorScopeChip, LiveEffect, Scope } from "./floor-model";
 import type { BurstKind } from "./spectacle";
-import { SPRITE_KEYFRAMES, StationSprite } from "./station-sprites";
+import { BinIcon, SPRITE_KEYFRAMES, STATION_GLOW, StationSprite } from "./station-sprites";
 
 /**
  * Which items get a desk, sticky across views: an unchanged choice keeps the same array.
@@ -77,25 +78,32 @@ function useClock(ms: number): number {
 
 const ATTENTION_RING = { needs_human: "#e7a505", failed: "#ef5350", stalled: "#f59e0b", ok: "transparent" } as const;
 const TONE = { good: "#7dffb0", info: "#6fb4ff", warn: "#ffd27a", bad: "#ff6b6b" } as const;
-const CONFETTI = ["#7dffb0", "#ffd27a", "#6fb4ff", "#ff8ad8", "#d4850a", "#c39bff"];
+const PHASE_LED = { queued: "#4b3e2e", running: "#6fb4ff", passed: "#7dffb0", failed: "#ff6b6b", skipped: "#3a2f22", unknown: "#3a2f22" } as const;
+const CONFETTI = ["#7dffb0", "#ffd27a", "#6fb4ff", "#ff8ad8", "#d4850a", "#c39bff", "#ffffff"];
 /** How long a parcel keeps "typing" after its agent's last tail lines. */
 const TYPING_MS = 3_600;
 
 const KEYFRAMES = `
-  @keyframes floor-rise { from { opacity: 1; transform: translate(-50%, -14px); } to { opacity: 0; transform: translate(-50%, -44px); } }
-  @keyframes floor-stamp { 0% { opacity: 0; transform: translate(-50%, -50%) scale(2.4) rotate(-14deg); } 18% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-8deg); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1) rotate(-8deg); } }
-  @keyframes floor-burst-text { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.4); } 25% { opacity: 1; transform: translate(-50%, -150%) scale(1.35); } 100% { opacity: 0; transform: translate(-50%, -260%) scale(1); } }
-  @keyframes floor-confetti { from { opacity: 1; transform: translate(-50%, -50%) rotate(0); } to { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--rot)); } }
-  @keyframes floor-spark { from { opacity: 1; transform: translate(0, 0) scale(1); } to { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(.3); } }
-  @keyframes floor-spark-text { from { opacity: .95; transform: translate(-50%, -6px); } to { opacity: 0; transform: translate(-50%, -22px); } }
-  @keyframes floor-bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-3px) } }
-  @keyframes floor-belt { to { background-position: 18px 6px; } }
-  @keyframes floor-static { 0%,100% { opacity: .3 } 50% { opacity: .12 } }
-  @keyframes floor-type { 0%,100% { transform: translateY(0); opacity: .45 } 50% { transform: translateY(-2.5px); opacity: 1 } }
-  @keyframes floor-typing-out { 0%,85% { opacity: 1 } 100% { opacity: 0 } }
-  @keyframes floor-wobble { 0%,100% { rotate: 0deg } 25% { rotate: -2.5deg } 75% { rotate: 2.5deg } }
-  @keyframes floor-shimmer { from { background-position: -40px 0 } to { background-position: 40px 0 } }
-  @keyframes floor-ticker { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+  @keyframes floor-rise { 0% { opacity: 0; transform: translate(-50%, -4px) scale(.88); } 18% { opacity: 1; transform: translate(-50%, -18px) scale(1.04); } 100% { opacity: 0; transform: translate(-50%, -48px) scale(.98); } }
+  @keyframes floor-stamp { 0% { opacity: 0; transform: translate(-50%, -50%) scale(2.5) rotate(-16deg); } 16% { opacity: 1; transform: translate(-50%, -50%) scale(.95) rotate(-7deg); } 26% { transform: translate(-50%, -50%) scale(1.03) rotate(-8deg); } 82% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1) rotate(-8deg); } }
+  @keyframes floor-burst-text { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.35); } 24% { opacity: 1; transform: translate(-50%, -155%) scale(1.38); } 100% { opacity: 0; transform: translate(-50%, -270%) scale(1); } }
+  @keyframes floor-ring { 0% { opacity: .9; transform: translate(-50%, -50%) scale(.2); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(2.4); } }
+  @keyframes floor-confetti { from { opacity: 1; transform: translate(-50%, -50%) rotate(0) scale(1); } to { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--rot)) scale(.7); } }
+  @keyframes floor-spark { from { opacity: 1; transform: translate(0, 0) scale(1.1); } to { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(.2); } }
+  @keyframes floor-spark-text { 0% { opacity: 0; transform: translate(-50%, -2px) scale(.9); } 20% { opacity: 1; transform: translate(-50%, -12px) scale(1); } 100% { opacity: 0; transform: translate(-50%, -28px) scale(.95); } }
+  @keyframes floor-bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-3.5px) } }
+  @keyframes floor-sonar { 0% { opacity: .75; transform: scale(1) } 100% { opacity: 0; transform: scale(1.22, 1.45) } }
+  @keyframes floor-belt { to { background-position: 24px 0; } }
+  @keyframes floor-energy { 0% { left: -12%; opacity: 0; } 12% { opacity: .9; } 88% { opacity: .9; } 100% { left: 104%; opacity: 0; } }
+  @keyframes floor-pulley { to { transform: rotate(360deg); } }
+  @keyframes floor-static { 0%,100% { opacity: .34 } 50% { opacity: .14 } }
+  @keyframes floor-type { 0%,100% { transform: translateY(0); opacity: .4 } 50% { transform: translateY(-3px); opacity: 1 } }
+  @keyframes floor-typing-out { 0%,84% { opacity: 1 } 100% { opacity: 0 } }
+  @keyframes floor-wobble { 0%,100% { rotate: 0deg } 25% { rotate: -2.6deg } 75% { rotate: 2.6deg } }
+  @keyframes floor-scanline { 0% { transform: translateX(-110%); opacity: 0; } 20% { opacity: .7; } 80% { opacity: .7; } 100% { transform: translateX(220%); opacity: 0; } }
+  @keyframes floor-led-pulse { 0%,100% { opacity: 1; filter: brightness(1.25); } 50% { opacity: .45; filter: brightness(.85); } }
+  @keyframes floor-thruster { 0%,100% { opacity: .45; transform: scaleX(.92); } 50% { opacity: .95; transform: scaleX(1.06); } }
+  @keyframes floor-ticker { from { opacity: 0; transform: translateY(5px) } to { opacity: 1; transform: none } }
   ${SPRITE_KEYFRAMES}
 `;
 
@@ -107,23 +115,42 @@ const spread = (seed: string, i: number) => {
 };
 
 function Confetti({ e, x, y }: { e: LiveEffect; x: number; y: number }) {
+  const color = TONE[e.tone];
   return (
     <>
-      {Array.from({ length: 14 }, (_, i) => {
-        const angle = (i / 14) * Math.PI * 2 + spread(e.beatId, i) * 0.6;
-        const dist = 34 + spread(e.beatId, i + 50) * 46;
+      {/* Expanding shockwave ring */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute rounded-full border-2"
+        style={{
+          left: x,
+          top: y,
+          width: 44,
+          height: 44,
+          borderColor: color,
+          boxShadow: `0 0 12px ${color}`,
+          animation: "floor-ring .9s cubic-bezier(.15,.7,.3,1) forwards",
+        }}
+      />
+      {Array.from({ length: 20 }, (_, i) => {
+        const angle = (i / 20) * Math.PI * 2 + spread(e.beatId, i) * 0.55;
+        const dist = 36 + spread(e.beatId, i + 50) * 56;
+        const diamond = i % 4 === 0;
+        const c = CONFETTI[i % CONFETTI.length] ?? color;
         const style = {
           left: x,
           top: y,
-          width: i % 3 ? 5 : 3,
-          height: i % 3 ? 3 : 7,
-          backgroundColor: CONFETTI[i % CONFETTI.length],
+          width: diamond ? 6 : i % 3 ? 6 : 3.5,
+          height: diamond ? 6 : i % 3 ? 3.5 : 8,
+          backgroundColor: c,
+          boxShadow: `0 0 5px ${c}88`,
+          borderRadius: diamond ? 1 : i % 2 ? 99 : 1,
           "--dx": `${Math.cos(angle) * dist}px`,
-          "--dy": `${Math.sin(angle) * dist + 16}px`,
-          "--rot": `${(spread(e.beatId, i + 99) - 0.5) * 720}deg`,
-          animation: `floor-confetti 1.3s cubic-bezier(.15,.7,.3,1) forwards`,
+          "--dy": `${Math.sin(angle) * dist + 18}px`,
+          "--rot": `${(spread(e.beatId, i + 99) - 0.5) * 820}deg`,
+          animation: `floor-confetti 1.4s cubic-bezier(.14,.74,.28,1) ${Math.floor((i % 3) * 35)}ms forwards`,
         } as CSSProperties;
-        return <span key={i} aria-hidden className="pointer-events-none absolute rounded-[1px]" style={style} />;
+        return <span key={i} aria-hidden className="pointer-events-none absolute" style={style} />;
       })}
     </>
   );
@@ -132,22 +159,35 @@ function Confetti({ e, x, y }: { e: LiveEffect; x: number; y: number }) {
 function Sparks({ e, x, y, hue }: { e: LiveEffect; x: number; y: number; hue: number }) {
   return (
     <>
-      {Array.from({ length: 5 }, (_, i) => {
-        const angle = -Math.PI / 2 + (spread(e.beatId, i) - 0.5) * 2.4;
-        const dist = 12 + spread(e.beatId, i + 20) * 16;
+      {Array.from({ length: 7 }, (_, i) => {
+        const angle = -Math.PI / 2 + (spread(e.beatId, i) - 0.5) * 2.5;
+        const dist = 14 + spread(e.beatId, i + 20) * 20;
+        const color = e.tone === "warn" ? TONE.warn : e.tone === "good" ? TONE.good : `hsl(${hue} 92% 74%)`;
         const style = {
-          left: x + (spread(e.beatId, i + 40) - 0.5) * 30,
-          top: y - 8,
-          backgroundColor: e.tone === "warn" ? TONE.warn : `hsl(${hue} 90% 72%)`,
-          boxShadow: `0 0 4px hsl(${hue} 90% 60%)`,
+          left: x + (spread(e.beatId, i + 40) - 0.5) * 34,
+          top: y - 10,
+          backgroundColor: color,
+          boxShadow: `0 0 6px ${color}`,
           "--dx": `${Math.cos(angle) * dist}px`,
           "--dy": `${Math.sin(angle) * dist}px`,
-          animation: `floor-spark .7s ease-out ${i * 40}ms forwards`,
+          animation: `floor-spark .75s ease-out ${i * 35}ms forwards`,
         } as CSSProperties;
-        return <span key={i} aria-hidden className="pointer-events-none absolute h-1 w-1 rounded-full opacity-0" style={style} />;
+        return <span key={i} aria-hidden className="pointer-events-none absolute h-[4.5px] w-[4.5px] rounded-full opacity-0" style={style} />;
       })}
       {e.text ? (
-        <div aria-hidden className="pointer-events-none absolute whitespace-nowrap font-mono text-[9px] font-bold tracking-widest" style={{ left: x, top: y - 12, color: TONE[e.tone], textShadow: "0 0 4px #000", animation: "floor-spark-text 1.1s ease-out forwards" }}>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute whitespace-nowrap rounded-full border px-1.5 py-[1px] font-mono text-[9px] font-extrabold tracking-widest"
+          style={{
+            left: x,
+            top: y - 16,
+            color: TONE[e.tone],
+            borderColor: `${TONE[e.tone]}66`,
+            backgroundColor: "#120f0be6",
+            boxShadow: `0 0 8px ${TONE[e.tone]}44`,
+            animation: "floor-spark-text 1.15s ease-out forwards",
+          }}
+        >
           {e.text}
         </div>
       ) : null}
@@ -156,7 +196,7 @@ function Sparks({ e, x, y, hue }: { e: LiveEffect; x: number; y: number; hue: nu
 }
 
 function EffectSprite({ e, x, y, hue }: { e: LiveEffect; x: number; y: number; hue: number }) {
-  const label = { color: TONE[e.tone], textShadow: "0 0 6px #000" };
+  const color = TONE[e.tone];
   switch (e.kind) {
     case "spark":
       return <Sparks e={e} x={x} y={y} hue={hue} />;
@@ -164,47 +204,131 @@ function EffectSprite({ e, x, y, hue }: { e: LiveEffect; x: number; y: number; h
       return (
         <>
           <Confetti e={e} x={x} y={y} />
-          <div aria-hidden className="pointer-events-none absolute whitespace-nowrap font-mono text-[15px] font-black tracking-widest" style={{ ...label, left: x, top: y, animation: "floor-burst-text 1.6s ease-out forwards" }}>
-            {e.text}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute whitespace-nowrap rounded-md border px-2 py-0.5 font-mono text-[14px] font-black tracking-[0.16em]"
+            style={{
+              left: x,
+              top: y,
+              color,
+              borderColor: `${color}aa`,
+              backgroundColor: "#120f0be6",
+              textShadow: `0 0 10px ${color}`,
+              boxShadow: `0 0 18px ${color}55`,
+              animation: "floor-burst-text 1.65s ease-out forwards",
+            }}
+          >
+            ★ {e.text}
           </div>
         </>
       );
     case "stamp":
       return (
-        <div aria-hidden className="pointer-events-none absolute whitespace-nowrap rounded border-2 px-1.5 font-mono text-[11px] font-black tracking-widest" style={{ ...label, borderColor: TONE[e.tone], left: x, top: y, backgroundColor: "#120f0bcc", animation: "floor-stamp 1.6s ease-out forwards" }}>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute whitespace-nowrap rounded border-2 px-2 py-0.5 font-mono text-[11px] font-black tracking-[0.14em]"
+          style={{
+            color,
+            borderColor: color,
+            left: x,
+            top: y,
+            backgroundColor: "#14100be8",
+            boxShadow: `0 0 14px ${color}55, inset 0 0 0 1px ${color}44`,
+            textShadow: `0 0 6px ${color}88`,
+            animation: "floor-stamp 1.65s ease-out forwards",
+          }}
+        >
           {e.text}
         </div>
       );
     default:
       return (
-        <div aria-hidden className="pointer-events-none absolute whitespace-nowrap font-mono text-[12px] font-black tracking-widest" style={{ ...label, left: x, top: y, animation: "floor-rise 1.4s ease-out forwards" }}>
-          {e.text}
-        </div>
+        <>
+          <span
+            aria-hidden
+            className="pointer-events-none absolute rounded-full border"
+            style={{
+              left: x,
+              top: y,
+              width: 24,
+              height: 24,
+              borderColor: `${color}88`,
+              animation: "floor-ring .8s ease-out forwards",
+            }}
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute whitespace-nowrap rounded-full border px-2 py-[1px] font-mono text-[11px] font-black tracking-widest"
+            style={{
+              left: x,
+              top: y,
+              color,
+              borderColor: `${color}66`,
+              backgroundColor: "#14100be0",
+              textShadow: `0 0 6px ${color}66`,
+              animation: "floor-rise 1.4s ease-out forwards",
+            }}
+          >
+            {e.text}
+          </div>
+        </>
       );
   }
 }
 
-/** The thin CI meter under a parcel: fill is settled phases, colour is the run's state. */
+/** Live segmented CI LED strip tucked under a parcel: each real WebSocket phase lights its own pip. */
 function CiMeter({ ci, w }: { ci: CiMessage | undefined; w: number }) {
-  if (!ci?.available || !ci.phases.length) return null;
-  const failed = ci.phases.some((p) => p.status === "failed");
-  const progress = ciProgress(ci.phases);
-  const running = !failed && progress < 1;
-  const color = failed ? TONE.bad : progress >= 1 ? TONE.good : TONE.info;
+  const phases = liveCiPhases(ci, 8);
+  if (!phases.length) return null;
+  const progress = ciProgress(phases);
+  const failed = phases.some((p) => p.status === "failed");
+  const allGreen = !failed && progress >= 1;
   return (
-    <span aria-hidden className="absolute -bottom-[5px] left-0.5 h-[3px] overflow-hidden rounded-full bg-black/50" style={{ width: w - 4 }}>
-      <span
-        className="block h-full rounded-full transition-[width] duration-700"
-        style={{
-          width: `${Math.max(8, progress * 100)}%`,
-          backgroundColor: color,
-          backgroundImage: running ? "linear-gradient(90deg, transparent, #ffffff88, transparent)" : undefined,
-          backgroundSize: "40px 100%",
-          backgroundRepeat: "no-repeat",
-          animation: running ? "floor-shimmer 1.1s linear infinite" : undefined,
-        }}
-      />
+    <span
+      aria-hidden
+      className="absolute -bottom-[6px] left-[2px] flex h-[4px] items-center gap-[1.5px] rounded-full bg-[#090705] px-[1.5px] py-[0.5px]"
+      style={{
+        width: w - 4,
+        boxShadow: allGreen ? "0 0 6px #7dffb077" : failed ? "0 0 6px #ff6b6b77" : "0 0 5px #6fb4ff44",
+      }}
+    >
+      {phases.map((phase, i) => {
+        const running = phase.status === "running";
+        const color = PHASE_LED[phase.status];
+        return (
+          <span
+            key={`${phase.name}:${i}`}
+            className="h-[2.5px] flex-1 rounded-full transition-colors duration-300"
+            style={{
+              backgroundColor: color,
+              boxShadow: running || phase.status === "passed" || phase.status === "failed" ? `0 0 4px ${color}` : undefined,
+              animation: running ? "floor-led-pulse .85s ease-in-out infinite" : undefined,
+            }}
+          />
+        );
+      })}
     </span>
+  );
+}
+
+/** Machined brass conveyor pulley wheel at either end of the belt. */
+function BeltPulley({ x, y, running, speed }: { x: number; y: number; running: boolean; speed: number }) {
+  return (
+    <svg
+      aria-hidden
+      width={20}
+      height={20}
+      viewBox="0 0 20 20"
+      className="pointer-events-none absolute"
+      style={{ left: x - 10, top: y - 10 }}
+    >
+      <circle cx="10" cy="10" r="8.5" fill="#1d1710" stroke="#78603c" strokeWidth="1.6" />
+      <g style={running ? { animation: `floor-pulley ${speed * 1.8}s linear infinite`, transformOrigin: "10px 10px" } : undefined}>
+        <line x1="10" y1="3.5" x2="10" y2="16.5" stroke="#b5945d" strokeWidth="1.5" strokeLinecap="round" />
+        <line x1="3.5" y1="10" x2="16.5" y2="10" stroke="#b5945d" strokeWidth="1.5" strokeLinecap="round" />
+      </g>
+      <circle cx="10" cy="10" r="2.6" fill="#ffd27a" stroke="#17130e" strokeWidth="1" />
+    </svg>
   );
 }
 
@@ -213,23 +337,60 @@ function ScopeChips({ chips, scope, onScope }: { chips: FloorScopeChip[]; scope:
   const active = (c: FloorScopeChip) => (c.level === "repo" ? scope.repoKey === c.scope.repoKey : scope.startupId === c.scope.startupId);
   return (
     <>
-      {chips.map((c) => (
-        <button
-          key={c.key}
-          type="button"
-          onClick={() => onScope(active(c) ? (c.level === "repo" ? { ...(scope.startupId ? { startupId: scope.startupId } : {}) } : {}) : c.scope)}
-          aria-pressed={active(c)}
-          className="flex items-center gap-1 rounded-full border px-2 py-[1px] font-mono text-[10px] normal-case tracking-normal transition-colors"
-          style={{ borderColor: active(c) ? "#ffd27a" : "#3a2f22", color: active(c) ? "#ffd27a" : "#8a7758", backgroundColor: active(c) ? "#2a2116" : "transparent" }}
-          title={`${c.level === "repo" ? "Repo" : "Project"} ${c.label}: ${c.count} items${c.attention ? `, ${c.attention} need attention` : ""}`}
-        >
-          {c.hue !== null ? <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: `hsl(${c.hue} 58% 56%)` }} /> : null}
-          {c.label}
-          <span className="opacity-70">{c.count}</span>
-          {c.attention ? <span className="text-[#e7a505]">!</span> : null}
-        </button>
-      ))}
+      {chips.map((c) => {
+        const isOn = active(c);
+        return (
+          <button
+            key={c.key}
+            type="button"
+            onClick={() => onScope(isOn ? (c.level === "repo" ? { ...(scope.startupId ? { startupId: scope.startupId } : {}) } : {}) : c.scope)}
+            aria-pressed={isOn}
+            className="flex items-center gap-1.5 rounded-full border px-2.5 py-[2px] font-mono text-[10px] normal-case tracking-normal transition-all hover:brightness-125"
+            style={{
+              borderColor: isOn ? "#ffd27a" : "#3a2e20",
+              color: isOn ? "#ffd27a" : "#a08b69",
+              backgroundColor: isOn ? "#2c2215" : "#18130d",
+              boxShadow: isOn ? "0 0 10px #d4850a38, inset 0 1px 0 #ffd27a33" : "inset 0 1px 0 #ffffff08",
+            }}
+            title={`${c.level === "repo" ? "Repo" : "Project"} ${c.label}: ${c.count} items${c.attention ? `, ${c.attention} need attention` : ""}`}
+          >
+            {c.hue !== null ? (
+              <span
+                className="h-2 w-2 rounded-sm"
+                style={{
+                  backgroundColor: `hsl(${c.hue} 70% 56%)`,
+                  boxShadow: isOn ? `0 0 6px hsl(${c.hue} 80% 60%)` : undefined,
+                }}
+              />
+            ) : (
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: isOn ? "#ffd27a" : "#6a5638" }} />
+            )}
+            <span className="font-semibold">{c.label}</span>
+            <span className="rounded bg-black/35 px-1 text-[9px] tabular-nums opacity-85">{c.count}</span>
+            {c.attention ? <span className="font-black text-[#e7a505]">!</span> : null}
+          </button>
+        );
+      })}
     </>
+  );
+}
+
+function HudTile({ label, value, color, lit, title }: { label: string; value: number | string; color: string; lit?: boolean; title?: string }) {
+  return (
+    <span
+      title={title}
+      className="inline-flex items-baseline gap-1.5 rounded border px-2 py-[2px]"
+      style={{
+        backgroundColor: "#0c0907",
+        borderColor: lit ? `${color}55` : "#292117",
+        boxShadow: lit ? `inset 0 0 8px ${color}18` : "inset 0 1px 2px #00000080",
+      }}
+    >
+      <span className="text-[9px] tracking-[0.14em] text-[#8a7758]">{label}</span>
+      <b className="text-[13px] font-black tabular-nums" style={{ color, textShadow: lit ? `0 0 8px ${color}66` : undefined }}>
+        {value}
+      </b>
+    </span>
   );
 }
 
@@ -287,10 +448,13 @@ export function FloorPanel({ onCue }: { onCue?: (kind: BurstKind) => void } = {}
       if (fx.length) setEffects((cur) => [...expire(cur, at), ...fx].slice(-32));
       const active = fresh.filter((b) => b.kind === "agent.activity" && b.subject.itemId);
       if (active.length) setTyping((cur) => ({ ...cur, ...Object.fromEntries(active.map((b) => [b.subject.itemId!, at])) }));
-      // Outcomes the floor saw first also light the full-screen spectacle (spectacle level only draws them).
+      // Outcomes the floor saw first also light the full-screen spectacle & chimes immediately.
       for (const b of fresh) {
         if (b.kind === "ci.green") cueRef.current?.("pr");
         else if (b.kind === "ci.phase" && b.data?.to === "failed") cueRef.current?.("failure");
+        else if (b.kind === "item.failed") cueRef.current?.("failure");
+        else if (b.kind === "milestone" && b.data?.milestone === "merged") cueRef.current?.("merge");
+        else if (b.kind === "milestone" && b.data?.milestone === "production-verified") cueRef.current?.("deploy");
       }
     },
     [log],
@@ -343,26 +507,71 @@ export function FloorPanel({ onCue }: { onCue?: (kind: BurstKind) => void } = {}
   const gap = effects.some((e) => e.kind === "static");
   const ticker = tickerBeats(log.recent(12), 3);
   const beltSpeed = Math.max(0.35, 1.2 - counts.inFlight * 0.08);
+  const beltRunning = counts.inFlight > 0;
+  const beltStations = scene ? scene.stations.filter((s) => s.kind === "belt") : [];
+  const binStations = scene ? scene.stations.filter((s) => s.kind === "bin") : [];
+  const colW = scene && beltStations.length ? (scene.width - 24) / beltStations.length : 0;
 
   return (
-    <section className="mx-4 mb-3 rounded-lg border border-white/10 bg-[#120f0b]" aria-label="The Floor: SDLC items by stage">
+    <section
+      className="relative mx-4 mb-3 overflow-hidden rounded-xl border border-[#3d3020] shadow-[0_12px_36px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,210,122,0.12)]"
+      style={{
+        background: "radial-gradient(ellipse 90% 60% at 50% 0%, #1c150e 0%, #120e0a 58%, #0d0a07 100%)",
+      }}
+      aria-label="The Floor: SDLC items by stage"
+    >
       <style>{KEYFRAMES}</style>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 pt-2 font-mono text-[10px] tracking-widest text-[#8a7758]">
-        <span className="text-[#ffd27a]">THE FLOOR</span>
-        <span>AGENTS <b className="text-[13px] text-[#ffd27a]">{counts.agents}</b></span>
-        <span>IN FLIGHT <b className="text-[13px] text-[#ffd27a]">{counts.inFlight}</b></span>
-        <span>CI <b className="text-[13px] text-[#6fb4ff]">{counts.ci}</b></span>
-        <span>NEEDS YOU <b className="text-[13px]" style={{ color: counts.needsYou ? "#e7a505" : "#ffd27a" }}>{counts.needsYou}</b></span>
-        <span title="Sat too long where the system should have moved it on">STALLED <b className="text-[13px]" style={{ color: counts.stalled ? "#ff9f43" : "#ffd27a" }}>{counts.stalled}</b></span>
-        <span>SHIPPED <b className="text-[13px] text-[#7dffb0]">{counts.shipped}</b></span>
-        <span>FAILED <b className="text-[13px]" style={{ color: counts.failed ? "#ff6b6b" : "#ffd27a" }}>{counts.failed}</b></span>
-        <span title="Reached production since local midnight">TODAY <b className="text-[13px] text-[#7dffb0]">{today ?? "–"}</b></span>
-        <span className="ml-auto flex min-w-0 max-w-[45%] flex-col items-end normal-case tracking-normal" aria-live="polite">
-          {ticker.map((b, i) => (
-            <span key={b.id} className="max-w-full truncate" style={{ opacity: 1 - i * 0.3, animation: i === 0 ? "floor-ticker .3s ease-out" : undefined }}>
-              {beatLine(b)}
-            </span>
-          ))}
+      {/* Top arcade marquee & scoreboard HUD */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-[#2c2318] bg-[#16110c]/90 px-3 py-2 font-mono text-[10px] tracking-widest text-[#8a7758]">
+        <span className="mr-1 flex items-center gap-2">
+          <span
+            className="inline-block h-2 w-2 rounded-full"
+            style={{
+              backgroundColor: connection === "live" ? "#7dffb0" : "#ffd27a",
+              boxShadow: connection === "live" ? "0 0 8px #7dffb0" : "0 0 6px #ffd27a",
+              animation: connection === "live" ? "floor-led-pulse 2.2s ease-in-out infinite" : undefined,
+            }}
+          />
+          <span className="font-black tracking-[0.2em] text-[#ffd27a]" style={{ textShadow: "0 0 10px #d4850a66" }}>
+            BOB ARCADE
+          </span>
+        </span>
+        <HudTile label="AGENTS" value={counts.agents} color="#6fb4ff" lit={counts.agents > 0} />
+        <HudTile label="IN FLIGHT" value={counts.inFlight} color="#ffd27a" lit={counts.inFlight > 0} />
+        <HudTile label="CI" value={counts.ci} color="#7fd3e8" lit={counts.ci > 0} />
+        <HudTile label="NEEDS YOU" value={counts.needsYou} color={counts.needsYou ? "#e7a505" : "#8a7758"} lit={counts.needsYou > 0} />
+        <HudTile
+          label="STALLED"
+          value={counts.stalled}
+          color={counts.stalled ? "#ff9f43" : "#8a7758"}
+          lit={counts.stalled > 0}
+          title="Sat too long where the system should have moved it on"
+        />
+        <HudTile label="SHIPPED" value={counts.shipped} color="#7dffb0" lit={counts.shipped > 0} />
+        <HudTile label="FAILED" value={counts.failed} color={counts.failed ? "#ff6b6b" : "#8a7758"} lit={counts.failed > 0} />
+        <HudTile label="TODAY" value={today ?? "–"} color="#7dffb0" lit={Boolean(today)} title="Reached production since local midnight" />
+        {/* Dot-matrix live telemetry ticker */}
+        <span
+          className="ml-auto flex min-w-0 max-w-[40%] flex-col items-end gap-[1px] rounded border border-[#292016] bg-[#0b0907]/90 px-2 py-1 normal-case tracking-normal"
+          aria-live="polite"
+        >
+          {ticker.length ? (
+            ticker.map((b, i) => {
+              const c = TONE[beatTone(b)];
+              return (
+                <span
+                  key={b.id}
+                  className="flex max-w-full items-center gap-1.5 text-[10px]"
+                  style={{ opacity: 1 - i * 0.28, animation: i === 0 ? "floor-ticker .3s ease-out" : undefined }}
+                >
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: c, boxShadow: i === 0 ? `0 0 6px ${c}` : undefined }} />
+                  <span className="truncate text-[#d8c7a8]">{beatLine(b)}</span>
+                </span>
+              );
+            })
+          ) : (
+            <span className="text-[10px] text-[#6a5638]">Listening for live WebSocket beats…</span>
+          )}
         </span>
       </div>
       {board ? (
@@ -372,61 +581,181 @@ export function FloorPanel({ onCue }: { onCue?: (kind: BurstKind) => void } = {}
           onSelect={(row) => { setProject(row); setIssueId(null); }}
         />
       ) : null}
-      {project ? <div className="px-3 pb-1 font-mono text-[11px] text-[#ffd27a]">{project.name}{scene && scene.backlog > 0 ? <span className="ml-3 text-[#8a7758]">BACKLOG {scene.backlog}</span> : null}</div> : null}
+      {project ? (
+        <div className="flex items-center gap-3 border-b border-[#241c13] bg-[#16110b] px-3 py-1 font-mono text-[11px] text-[#ffd27a]">
+          <span className="h-2 w-2 rounded-full bg-[#ffd27a]" />
+          <span className="font-bold">{project.name}</span>
+          {scene && scene.backlog > 0 ? <span className="rounded bg-[#241d15] px-1.5 py-[1px] text-[10px] text-[#a08b69]">BACKLOG {scene.backlog}</span> : null}
+        </div>
+      ) : null}
       {scopes.projects.length || scopes.repos.length ? (
-        <div className="flex flex-wrap items-center gap-1.5 px-3 pt-1.5" aria-label="Scope the floor">
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-[#241c13] bg-[#130f0a]/80 px-3 py-1.5" aria-label="Scope the floor">
+          <span className="mr-1 font-mono text-[9px] tracking-widest text-[#6a5638]">SCOPE</span>
           <ScopeChips chips={scopes.projects} scope={scope} onScope={setScope} />
-          {scopes.projects.length && scopes.repos.length ? <span className="mx-1 h-3 w-px bg-[#3a2f22]" /> : null}
+          {scopes.projects.length && scopes.repos.length ? <span className="mx-1 h-3.5 w-px bg-[#3a2f22]" /> : null}
           <ScopeChips chips={scopes.repos} scope={scope} onScope={setScope} />
         </div>
       ) : null}
-      <div ref={boxRef} className="relative overflow-hidden transition-[height] duration-500" style={{ height }}>
+      {/* Main Factory Floor Stage */}
+      <div
+        ref={boxRef}
+        className="relative overflow-hidden transition-[height] duration-500"
+        style={{
+          height,
+          backgroundImage: "radial-gradient(rgba(255, 210, 122, 0.07) 1px, transparent 1px)",
+          backgroundSize: "18px 18px",
+        }}
+      >
         {view.epoch === null ? (
-          <div className="p-4 font-mono text-xs text-white/40">waiting for the SDLC edge…</div>
+          <div className="flex h-full items-center justify-center font-mono text-xs tracking-widest text-[#8a7758]">
+            waiting for the SDLC edge…
+          </div>
         ) : scene ? (
           <>
+            {/* Ambient overhead stage cones & lane dividers for occupied belt stations */}
+            {beltStations.map((s, idx) => {
+              const lit = s.count > 0;
+              const glow = s.attention && s.attention !== "ok" ? ATTENTION_RING[s.attention] : STATION_GLOW[s.id];
+              return (
+                <div
+                  key={`bay-${s.id}`}
+                  aria-hidden
+                  className="pointer-events-none absolute top-0 bottom-[26px]"
+                  style={{
+                    left: s.x - colW / 2,
+                    width: colW,
+                    borderLeft: idx > 0 ? "1px dashed rgba(106, 86, 56, 0.16)" : undefined,
+                    background: lit ? `radial-gradient(ellipse 80% 70% at 50% 16%, ${glow}18 0%, transparent 72%)` : undefined,
+                  }}
+                />
+              );
+            })}
+
+            {/* Machined industrial conveyor belt */}
             <div
               aria-hidden
-              className="absolute rounded-full"
+              className="pointer-events-none absolute overflow-hidden rounded-full border border-[#5c4830]"
               style={{
                 left: scene.belt.x1,
-                top: scene.belt.y1 - 7,
+                top: scene.belt.y1 - 9,
                 width: scene.belt.x2 - scene.belt.x1,
-                height: 14,
-                backgroundColor: "#3a2f22",
-                backgroundImage: "repeating-linear-gradient(90deg, #6a5638 0 8px, transparent 8px 18px)",
-                backgroundSize: "18px 2px",
-                backgroundRepeat: "repeat-x",
-                backgroundPosition: "0 6px",
-                animation: counts.inFlight ? `floor-belt ${beltSpeed}s linear infinite` : undefined,
+                height: 18,
+                backgroundColor: "#211a12",
+                boxShadow: beltRunning
+                  ? "0 3px 14px rgba(0,0,0,0.65), inset 0 2px 4px rgba(0,0,0,0.7), 0 0 12px rgba(212,133,10,0.22)"
+                  : "0 2px 8px rgba(0,0,0,0.5), inset 0 2px 4px rgba(0,0,0,0.7)",
               }}
-            />
+            >
+              {/* Metallic upper & lower guide rails */}
+              <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-[#5a4730] via-[#8c7048] to-[#5a4730] opacity-70" />
+              <div className="absolute inset-x-0 bottom-0 h-[2px] bg-[#0e0b08]" />
+              {/* Moving chevron treads */}
+              <div
+                className="absolute inset-x-0 top-[3px] bottom-[3px]"
+                style={{
+                  backgroundImage:
+                    "repeating-linear-gradient(120deg, rgba(212,154,68,0.42) 0 4px, transparent 4px 12px), repeating-linear-gradient(60deg, rgba(212,154,68,0.22) 0 4px, transparent 4px 12px)",
+                  backgroundSize: "24px 100%",
+                  animation: beltRunning ? `floor-belt ${beltSpeed}s linear infinite` : undefined,
+                }}
+              />
+              {/* Subtle warm power vein & gliding energy pulses when items are in flight */}
+              {beltRunning ? (
+                <>
+                  <div className="absolute inset-x-2 top-1/2 h-[1.5px] -translate-y-1/2 bg-gradient-to-r from-transparent via-[#ffd27a]/45 to-transparent" />
+                  {[0, 1].map((idx) => (
+                    <span
+                      key={idx}
+                      className="absolute top-1/2 h-[4px] w-[28px] -translate-y-1/2 rounded-full"
+                      style={{
+                        background: "linear-gradient(90deg, transparent, #ffd27a, #ffffff, transparent)",
+                        boxShadow: "0 0 8px #ffd27a99",
+                        animation: `floor-energy ${beltSpeed * 3.4}s linear ${idx * beltSpeed * 1.7}s infinite`,
+                      }}
+                    />
+                  ))}
+                </>
+              ) : null}
+            </div>
+            <BeltPulley x={scene.belt.x1 + 4} y={scene.belt.y1} running={beltRunning} speed={beltSpeed} />
+            <BeltPulley x={scene.belt.x2 - 4} y={scene.belt.y1} running={beltRunning} speed={beltSpeed} />
+
+            {/* Recessed floor divider above Scrap & Cancelled bins */}
+            {binStations[0] ? (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-3 border-t border-dashed border-[#362b1d]"
+                style={{ top: binStations[0].y - 8 }}
+              />
+            ) : null}
+
+            {/* Stations & custom machinery sprites */}
             {scene.stations.map((s) =>
               s.kind === "belt" ? (
                 <div key={s.id} aria-hidden>
-                  <StationSprite id={s.id} active={s.count > 0} x={s.x} y={s.y} color={s.attention && s.attention !== "ok" ? ATTENTION_RING[s.attention] : s.count ? "#d4850a" : "#4a3d2c"} />
-                  <div className="absolute w-[100px] text-center font-mono text-[10px] tracking-widest" style={{ left: s.x - 50, top: s.y - 28, color: s.count ? "#ffd27a" : "#8a7758" }}>
-                    {s.label.toUpperCase()}
-                    {s.count ? ` ${s.count}` : ""}
+                  <StationSprite
+                    id={s.id}
+                    active={s.count > 0}
+                    color={s.attention && s.attention !== "ok" ? ATTENTION_RING[s.attention] : s.count ? STATION_GLOW[s.id] : "#5e4e3a"}
+                    x={s.x}
+                    y={s.y}
+                  />
+                  <div
+                    className="absolute flex w-[112px] items-center justify-center gap-1 text-center font-mono text-[10px] font-bold tracking-[0.14em]"
+                    style={{ left: s.x - 56, top: s.y - 31, color: s.count ? "#ffd27a" : "#78664b" }}
+                  >
+                    <span>{s.label.toUpperCase()}</span>
+                    {s.count ? (
+                      <span
+                        className="rounded-full px-1.5 py-[0.5px] text-[9px] font-black tabular-nums"
+                        style={{
+                          backgroundColor: s.attention && s.attention !== "ok" ? `${ATTENTION_RING[s.attention]}33` : "#2b2217",
+                          color: s.attention && s.attention !== "ok" ? ATTENTION_RING[s.attention] : "#ffd27a",
+                          border: `1px solid ${s.attention && s.attention !== "ok" ? ATTENTION_RING[s.attention] : "#59462d"}`,
+                        }}
+                      >
+                        {s.count}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               ) : (
-                <div key={s.id} aria-hidden className="absolute font-mono text-[10px] tracking-widest" style={{ left: s.x, top: s.y - 4, color: s.count ? ATTENTION_RING[s.attention ?? "ok"] : "#8a7758" }}>
-                  {s.label.toUpperCase()}
-                  {s.count ? ` ${s.count}` : ""}
+                <div
+                  key={s.id}
+                  aria-hidden
+                  className="absolute flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.14em]"
+                  style={{ left: s.x, top: s.y - 4, color: s.count ? (s.id === "scrap" ? "#ff6b6b" : "#b8a68a") : "#75634a" }}
+                >
+                  <BinIcon id={s.id === "scrap" ? "scrap" : "cancelled"} active={s.count > 0} />
+                  <span>{s.label.toUpperCase()}</span>
+                  {s.count ? <span className="rounded bg-black/40 px-1 text-[9px] tabular-nums">{s.count}</span> : null}
                 </div>
               ),
             )}
+
+            {/* Overflow counters */}
             {scene.overflow.map((o) => (
-              <div key={`over-${o.stationId}`} className="absolute flex items-center justify-center rounded border border-[#6a5638] font-mono text-[10px] text-[#ffd27a]" style={{ left: o.x - scene.parcel.w / 2, top: o.y - scene.parcel.h / 2, width: scene.parcel.w, height: scene.parcel.h }}>
+              <div
+                key={`over-${o.stationId}`}
+                className="absolute flex items-center justify-center rounded-md border border-dashed border-[#6a5638] bg-[#1a140e]/90 font-mono text-[10px] font-bold text-[#ffd27a] shadow-inner"
+                style={{ left: o.x - scene.parcel.w / 2, top: o.y - scene.parcel.h / 2, width: scene.parcel.w, height: scene.parcel.h }}
+              >
                 +{o.count}
               </div>
             ))}
+
+            {/* Tactile glowing arcade cartridge parcels */}
             {scene.parcels.map((p) => {
               const last = typing[p.itemId];
               const working = last !== undefined && now - last < 60_000 && (p.state === "running" || p.state === "waiting-input");
               const compact = scene.density === "compact";
               const tone = PARCEL_TONE[p.tone];
+              const ciMsg = attempt.ci[p.itemId];
+              const ciRunning = Boolean(ciMsg?.available && ciMsg.phases.some((ph) => ph.status === "running")) || p.stationId === "ci";
+              const deploying = p.stationId === "deploy";
+              const needsHuman = p.attention === "needs_human";
+              const repoAccent = `hsl(${p.hue} 78% 52%)`;
+
               return (
                 <a
                   key={p.itemId}
@@ -435,41 +764,109 @@ export function FloorPanel({ onCue }: { onCue?: (kind: BurstKind) => void } = {}
                   onClick={p.kind === "issue" ? (event) => { event.preventDefault(); setIssueId(p.itemId); } : undefined}
                   title={p.accessibilityLabel}
                   aria-label={p.accessibilityLabel}
-                  className="absolute left-0 top-0 transition-transform duration-700 ease-[cubic-bezier(.2,.9,.25,1.15)] hover:brightness-110"
+                  className="group absolute left-0 top-0 transition-transform duration-700 ease-[cubic-bezier(.2,.9,.25,1.15)] hover:z-20 hover:brightness-110"
                   style={{ width: scene.parcel.w, height: scene.parcel.h, transform: `translate(${p.x - scene.parcel.w / 2}px, ${p.y - scene.parcel.h / 2}px)` }}
                 >
+                  {/* Expanding amber radar sonar halo when waiting on a human */}
+                  {needsHuman ? (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute -inset-[3px] rounded-[7px] border-2 border-[#e7a505]"
+                      style={{ animation: "floor-sonar 1.6s ease-out infinite" }}
+                    />
+                  ) : null}
+
+                  {/* Deploying thruster glow beneath the cartridge */}
+                  {deploying ? (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute -bottom-[5px] left-2 right-2 h-[5px] rounded-full"
+                      style={{
+                        background: "radial-gradient(ellipse at center, #ffb74d 0%, #c09cff88 55%, transparent 100%)",
+                        animation: "floor-thruster .55s ease-in-out infinite",
+                      }}
+                    />
+                  ) : null}
+
                   <span
-                    className={`relative flex h-full w-full flex-col overflow-hidden rounded-[5px] font-mono leading-tight ${compact ? "items-center justify-center" : "justify-center pl-[7px] pr-[3px]"}`}
+                    className={`relative flex h-full w-full flex-col overflow-hidden rounded-[6px] font-mono leading-tight ${compact ? "items-center justify-center" : "justify-center pl-[9px] pr-[4px]"}`}
                     style={{
                       backgroundColor: tone.fill,
+                      backgroundImage: "linear-gradient(180deg, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0) 44%, rgba(0,0,0,0.16) 100%)",
                       color: tone.ink,
-                      border: `2px solid ${ATTENTION_RING[p.attention]}`,
+                      border: p.attention !== "ok" ? `2px solid ${ATTENTION_RING[p.attention]}` : "1px solid rgba(255,255,255,0.22)",
+                      boxShadow: working
+                        ? `0 0 14px ${repoAccent}88, 0 3px 8px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.4)`
+                        : `0 3px 8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.32)`,
                       // Keyed on the activity time so each new tail frame restarts a short wobble.
-                      animation: working ? "floor-wobble .5s ease-in-out 3" : undefined,
+                      animation: working ? "floor-wobble .48s ease-in-out 3" : undefined,
                     }}
                     key={working ? last : "still"}
                   >
-                    {/* The repository, as a stripe: one repo's parcels still read as a family. */}
-                    <span aria-hidden className="absolute inset-y-0 left-0 w-[3px]" style={{ backgroundColor: `hsl(${p.hue} 70% 45%)` }} />
-                    <span className={`max-w-full truncate font-bold ${compact ? "text-[9px]" : "text-[10px]"}`}>{compact ? p.short : p.label}</span>
-                    {!compact && (p.sublabel || p.age) ? <span className="max-w-full truncate text-[9px] opacity-75">{[p.sublabel, p.age].filter(Boolean).join(" · ")}</span> : null}
+                    {/* The repository, as a luminous cartridge tab: one repo's parcels read as a family. */}
+                    <span
+                      aria-hidden
+                      className="absolute inset-y-0 left-0 w-[4px]"
+                      style={{ backgroundColor: repoAccent, boxShadow: working ? `0 0 8px ${repoAccent}` : undefined }}
+                    />
+                    {/* Sweeping laser scanline while CI is actively checking this parcel */}
+                    {ciRunning ? (
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-y-0 w-[18px]"
+                        style={{
+                          background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent)",
+                          animation: "floor-scanline 1.7s ease-in-out infinite",
+                        }}
+                      />
+                    ) : null}
+                    <span className={`max-w-full truncate font-extrabold ${compact ? "text-[9px]" : "text-[10px]"}`}>{compact ? p.short : p.label}</span>
+                    {!compact && (p.sublabel || p.age) ? (
+                      <span className="max-w-full truncate text-[9px] font-medium opacity-80">{[p.sublabel, p.age].filter(Boolean).join(" · ")}</span>
+                    ) : null}
                   </span>
+
+                  {/* Floating animated agent typing pill when live tail lines arrive */}
                   {working ? (
-                    <span key={`t${last}`} aria-hidden className="absolute -top-[9px] left-1/2 flex -translate-x-1/2 gap-[2px] rounded-full bg-[#17130e] px-1 py-[2px]" style={{ animation: `floor-typing-out ${TYPING_MS}ms linear forwards` }}>
+                    <span
+                      key={`t${last}`}
+                      aria-hidden
+                      className="absolute -top-[11px] left-1/2 flex -translate-x-1/2 items-center gap-[2.5px] rounded-full border border-[#4a3b28] bg-[#14100b] px-1.5 py-[2.5px] shadow-md"
+                      style={{ animation: `floor-typing-out ${TYPING_MS}ms linear forwards` }}
+                    >
                       {[0, 1, 2].map((i) => (
-                        <span key={i} className="h-[3px] w-[3px] rounded-full" style={{ backgroundColor: `hsl(${p.hue} 90% 72%)`, animation: `floor-type .6s ease-in-out ${i * 120}ms 6` }} />
+                        <span
+                          key={i}
+                          className="h-[3.5px] w-[3.5px] rounded-full"
+                          style={{
+                            backgroundColor: `hsl(${p.hue} 92% 74%)`,
+                            boxShadow: `0 0 5px hsl(${p.hue} 92% 70%)`,
+                            animation: `floor-type .58s ease-in-out ${i * 110}ms 6`,
+                          }}
+                        />
                       ))}
                     </span>
                   ) : null}
-                  <CiMeter ci={attempt.ci[p.itemId]} w={scene.parcel.w} />
+
+                  <CiMeter ci={ciMsg} w={scene.parcel.w} />
+
                   {p.marker ? (
-                    <span className="absolute -right-1.5 -top-2 flex h-4 w-4 items-center justify-center rounded-full font-mono text-[10px] font-black text-[#17130e]" style={{ backgroundColor: ATTENTION_RING[p.attention], animation: p.marker === "!" ? "floor-bob .9s ease-in-out infinite" : undefined }}>
+                    <span
+                      className="absolute -right-2 -top-2 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-[#17130e] font-mono text-[10px] font-black text-[#17130e] shadow-md"
+                      style={{
+                        backgroundColor: ATTENTION_RING[p.attention],
+                        boxShadow: `0 0 10px ${ATTENTION_RING[p.attention]}aa`,
+                        animation: p.marker === "!" ? "floor-bob .85s ease-in-out infinite" : undefined,
+                      }}
+                    >
                       {p.marker}
                     </span>
                   ) : null}
                 </a>
               );
             })}
+
+            {/* Live WebSocket-driven celebratory & progress effects */}
             {effects
               // An effect for an item not drawn on this floor (another project's) is skipped.
               .filter((e) => e.kind !== "static" && (!e.itemId || at.has(e.itemId)))
@@ -479,7 +876,24 @@ export function FloorPanel({ onCue }: { onCue?: (kind: BurstKind) => void } = {}
                 if (e.itemId && !p) return null;
                 return <EffectSprite key={e.beatId} e={e} x={p?.x ?? scene.width / 2} y={p?.y ?? scene.height / 2} hue={p?.hue ?? 40} />;
               })}
-            {gap ? <div aria-hidden className="pointer-events-none absolute inset-0 bg-neutral-500" style={{ animation: "floor-static .14s steps(2) 8" }} /> : null}
+
+            {/* Retro CRT static resync overlay */}
+            {gap ? (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                style={{
+                  backgroundImage:
+                    "repeating-linear-gradient(0deg, rgba(255,210,122,0.12) 0 2px, rgba(0,0,0,0.45) 2px 4px)",
+                  animation: "floor-static .14s steps(2) 8",
+                }}
+              >
+                <span className="rounded border border-[#ffd27a] bg-[#120f0be8] px-3 py-1 font-mono text-xs font-black tracking-[0.2em] text-[#ffd27a]">
+                  RESYNCING SIGNAL…
+                </span>
+              </div>
+            ) : null}
+
             <ul className="sr-only">
               {floorSummary(scene).map((line) => (
                 <li key={line}>{line}</li>

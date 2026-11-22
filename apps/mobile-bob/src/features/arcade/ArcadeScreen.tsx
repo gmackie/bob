@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
-import { beatLine, ciMeter, createBeatLog, desks as deskCards, floorScene, floorSummary, hud, projectBoard, shippedToday, WIDE_MIN_WIDTH } from "@bob/arcade";
+import { beatLine, beatTone, ciMeter, createBeatLog, desks as deskCards, floorScene, floorSummary, hud, liveCiPhases, projectBoard, shippedToday, WIDE_MIN_WIDTH } from "@bob/arcade";
 import type { AttemptDetailLike, BoardRow, Desk } from "@bob/arcade";
 import { coordinatedIssueIds, issueAttention, issueCommands, rows, RELEASE_STAGE_PRESENTATION, STATE_PRESENTATION } from "@bob/sdlc-view";
 import type { CommandOption, Confirmation, EdgeView, Scope, TrackedIssue } from "@bob/sdlc-view";
@@ -17,7 +17,7 @@ import { useLiveActivity, useLiveActivityPreview, useNow, useSdlcEdge, useShippe
 import { colors } from "~/lib/colors";
 
 import type { LiveEffect } from "./arcade-model";
-import { EFFECT_TTL_MS, expire, step, stepAttempts } from "./arcade-model";
+import { EFFECT_TTL_MS, expire, step, stepAttempts, TONE_COLOR } from "./arcade-model";
 import { BoardView } from "./BoardView";
 import { demoDeskDetail } from "./demo-feed";
 import { DesksView } from "./DesksView";
@@ -40,31 +40,60 @@ const NO_ATTEMPTS: Attempts = {};
 
 function HudStrip({ view, scope, demo, today, clock }: { view: EdgeView; scope: Scope; demo: boolean; today: number | null; clock: number }) {
   const h = hud(view, scope, clock);
-  const cells: [string, number | string, string][] = [
-    ["AGENTS", h.agents, "#ffd27a"],
-    ["IN FLIGHT", h.inFlight, "#ffd27a"],
-    ["CI", h.ci, "#6fb4ff"],
-    ["NEEDS YOU", h.needsYou, h.needsYou ? colors.accent : "#ffd27a"],
+  const cells: [string, number | string, string, boolean][] = [
+    ["AGENTS", h.agents, "#6fb4ff", h.agents > 0],
+    ["IN FLIGHT", h.inFlight, "#ffd27a", h.inFlight > 0],
+    ["CI", h.ci, "#7fd3e8", h.ci > 0],
+    ["NEEDS YOU", h.needsYou, h.needsYou ? colors.accent : STAGE.label, h.needsYou > 0],
     // Sat too long where the system should have moved it on (BOB-101).
-    ["STALLED", h.stalled, h.stalled ? "#ff9f43" : "#ffd27a"],
-    ["DEPLOYING", h.deploying, "#6fb4ff"],
-    ["SHIPPED", h.shipped, "#7dffb0"],
-    ["FAILED", h.failed, h.failed ? "#ff6b6b" : "#ffd27a"],
+    ["STALLED", h.stalled, h.stalled ? "#ff9f43" : STAGE.label, h.stalled > 0],
+    ["DEPLOYING", h.deploying, "#c09cff", h.deploying > 0],
+    ["SHIPPED", h.shipped, "#7dffb0", h.shipped > 0],
+    ["FAILED", h.failed, h.failed ? "#ff6b6b" : STAGE.label, h.failed > 0],
     // Reached production since local midnight (BOB-95); a dash until the edge answers.
-    ["TODAY", today ?? "–", "#7dffb0"],
+    ["TODAY", today ?? "–", "#7dffb0", Boolean(today)],
   ];
   return (
     <View
       accessible
       accessibilityLabel={cells.map(([k, v]) => `${k.toLowerCase()} ${v}`).join(", ")}
-      style={{ flexDirection: "row", flexWrap: "wrap", columnGap: 14, rowGap: 4, paddingHorizontal: 14, paddingVertical: 10 }}
+      style={{
+        flexDirection: "row",
+        flexWrap: "wrap",
+        alignItems: "center",
+        columnGap: 6,
+        rowGap: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: "#261e15",
+        backgroundColor: "#15110c",
+      }}
       testID="arcade-hud"
     >
-      {demo ? <Text style={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1, color: "#000", backgroundColor: "#ffd27a", paddingHorizontal: 4 }}>DEMO FEED</Text> : null}
-      {cells.map(([k, v, c]) => (
-        <Text key={k} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1, color: STAGE.label }}>
-          {k} <Text style={{ fontSize: 13, fontWeight: "800", color: c }}>{v}</Text>
-        </Text>
+      {demo ? (
+        <View style={{ borderRadius: 4, backgroundColor: "#ffd27a", paddingHorizontal: 5, paddingVertical: 2 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: "900", letterSpacing: 1, color: "#120f0b" }}>DEMO FEED</Text>
+        </View>
+      ) : null}
+      {cells.map(([k, v, c, lit]) => (
+        <View
+          key={k}
+          style={{
+            flexDirection: "row",
+            alignItems: "baseline",
+            gap: 5,
+            borderRadius: 6,
+            borderWidth: 1,
+            borderColor: lit ? `${c}55` : "#292016",
+            backgroundColor: "#0c0907",
+            paddingHorizontal: 7,
+            paddingVertical: 3,
+          }}
+        >
+          <Text style={{ fontFamily: MONO, fontSize: 9, letterSpacing: 1, color: STAGE.label }}>{k}</Text>
+          <Text style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: "900", color: c }}>{v}</Text>
+        </View>
       ))}
     </View>
   );
@@ -348,7 +377,10 @@ function ArcadeView({
   }, [attempts, issues, log]);
   const meters = useMemo(() => {
     const out: Record<string, ParcelMeter | null> = {};
-    for (const [id, d] of Object.entries(attempts)) out[id] = ciMeter(d?.ci);
+    for (const [id, d] of Object.entries(attempts)) {
+      const m = ciMeter(d?.ci);
+      out[id] = m ? { ...m, phases: liveCiPhases(d?.ci, 8) } : null;
+    }
     return out;
   }, [attempts]);
 
@@ -453,12 +485,38 @@ function ArcadeView({
         ) : null}
       </View>
       {waiting ? null : <DesksView desks={desks} width={screenWidth} now={now} reduced={reduced} selectedItemId={selected} onPressDesk={select} />}
-      <View style={{ paddingHorizontal: 14, paddingBottom: 12, paddingTop: 4, minHeight: 68 }} accessibilityLabel="Recent floor events" testID="arcade-ticker">
-        {ticker.map((b) => (
-          <Text key={b.id} numberOfLines={1} style={{ fontFamily: MONO, fontSize: 11, color: STAGE.label }}>
-            {beatLine(b)}
-          </Text>
-        ))}
+      <View
+        style={{
+          marginHorizontal: 12,
+          marginBottom: 10,
+          marginTop: 6,
+          minHeight: 68,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: "#261e15",
+          backgroundColor: "#0c0907",
+          paddingHorizontal: 10,
+          paddingVertical: 7,
+          gap: 3,
+        }}
+        accessibilityLabel="Recent floor events"
+        testID="arcade-ticker"
+      >
+        {ticker.length ? (
+          ticker.map((b, i) => {
+            const c = TONE_COLOR[beatTone(b)];
+            return (
+              <View key={b.id} style={{ flexDirection: "row", alignItems: "center", gap: 6, opacity: 1 - i * 0.2 }}>
+                <View style={{ width: 5.5, height: 5.5, borderRadius: 3, backgroundColor: c }} />
+                <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: 10.5, color: i === 0 ? "#e6d8bc" : STAGE.label }}>
+                  {beatLine(b)}
+                </Text>
+              </View>
+            );
+          })
+        ) : (
+          <Text style={{ fontFamily: MONO, fontSize: 10.5, color: "#5e4e3a" }}>Listening for live WebSocket beats…</Text>
+        )}
       </View>
     </View>
   );
