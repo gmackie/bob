@@ -35,7 +35,7 @@ Eventual 6-app target: `apps/{core,bob,ooda,mobile-core,mobile-bob,mobile-ooda}`
 ### Tooling
 
 - `tooling/typescript`, `tooling/tailwind` — gmacko shared configs.
-- `tooling/bob-{typescript,tailwind,eslint,prettier,github}` — Bob's tooling, dirs renamed; package names preserved as `@bob/*`.
+- `tooling/bob-{typescript,tailwind,oxlint,prettier,github}` — Bob's tooling, dirs renamed; package names preserved as `@bob/*`.
 
 ## Stack
 

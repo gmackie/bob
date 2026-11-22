@@ -60,7 +60,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false",
-    "lint": "eslint --flag unstable_native_nodejs_ts_config"
+    "lint": "oxlint -c ../../../../.oxlintrc.json"
   },
   "dependencies": {
     "@gmacko/core": "workspace:*",
@@ -71,7 +71,6 @@
   "devDependencies": {
     "@bob/tsconfig": "workspace:*",
     "typescript": "7.0.2",
-    "@bob/eslint-config": "workspace:*",
-    "eslint": "catalog:"
+    "oxlint": "1.94.0"
   }
 }

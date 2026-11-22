@@ -66,7 +66,7 @@ export interface MeterAccountInput {
   modelMeters?: Record<string, BudgetMeterJson[]>;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 type Db = PgDatabase<PgQueryResultHKT, any, any>;
 
 const MAX_ROWS = 2_000;

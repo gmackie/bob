@@ -22,7 +22,7 @@
     "clean": "git clean -xdf .cache .turbo dist node_modules",
     "dev": "tsc",
     "format": "prettier --check . --ignore-path ../../.gitignore",
-    "lint": "eslint --flag unstable_native_nodejs_ts_config",
+    "lint": "oxlint -c ../../../../.oxlintrc.json",
     "test": "vitest run",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
@@ -34,13 +34,12 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@bob/eslint-config": "workspace:*",
     "@bob/prettier-config": "workspace:*",
     "@bob/tsconfig": "workspace:*",
-    "eslint": "catalog:",
     "prettier": "3.10.1",
     "typescript": "7.0.2",
-    "vitest": "5.1.1"
+    "vitest": "5.1.1",
+    "oxlint": "1.94.0"
   },
   "prettier": "@bob/prettier-config"
 }

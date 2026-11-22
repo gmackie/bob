@@ -14,7 +14,6 @@ try {
   // This must stay a synchronous require() inside try/catch to defensively
   // handle a native module that may not be linked; see
   // use-push-notifications.ts for the fuller rationale.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- see above.
   Haptics = require("expo-haptics") as HapticsModule;
 } catch {
   // Native module not available

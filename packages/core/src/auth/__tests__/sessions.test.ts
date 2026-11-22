@@ -149,7 +149,7 @@ describe("Sessions.validateRequest (signature-aware)", () => {
   // `layerSessions` requires `GmackoDb` (used by validateToken) even though
   // `validateRequest` itself doesn't touch the DB. Provide a stub so the
   // layer constructs cleanly; the impl never reads `db` on this path.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  
   const stubDbLayer = Layer.succeed(GmackoDb)({} as any);
 
   vitestIt(

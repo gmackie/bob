@@ -4,6 +4,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   Text,
   TextInput,
   View,
@@ -195,7 +196,7 @@ export function AgentThreadView({
   showHeader = true,
   canStop = true,
 }: AgentThreadViewProps) {
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const [inputText, setInputText] = useState("");
 
   useEffect(() => {

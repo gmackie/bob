@@ -43,7 +43,7 @@ import { getServerEnv } from "./env.js";
 // ---------------------------------------------------------------------------
 
 declare global {
-  // eslint-disable-next-line no-var
+  
   var __gmacko_database_manager:
     | ReturnType<typeof createDatabaseManager>
     | undefined;

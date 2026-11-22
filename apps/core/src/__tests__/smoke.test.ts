@@ -43,7 +43,7 @@ function ingestSetCookie(res: Response): void {
   // with a comma, which is ambiguous for cookie values that contain commas
   // (better-auth's signed cookies do). Use `getSetCookie()` (Node 20+)
   // when available, fall back to the joined string.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  
   const headersAny = res.headers as any;
   const raw: string[] =
     typeof headersAny.getSetCookie === "function"

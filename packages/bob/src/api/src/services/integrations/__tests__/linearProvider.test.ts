@@ -361,7 +361,7 @@ describe("LinearPlanningProvider", () => {
         expect.objectContaining({
           // vitest's expect.arrayContaining/objectContaining always return
           // `any` per their own type declarations, regardless of generic.
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          
           syncFailures: expect.arrayContaining([
             expect.objectContaining({
               method: "reportMilestone",
@@ -388,7 +388,7 @@ describe("LinearPlanningProvider", () => {
         issueId: "issue-1",
         // vitest's expect.stringContaining always returns `any` per its own
         // type declarations.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         body: expect.stringContaining("Task blocked"),
       });
       expect(mockUpdateIssue).not.toHaveBeenCalled();
@@ -405,7 +405,7 @@ describe("LinearPlanningProvider", () => {
 
       expect(mockCreateComment).toHaveBeenCalledWith({
         issueId: "issue-1",
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         body: expect.stringContaining("Task failed"),
       });
       expect(mockUpdateIssue).not.toHaveBeenCalled();
@@ -483,12 +483,12 @@ describe("LinearPlanningProvider", () => {
         issueId: "issue-1",
         // vitest's expect.stringMatching/stringContaining always return
         // `any` per their own type declarations.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         body: expect.stringMatching(/\*\*🤖 Bob — Note\*\*/),
       });
       expect(mockCreateComment).toHaveBeenCalledWith({
         issueId: "issue-1",
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         body: expect.stringContaining("`run-abc-123`"),
       });
     });

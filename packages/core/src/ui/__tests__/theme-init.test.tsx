@@ -69,7 +69,7 @@ describe("theme-init", () => {
     localStorage.setItem("gmacko-theme", "bob");
     localStorage.setItem("gmacko-mode", "dark");
     expect(() => {
-      // eslint-disable-next-line no-new-func
+      
       new Function(THEME_INIT_SCRIPT)();
     }).not.toThrow();
     expect(document.documentElement.getAttribute("data-theme")).toBe("bob");

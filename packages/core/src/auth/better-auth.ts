@@ -205,14 +205,14 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
                 name?: string | null;
                 email: string;
               }) => {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see note on InitAuthOptions.db
+                 // see note on InitAuthOptions.db
                 const drizzleDb = opts.db as any;
                 const personalName =
                   user.name?.trim() ||
                   user.email.split("@")[0] ||
                   "Personal";
                 const slug = `personal-${user.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 32)}`;
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle tx type varies by driver
+                 // drizzle tx type varies by driver
                 await drizzleDb.transaction(async (tx: any) => {
                   const [tenantRow] = await tx
                     .insert(tenantsTable)
@@ -244,10 +244,10 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
         };
 
   const config = {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see note on InitAuthOptions.db
+     // see note on InitAuthOptions.db
     database: drizzleAdapter(opts.db as any, {
       provider: "pg",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      
       ...(opts.schema ? { schema: opts.schema as any } : {}),
       ...(opts.pluralizeTables ? { usePlural: true } : {}),
     }),

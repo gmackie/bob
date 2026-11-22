@@ -37,7 +37,7 @@ export function WeekRiver({ series }: { series: RiverSeries }) {
     const pts = series.history;
     if (pts.length < 2) return "";
     return `${path(pts, x, y)} L${x(pts.at(-1)!.t).toFixed(1)} ${y(0)} L${x(pts[0]!.t).toFixed(1)} ${y(0)} Z`;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react/exhaustive-deps
   }, [series]);
 
   const hover = hoverT === null ? null : {

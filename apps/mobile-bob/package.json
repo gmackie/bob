@@ -15,7 +15,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "format": "prettier --check . --ignore-path ../../.gitignore --ignore-path .prettierignore",
-    "lint": "eslint --flag unstable_native_nodejs_ts_config",
+    "lint": "oxlint -c ../../.oxlintrc.json",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "ios:device:production": "APP_ENV=production API_URL=https://bob.blder.bot AUTH_URL=https://bob.blder.bot OODA_API_URL=https://ooda.blder.bot GATEWAY_PUBLIC_URL=wss://ws.blder.bot expo run:ios --configuration Release --no-bundler --device"
@@ -75,7 +75,6 @@
   },
   "devDependencies": {
     "@babel/plugin-transform-react-jsx": "8.0.1",
-    "@bob/eslint-config": "workspace:*",
     "@bob/prettier-config": "workspace:*",
     "@bob/tailwind-config": "workspace:*",
     "@bob/tsconfig": "workspace:*",
@@ -84,12 +83,12 @@
     "@types/react": "19.3.0",
     "@types/uuid": "11.0.0",
     "babel-preset-expo": "58.0.26",
-    "eslint": "catalog:",
     "metro-cache": "0.88.0",
     "prettier": "3.10.1",
     "tailwindcss": "4.3.5",
     "typescript": "7.0.2",
-    "vitest": "5.1.1"
+    "vitest": "5.1.1",
+    "oxlint": "1.94.0"
   },
   "prettier": "@bob/prettier-config",
   "expo": {

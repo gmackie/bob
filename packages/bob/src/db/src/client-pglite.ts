@@ -128,9 +128,9 @@ export async function bootstrapSchema(client: PGlite): Promise<void> {
   // code. `prev`/`cur` are opaque snapshot blobs we only ever pass straight
   // into `generateMigration`/drizzle-kit's own APIs; we never inspect their
   // shape, so there's nothing here to narrow with a runtime guard.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- drizzle-kit d.ts vs zod v4 mismatch, see comment above
+   // drizzle-kit d.ts vs zod v4 mismatch, see comment above
   const prev = generateDrizzleJson({}, undefined, undefined, "snake_case");
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- drizzle-kit d.ts vs zod v4 mismatch, see comment above
+   // drizzle-kit d.ts vs zod v4 mismatch, see comment above
   const cur = generateDrizzleJson(deduped, undefined, undefined, "snake_case");
   const statements = await generateMigration(prev, cur);
 

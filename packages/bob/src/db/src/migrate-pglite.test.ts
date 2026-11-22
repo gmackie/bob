@@ -79,7 +79,7 @@ describe("applyMigrations against PGlite", () => {
     // matcher placeholder, not a real value), so the object literal below
     // trips no-unsafe-assignment despite being inert assertion syntax.
     expect(applied.rows[0]).toMatchObject({
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.stringContaining is `any` by vitest's own types
+       // expect.stringContaining is `any` by vitest's own types
       filename: expect.stringContaining("0001"),
     });
   });
