@@ -101,6 +101,9 @@ function Stations({ scene }: { scene: FloorScene }) {
             <View style={{ position: "absolute", left: s.x - 5, top: s.y - 5, width: 10, height: 10, borderRadius: 5, backgroundColor: color }} />
             <Text
               numberOfLines={1}
+              // "SHIPPED 15" outgrows the phone's label column; shrink it rather than cut the count (BOB-99).
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
               style={{
                 position: "absolute",
                 fontFamily: MONO,
