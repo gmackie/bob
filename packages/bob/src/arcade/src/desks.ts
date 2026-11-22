@@ -1,4 +1,4 @@
-import { inScope, MAX_WATCHED_ITEMS, rows, shippedSince, startOfLocalDay, STATE_PRESENTATION } from "@bob/sdlc-view";
+import { inScope, MAX_WATCHED_ITEMS, repoKey, rows, shippedSince, startOfLocalDay, STATE_PRESENTATION } from "@bob/sdlc-view";
 import type { Attention, CiMessage, CiPhase, EdgeView, ItemState, Row, Scope, ShippedEntry, TailFrame } from "@bob/sdlc-view";
 
 import { hueFor } from "./floor";
@@ -152,7 +152,8 @@ export function desks(view: EdgeView, ids: readonly string[], detail: (itemId: s
       itemId: id,
       label,
       repo,
-      hue: hueFor(repo),
+      // Same key as the floor parcel, so a desk and its parcel share a colour.
+      hue: hueFor(repoKey(row.target.repository)),
       state: row.item.state,
       stateLabel,
       attention: row.attention,

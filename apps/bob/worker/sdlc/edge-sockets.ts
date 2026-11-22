@@ -1,6 +1,6 @@
 // The SdlcEdge Durable Object's logic that does not need the Workers runtime, so node
 // tests can cover it with fakes. edge-do.ts only wires these to the DO's state.
-import { MAX_WATCHED_ITEMS, type WatchMessage } from "@bob/sdlc-view";
+import { MAX_WATCHED_ITEMS, parseIssueBatch, type WatchMessage } from "@bob/sdlc-view";
 import type { CommandSender, EdgeController, EdgeSocket, Hello } from "./controller";
 import { isViewer } from "./routes";
 import { parseBatch } from "./store";
@@ -176,6 +176,23 @@ export function handleCommand(
     take: () => userId !== null && controller.takeCommandSlot(userId, now),
   };
   controller.command(socket, raw, sender);
+}
+
+/**
+ * BOB-99: the DO's answer to a mirrored issue batch: 400 unless it parses; 503 with a
+ * generic body when storage fails (the mirror retries); otherwise the result.
+ */
+export function issuesResponse(controller: Pick<EdgeController, "ingestIssues">, text: string, log: Log = console.error): Response {
+  let value: unknown;
+  try { value = JSON.parse(text); } catch { return Response.json({ error: "invalid batch" }, { status: 400 }); }
+  const batch = parseIssueBatch(value);
+  if (!batch) return Response.json({ error: "invalid batch" }, { status: 400 });
+  try {
+    return Response.json(controller.ingestIssues(batch));
+  } catch (error) {
+    log(JSON.stringify({ event: "sdlc_edge_issues_failed", upserts: batch.upserts.length, error: error instanceof Error ? error.message : String(error) }));
+    return Response.json({ error: "unavailable" }, { status: 503 });
+  }
 }
 
 /**

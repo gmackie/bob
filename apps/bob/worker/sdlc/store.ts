@@ -6,6 +6,8 @@ import {
   TERMINAL_PLAN_STATES,
   type CommandResult,
   type EdgeMessage,
+  type IssueBatch,
+  type TrackedIssue,
   type ItemSnapshot,
   type PlanSnapshot,
   type QueuedCommand,
@@ -122,6 +124,8 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, plan_id TEXT NOT NULL, rv INTEGER NOT NULL, json TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS items_by_plan ON items (plan_id)",
   "CREATE TABLE IF NOT EXISTS tombstones (plan_id TEXT PRIMARY KEY, rv INTEGER NOT NULL)",
+  // BOB-99: mirrored Kanbanger issues, newest version per issue.
+  "CREATE TABLE IF NOT EXISTS issues (id TEXT PRIMARY KEY, version INTEGER NOT NULL, json TEXT NOT NULL)",
   ...OUTBOX_SCHEMA,
   ...ALERT_SCHEMA,
   ...SHIPPED_SCHEMA,
@@ -272,6 +276,42 @@ export class EdgeStore {
     return { plans, items };
   }
 
+  /**
+   * BOB-99: applies a mirrored issue batch in one transaction. An upsert replaces a stored
+   * issue only when its version is higher. `complete` removes every stored issue it does not
+   * list. Returns the delta to broadcast (null when nothing changed) and the counts.
+   */
+  applyIssues(batch: IssueBatch, coordinatorSeenAt: number): { message: Delta | null; stored: number; removed: number } {
+    return this.sql.transaction(() => {
+      const changed: TrackedIssue[] = [];
+      for (const issue of batch.upserts) {
+        const held = this.sql.exec<{ version: number }>("SELECT version FROM issues WHERE id = ?", issue.id)[0]?.version;
+        if (held !== undefined && issue.version <= held) continue;
+        this.sql.exec("INSERT INTO issues (id, version, json) VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET version = excluded.version, json = excluded.json", issue.id, issue.version, JSON.stringify(issue));
+        changed.push(issue);
+      }
+      const removed: string[] = [];
+      if (batch.complete) {
+        const keep = new Set(batch.complete.ids);
+        // An issue upserted in this same batch is present even if a caller forgot to list it.
+        for (const issue of batch.upserts) keep.add(issue.id);
+        for (const { id } of this.sql.exec<{ id: string }>("SELECT id FROM issues")) {
+          if (keep.has(id)) continue;
+          this.sql.exec("DELETE FROM issues WHERE id = ?", id);
+          removed.push(id);
+        }
+      }
+      if (changed.length === 0 && removed.length === 0) return { message: null, stored: 0, removed: 0 };
+      const seq = this.nextSeq();
+      const message: Delta = { type: "delta", seq, plans: [], items: [], coordinatorSeenAt, ...(changed.length ? { issues: changed } : {}), ...(removed.length ? { issuesRemoved: removed } : {}) };
+      return { message, stored: changed.length, removed: removed.length };
+    });
+  }
+
+  issueCount(): number {
+    return this.sql.exec<{ n: number }>("SELECT count(*) AS n FROM issues")[0]?.n ?? 0;
+  }
+
   private nextSeq(): number {
     const seq = this.meta().seq + 1;
     this.write(META_KEYS.seq, seq);
@@ -297,7 +337,8 @@ export class EdgeStore {
     const { epoch, seq, topology } = this.meta();
     const plans = this.sql.exec<{ json: string }>("SELECT json FROM plans ORDER BY id").map((r) => JSON.parse(r.json) as PlanSnapshot);
     const items = this.sql.exec<{ json: string }>("SELECT json FROM items ORDER BY id").map((r) => JSON.parse(r.json) as ItemSnapshot);
-    return { type: "snapshot", epoch, seq, plans, items, topology, coordinatorSeenAt };
+    const issues = this.sql.exec<{ json: string }>("SELECT json FROM issues ORDER BY id").map((r) => JSON.parse(r.json) as TrackedIssue);
+    return { type: "snapshot", epoch, seq, plans, items, topology, coordinatorSeenAt, issues };
   }
 
   /** Stores a BizPulse topology. Returns a snapshot (with the next seq) only when it changed. */

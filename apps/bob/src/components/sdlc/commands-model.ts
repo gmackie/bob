@@ -41,7 +41,9 @@ export const MAX_FINISHED = 50;
 export const emptyCommands = (): CommandsState => ({ entries: {}, order: [] });
 
 export const resourceIdOf = (command: CommandInput): string =>
-  command.operation === "ControlPlan" ? command.input.planId : command.input.itemId;
+  command.operation === "ControlPlan" ? command.input.planId
+    : command.operation === "SetIssueState" || command.operation === "DispatchIssue" ? command.input.issueId
+      : command.input.itemId;
 
 export const isInFlight = (entry: CommandEntry) => entry.status === "pending" || entry.status === "accepted";
 /**
@@ -204,6 +206,7 @@ export function globalDisabledReason(ctx: Omit<ActionContext, "commands">): stri
 const keyOf = (option: CommandOption) => {
   const { command } = option;
   // Operations that carry an action (Merge and Approve are both RequestRelease) key on it too.
+  if (command.operation === "SetIssueState") return `${command.operation}:${command.input.target}`;
   return command.operation === "ControlPlan" || command.operation === "RequestRelease" || command.operation === "RequestDeployment"
     ? `${command.operation}:${command.input.action}` : command.operation;
 };

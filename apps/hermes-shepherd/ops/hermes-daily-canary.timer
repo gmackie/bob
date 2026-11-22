@@ -1,8 +1,11 @@
 [Unit]
-Description=Check the Hermes morning briefing after its cutoff
+Description=Check Hermes after the morning briefing and the nightly wrap-up
 
 [Timer]
+# Morning briefing runs 07:00 America/Los_Angeles (14:00/15:00 UTC).
 OnCalendar=*-*-* 15:30:00 UTC
+# Nightly vault wrap-up runs 22:00 America/Los_Angeles (05:00/06:00 UTC).
+OnCalendar=*-*-* 06:30:00 UTC
 Persistent=true
 Unit=hermes-daily-canary.service
 
