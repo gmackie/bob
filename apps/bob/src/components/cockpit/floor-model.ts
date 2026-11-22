@@ -2,18 +2,22 @@
 // effect type the panel keeps in state.
 export {
   BOARD_LANES,
+  MOOD_LABEL,
   beatLine,
+  beatTone,
   boardRowSummary,
   chooseDesks,
   ciBeats,
   ciProgress,
   createBeatLog,
+  deskMood,
   desks,
   effectFor,
   floorScene,
   floorScopes,
   floorSummary,
   hud,
+  liveCiPhases,
   liveScope,
   PARCEL_TONE,
   projectBoard,
@@ -22,8 +26,9 @@ export {
   shippedToday,
   stationFor,
   tailBeats,
+  tailLineTone,
 } from "@bob/arcade";
-export type { Beat, Board, BoardLane, BoardRow, Desk, Effect, FloorParcel, FloorScopeChip, StationId } from "@bob/arcade";
+export type { Beat, Board, BoardLane, BoardRow, Desk, DeskMood, Effect, FloorParcel, FloorScopeChip, StationId } from "@bob/arcade";
 export type { CiMessage, EdgeView, Scope, TrackedIssue } from "@bob/sdlc-view";
 
 import type { Beat, Effect } from "@bob/arcade";
