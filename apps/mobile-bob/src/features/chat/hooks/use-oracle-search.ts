@@ -5,7 +5,7 @@ import type { AnyRouter } from "@trpc/server";
 import SuperJSON from "superjson";
 
 import { env } from "~/config/env";
-import { authClient } from "~/utils/auth";
+import { getSessionCookie } from "~/utils/auth";
 
 export interface OracleChunk {
   unitId: string;
@@ -47,7 +47,7 @@ function createOracleClient(baseUrl: string): OracleClient {
         headers() {
           const headers = new Map<string, string>();
           headers.set("x-trpc-source", "mobile-bob");
-          const cookies = authClient.getCookie();
+          const cookies = getSessionCookie();
           if (cookies) headers.set("Cookie", cookies);
           return headers;
         },
