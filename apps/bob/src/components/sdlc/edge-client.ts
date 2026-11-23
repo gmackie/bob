@@ -1,6 +1,20 @@
 // The SDLC edge client's logic without a socket or React, so node tests cover it.
 // use-sdlc-edge.ts wires it to a browser WebSocket.
-import { emptyView, reduce, type ClientCommand, type CommandInput, type Confirmation, type EdgeMessage, type EdgeView } from "@bob/sdlc-view";
+import {
+  emptyView,
+  mergeShipped,
+  parseShippedMessage,
+  reduce,
+  watchedIds,
+  type ClientCommand,
+  type CommandInput,
+  type Confirmation,
+  type EdgeMessage,
+  type EdgeView,
+  type ShippedEntry,
+  type ShippedRequest,
+  type WatchMessage,
+} from "@bob/sdlc-view";
 
 import { emptyAttempt, parseAttemptMessage, reduceAttempt, watchMessage, type AttemptState } from "./attempt-model";
 import { commandsToResend, emptyCommands, parseCommandStatus, reduceCommands, type CommandsState } from "./commands-model";
@@ -92,6 +106,17 @@ export interface EdgeClient {
    * again after the hello on every new socket, since the edge forgets watches on close.
    */
   watch(itemId: string | null): void;
+  /**
+   * Watch these items too, for the Arcade desks (BOB-98): after the watched item, within
+   * the edge's cap (MAX_WATCHED_ITEMS). An empty list stops. Written only when the set changes.
+   */
+  watchDesks(itemIds: readonly string[]): void;
+  /** The ids this client asks the edge to watch: the watched item first, then desks. */
+  readonly watching: readonly string[];
+  /** Ask for shipped-today entries (BOB-95), now and after every hello. */
+  followShipped(): void;
+  /** What reached production recently, newest first; null until the edge answers followShipped(). */
+  readonly shipped: readonly ShippedEntry[] | null;
 }
 
 /**
@@ -106,6 +131,7 @@ export function createEdgeClient(options: {
   onView?: (view: EdgeView) => void;
   onCommands?: (commands: CommandsState) => void;
   onAttempt?: (attempt: AttemptState) => void;
+  onShipped?: (shipped: readonly ShippedEntry[]) => void;
   initial?: EdgeView;
   newCommandId?: () => string;
 }): EdgeClient {
@@ -113,6 +139,10 @@ export function createEdgeClient(options: {
   let commands = emptyCommands();
   let attempt = emptyAttempt();
   let resyncRequested = false;
+  let deskIds: readonly string[] = [];
+  let watching: readonly string[] = [];
+  let shippedWanted = false;
+  let shipped: readonly ShippedEntry[] | null = null;
   const newCommandId = options.newCommandId ?? (() => crypto.randomUUID());
   const now = options.now ?? Date.now;
   /** commandId → when it was written to the current socket, until the edge answers it. */
@@ -131,8 +161,19 @@ export function createEdgeClient(options: {
     attempt = next;
     options.onAttempt?.(attempt);
   };
+  /** The single form while nothing but one item is watched (what the edge has always taken); the set form for desks. */
+  const watchFor = (ids: readonly string[]): WatchMessage =>
+    deskIds.length === 0 ? watchMessage(ids[0] ?? null) : { type: "watch", itemIds: [...ids] };
+  const applyWatch = () => {
+    const ids = watchedIds({ type: "watch", itemIds: attempt.watching ? [attempt.watching, ...deskIds] : [...deskIds] });
+    if (ids.length === watching.length && ids.every((id, i) => id === watching[i])) return;
+    watching = ids;
+    options.send(JSON.stringify(watchFor(ids)));
+  };
   return {
     get view() { return view; },
+    get watching() { return watching; },
+    get shipped() { return shipped; },
     get commands() { return commands; },
     get attempt() { return attempt; },
     overdue(at = now()) {
@@ -142,7 +183,17 @@ export function createEdgeClient(options: {
     watch(itemId) {
       if (itemId === attempt.watching) return;
       setAttempt({ ...attempt, watching: itemId });
-      options.send(JSON.stringify(watchMessage(itemId)));
+      applyWatch();
+    },
+    watchDesks(itemIds) {
+      if (itemIds.length === deskIds.length && itemIds.every((id, i) => id === deskIds[i])) return;
+      deskIds = [...itemIds];
+      applyWatch();
+    },
+    followShipped() {
+      if (shippedWanted) return;
+      shippedWanted = true;
+      options.send(JSON.stringify({ type: "shipped" } satisfies ShippedRequest));
     },
     opened() {
       // The hello on a new socket already asks for a snapshot when the view needs one.
@@ -152,7 +203,8 @@ export function createEdgeClient(options: {
       unacked.clear();
       for (const command of commandsToResend(commands)) sendCommand(command);
       // The edge keeps watches per socket: a new socket starts watching nothing.
-      if (attempt.watching !== null) options.send(JSON.stringify(watchMessage(attempt.watching)));
+      if (watching.length) options.send(JSON.stringify(watchFor(watching)));
+      if (shippedWanted) options.send(JSON.stringify({ type: "shipped" } satisfies ShippedRequest));
     },
     send(input, label, confirm) {
       const command = { type: "command", commandId: newCommandId(), ...input, ...(confirm ? { confirm } : {}) } as ClientCommand;
@@ -164,6 +216,12 @@ export function createEdgeClient(options: {
       const message = parseEdgeMessage(data);
       if (!message) {
         // Command status and attempt messages are not EdgeMessages: they never touch the view.
+        const done = parseShippedMessage(data);
+        if (done) {
+          shipped = mergeShipped(shipped ?? [], done);
+          options.onShipped?.(shipped);
+          return true;
+        }
         const live = parseAttemptMessage(data);
         if (live) {
           setAttempt(reduceAttempt(attempt, live));

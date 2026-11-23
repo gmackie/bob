@@ -1,10 +1,11 @@
 // The live session with the SdlcEdge on the phone: one socket at a time, the view folded
 // through reduce(), command statuses routed to the command model, attempt detail (tail,
-// CI) for the one watched item, reconnects with capped jittered backoff, and in-flight
-// commands plus the watch re-sent on every new socket. The socket is injected, so node
+// CI) for the watched items (the focused screen plus the Arcade desks), shipped-today
+// entries on request, reconnects with capped jittered backoff, and in-flight commands plus
+// the watch re-sent on every new socket. The socket is injected, so node
 // tests drive it without a network. Ported from the web edge-client and bob-tui session.
-import { emptyView, reduce, stripTerminalControls } from "@bob/sdlc-view";
-import type {CiMessage, ClientCommand, CommandInput, Confirmation, EdgeMessage, EdgeView, LiveActivityRegistration, TailFrame, WatchMessage} from "@bob/sdlc-view";
+import { emptyView, mergeShipped, parseShippedMessage, reduce, stripTerminalControls, watchedIds } from "@bob/sdlc-view";
+import type {CiMessage, ClientCommand, CommandInput, Confirmation, EdgeMessage, EdgeView, LiveActivityRegistration, ShippedEntry, ShippedRequest, TailFrame, WatchMessage} from "@bob/sdlc-view";
 
 import {
   asCommandStatus,
@@ -93,7 +94,7 @@ export function createBackoff(random: () => number = Math.random) {
   };
 }
 
-/** Live detail for the watched item. Cleared when the watch moves to another item. */
+/** Live detail for one watched item. Dropped when the item leaves the watch set. */
 export interface AttemptDetail {
   itemId: string;
   tail: TailFrame | null;
@@ -108,7 +109,17 @@ export interface SessionState {
   connection: EdgeConnection;
   /** Why the session stopped reconnecting (auth), or the last refusal. */
   error: string | null;
+  /** Live detail for the focused item (watch()), else null. */
   attempt: AttemptDetail | null;
+  /** Live detail per watched item: the focused item and the Arcade desks (BOB-98). */
+  attempts: Readonly<Record<string, AttemptDetail>>;
+  /**
+   * The ids this session asks the edge to watch, in order: the focused item first, then
+   * desks, capped at MAX_WATCHED_ITEMS (BOB-94). A desk outside this list gets no detail.
+   */
+  watching: readonly string[];
+  /** What reached production recently (BOB-95), newest first; null until followShipped(). */
+  shipped: readonly ShippedEntry[] | null;
 }
 
 export interface SocketHandlers {
@@ -151,8 +162,15 @@ export interface Session {
   wake(): void;
   /** Records and sends a command; while disconnected it is sent on the next socket. Returns the commandId. */
   send(command: CommandInput, label: string, confirm?: Confirmation): string;
-  /** Watch one item's attempt detail; null stops. Re-sent on every new socket. */
+  /** Watch one item's attempt detail (the focused screen's); null stops. Re-sent on every new socket. */
   watch(itemId: string | null): void;
+  /**
+   * Watch these items for the Arcade desks too (BOB-98), after the focused item, within the
+   * edge's cap. An empty list stops. A new watch is written only when the set changes.
+   */
+  watchDesks(itemIds: readonly string[]): void;
+  /** Ask the edge for shipped-today entries and their updates (BOB-95), now and on every new socket. */
+  followShipped(): void;
   /**
    * Register an iOS Live Activity's push token for an item (token null: stop it). Sent now
    * when the socket is live, else on the next socket; only the latest per item is kept.
@@ -167,13 +185,15 @@ export function createSession(options: SessionOptions): Session {
   const clearTimer = options.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
   const backoff = createBackoff(options.random);
   const listeners = new Set<(s: SessionState) => void>();
-  let state: SessionState = { view: emptyView(), commands: emptyCommands(), connection: "connecting", error: null, attempt: null };
+  let state: SessionState = { view: emptyView(), commands: emptyCommands(), connection: "connecting", error: null, attempt: null, attempts: {}, watching: [], shipped: null };
   let socket: SocketLike | null = null;
   let isOpen = false;
   let stopped = true;
   let timer: unknown;
   let resyncRequested = false;
-  let watched: string | null = null;
+  let focus: string | null = null;
+  let deskIds: readonly string[] = [];
+  let shippedWanted = false;
   /** Live Activity registrations not yet written to a live socket, latest per item. */
   const unsentActivities = new Map<string, LiveActivityRegistration>();
   /** commandId → when it was written to the current socket, until the edge answers it. */
@@ -211,13 +231,33 @@ export function createSession(options: SessionOptions): Session {
     armAck();
   };
 
+  const emptyDetail = (itemId: string): AttemptDetail => ({ itemId, tail: null, ci: null, tailUnavailable: null });
+  const withAttempts = (attempts: Record<string, AttemptDetail>): Partial<SessionState> => ({
+    attempts,
+    attempt: focus ? attempts[focus] ?? null : null,
+  });
+  /** The single form while only one screen watches (what the edge has always taken); the set form for desks. */
+  const watchMessage = (ids: readonly string[]): WatchMessage =>
+    deskIds.length === 0 ? { type: "watch", itemId: ids[0] ?? null } : { type: "watch", itemIds: [...ids] };
+  /** Recomputes the watch set; writes it and resets detail for ids that left or joined. */
+  const applyWatch = () => {
+    const ids = watchedIds({ type: "watch", itemIds: focus ? [focus, ...deskIds] : [...deskIds] });
+    const same = ids.length === state.watching.length && ids.every((id, i) => id === state.watching[i]);
+    const attempts: Record<string, AttemptDetail> = {};
+    for (const id of ids) attempts[id] = state.attempts[id] ?? emptyDetail(id);
+    set({ watching: ids, ...withAttempts(attempts) });
+    if (!same) write(watchMessage(ids));
+  };
+
   const onAttempt = (event: AttemptEvent) => {
     const itemId = event.type === "tail" ? event.frame.itemId : event.itemId;
-    if (itemId !== watched) return;
-    const base: AttemptDetail = state.attempt?.itemId === itemId ? state.attempt : { itemId, tail: null, ci: null, tailUnavailable: null };
-    if (event.type === "tail") set({ attempt: { ...base, tail: event.frame, tailUnavailable: null } });
-    else if (event.type === "ci") set({ attempt: { ...base, ci: event } });
-    else set({ attempt: { ...base, tailUnavailable: event.reason } });
+    if (!state.watching.includes(itemId)) return;
+    const base = state.attempts[itemId] ?? emptyDetail(itemId);
+    const next: AttemptDetail =
+      event.type === "tail" ? { ...base, tail: event.frame, tailUnavailable: null }
+      : event.type === "ci" ? { ...base, ci: event }
+      : { ...base, tailUnavailable: event.reason };
+    set(withAttempts({ ...state.attempts, [itemId]: next }));
   };
 
   /** Closes the current socket (its late events are ignored) and cancels a pending reconnect. */
@@ -246,7 +286,8 @@ export function createSession(options: SessionOptions): Session {
         set({ connection: "live", error: null });
         write(helloFor(state.view));
         for (const command of commandsToResend(state.commands)) writeCommand(command);
-        if (watched) write({ type: "watch", itemId: watched } satisfies WatchMessage);
+        if (state.watching.length) write(watchMessage(state.watching));
+        if (shippedWanted) write({ type: "shipped" } satisfies ShippedRequest);
         for (const registration of unsentActivities.values()) write(registration);
         unsentActivities.clear();
       },
@@ -258,6 +299,8 @@ export function createSession(options: SessionOptions): Session {
         if (status) { backoff.heard(); unacked.delete(status.commandId); set({ commands: reduceCommands(state.commands, status) }); return; }
         const attempt = asAttemptMessage(value);
         if (attempt) { backoff.heard(); onAttempt(attempt); return; }
+        const shipped = parseShippedMessage(value);
+        if (shipped) { backoff.heard(); set({ shipped: mergeShipped(state.shipped ?? [], shipped) }); return; }
         const message = asEdgeMessage(value);
         if (!message) return;
         backoff.heard();
@@ -322,10 +365,19 @@ export function createSession(options: SessionOptions): Session {
       return message.commandId;
     },
     watch(itemId) {
-      if (itemId === watched) return;
-      watched = itemId;
-      set({ attempt: itemId ? { itemId, tail: null, ci: null, tailUnavailable: null } : null });
-      write({ type: "watch", itemId } satisfies WatchMessage);
+      if (itemId === focus) return;
+      focus = itemId;
+      applyWatch();
+    },
+    watchDesks(itemIds) {
+      if (itemIds.length === deskIds.length && itemIds.every((id, i) => id === deskIds[i])) return;
+      deskIds = [...itemIds];
+      applyWatch();
+    },
+    followShipped() {
+      if (shippedWanted) return;
+      shippedWanted = true;
+      write({ type: "shipped" } satisfies ShippedRequest);
     },
     registerLiveActivity(registration) {
       if (socket && isOpen) { unsentActivities.delete(registration.itemId); write(registration); }

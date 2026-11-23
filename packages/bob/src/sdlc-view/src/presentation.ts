@@ -90,11 +90,41 @@ export const RELEASE_STAGE_PRESENTATION = {
   blocked:               { label: "Blocked",          attention: "needs_human", hint: "the release needs attention" },
 } as const satisfies Record<ReleaseStage, ReleaseStagePresentation>;
 
+const HOUR = 3_600_000;
+/**
+ * How long the system may keep an item in a state before it reads as stalled (BOB-101).
+ * Only states the system owns and should leave on its own: waiting for capacity (ready),
+ * for a human (review, waiting-input) or for dependencies (pending) is not a stall.
+ */
+export const STALL_AFTER_MS: Partial<Record<ItemState, number>> = {
+  reserved: HOUR,
+  running: 24 * HOUR,
+  validating: 6 * HOUR,
+  deploying: 2 * HOUR,
+  cancelling: HOUR,
+};
+
+/** How long the item has been in its current state, or null when the edge does not know. */
+export const stateAge = (item: { stateSince?: number | null }, now: number): number | null =>
+  typeof item.stateSince === "number" ? Math.max(0, now - item.stateSince) : null;
+
 /**
  * An item's attention, refined by its release: a blocked release needs a human in any
- * state, and a review-ready release that will auto-merge does not.
+ * state, and a review-ready release that will auto-merge does not. With `now`, an item
+ * that would otherwise be ok but has sat past STALL_AFTER_MS in its state is stalled.
  */
-export function itemAttention(item: { state: ItemState; release?: { stage: ReleaseStage; autoMerge: boolean } | null }): Attention {
+export function itemAttention(
+  item: { state: ItemState; release?: { stage: ReleaseStage; autoMerge: boolean } | null; stateSince?: number | null },
+  now?: number,
+): Attention {
+  const attention = releaseAttention(item);
+  if (attention !== "ok" || now === undefined) return attention;
+  const limit = STALL_AFTER_MS[item.state];
+  const age = stateAge(item, now);
+  return limit !== undefined && age !== null && age > limit ? "stalled" : "ok";
+}
+
+function releaseAttention(item: { state: ItemState; release?: { stage: ReleaseStage; autoMerge: boolean } | null }): Attention {
   const base = STATE_PRESENTATION[item.state].attention;
   const release = item.release;
   if (!release) return base;

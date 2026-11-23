@@ -89,6 +89,25 @@ describe("handleSdlcRoute: configuration", () => {
   });
 });
 
+describe("handleSdlcRoute: issues (BOB-99)", () => {
+  const issues = (body: BodyInit, headers: Record<string, string> = { authorization: `Bearer ${TOKEN}` }) =>
+    req("/api/sdlc/issues", { method: "POST", body, headers });
+  it("needs the ingest bearer token, POST, and at most MAX_INGEST_BYTES", async () => {
+    const e = env();
+    expect((await route(issues("{}", {}), e)).status).toBe(401);
+    expect((await route(issues("{}", { authorization: "Bearer nope" }), e)).status).toBe(401);
+    expect((await route(req("/api/sdlc/issues", { headers: { authorization: `Bearer ${TOKEN}` } }), e)).status).toBe(405);
+    expect((await route(issues("x".repeat(MAX_INGEST_BYTES + 1)), e)).status).toBe(413);
+    expect(e.SDLC_EDGE.calls).toEqual([]);
+  });
+  it("forwards an authorised body to the Durable Object's /issues", async () => {
+    const e = env();
+    const body = JSON.stringify({ contractVersion: "1", upserts: [] });
+    expect((await route(issues(body), e)).status).toBe(200);
+    expect(e.SDLC_EDGE.calls).toEqual([{ path: "/issues", method: "POST", body, upgrade: null, cookie: null }]);
+  });
+});
+
 describe("handleSdlcRoute: ingest", () => {
   it("answers 401 without the exact bearer token and forwards nothing", async () => {
     const e = env();
@@ -290,6 +309,40 @@ describe("handleSdlcRoute: native clients (device API key)", () => {
   it("without a key verifier (the default), a bearer upgrade is 401", async () => {
     const e = env();
     expect((await handleSdlcRoute(native({ authorization: `Bearer ${KEY}` }), e as never, async () => "u1")).status).toBe(401);
+  });
+});
+
+describe("handleSdlcRoute: MCP Apps views (single-use ticket)", () => {
+  const ticketed = (ticket: string, origin = "null") =>
+    req(`/api/sdlc/ws?ticket=${ticket}`, { headers: { upgrade: "websocket", origin, cookie: "session=s" } });
+  const tickets = (valid: Record<string, string>) => {
+    const left = new Map(Object.entries(valid));
+    return vi.fn(async (ticket: string) => {
+      const user = left.get(ticket) ?? null;
+      left.delete(ticket);
+      return user;
+    });
+  };
+  const call = (request: Request, e: FakeEnv, consume: (ticket: string) => Promise<string | null>, session = vi.fn(async () => "u1")) =>
+    handleSdlcRoute(request, e as unknown as SdlcRouteEnv, session, async () => null, consume);
+
+  it("accepts a valid ticket from a sandboxed frame's opaque Origin once, forwarding only its user", async () => {
+    const e = env();
+    const consume = tickets({ t1: "u3" });
+    const session = vi.fn(async () => "u1");
+    expect((await call(ticketed("t1"), e, consume, session)).status).toBe(200);
+    expect(e.SDLC_EDGE.calls).toEqual([{ path: "/ws", method: "GET", body: "", upgrade: "websocket", cookie: null, user: "u3" }]);
+    expect((await call(ticketed("t1"), e, consume, session)).status).toBe(401);
+    expect(session).not.toHaveBeenCalled();
+  });
+  it("answers 401 to an unknown ticket and 403 to a ticket whose user is not on SDLC_VIEWER_USER_IDS", async () => {
+    const e = env();
+    expect((await call(ticketed("nope"), e, tickets({}))).status).toBe(401);
+    expect((await call(ticketed("t2"), e, tickets({ t2: "u2" }))).status).toBe(403);
+    expect(e.SDLC_EDGE.calls).toHaveLength(0);
+  });
+  it("without a ticket consumer (the default), a ticketed upgrade is 401", async () => {
+    expect((await route(ticketed("t1", ORIGIN), env(), "u1")).status).toBe(401);
   });
 });
 
