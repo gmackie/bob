@@ -134,10 +134,93 @@ test("Hermes vault sync never overwrites a dirty checkout", async () => {
   assert.match(timer, /^OnUnitActiveSec=10min$/m);
 });
 
-test("Hermes daily canary alerts when the note misses its cutoff", async () => {
-  const script = await readOps("hermes-daily-canary.sh");
+// --- BOB-108: versioned Hermes config + loud failure detection -------------
+const readConfig = (name) =>
+  readFile(new URL(`../hermes-config/${name}`, import.meta.url), "utf8");
+const HERMES_CONFIGS = [
+  "config.yaml",
+  "profiles/hermes-console/config.yaml",
+  "profiles/hermes-operator/config.yaml",
+];
+// Model ids retired for Codex ChatGPT accounts (BOB-105). Never ship them again.
+const RETIRED_MODELS = ["gpt-5.4", "gpt-5.4-mini"];
+
+test("Hermes daily canary runs the health check after both scheduled jobs", async () => {
+  const service = await readOps("hermes-daily-canary.service");
   const timer = await readOps("hermes-daily-canary.timer");
-  assert.match(script, /Daily\/\$\{today\}\.md/);
-  assert.match(script, /systemd-cat/);
+  assert.match(
+    service,
+    /^ExecStart=\/usr\/bin\/python3 \/opt\/bob\/ops\/hermes-health-check\.py$/m,
+  );
+  assert.match(service, /^User=bob$/m);
+  assert.match(service, /^Environment=HERMES_HOME=\/home\/bob\/\.hermes$/m);
+  // The Telegram alert path writes Hermes logs; the rest of $HOME stays read-only.
+  assert.match(service, /^ProtectHome=read-only$/m);
+  assert.match(service, /^ReadWritePaths=\/home\/bob\/\.hermes$/m);
+  // Morning briefing 07:00 and nightly wrap-up 22:00 America/Los_Angeles.
   assert.match(timer, /^OnCalendar=.*15:30:00 UTC$/m);
+  assert.match(timer, /^OnCalendar=.*06:30:00 UTC$/m);
+  assert.match(timer, /^Persistent=true$/m);
+});
+
+test("Hermes health check alerts through the operator Telegram path", async () => {
+  const script = await readOps("hermes-health-check.py");
+  assert.match(script, /"-p", OPERATOR_PROFILE, "send", "-t", "telegram"/);
+  assert.match(script, /OPERATOR_PROFILE = "hermes-operator"/);
+  assert.match(script, /Daily/);
+});
+
+test("versioned Hermes configs carry no secrets", async () => {
+  for (const name of HERMES_CONFIGS) {
+    const config = await readConfig(name);
+    assert.doesNotMatch(
+      config,
+      /^\s*[\w-]*(api_?key|token|secret|password)[\w-]*:\s*["']?[^\s"'#{$][^\s"']{7,}/im,
+      name,
+    );
+    assert.doesNotMatch(config, /Bearer\s+[A-Za-z0-9_-]{8,}/, name);
+    assert.doesNotMatch(config, /\b(sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|xox[bp]-)/, name);
+  }
+});
+
+test("versioned Hermes configs pin supported models and the jobs follow them", async () => {
+  const pins = JSON.parse(await readConfig("job-models.json"));
+  for (const name of HERMES_CONFIGS) {
+    const config = await readConfig(name);
+    const model = config.match(/^model:\n  default: (\S+)\n  provider: (\S+)\n/);
+    assert.ok(model, `${name} has a top-level model.default/provider`);
+    const compression = config.match(/^auxiliary:\n  compression:\n    provider: (\S+)\n    model: (\S+)\n/m);
+    assert.ok(compression, `${name} pins the compression model`);
+    for (const retired of RETIRED_MODELS) {
+      assert.notEqual(model[1], retired, name);
+      assert.notEqual(compression[2], retired, name);
+    }
+    if (name === "config.yaml") {
+      assert.ok(pins.jobs.length >= 2);
+      for (const job of pins.jobs) {
+        assert.equal(job.model, model[1], `${job.name} follows model.default`);
+        assert.equal(job.provider, model[2], `${job.name} follows model.provider`);
+      }
+    }
+  }
+  assert.deepEqual(
+    pins.jobs.map((job) => job.name).sort(),
+    ["Morning briefing", "Nightly vault wrap-up"],
+  );
+});
+
+test("Hermes config install backs up, keeps 0600, and has a read-only check", async () => {
+  const script = await readOps("install-hermes-config.sh");
+  assert.match(script, /--check/);
+  assert.match(script, /\.bak-\$\{STAMP\}/);
+  assert.match(script, /install -o bob -g bob -m 0600/);
+  for (const name of HERMES_CONFIGS) {
+    assert.ok(script.includes(name.replace("config.yaml", "")), name);
+  }
+  assert.match(script, /apply-hermes-job-models\.py/);
+  assert.match(script, /hermes-health-check\.py/);
+  assert.match(script, /systemctl enable --now hermes-daily-canary\.timer/);
+  // Only a changed config restarts the gateway; never unrelated bob services.
+  assert.match(script, /if \[\[ "\$\{changed\}" -eq 1 \]\]; then\n\s+systemctl restart hermes-gateway\.service/);
+  assert.doesNotMatch(script, /ooda-runner|bob-ws-gateway|bob-execution/);
 });

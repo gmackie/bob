@@ -409,3 +409,25 @@ describe("command decision log (BOB-89)", () => {
     expect(h.send(h.connect("u1"), pause("log-t"))).toMatchObject({ type: "commandAccepted", commandId: "log-t" });
   });
 });
+
+describe("issue commands (BOB-99)", () => {
+  const ISSUE = "6599c7ad-a18d-4670-a462-ea815e170356";
+  const move = (commandId: string, target: string, confirm?: unknown) =>
+    ({ type: "command", commandId, operation: "SetIssueState", input: { issueId: ISSUE, target }, ...(confirm ? { confirm } : {}) });
+  it("queues a move at once, and asks to confirm Done, Canceled and dispatch", () => {
+    const h = harness(); h.ingest();
+    const s = h.connect("u1");
+    expect(h.send(s, move("m1", "in_review"))).toMatchObject({ type: "commandAccepted" });
+    expect(h.send(s, move("m2", "done"))).toMatchObject({ type: "commandRejected", code: "confirmation-required" });
+    expect(h.send(s, move("m3", "done", { confirmed: true }))).toMatchObject({ type: "commandAccepted" });
+    expect(h.send(s, { type: "command", commandId: "d1", operation: "DispatchIssue", input: { issueId: ISSUE } })).toMatchObject({ code: "confirmation-required" });
+    expect(h.send(s, { type: "command", commandId: "d2", operation: "DispatchIssue", input: { issueId: ISSUE }, confirm: { confirmed: true } })).toMatchObject({ type: "commandAccepted" });
+    expect(rows(h)).toEqual(["m1", "m3", "d2"]);
+    const queued = h.ingest().commands.map((c) => [c.commandId, c.operation]);
+    expect(queued).toEqual([["m1", "SetIssueState"], ["m3", "SetIssueState"], ["d2", "DispatchIssue"]]);
+  });
+  it("refuses an issue key where a UUID belongs", () => {
+    const h = harness(); h.ingest();
+    expect(h.send(h.connect("u1"), { type: "command", commandId: "x", operation: "SetIssueState", input: { issueId: "BOB-101", target: "done" } })).toMatchObject({ code: "invalid" });
+  });
+});

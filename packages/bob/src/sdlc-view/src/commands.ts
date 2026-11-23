@@ -15,9 +15,15 @@
  * its commandId arrives; the coordinator's idempotency replay makes the effect happen once.
  */
 import type { ItemSnapshot, PlanSnapshot } from "./model";
+import { ISSUE_TARGET_LABEL, ISSUE_TARGETS, issueTargetOf, type IssueTarget, type TrackedIssue } from "./issues";
 
-/** Coordinator operations the edge may relay. Anything else is refused by the DO and by the exporter. */
-export const RELAYED_OPERATIONS = ["ControlPlan", "RetryItem", "CancelItem", "ReconcileItem", "ResolveInput", "RequestRelease", "RequestDeployment"] as const;
+/**
+ * Operations the edge may relay. Anything else is refused by the DO and by the exporter.
+ * SetIssueState and DispatchIssue (BOB-99) are not coordinator contract operations: the
+ * exporter runs them itself, against Kanbanger (SetIssueState) or as CreatePlan + start
+ * under the edge principal (DispatchIssue).
+ */
+export const RELAYED_OPERATIONS = ["ControlPlan", "RetryItem", "CancelItem", "ReconcileItem", "ResolveInput", "RequestRelease", "RequestDeployment", "SetIssueState", "DispatchIssue"] as const;
 export type RelayedOperation = (typeof RELAYED_OPERATIONS)[number];
 
 export type PlanAction = "start" | "pause" | "resume" | "cancel";
@@ -46,7 +52,11 @@ export type CommandInput =
    * sourceRevision is the release's headSha: the coordinator refuses a stale head.
    */
   | { operation: "RequestRelease"; input: { itemId: string; attemptId: string; action: ReleaseAction; sourceRevision: string; pullRequestRef?: string } }
-  | { operation: "RequestDeployment"; input: { itemId: string; action: DeploymentAction; artifactRef: string; stageRef: string; deploymentRef?: string } };
+  | { operation: "RequestDeployment"; input: { itemId: string; action: DeploymentAction; artifactRef: string; stageRef: string; deploymentRef?: string } }
+  /** Move a Kanbanger issue (by UUID) to a workflow state; the coordinator picks the team's state for `target`. */
+  | { operation: "SetIssueState"; input: { issueId: string; target: IssueTarget } }
+  /** Hand an issue to an agent: a one-item plan for it, started. Only for issues marked dispatchable. */
+  | { operation: "DispatchIssue"; input: { issueId: string } };
 
 export function tierOf(command: CommandInput): Tier {
   switch (command.operation) {
@@ -61,6 +71,10 @@ export function tierOf(command: CommandInput): Tier {
       return 2;
     case "RequestDeployment":
       return 3;
+    case "SetIssueState":
+      return command.input.target === "done" || command.input.target === "canceled" ? 2 : 1;
+    case "DispatchIssue":
+      return 2;
   }
 }
 
@@ -198,12 +212,33 @@ export function itemCommands(item: ItemSnapshot, plan?: PlanSnapshot): CommandOp
   return out;
 }
 
+/**
+ * Issue actions (BOB-99): move to each workflow target it is not already at, and dispatch
+ * when the coordinator's policy admits the issue's project and no coordinator item draws it.
+ */
+export function issueCommands(issue: TrackedIssue, coordinated = false): CommandOption[] {
+  const out: CommandOption[] = [];
+  const at = issueTargetOf(issue);
+  if (issue.dispatchable && !coordinated && issue.state.type !== "completed" && issue.state.type !== "canceled") {
+    const command: CommandInput = { operation: "DispatchIssue", input: { issueId: issue.id } };
+    out.push({ label: "Dispatch to an agent", tier: tierOf(command), command });
+  }
+  for (const target of ISSUE_TARGETS) {
+    if (target === at) continue;
+    const command: CommandInput = { operation: "SetIssueState", input: { issueId: issue.id, target } };
+    out.push({ label: `Move to ${ISSUE_TARGET_LABEL[target]}`, tier: tierOf(command), command, destructive: target === "canceled" });
+  }
+  return out;
+}
+
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const isId = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 200;
 /** A t3 runtime request id: Codex async question ids run to ~191 chars (coordination contract PromptId, BOB-85). */
 const isPromptId = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 1024;
 const isVersion = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 1;
 const isSha = (v: unknown): v is string => typeof v === "string" && SHA.test(v);
+/** Kanbanger mutations take an issue UUID (BOB-99). */
+const isUuid = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const RELEASE_ACTIONS: ReadonlySet<string> = new Set<ReleaseAction>(["open-pr", "approve", "merge"]);
 const DEPLOYMENT_ACTIONS: ReadonlySet<string> = new Set<DeploymentAction>(["deploy", "promote", "rollback"]);
 
@@ -232,6 +267,11 @@ export function parseCommandInput(operation: unknown, input: unknown): CommandIn
       if (!isId(input.itemId) || !DEPLOYMENT_ACTIONS.has(input.action as string) || !isId(input.artifactRef) || !isId(input.stageRef)) return null;
       if (input.deploymentRef !== undefined && !isId(input.deploymentRef)) return null;
       return { operation, input: { itemId: input.itemId, action: input.action as DeploymentAction, artifactRef: input.artifactRef, stageRef: input.stageRef, ...(input.deploymentRef !== undefined ? { deploymentRef: input.deploymentRef } : {}) } };
+    case "SetIssueState":
+      return isUuid(input.issueId) && (ISSUE_TARGETS as readonly string[]).includes(input.target as string)
+        ? { operation, input: { issueId: input.issueId, target: input.target as IssueTarget } } : null;
+    case "DispatchIssue":
+      return isUuid(input.issueId) ? { operation, input: { issueId: input.issueId } } : null;
     default:
       return null;
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyView, reduce, type EdgeMessage, type EdgeView, type ItemSnapshot, type PlanSnapshot } from "@bob/sdlc-view";
+import { emptyView, reduce, type EdgeMessage, type EdgeView, type IssueBatch, type ItemSnapshot, type PlanSnapshot, type TrackedIssue } from "@bob/sdlc-view";
 import { DeltaLog, EdgeStore, MAX_INGEST_BYTES, parseBatch, type IngestBatch } from "./store";
 import { durableObjectSql } from "./sql";
 import { nodeSqlitePort } from "./test-helpers/node-sqlite";
@@ -34,8 +34,9 @@ describe("EdgeStore.apply", () => {
     s.apply(batch({ kind: "snapshot", watermark: 4, items: [item("a", 1)] }), 100);
     const next = s.apply(batch({ fromSequence: 4, watermark: 6, items: [item("a", 2, "running")] }), 200);
     expect(next.result).toEqual({ accepted: true, watermark: 6 });
-    expect(next.message).toEqual({ type: "delta", seq: 2, plans: [], items: [item("a", 2, "running")], coordinatorSeenAt: 200 });
-    expect(s.snapshot(null).items).toEqual([item("a", 2, "running")]);
+    // The edge stamps when it saw the state change (BOB-101).
+    expect(next.message).toEqual({ type: "delta", seq: 2, plans: [], items: [{ ...item("a", 2, "running"), stateSince: 200 }], coordinatorSeenAt: 200 });
+    expect(s.snapshot(null).items).toEqual([{ ...item("a", 2, "running"), stateSince: 200 }]);
   });
   it("accepts an empty changes batch (every resource out of policy) and advances the watermark without a delta", () => {
     const s = store();
@@ -53,7 +54,7 @@ describe("EdgeStore.apply", () => {
     expect(replay).toEqual({ result: { accepted: true, watermark: 5 }, message: null, covered: true, alerts: [], shipped: [] }); // the exporter checks result.watermark === batch.watermark
     expect(sql.statements.slice(writes).filter((q) => WRITES.test(q))).toEqual([]);
     expect(s.meta()).toMatchObject({ watermark: 6, seq: 2 });
-    expect(s.snapshot(null).items).toEqual([item("a", 3, "running")]);
+    expect(s.snapshot(null).items).toEqual([{ ...item("a", 3, "running"), stateSince: 200 }]);
   });
   it("keeps the newest resourceVersion in an overlapping batch and leaves stale rows out of the delta", () => {
     const s = store();
@@ -103,6 +104,69 @@ describe("EdgeStore.apply", () => {
     expect(first).toMatch(/^[0-9a-f-]{36}$/);
     expect(new EdgeStore(sql).meta().epoch).toBe(first);
     expect(new EdgeStore(nodeSqlitePort()).meta().epoch).not.toBe(first);
+  });
+});
+
+describe("EdgeStore stateSince (BOB-101)", () => {
+  const since = (s: EdgeStore, id: string) => s.snapshot(null).items.find((i) => i.itemId === id)?.stateSince;
+  it("leaves it unknown for items a snapshot brings, then stamps the edge time when the state changes", () => {
+    const s = store();
+    s.apply(batch({ kind: "snapshot", watermark: 4, items: [item("a", 1, "running")] }), 100);
+    expect(since(s, "a")).toBeNull();
+    const next = s.apply(batch({ fromSequence: 4, watermark: 5, items: [item("a", 2, "validating")] }), 200);
+    expect(since(s, "a")).toBe(200);
+    expect(next.message).toMatchObject({ type: "delta", items: [{ itemId: "a", stateSince: 200 }] });
+  });
+  it("keeps it while the state holds, across new versions and later snapshots", () => {
+    const s = store();
+    s.apply(batch({ kind: "snapshot", watermark: 4 }), 100);
+    s.apply(batch({ fromSequence: 4, watermark: 5, items: [item("b", 1, "validating")] }), 150);
+    s.apply(batch({ fromSequence: 5, watermark: 6, items: [item("b", 2, "validating")] }), 300);
+    expect(since(s, "b")).toBe(150);
+    s.apply(batch({ kind: "snapshot", watermark: 9, items: [item("b", 3, "validating")] }), 400);
+    expect(since(s, "b")).toBe(150);
+  });
+  it("ignores a stamp sent by the coordinator", () => {
+    const s = store();
+    s.apply(batch({ kind: "snapshot", watermark: 4 }), 100);
+    s.apply(batch({ fromSequence: 4, watermark: 5, items: [{ ...item("c", 1, "running"), stateSince: 1 }] }), 250);
+    expect(since(s, "c")).toBe(250);
+  });
+});
+
+describe("EdgeStore issues (BOB-99)", () => {
+  const issue = (id: string, version: number, over: Partial<TrackedIssue> = {}): TrackedIssue => ({
+    id, key: `BOB-${id}`, title: `Issue ${id}`, url: null, state: { name: "In Progress", type: "started" }, project: { id: "p1", name: "Bob" },
+    team: "GMA", updatedAt: version, pr: null, dispatchable: false, version, ...over,
+  });
+  const batchOf = (upserts: TrackedIssue[], complete?: string[]): IssueBatch => ({ contractVersion: "1", upserts, ...(complete ? { complete: { ids: complete } } : {}) });
+  it("stores issues by version and sends only what changed, as the next delta", () => {
+    const s = store();
+    s.apply(batch({ kind: "snapshot", watermark: 1 }), 100);
+    const first = s.applyIssues(batchOf([issue("1", 10), issue("2", 10)]), 200);
+    expect(first).toMatchObject({ stored: 2, removed: 0, message: { type: "delta", seq: 2, plans: [], items: [], coordinatorSeenAt: 200 } });
+    expect(first.message?.issues?.map((i) => i.id)).toEqual(["1", "2"]);
+    const again = s.applyIssues(batchOf([issue("1", 10), issue("2", 9), issue("3", 5)]), 300);
+    expect(again.stored).toBe(1);
+    expect(again.message?.issues?.map((i) => i.id)).toEqual(["3"]);
+    expect(s.applyIssues(batchOf([issue("1", 10)]), 400).message).toBeNull();
+    expect(s.meta().seq).toBe(3);
+    expect(s.snapshot(null).issues?.map((i) => i.id)).toEqual(["1", "2", "3"]);
+  });
+  it("removes issues a full sync no longer lists, keeping ones upserted in the same batch", () => {
+    const s = store();
+    s.applyIssues(batchOf([issue("1", 1), issue("2", 1), issue("3", 1)]), 100);
+    const sync = s.applyIssues(batchOf([issue("4", 1)], ["1"]), 200);
+    expect(sync).toMatchObject({ stored: 1, removed: 2 });
+    expect(sync.message?.issuesRemoved?.sort()).toEqual(["2", "3"]);
+    expect(s.snapshot(null).issues?.map((i) => i.id)).toEqual(["1", "4"]);
+    expect(s.issueCount()).toBe(2);
+  });
+  it("keeps issues across a coordinator snapshot of plans and items", () => {
+    const s = store();
+    s.applyIssues(batchOf([issue("1", 1)]), 100);
+    s.apply(batch({ kind: "snapshot", watermark: 4, items: [item("a", 1)] }), 200);
+    expect(s.snapshot(null).issues?.map((i) => i.id)).toEqual(["1"]);
   });
 });
 
@@ -181,7 +245,10 @@ describe("EdgeStore matches reduce", () => {
   const pick = (v: { plans: Record<string, PlanSnapshot> | PlanSnapshot[]; items: Record<string, ItemSnapshot> | ItemSnapshot[] }) => {
     const byId = <T,>(list: T[] | Record<string, T>, id: (t: T) => string) =>
       Object.fromEntries((Array.isArray(list) ? list.map((t) => [id(t), t] as const) : Object.entries(list)).sort(([a], [b]) => a.localeCompare(b)));
-    return { plans: byId(v.plans, (p) => p.planId), items: byId(v.items, (i) => i.itemId) };
+    // stateSince is the edge's own stamp (BOB-101); reduce of the coordinator's batches has none.
+    const unstamped = (list: ItemSnapshot[] | Record<string, ItemSnapshot>) =>
+      (Array.isArray(list) ? list : Object.values(list)).map(({ stateSince: _edgeStamp, ...rest }) => rest as ItemSnapshot);
+    return { plans: byId(v.plans, (p) => p.planId), items: byId(unstamped(v.items), (i) => i.itemId) };
   };
 
   for (const seed of [1, 7, 42, 1234]) {

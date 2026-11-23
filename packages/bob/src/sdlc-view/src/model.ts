@@ -1,5 +1,6 @@
 import { ITEM_STATES, type ItemState, type Milestone, type PlanState, type ReleaseStage } from "./generated/contract";
 import { itemAttention, type Attention } from "./presentation";
+import { newerIssue, type TrackedIssue } from "./issues";
 
 export interface RepositoryRef { integrationId: string; repositoryId: string }
 export interface ExecutionTarget { environmentId: string; projectId: string; repository: RepositoryRef }
@@ -52,6 +53,12 @@ export interface ItemSnapshot {
   achievedMilestones: Milestone[];
   operationIds: string[];
   evidenceRefs: string[];
+  /**
+   * Stamped by the edge, not the coordinator (BOB-101): when the edge first saw the item in
+   * its current state, in the edge's clock (ms). Null when unknown: an item the edge first
+   * met in a snapshot, or one it held before it began stamping.
+   */
+  stateSince?: number | null;
 }
 /** A BizPulse repos.list row reduced to what the join needs. */
 export interface TopologyRepo { startupId: string; startupName: string; repoSlug: string }
@@ -67,6 +74,8 @@ export interface EdgeView {
   plans: Record<string, PlanSnapshot>;
   items: Record<string, ItemSnapshot>;
   topology: TopologyRepo[];
+  /** Every open Kanbanger issue the coordinator mirrors (BOB-99), by issue UUID. */
+  issues: Record<string, TrackedIssue>;
   /**
    * When the edge last heard from the coordinator: the edge's own receive time
    * (Date.now() in the edge), not the coordinator's clock. isOffline() compares it
@@ -84,11 +93,13 @@ export interface EdgeView {
  * broadcast as they happen.
  */
 export type EdgeMessage =
-  | { type: "snapshot"; epoch: string; seq: number; plans: PlanSnapshot[]; items: ItemSnapshot[]; topology: TopologyRepo[]; coordinatorSeenAt: number | null }
-  | { type: "delta"; seq: number; plans: PlanSnapshot[]; items: ItemSnapshot[]; coordinatorSeenAt: number | null }
+  /** issues is absent from an edge older than BOB-99. */
+  | { type: "snapshot"; epoch: string; seq: number; plans: PlanSnapshot[]; items: ItemSnapshot[]; topology: TopologyRepo[]; coordinatorSeenAt: number | null; issues?: TrackedIssue[] }
+  /** issues: upserts by version; issuesRemoved: ids a full sync no longer lists (BOB-99). */
+  | { type: "delta"; seq: number; plans: PlanSnapshot[]; items: ItemSnapshot[]; coordinatorSeenAt: number | null; issues?: TrackedIssue[]; issuesRemoved?: string[] }
   | { type: "status"; coordinatorSeenAt: number | null };
 
-export const emptyView = (): EdgeView => ({ epoch: null, seq: 0, plans: {}, items: {}, topology: [], coordinatorSeenAt: null, needsResync: false });
+export const emptyView = (): EdgeView => ({ epoch: null, seq: 0, plans: {}, items: {}, topology: [], issues: {}, coordinatorSeenAt: null, needsResync: false });
 const newer = <T extends { resourceVersion: number }>(current: T | undefined, next: T) => !current || next.resourceVersion > current.resourceVersion;
 const later = (a: number | null, b: number | null) => (a === null ? b : b === null ? a : Math.max(a, b));
 /** Plans in these states never live in the view. */
@@ -121,11 +132,16 @@ export function reduce(view: EdgeView, message: EdgeMessage): EdgeView {
   }
   for (const i of message.items) if (!evicted.has(i.planId) && newer(items[i.itemId], i)) items[i.itemId] = i;
   if (evicted.size) for (const [id, i] of Object.entries(items)) if (evicted.has(i.planId)) delete items[id];
+  // A snapshot from an edge older than BOB-99 has no issues field: keep none rather than stale ones.
+  const issues = snapshot ? {} : { ...view.issues };
+  for (const issue of message.issues ?? []) if (newerIssue(issues[issue.id], issue)) issues[issue.id] = issue;
+  if (message.type === "delta") for (const id of message.issuesRemoved ?? []) delete issues[id];
   return {
     ...base,
     seq: message.seq,
     plans,
     items,
+    issues,
     // Liveness never moves backwards, not even on a snapshot: an edge that was evicted
     // has not heard from the coordinator yet, and must not make a live coordinator look offline.
     coordinatorSeenAt: later(view.coordinatorSeenAt, message.coordinatorSeenAt),
@@ -153,14 +169,17 @@ export function projectFor(topology: TopologyRepo[], ref: RepositoryRef): { star
 export const repoKey = (ref: RepositoryRef) => `${ref.integrationId}:${ref.repositoryId}`;
 
 export interface Row { item: ItemSnapshot; plan: PlanSnapshot; target: ExecutionTarget; issue: IssueRef; startupId: string; startupName: string; attention: Attention }
-/** One row per item whose plan (and its definition of the item) the view has. */
-export function rows(view: EdgeView): Row[] {
+/**
+ * One row per item whose plan (and its definition of the item) the view has. With `now`,
+ * an item that has sat too long in an in-flight state reads as stalled (see itemAttention).
+ */
+export function rows(view: EdgeView, now?: number): Row[] {
   const out: Row[] = [];
   for (const item of Object.values(view.items)) {
     const plan = view.plans[item.planId];
     const def = plan?.definition.items.find((d) => d.itemId === item.itemId);
     if (!plan || !def) continue;
-    out.push({ item, plan, target: def.target, issue: def.issue, ...projectFor(view.topology, def.target.repository), attention: itemAttention(item) });
+    out.push({ item, plan, target: def.target, issue: def.issue, ...projectFor(view.topology, def.target.repository), attention: itemAttention(item, now) });
   }
   return out;
 }

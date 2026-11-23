@@ -48,6 +48,17 @@ beforeEach(() => {
 
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
+it("reproduces the original colon failure at Git worktree admission", async () => {
+  const branch = "bob/bizpulse:2026-10-05:startup:connector_failure:restore-connection/restore-connection";
+  const target = join(root, "rejected");
+  expect(() => git(repo, ["worktree", "add", "-B", branch, target, "master"]))
+    .toThrow(/not a valid branch name/);
+  expect(existsSync(target)).toBe(false);
+  await expect(assertValidWorktreeBranch(runGit, repo, branch))
+    .rejects.toThrow(INVALID_BRANCH_ERROR);
+  expect(git(repo, ["for-each-ref", "--format=%(refname)", "refs/heads/bob/"])).toBe("");
+});
+
 it("creates real worktrees for escaped intake IDs and distinct retry branches", async () => {
   const branch = generateBranchName("bizpulse:2026-10-05:startup:connector_failure:restore-connection", "Restore connection");
   const branches = [branch, `${branch}-a2`, `${branch}-a3`];

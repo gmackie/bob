@@ -3,9 +3,9 @@ import { useEffect, useState } from "react";
 import { emptyView, reduce } from "@bob/sdlc-view";
 import type { EdgeView } from "@bob/sdlc-view";
 
-import { demoFeed } from "./demo-feed";
+import { DEMO_STEP_MS, demoFeed } from "./demo-feed";
 
-const STEP_MS = 1_100;
+const STEP_MS = DEMO_STEP_MS;
 const REST_MS = 4_000;
 
 export function useDemoEdge(): EdgeView {

@@ -137,6 +137,15 @@ describe("generateBranchName", () => {
 });
 
 describe("tracker identifiers", () => {
+  it.each(["", "bizpulse:date:item", "GMA-5/other", "GMA-5.lock", "gma-5", "GMA-5\n"])(
+    "rejects invalid tracker identity %j at the emitter boundary",
+    (identifier) => {
+      expect(() => generateTrackerBranchName(identifier, "Task")).toThrow(
+        "A valid tracker identifier is required for branch naming",
+      );
+    },
+  );
+
   it("accepts exactly what Kanbanger's [A-Z]{2,10}-\\d+ extractor finds", () => {
     expect(isTrackerIdentifier("GMA-612")).toBe(true);
     expect(isTrackerIdentifier("gma-612")).toBe(false);
