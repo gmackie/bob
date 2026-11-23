@@ -7,7 +7,7 @@ import { clean, cleanBlock } from "../ui/sanitize";
 import { AnswerPrompt, AttemptPane } from "./attempt";
 
 // Ink's own styling is SGR only (ESC [ ... m). Anything else came from the data.
-// eslint-disable-next-line no-control-regex
+// oxlint-disable-next-line no-control-regex
 const foreign = (s: string) => s.replace(/\u001b\[[0-9;]*m/g, "").match(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g);
 
 const ESC = "\u001b";

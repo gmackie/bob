@@ -152,7 +152,7 @@ const definitions = {
   },
 };
 export interface McpToolService {
-  list(grant: OAuthGrant): unknown[];
+  list(grant: OAuthGrant): unknown[] | Promise<unknown[]>;
   call(grant: OAuthGrant, name: string, args: unknown): Promise<unknown>;
 }
 function projectView(p: typeof projects.$inferSelect) {

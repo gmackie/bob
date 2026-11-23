@@ -5,9 +5,13 @@ on:
     branches: [master]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   FG_REGISTRY_TOKEN: ${{ secrets.FG_REGISTRY_TOKEN }}
-  NODE_VERSION: "24"
+  NODE_VERSION: "26.13.1"
 
 jobs:
   research-backend:
@@ -221,10 +225,10 @@ jobs:
       - name: Lint
         id: lint
         # Serialize for the same reason as typecheck above: `pnpm lint` is
-        # `turbo run lint --continue`, which fans out one eslint process per
+        # `turbo run lint --continue`, which fans out one oxlint process per
         # package with no concurrency cap. Each is 600-800MB, so a full fan-out
         # exhausted RAM *and* swap on the shared runner host — load average
-        # reached 150 with every eslint stuck in uninterruptible sleep, which
+        # reached 150 with every oxlint stuck in uninterruptible sleep, which
         # degraded the Forgejo instance sharing that box until the processes
         # were killed. Serial lint cannot collectively exhaust memory.
         # The API lint program exceeds the runner's default 1.5GB heap; keep
@@ -394,7 +398,7 @@ jobs:
   #
   # NOTE: this is a CODE-ONLY deploy. The `predeploy` DB migration
   # (scripts/migrate-hetzner.sh) reaches Postgres over Tailscale and cannot run
-  # on a cloud runner, so it's intentionally skipped here (we call `vinext deploy`
+  # on a cloud runner, so it's intentionally skipped here (we call `wrangler deploy`
   # directly, not `pnpm deploy`). When a deploy includes schema changes, run
   # migrations first from a Tailscale-connected host:
   #   DATABASE_URL=$(forge db url --app bob) pnpm -F @bob/db migrate
@@ -443,7 +447,7 @@ jobs:
         working-directory: apps/bob
         run: pnpm exec vinext build
       # This job is the only production deploy: ForgeGraph records it from the
-      # report below instead of deploying again. `vinext deploy` is this build
+      # report below instead of deploying again. `vinext-cloudflare deploy` is this build
       # plus a bare `wrangler deploy`, which cannot stamp FG_COMMIT_HASH, and
       # ForgeGraph's source-order guard refuses any later deploy (rollbacks
       # included) while the serving version carries no stamp.
@@ -528,4 +532,6 @@ jobs:
           test -n "${RESEARCH_SERVICE_TOKEN}"
           printf '%s' "${FORGEGRAPH_API_KEY}" | pnpm exec wrangler secret put FORGEGRAPH_API_KEY --name ooda-blder-bot
           printf '%s' "${RESEARCH_SERVICE_TOKEN}" | pnpm exec wrangler secret put RESEARCH_SERVICE_TOKEN --name ooda-blder-bot
-          ../../scripts/retry-cloudflare-command.sh pnpm exec vinext deploy
+          # vinext 1.4.6 moved `vinext deploy` to @vinext/cloudflare (BOB-118).
+          # The Worker was built above, so skip the rebuild (and on retries).
+          ../../scripts/retry-cloudflare-command.sh pnpm exec vinext-cloudflare deploy --skip-build

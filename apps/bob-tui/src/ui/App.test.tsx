@@ -10,7 +10,7 @@ import type { UiState } from "../model/keymap";
 import { App, type SessionHandle } from "./App";
 
 // Strip ANSI so snapshots are stable regardless of color support.
-// eslint-disable-next-line no-control-regex
+// oxlint-disable-next-line no-control-regex
 const plain = (s: string | undefined) => (s ?? "").replace(/\u001b\[[0-9;]*m/g, "").split("\n").map((l) => l.trimEnd()).join("\n");
 
 function fakeSession(patch: Partial<SessionState> = {}) {

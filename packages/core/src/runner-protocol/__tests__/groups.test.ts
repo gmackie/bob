@@ -9,7 +9,7 @@
 //      4 procedures that need the X-Runner-Session header (i.e.
 //      everything EXCEPT `runner.register`).
 import { describe, expect, it } from "vitest";
-import { RpcSchema } from "effect/unstable/rpc";
+import { RpcSchema } from "effect/rpc";
 
 import {
   RUNNER_SESSION_REQUIRED,

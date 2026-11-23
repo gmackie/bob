@@ -4,7 +4,7 @@ set -euo pipefail
 # Predeploy hook for the bob.blder.bot Cloudflare Worker.
 #
 # Applies any pending @bob/db forward SQL migrations to the production Postgres
-# before `vinext deploy` ships the worker. CF Workers reach the DB via
+# before `vinext-cloudflare deploy` (@vinext/cloudflare) ships the worker. CF Workers reach the DB via
 # Hyperdrive at runtime; migrations run directly over Tailscale.
 #
 # Connection string resolution (first hit wins):

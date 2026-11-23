@@ -15,13 +15,13 @@ import { SettingsRpc } from "@gmacko/core/contracts/groups/settings";
 import { GmackoDb } from "@gmacko/core/db";
 import { CurrentUser } from "@gmacko/core/rpc/context";
 import { Effect, Layer, Option, Schema } from "effect";
-import { HttpRouter, HttpServerRequest } from "effect/unstable/http";
+import { HttpRouter, HttpServerRequest } from "effect/http";
 import {
   Rpc,
   RpcGroup,
   RpcSerialization,
   RpcServer,
-} from "effect/unstable/rpc";
+} from "effect/rpc";
 
 import type { HandlerContext } from "./handlers/context.js";
 import { LocalFilesystemAuthority } from "./handlers/local-filesystem-authority.js";
@@ -137,8 +137,8 @@ export function liftHandlers<
   for (const key of keys) {
     lifted[key] = (input: never) =>
       Effect.gen(function* () {
-        const db = yield* GmackoDb.asEffect();
-        const user = yield* CurrentUser.asEffect();
+        const db = yield* GmackoDb;
+        const user = yield* CurrentUser;
         const localAuthority = yield* LocalFilesystemAuthority;
         const httpRequest = yield* Effect.serviceOption(
           HttpServerRequest.HttpServerRequest,

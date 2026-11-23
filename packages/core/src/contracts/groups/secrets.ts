@@ -11,7 +11,7 @@
 // Bob's `secretsRouter` for session-scoped secrets (create, list, manifest,
 // getForExecution, delete, markUsed, upsertDeployBinding, promote).
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 import {
   MaxUsesExceededError,

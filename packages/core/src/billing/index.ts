@@ -10,7 +10,7 @@
 //
 // Real implementation deferred to Phase 7 (Bob migration). Stripe-style driver
 // lands when Bob ships subscriptions.
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, Schema, Context } from "effect";
 
 export interface SubscriptionPlan {
   readonly id: string;
@@ -28,7 +28,7 @@ export interface Subscription {
   readonly currentPeriodEnd: Date;
 }
 
-export class BillingNotImplementedError extends Schema.TaggedErrorClass<BillingNotImplementedError>()(
+export class BillingNotImplementedError extends Schema.TaggedError<BillingNotImplementedError>()(
   "BillingNotImplementedError",
   {
     reason: Schema.String,
@@ -59,7 +59,7 @@ export interface BillingShape {
   ) => Effect.Effect<void, BillingNotImplementedError>;
 }
 
-export const Billing = ServiceMap.Service<BillingShape>(
+export const Billing = Context.Service<BillingShape>(
   "@gmacko/billing/Billing",
 );
 

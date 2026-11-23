@@ -50,6 +50,51 @@ export const mcpOAuthCredentials = pgTable(
     index("mcp_oauth_credentials_grant_idx").on(t.grantId),
   ],
 );
+
+export const bizpulseMcpLink = pgTable(
+  "bizpulse_mcp_link",
+  (t) => ({
+    id: t.text().primaryKey(),
+    userId: t
+      .text()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: t
+      .uuid()
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    origin: t.text().notNull(),
+    envelope: t
+      .jsonb()
+      .$type<{ ciphertext: string; iv: string; tag: string }>()
+      .notNull(),
+    expiresAt: t.timestamp({ withTimezone: true }).notNull(),
+  }),
+  (t) => [index("bizpulse_mcp_link_owner_idx").on(t.userId, t.workspaceId)],
+);
+
+export const bizpulseMcpConsent = pgTable(
+  "bizpulse_mcp_consent",
+  (t) => ({
+    stateHash: t.text().primaryKey(),
+    userId: t
+      .text()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: t
+      .uuid()
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    origin: t.text().notNull(),
+    envelope: t
+      .jsonb()
+      .$type<{ ciphertext: string; iv: string; tag: string }>()
+      .notNull(),
+    expiresAt: t.timestamp({ withTimezone: true }).notNull(),
+  }),
+  (t) => [index("bizpulse_mcp_consent_expiry_idx").on(t.expiresAt)],
+);
+
 /** A person's approval to dispatch a work item from the MCP planning review. */
 export const mcpDispatchApprovals = pgTable("mcp_dispatch_approvals", (t) => ({
   workItemId: t

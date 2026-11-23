@@ -7,6 +7,7 @@ import type {
 
 export const READ_SCOPE = "bob:read";
 export const WRITE_SCOPE = "bob:write";
+export const BIZPULSE_SCOPE = "bob:bizpulse";
 const ACCESS_SECONDS = 3600;
 const GRANT_SECONDS = 30 * 86400;
 const MAX_BODY = 32_768;
@@ -75,11 +76,11 @@ function scopes(value: string) {
   const result = [...new Set((value || READ_SCOPE).split(" ").filter(Boolean))];
   if (
     !result.includes(READ_SCOPE) ||
-    result.some((s) => ![READ_SCOPE, WRITE_SCOPE].includes(s))
+    result.some((s) => ![READ_SCOPE, WRITE_SCOPE, BIZPULSE_SCOPE].includes(s))
   ) {
     throw new OAuthError(
       "invalid_scope",
-      "Request bob:read and optionally bob:write",
+      "Request bob:read and optionally bob:write or bob:bizpulse",
     );
   }
   return result;
@@ -107,7 +108,11 @@ const escapeHtml = (s: string) =>
         c
       ]!,
   );
-function page(content: string, script?: (nonce: string) => string, callback?: string) {
+function page(
+  content: string,
+  script?: (nonce: string) => string,
+  callback?: string,
+) {
   const nonce = randomToken();
   return new Response(
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect to Bob</title></head><body><main><h1>Connect to Bob</h1>${content}</main>${script?.(nonce) ?? ""}</body></html>`,
@@ -119,7 +124,7 @@ function page(content: string, script?: (nonce: string) => string, callback?: st
         // Preserve same-origin consent submissions without leaking cross-origin.
         "Referrer-Policy": "same-origin",
         "X-Content-Type-Options": "nosniff",
-        "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; connect-src 'self'; form-action 'self'${callback ? ` ${new URL(callback).origin.replace(/;/g, '%3B')}` : ''}; frame-ancestors 'none'; base-uri 'none'`,
+        "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; connect-src 'self'; form-action 'self'${callback ? ` ${new URL(callback).origin.replace(/;/g, "%3B")}` : ""}; frame-ancestors 'none'; base-uri 'none'`,
       },
     },
   );
@@ -273,7 +278,7 @@ export function makeOAuth(options: {
         userId: session.userId,
       });
       return page(
-        `<p><strong>${escapeHtml(client.name)}</strong> requests permission to read projects and work items${authorization.scopes.includes(WRITE_SCOPE) ? ", update work items, and add comments" : ""}.</p><p>Callback: ${escapeHtml(new URL(authorization.redirectUri).origin)}</p><form method="post" action="/oauth/authorize"><input type="hidden" name="consent" value="${consent}"><label>Workspace <select name="workspace_id" required>${choices
+        `<p><strong>${escapeHtml(client.name)}</strong> requests permission to read projects and work items${authorization.scopes.includes(WRITE_SCOPE) ? ", update work items, and add comments" : ""}. ${authorization.scopes.includes(BIZPULSE_SCOPE) ? "It also requests access to use your linked BizPulse credential tools in the selected workspace." : ""}</p><p>Callback: ${escapeHtml(new URL(authorization.redirectUri).origin)}</p><form method="post" action="/oauth/authorize"><input type="hidden" name="consent" value="${consent}"><label>Workspace <select name="workspace_id" required>${choices
           .filter(
             (w) => !authorization.scopes.includes(WRITE_SCOPE) || w.canWrite,
           )
@@ -606,7 +611,7 @@ export function makeOAuth(options: {
           return json({
             resource,
             authorization_servers: [origin],
-            scopes_supported: [READ_SCOPE, WRITE_SCOPE],
+            scopes_supported: [READ_SCOPE, WRITE_SCOPE, BIZPULSE_SCOPE],
             bearer_methods_supported: ["header"],
             resource_name: "Bob",
           });
@@ -625,7 +630,7 @@ export function makeOAuth(options: {
             code_challenge_methods_supported: ["S256"],
             token_endpoint_auth_methods_supported: ["none"],
             revocation_endpoint_auth_methods_supported: ["none"],
-            scopes_supported: [READ_SCOPE, WRITE_SCOPE],
+            scopes_supported: [READ_SCOPE, WRITE_SCOPE, BIZPULSE_SCOPE],
           });
         if (
           path === "/oauth/authorize" &&

@@ -1,7 +1,7 @@
 # Build stage: install deps + bundle with tsup
-FROM node:22-slim AS builder
+FROM node:26-slim AS builder
 
-RUN corepack enable pnpm
+RUN npm i -g pnpm@12.21.0
 
 WORKDIR /build
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
@@ -21,9 +21,9 @@ COPY apps/ws-gateway/ apps/ws-gateway/
 RUN cd apps/ws-gateway && pnpm build
 
 # Runtime stage: minimal image with just the bundle + runtime deps
-FROM node:22-slim AS runtime
+FROM node:26-slim AS runtime
 
-RUN corepack enable pnpm
+RUN npm i -g pnpm@12.21.0
 
 WORKDIR /app
 

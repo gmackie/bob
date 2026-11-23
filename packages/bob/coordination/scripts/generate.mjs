@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { compiler } from './compiler.mjs';
-import ts from 'typescript';
+// TypeScript 7's typescript/unstable API has no transpileModule; keep TS 6 for this one transpile.
+import ts from '@typescript/typescript6';
 import { writeFileSync } from 'node:fs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));

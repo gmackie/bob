@@ -5,7 +5,7 @@
 // policy object, envelope metadata, and usage bookkeeping travel alongside.
 
 import { Effect } from "effect";
-import { RpcClient } from "effect/unstable/rpc";
+import { RpcClient } from "effect/rpc";
 import { SecretsRpc } from "@gmacko/core/contracts/groups/secrets";
 import type {
   SecretEnvelopeWire,

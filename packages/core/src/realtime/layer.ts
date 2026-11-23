@@ -3,7 +3,7 @@
 // Selects the appropriate backend Layer based on a `RealtimeBackend` literal,
 // typically sourced from `@gmacko/config`'s env-var-typed schema. The
 // returned Layer's requirement set is `never` — backends are selected at
-// construction time, not via the runtime ServiceMap.
+// construction time, not via the runtime Context.
 //
 // The exhaustive `switch` on the `RealtimeBackend` union forces the literal
 // set here and the one in `@gmacko/config`'s `RealtimeBackend = Schema.Literals
@@ -13,7 +13,7 @@
 // Internal backend Layers stay separately importable via
 // `@gmacko/realtime/backends/{memory,redis,ws-gateway}` for tests or advanced
 // callers; this factory is the documented public-facing constructor.
-import type { Layer, ServiceMap } from "effect";
+import type { Layer, Context } from "effect";
 
 import type { RealtimeBackend } from "@gmacko/core/config";
 
@@ -24,7 +24,7 @@ import type { RealtimeChannelShape } from "./channel.js";
 
 export const layerRealtime = <A>(
   backend: RealtimeBackend,
-  tag: ServiceMap.Service<RealtimeChannelShape<A>, RealtimeChannelShape<A>>,
+  tag: Context.Service<RealtimeChannelShape<A>, RealtimeChannelShape<A>>,
 ): Layer.Layer<RealtimeChannelShape<A>> => {
   switch (backend) {
     case "memory":

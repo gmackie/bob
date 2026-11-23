@@ -156,9 +156,9 @@ export const resolveCurrentUser = (
   ApiKeys | Sessions | Tenancy
 > =>
   Effect.gen(function* () {
-    const apiKeys = yield* ApiKeys.asEffect();
-    const sessions = yield* Sessions.asEffect();
-    const tenancy = yield* Tenancy.asEffect();
+    const apiKeys = yield* ApiKeys;
+    const sessions = yield* Sessions;
+    const tenancy = yield* Tenancy;
 
     const authHeader = readHeader(req.headers, "authorization");
     const bearerToken = extractBearer(authHeader);

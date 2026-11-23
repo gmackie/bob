@@ -63,10 +63,10 @@ export function makeMcpTransport(
           }
         : null;
     },
-    tools: ({ grant }) =>
+    tools: async ({ grant }) =>
       // SAFETY: `makeTools().list` builds each entry from a zod definition
       // (name, description, z.toJSONSchema object schema, annotations).
-      (tools.list(grant) as ListedTool[]).map((tool) =>
+      ((await tools.list(grant)) as ListedTool[]).map((tool) =>
         defineTool<BobPrincipal>({
           ...tool,
           // `tools.list` already filtered by grant; `tools.call` re-checks.

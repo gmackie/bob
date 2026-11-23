@@ -13,7 +13,7 @@
 // API surface.
 import { and, desc, eq } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
-import { Effect, Layer, ServiceMap } from "effect";
+import { Effect, Layer, Context } from "effect";
 
 import { GmackoDb } from "@gmacko/core/db";
 import {
@@ -91,7 +91,7 @@ export interface ApiKeysShape {
   ) => Effect.Effect<readonly ApiKeyListItem[], never>;
 }
 
-export class ApiKeys extends ServiceMap.Service<ApiKeys, ApiKeysShape>()(
+export class ApiKeys extends Context.Service<ApiKeys, ApiKeysShape>()(
   "@gmacko/auth/ApiKeys",
 ) {}
 

@@ -4,7 +4,7 @@
 //
 // Why this exists: see docs/plans/2026-04-25-phase7a-punchlist.md Task 6.
 //
-// Parity rule: every TaggedErrorClass declared in service modules
+// Parity rule: every TaggedError declared in service modules
 // (api-keys.ts / device-codes.ts / sessions.ts / tenancy.ts /
 // runner-sessions.ts) is mirrored here. The service modules re-export from
 // this file, so a single import path (`@gmacko/auth`) still works for
@@ -15,27 +15,27 @@
 // subpath stays node:* / better-auth / drizzle / @gmacko/db free.
 import { Schema } from "effect";
 
-export class InvalidApiKeyError extends Schema.TaggedErrorClass<InvalidApiKeyError>()(
+export class InvalidApiKeyError extends Schema.TaggedError<InvalidApiKeyError>()(
   "InvalidApiKeyError",
   { message: Schema.String },
 ) {}
 
-export class InvalidDeviceCodeError extends Schema.TaggedErrorClass<InvalidDeviceCodeError>()(
+export class InvalidDeviceCodeError extends Schema.TaggedError<InvalidDeviceCodeError>()(
   "InvalidDeviceCodeError",
   { message: Schema.String },
 ) {}
 
-export class InvalidUserCodeError extends Schema.TaggedErrorClass<InvalidUserCodeError>()(
+export class InvalidUserCodeError extends Schema.TaggedError<InvalidUserCodeError>()(
   "InvalidUserCodeError",
   { message: Schema.String },
 ) {}
 
-export class AlreadyApprovedError extends Schema.TaggedErrorClass<AlreadyApprovedError>()(
+export class AlreadyApprovedError extends Schema.TaggedError<AlreadyApprovedError>()(
   "AlreadyApprovedError",
   { message: Schema.String },
 ) {}
 
-export class SessionExpiredError extends Schema.TaggedErrorClass<SessionExpiredError>()(
+export class SessionExpiredError extends Schema.TaggedError<SessionExpiredError>()(
   "SessionExpiredError",
   { message: Schema.String },
 ) {}
@@ -44,7 +44,7 @@ export class SessionExpiredError extends Schema.TaggedErrorClass<SessionExpiredE
 // fields (UserId, TenantId) to keep the tagged errors structural and avoid
 // running the brand decoders at construct time — the branding is enforced
 // by the service method signatures at the boundary.
-export class NotAMemberError extends Schema.TaggedErrorClass<NotAMemberError>()(
+export class NotAMemberError extends Schema.TaggedError<NotAMemberError>()(
   "NotAMemberError",
   { userId: Schema.String, tenantId: Schema.String },
 ) {}
@@ -53,7 +53,7 @@ export class NotAMemberError extends Schema.TaggedErrorClass<NotAMemberError>()(
 // instead of importing `TenantMemberRole` from `@gmacko/validators` to keep
 // this module's import surface to a single line. Runtime is identical:
 // `TenantMemberRole` IS `Schema.Literals(["owner", "admin", "member"])`.
-export class InsufficientRoleError extends Schema.TaggedErrorClass<InsufficientRoleError>()(
+export class InsufficientRoleError extends Schema.TaggedError<InsufficientRoleError>()(
   "InsufficientRoleError",
   {
     required: Schema.Literals(["owner", "admin", "member"]),
@@ -61,7 +61,7 @@ export class InsufficientRoleError extends Schema.TaggedErrorClass<InsufficientR
   },
 ) {}
 
-export class TenantNotSelectedError extends Schema.TaggedErrorClass<TenantNotSelectedError>()(
+export class TenantNotSelectedError extends Schema.TaggedError<TenantNotSelectedError>()(
   "TenantNotSelectedError",
   {
     message: Schema.String,
@@ -79,7 +79,7 @@ export class TenantNotSelectedError extends Schema.TaggedErrorClass<TenantNotSel
  * dot count, non-JSON payload, missing fields); `signature` = HMAC mismatch;
  * `expired` = past `expiresAt`.
  */
-export class InvalidRunnerSessionError extends Schema.TaggedErrorClass<InvalidRunnerSessionError>()(
+export class InvalidRunnerSessionError extends Schema.TaggedError<InvalidRunnerSessionError>()(
   "InvalidRunnerSessionError",
   { reason: Schema.Literals(["malformed", "signature", "expired"]) },
 ) {}

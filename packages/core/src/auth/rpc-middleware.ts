@@ -23,8 +23,8 @@
 //     must therefore inject `HttpServerRequest` and is declared as such in
 //     `requires`.
 import { Effect, Layer, Schema } from "effect";
-import { RpcMiddleware } from "effect/unstable/rpc";
-import { HttpServerRequest } from "effect/unstable/http";
+import { RpcMiddleware } from "effect/rpc";
+import { HttpServerRequest } from "effect/http";
 
 import { CurrentUser } from "@gmacko/core/rpc/context";
 import { UnauthorizedError } from "@gmacko/core/rpc/errors";
@@ -43,7 +43,7 @@ import { resolveCurrentUser, type AuthRequest } from "./middleware.js";
  * error channel.
  *
  * Config keys confirmed against
- * `effect/unstable/rpc/RpcMiddleware.d.ts:176`:
+ * `effect/rpc/RpcMiddleware.d.ts:176`:
  *   - `provides: typeof CurrentUser` — the service this middleware injects
  *   - `requires: typeof HttpServerRequest.HttpServerRequest` — services the
  *     middleware itself consumes (beyond whatever its Layer resolves).
@@ -77,9 +77,9 @@ export const layerAuthMiddleware: Layer.Layer<
   Sessions | ApiKeys | Tenancy
 > = Layer.effect(AuthMiddleware)(
   Effect.gen(function* () {
-    const sessions = yield* Sessions.asEffect();
-    const apiKeys = yield* ApiKeys.asEffect();
-    const tenancy = yield* Tenancy.asEffect();
+    const sessions = yield* Sessions;
+    const apiKeys = yield* ApiKeys;
+    const tenancy = yield* Tenancy;
 
     // The middleware handler. Receives the downstream effect (opaquely
     // typed over SuccessValue) and the transport-provided options. We do

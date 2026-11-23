@@ -434,7 +434,7 @@ describe("featureBranch router", () => {
         // `any` per its own type declarations (see @vitest/expect), so
         // assigning it as an object-literal property always trips
         // no-unsafe-assignment here.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         mergedAt: expect.stringMatching(
           /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
         ),

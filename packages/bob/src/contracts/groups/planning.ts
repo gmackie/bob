@@ -4,7 +4,7 @@
 // 7B-4C Task 6: +11 planning.task.* + 8 planning.dispatch.* (55 total).
 // 7B-4C Task 7: +6 planning.skill.* + 3 planning.snapshot.* + 3 planning.checkpoint.* (67 total).
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 import { BobNotFoundError, BobForbiddenError, BobConflictError } from "../errors.js";
 import {

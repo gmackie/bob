@@ -4,7 +4,7 @@
 // implementation is deferred until the `@gmacko/ws-gateway` package
 // (scaffolded at 6A, currently empty) materializes as an actual hosted
 // service. Mirrors the redis stub; see `./redis.ts` for the parallel shape.
-import { Effect, Layer, ServiceMap, Stream } from "effect";
+import { Effect, Layer, Context, Stream } from "effect";
 
 import {
   type RealtimeChannelShape,
@@ -12,7 +12,7 @@ import {
 } from "../channel.js";
 
 export const layerWsGateway = <A>(
-  tag: ServiceMap.Service<RealtimeChannelShape<A>, RealtimeChannelShape<A>>,
+  tag: Context.Service<RealtimeChannelShape<A>, RealtimeChannelShape<A>>,
 ): Layer.Layer<RealtimeChannelShape<A>> =>
   Layer.succeed(tag, {
     publish: (channel) =>

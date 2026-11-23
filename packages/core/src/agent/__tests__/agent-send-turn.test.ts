@@ -74,7 +74,7 @@ describe("@gmacko/agent AgentSession.sendTurn", () => {
           { type: "turn_end", stopReason: "end_turn" },
         ];
         const adapter = mockAdapter({ events });
-        const svc = yield* AgentSession.asEffect();
+        const svc = yield* AgentSession;
         const { conversationId } = yield* svc.create({
           tenantId: TENANT_A,
           userId: USER_ID,
@@ -158,7 +158,7 @@ describe("@gmacko/agent AgentSession.sendTurn", () => {
         ],
       });
       return Effect.gen(function* () {
-        const svc = yield* AgentSession.asEffect();
+        const svc = yield* AgentSession;
         const { conversationId } = yield* svc.create({
           tenantId: TENANT_A,
           userId: USER_ID,
@@ -209,7 +209,7 @@ describe("@gmacko/agent AgentSession.sendTurn", () => {
       };
 
       return Effect.gen(function* () {
-        const svc = yield* AgentSession.asEffect();
+        const svc = yield* AgentSession;
         const { conversationId } = yield* svc.create({
           tenantId: TENANT_A,
           userId: USER_ID,
@@ -264,7 +264,7 @@ describe("@gmacko/agent AgentSession.sendTurn", () => {
       });
 
       return Effect.gen(function* () {
-        const svc = yield* AgentSession.asEffect();
+        const svc = yield* AgentSession;
         const { conversationId } = yield* svc.create({
           tenantId: TENANT_A,
           userId: USER_ID,
@@ -312,7 +312,7 @@ describe("@gmacko/agent AgentSession.sendTurn", () => {
   it.effect("cross-tenant sendTurn fails with AgentSessionNotFoundError", () => {
     const adapter = mockAdapter({ events: [] });
     return Effect.gen(function* () {
-      const svc = yield* AgentSession.asEffect();
+      const svc = yield* AgentSession;
       const { conversationId } = yield* svc.create({
         tenantId: TENANT_A,
         userId: USER_ID,

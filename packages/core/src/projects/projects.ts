@@ -14,7 +14,7 @@
 // API surface.
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
-import { Effect, Layer, ServiceMap } from "effect";
+import { Effect, Layer, Context } from "effect";
 
 import { GmackoDb } from "@gmacko/core/db";
 import { projects as projectsTable } from "@gmacko/core/db/schema/projects";
@@ -69,7 +69,7 @@ export interface ProjectsShape {
   }) => Effect.Effect<void, ProjectNotFoundError>;
 }
 
-export class Projects extends ServiceMap.Service<Projects, ProjectsShape>()(
+export class Projects extends Context.Service<Projects, ProjectsShape>()(
   "@gmacko/projects/Projects",
 ) {}
 

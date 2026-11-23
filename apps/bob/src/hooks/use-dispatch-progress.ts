@@ -61,7 +61,7 @@ export function useDispatchProgress(batchId: string | null) {
         intervalRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react/exhaustive-deps
   }, [batchId, isActive]);
 
   return {

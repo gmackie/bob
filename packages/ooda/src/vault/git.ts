@@ -2,7 +2,7 @@ import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 
-import simpleGit from "simple-git";
+import { simpleGit } from "simple-git";
 
 import { LocalGitStorage } from "./local-git-storage";
 import type { PublicationRecord } from "./versioned-storage";

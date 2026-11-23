@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Schema, Effect } from "effect";
 
 export const ExplorationStatus = Schema.Literals([
   "running",
@@ -31,7 +31,7 @@ export const StartExplorationInput = Schema.Struct({
   threadId: Schema.String.check(Schema.isUUID()),
   branchId: Schema.String.check(Schema.isUUID()),
   topic: Schema.String.check(Schema.isMinLength(1)),
-  maxDepth: Schema.Number.pipe(Schema.withDecodingDefault(() => 5)),
+  maxDepth: Schema.Number.pipe(Schema.withDecodingDefault(Effect.sync(() => 5))),
 });
 
 export const RespondToCheckInInput = Schema.Struct({

@@ -246,7 +246,7 @@ describe("publicApi router tenant isolation", () => {
         method: "POST",
         // vitest's nested expect.objectContaining always returns `any` per
         // its own type declarations, regardless of generic argument.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         headers: expect.objectContaining({
           Authorization: "Bearer shh",
         }),
@@ -306,7 +306,7 @@ describe("publicApi router tenant isolation", () => {
         method: "POST",
         // vitest's nested expect.objectContaining always returns `any` per
         // its own type declarations, regardless of generic argument.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         headers: expect.objectContaining({
           Authorization: "Bearer shh",
         }),
@@ -365,7 +365,7 @@ describe("publicApi router tenant isolation", () => {
         method: "POST",
         // vitest's nested expect.objectContaining always returns `any` per
         // its own type declarations, regardless of generic argument.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         headers: expect.objectContaining({
           Authorization: "Bearer shh",
         }),
@@ -461,7 +461,7 @@ describe("publicApi router tenant isolation", () => {
         method: "POST",
         // vitest's nested expect.objectContaining always returns `any` per
         // its own type declarations, regardless of generic argument.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         headers: expect.objectContaining({
           Authorization: "Bearer shh",
         }),

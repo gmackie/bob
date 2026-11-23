@@ -23,7 +23,7 @@
 // behavior is the Bob-flavored semantics we want.
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
-import { Effect, Layer, ServiceMap } from "effect";
+import { Effect, Layer, Context } from "effect";
 
 import { GmackoDb } from "@gmacko/core/db";
 import {
@@ -114,7 +114,7 @@ export interface SecretsShape {
   }) => Effect.Effect<void, SecretNotFoundError>;
 }
 
-export class Secrets extends ServiceMap.Service<Secrets, SecretsShape>()(
+export class Secrets extends Context.Service<Secrets, SecretsShape>()(
   "@gmacko/secrets/Secrets",
 ) {}
 

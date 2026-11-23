@@ -7,7 +7,6 @@ type HapticsModule = typeof ExpoHaptics;
 let Haptics: HapticsModule | null = null;
 try {
   // A synchronous require inside try/catch, as in ~/lib/haptics: the native module may be absent.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- see above.
   Haptics = require("expo-haptics") as HapticsModule;
 } catch {
   // Native module not available
