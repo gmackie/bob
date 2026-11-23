@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "test": "vitest run --passWithNoTests",
     "test:smoke": "vitest run src/__tests__/smoke.test.ts"
