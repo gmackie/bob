@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { resolveOrphanedClaim } from "../orphaned-claims";
+import {
+  resolveOrphanReconcileMode,
+  resolveOrphanedClaim,
+  runOrphanReconcileSweep,
+} from "../orphaned-claims";
 
 const HOUR = 60 * 60 * 1000;
 const base = {
@@ -55,5 +59,75 @@ describe("resolveOrphanedClaim", () => {
         release: false,
       });
     }
+  });
+});
+
+describe("orphan reconcile sweep gate", () => {
+  const sweepResult = {
+    released: 2,
+    items: [
+      { id: "item-a", reason: "claimed but never dispatched" },
+      { id: "item-b", reason: "every run ended" },
+    ],
+    dryRun: false,
+  };
+
+  it("does nothing by default: no mode set means no sweep and no db work", async () => {
+    const sweep = vi.fn(async () => sweepResult);
+    const loadSweep = vi.fn(async () => sweep);
+    const log = vi.fn();
+
+    const out = await runOrphanReconcileSweep({}, loadSweep, log);
+
+    expect(out).toEqual({ mode: "off" });
+    expect(loadSweep).not.toHaveBeenCalled();
+    expect(sweep).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("treats empty, legacy and unrecognised values as off", async () => {
+    for (const raw of [undefined, null, "", "off", "true", "1", "enabled", "yes"]) {
+      expect(resolveOrphanReconcileMode(raw)).toBe("off");
+      const loadSweep = vi.fn();
+      await runOrphanReconcileSweep(
+        { BOB_ORPHAN_RECONCILE_MODE: raw },
+        loadSweep,
+        () => {},
+      );
+      expect(loadSweep).not.toHaveBeenCalled();
+    }
+  });
+
+  it("dry-run sweeps without writing and logs the count", async () => {
+    const sweep = vi.fn(async () => ({ ...sweepResult, dryRun: true }));
+    const log = vi.fn();
+
+    const out = await runOrphanReconcileSweep(
+      { BOB_ORPHAN_RECONCILE_MODE: "dry-run", BOB_ORPHAN_RECONCILE_LIMIT: "500" },
+      async () => sweep,
+      log,
+    );
+
+    expect(out.mode).toBe("dry-run");
+    expect(sweep).toHaveBeenCalledWith({
+      idleMs: undefined,
+      limit: 500,
+      dryRun: true,
+    });
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/would release 2 item/));
+  });
+
+  it("only writes when explicitly on", async () => {
+    const sweep = vi.fn(async () => sweepResult);
+    await runOrphanReconcileSweep(
+      { BOB_ORPHAN_RECONCILE_MODE: "on", BOB_ORPHAN_RECONCILE_IDLE_MS: "3600000" },
+      async () => sweep,
+      () => {},
+    );
+    expect(sweep).toHaveBeenCalledWith({
+      idleMs: 3600000,
+      limit: undefined,
+      dryRun: false,
+    });
   });
 });

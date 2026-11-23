@@ -342,28 +342,24 @@ export default Sentry.withSentry(
           // The session reaper reaches a work item through its session, so it
           // cannot see an item claimed but never dispatched, or one whose runs
           // all ended without moving it. 454 production items sat "In Progress"
-          // that way with zero live runs, the oldest for a month. Same gate and
-          // same best-effort contract as the reaper above.
-          if (String(runtimeEnv.BOB_ORPHAN_RECONCILE_ENABLED ?? "true") !== "false") {
-            try {
+          // that way with zero live runs, the oldest for a month.
+          //
+          // OFF unless BOB_ORPHAN_RECONCILE_MODE is "dry-run" (log what it would
+          // release, write nothing) or "on" (move them back to todo, where the
+          // autoDrain call below runs them). Off by default because enabling it
+          // requeues every stale claim at once. Best-effort, like the reaper.
+          try {
+            const { runOrphanReconcileSweep } = await import(
+              "@bob/api/handlers/orphanReconcileSweep"
+            );
+            await runOrphanReconcileSweep(runtimeEnv, async () => {
               const { reconcileOrphanedClaims } = await import(
                 "@bob/api/handlers/reconcileOrphanedClaims"
               );
-              const swept = await reconcileOrphanedClaims({
-                idleMs: runtimeEnv.BOB_ORPHAN_RECONCILE_IDLE_MS
-                  ? Number(runtimeEnv.BOB_ORPHAN_RECONCILE_IDLE_MS)
-                  : undefined,
-              });
-              if (swept.released > 0) {
-                console.log(
-                  `[orphan-reconcile] released=${swept.released} items=${swept.items
-                    .map((i) => i.id.slice(0, 8))
-                    .join(",")}`,
-                );
-              }
-            } catch (err) {
-              console.error("[orphan-reconcile] sweep failed:", err);
-            }
+              return reconcileOrphanedClaims;
+            });
+          } catch (err) {
+            console.error("[orphan-reconcile] sweep failed:", err);
           }
 
           const { autoDrainBacklog } = await import(

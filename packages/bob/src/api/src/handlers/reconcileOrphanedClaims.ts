@@ -105,9 +105,11 @@ export async function reconcileOrphanedClaims(
     });
 
     if (!outcome.release) continue;
-    released.push({ id: item.id, reason: outcome.reason });
 
-    if (opts.dryRun) continue;
+    if (opts.dryRun) {
+      released.push({ id: item.id, reason: outcome.reason });
+      continue;
+    }
     try {
       // Carry the existing attempt count through: mirrorWorkItemEvent writes
       // whatever it is given, and resetting it would erase the history that
@@ -120,6 +122,7 @@ export async function reconcileOrphanedClaims(
         reason: outcome.reason,
         attempt: Number.isFinite(attempts) ? attempts : 0,
       });
+      released.push({ id: item.id, reason: outcome.reason });
     } catch (err) {
       console.error(
         `[orphan-reconcile] release of work item ${item.id} failed:`,
