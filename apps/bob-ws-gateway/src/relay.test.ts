@@ -73,6 +73,15 @@ vi.mock("@bob/db/client", () => {
   return { db: dbObj };
 });
 
+vi.mock("./commit-planning-issues.js", () => ({
+  commitSessionPlanningIssues: vi.fn(async () => ({
+    committed: 0,
+    workspaceId: null,
+    tasks: [],
+    retry: false,
+  })),
+}));
+
 import { db } from "@bob/db/client";
 import { Relay } from "./relay.js";
 
@@ -156,6 +165,53 @@ describe("Relay", () => {
     });
   });
 
+  describe("pending delivery retry", () => {
+    it("sends only one offer when enrichment overlaps another poll", async () => {
+      const ws = new FakeWs();
+      const conn = { ws, kind: "daemon", userId: "user-1", workspaceId: "ws-1" };
+      const poll = relay as unknown as { deliverPendingSessionsToDaemon(conn: unknown): Promise<void> };
+      vi.mocked(db.query.chatConversations.findMany).mockResolvedValue([
+        { id: "overlap", status: "pending", agentType: "codex", sessionType: "execution", workItemId: "item-1" },
+      ] as never);
+      vi.mocked(db.query.workItems.findFirst).mockResolvedValue({ description: "Owned" } as never);
+      try {
+        await Promise.all([poll.deliverPendingSessionsToDaemon(conn), poll.deliverPendingSessionsToDaemon(conn)]);
+        expect(ws.sentOfType("session_available")).toHaveLength(1);
+      } finally {
+        vi.mocked(db.query.chatConversations.findMany).mockResolvedValue([]);
+        vi.mocked(db.query.workItems.findFirst).mockReset();
+      }
+    });
+
+    it("re-offers an unclaimed session after capacity clears without reconnecting", async () => {
+      const ws = new FakeWs();
+      const conn = { ws, kind: "daemon", userId: "user-1", workspaceId: "ws-1" };
+      const poll = relay as unknown as { deliverPendingSessionsToDaemon(conn: unknown): Promise<void> };
+      const pending = { id: "capacity-wait", status: "pending", agentType: "codex", sessionType: "execution" };
+      vi.mocked(db.query.chatConversations.findMany).mockResolvedValue([pending] as never);
+      const now = vi.spyOn(Date, "now").mockReturnValue(100_000);
+      try {
+        await poll.deliverPendingSessionsToDaemon(conn);
+        expect(ws.sentOfType("session_available")).toHaveLength(1);
+        // A busy runner does not claim: the DB row remains pending.
+        now.mockReturnValue(115_000);
+        await poll.deliverPendingSessionsToDaemon(conn);
+        expect(ws.sentOfType("session_available")).toHaveLength(1);
+        now.mockReturnValue(130_000);
+        await poll.deliverPendingSessionsToDaemon(conn);
+        expect(ws.sentOfType("session_available")).toHaveLength(2);
+        // Claiming removes the row from the pending query.
+        vi.mocked(db.query.chatConversations.findMany).mockResolvedValue([]);
+        now.mockReturnValue(160_000);
+        await poll.deliverPendingSessionsToDaemon(conn);
+        expect(ws.sentOfType("session_available")).toHaveLength(2);
+      } finally {
+        now.mockRestore();
+        vi.mocked(db.query.chatConversations.findMany).mockResolvedValue([]);
+      }
+    });
+  });
+
   describe("pending execution ownership", () => {
     it.each(["ws-1", "foreign", null])("only delivers context to its bound workspace: %s", async (workspaceId) => {
       const ws = new FakeWs();
@@ -168,7 +224,7 @@ describe("Relay", () => {
         const params = new PgDialect().sqlToQuery(where).params;
         return Promise.resolve(params.includes("ws-1") ? { description: "Owned context" } : undefined) as never;
       });
-      const conn = { ws, kind: "daemon", userId: "user-1", workspaceId, deliveredSessions: new Set<string>() };
+      const conn = { ws, kind: "daemon", userId: "user-1", workspaceId, deliveredSessions: new Map<string, number>() };
       const poll = relay as unknown as { deliverPendingSessionsToDaemon(conn: unknown): Promise<void> };
       await poll.deliverPendingSessionsToDaemon(conn);
       const messages = ws.sentOfType("session_available");
@@ -1313,6 +1369,103 @@ describe("Relay", () => {
         (p) => p.status === "failed" && "blockedReason" in p,
       );
       expect(taskUpdate?.blockedReason).toBe("boom: agent exited 1");
+    });
+
+    it.each([true, false])("blocks a deterministic branch admission failure instead of retrying another provider (task run: %s)", async (hasTaskRun) => {
+      const daemonWs = new FakeWs();
+      relay.handleConnection(daemonWs as any);
+      daemonWs.receive({
+        type: "hello", clientId: "d1", deviceType: "daemon",
+        token: "good-daemon", workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+      const SID = "55555555-5555-4555-8555-555555555555";
+      (db.query.chatConversations.findFirst as any).mockResolvedValueOnce({
+        id: SID, userId: "user-1", status: "starting", workItemId: "wi-1", agentType: "codex",
+      });
+      (db.query.taskRuns.findFirst as any) = vi.fn(() =>
+        Promise.resolve(hasTaskRun ? { id: "tr-1", workItemId: "wi-1" } : null),
+      );
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (payload: any) => {
+          setPayloads.push(payload);
+          return { where: () => Promise.resolve() };
+        },
+      }));
+      daemonWs.receive({
+        type: "session_status", sessionId: SID, status: "error",
+        summary: {
+          code: "INVALID_BRANCH", phase: "worktree_admission", modelStarted: false, retryable: false,
+          error: "Session branch must be a valid Git branch of at most 240 bytes",
+        },
+      } as any);
+      await new Promise((r) => setImmediate(r));
+      expect(setPayloads.find((p) => p.lastError)?.lastError.code).toBe("INVALID_BRANCH");
+      expect(setPayloads).toContainEqual({ status: "blocked" });
+      expect(setPayloads).not.toContainEqual({ status: "ready" });
+      if (hasTaskRun) expect(setPayloads.find((p) => "blockedReason" in p)).toMatchObject({ status: "failed" });
+      expect(setPayloads.find((p) => p.summary)?.summary).toMatchObject({ modelStarted: false, retryable: false });
+    });
+
+    it("never marks a no-commit run done or in review", async () => {
+      const daemonWs = new FakeWs();
+      relay.handleConnection(daemonWs as any);
+      daemonWs.receive({
+        type: "hello",
+        clientId: "d1",
+        deviceType: "daemon",
+        token: "good-daemon",
+        workspaceId: "ws-1",
+      });
+      await new Promise((r) => setImmediate(r));
+
+      const SID = "44444444-4444-4444-8444-444444444444";
+      (db.query.chatConversations.findFirst as any).mockResolvedValueOnce({
+        id: SID,
+        userId: "user-1",
+        status: "running",
+        workItemId: "wi-1",
+        agentType: "codex",
+      });
+      (db.query.taskRuns.findFirst as any) = vi.fn(() =>
+        Promise.resolve({ id: "tr-1", workItemId: "wi-1" }),
+      );
+      const setPayloads: any[] = [];
+      (db.update as any).mockImplementation(() => ({
+        set: (payload: any) => {
+          setPayloads.push(payload);
+          return { where: () => Promise.resolve() };
+        },
+      }));
+      const recordPullRequest = vi.spyOn(relay as any, "recordPullRequest");
+
+      daemonWs.receive({
+        type: "session_status",
+        sessionId: SID,
+        status: "error",
+        summary: {
+          code: "NO_COMMITS",
+          error: "agent finished without committing any changes",
+          branch: "bob/abcd1234/hypothesis",
+        },
+      } as any);
+      await new Promise((r) => setImmediate(r));
+
+      const convUpdate = setPayloads.find((p) => p.lastError);
+      expect(convUpdate?.status).toBe("error");
+      expect(convUpdate?.lastError?.code).toBe("NO_COMMITS");
+      const taskUpdate = setPayloads.find((p) => "blockedReason" in p);
+      expect(taskUpdate).toMatchObject({
+        status: "failed",
+        blockedReason: "agent finished without committing any changes",
+      });
+      expect(taskUpdate).not.toHaveProperty("pullRequestId");
+      // The work item returns to ready for another attempt, never in_review.
+      expect(setPayloads).toContainEqual({ status: "ready" });
+      expect(setPayloads.map((p) => p.status)).not.toContain("in_review");
+      expect(setPayloads.map((p) => p.status)).not.toContain("completed");
+      expect(recordPullRequest).not.toHaveBeenCalled();
     });
   });
 

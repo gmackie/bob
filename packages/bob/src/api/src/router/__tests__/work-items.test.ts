@@ -353,7 +353,7 @@ describe("workItems router", () => {
         // vitest's expect.objectContaining always returns `any` per its own
         // type declarations, regardless of generic — nesting it as an
         // object-literal property value trips no-unsafe-assignment here.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         workItem: expect.objectContaining({
           id: "child-1",
           title: "Child one",
@@ -555,7 +555,7 @@ describe("workItems router", () => {
         toValue: "task",
         // Nested expect.objectContaining always returns `any` — see comment
         // earlier in this file.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         metadata: expect.objectContaining({
           field: "kind",
         }),

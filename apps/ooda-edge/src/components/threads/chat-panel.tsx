@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 
+import { track } from "~/lib/analytics";
 import { useTRPC } from "~/trpc/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSessionStream } from "~/hooks/use-session-stream";
@@ -112,6 +113,7 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
   const sendMutation = useMutation(
     trpc.runner.sendPrompt.mutationOptions({
       onSuccess: (session) => {
+        track("prompt_sent");
         if (session) {
           setActiveSessionId(session.id);
         }
@@ -231,7 +233,7 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
     setInput("");
     setPendingSeed(null);
     setPendingImages(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react/exhaustive-deps
   }, [pendingSeed, availableRunner]);
 
   const handlePromote = (msg: ChatMessage) => {
@@ -356,7 +358,7 @@ export function ChatPanel({ threadId, runnerId, onPromoted }: ChatPanelProps) {
           <div className="mb-2 flex flex-wrap gap-2">
             {attachedImages.map((img, i) => (
               <div key={i} className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {/* oxlint-disable-next-line nextjs/no-img-element */}
                 <img
                   src={img.preview}
                   alt="attachment"

@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, extname } from "node:path";
 import { eq, and, desc } from "@bob/db";
 import { agentPersonas } from "@bob/db/schema";
-import yaml from "js-yaml";
+import { load as loadYaml } from "js-yaml";
 import type { HandlerContext } from "./context.js";
 
 function resolveTenantId(ctx: HandlerContext): string {
@@ -190,10 +190,10 @@ export async function personaSyncFromDirectory(
 
   for (const file of yamlFiles) {
     const content = await readFile(join(input.directory, file), "utf-8");
-    // yaml.load() returns unknown-shaped data (or undefined for an empty
+    // loadYaml() returns unknown-shaped data (or undefined for an empty
     // file) — this is untrusted external input, so it's narrowed with a
     // real runtime check rather than cast straight to PersonaYaml.
-    const raw: unknown = yaml.load(content);
+    const raw: unknown = loadYaml(content);
     if (
       typeof raw !== "object" ||
       raw === null ||

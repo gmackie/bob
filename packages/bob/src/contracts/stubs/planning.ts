@@ -5,6 +5,23 @@ import { Effect } from "effect";
 
 import { PlanningRpc } from "../groups/planning.js";
 
+const STUB_DAILY_PLAN = {
+  id: "stub-plan-1",
+  workspaceId: "stub-workspace",
+  planDate: "2026-01-01",
+  status: "draft" as const,
+  summary: "",
+  items: [],
+  intake: [],
+  review: null,
+  reviewSummary: null,
+  capacity: 0,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  approvedAt: null,
+  approvedByUserId: null,
+  closedAt: null,
+};
+
 export const PlanningStubLayer = PlanningRpc.toLayer({
   // --- Core planning ---
   "planning.listWorkspaces": () => Effect.succeed([]),
@@ -102,6 +119,12 @@ export const PlanningStubLayer = PlanningRpc.toLayer({
     }),
   "planning.session.get": () => Effect.succeed(null),
   "planning.session.list": () => Effect.succeed([]),
+  // --- Daily plan ---
+  "planning.dailyPlan.get": () => Effect.succeed(null),
+  "planning.dailyPlan.list": () => Effect.succeed([]),
+  "planning.dailyPlan.generate": () => Effect.succeed(STUB_DAILY_PLAN),
+  "planning.dailyPlan.approve": () => Effect.succeed(STUB_DAILY_PLAN),
+  "planning.dailyPlan.close": () => Effect.succeed(STUB_DAILY_PLAN),
   "planning.session.listByWorkItem": () => Effect.succeed([]),
   "planning.session.getActiveForWorkItem": () => Effect.succeed(null),
   "planning.session.saveArtifact": () =>

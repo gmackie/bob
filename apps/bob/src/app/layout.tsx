@@ -19,7 +19,11 @@ export const metadata: Metadata = {
   title: "blder.bot - AI Agent Manager",
   description: "Manage AI agents, plan work, and ship code with blder.bot",
   icons: {
-    icon: "/favicon.svg",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/apple-touch-icon.png",
   },
   openGraph: {
     title: "blder.bot - AI Agent Manager",
@@ -132,6 +136,15 @@ export default function RootLayout(props: {
           </div>
           <Toaster />
         </ThemeProvider>
+        <Script
+          src="/dataflare.js"
+          data-enabled={
+            process.env.NEXT_PUBLIC_DATAFLARE_ENABLED !== "false"
+              ? "true"
+              : "false"
+          }
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );

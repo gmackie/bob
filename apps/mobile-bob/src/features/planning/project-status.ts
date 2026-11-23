@@ -1,3 +1,5 @@
+import { timestampToMillis } from "~/lib/timestamps";
+
 export interface MobileProjectStatusEntry {
   project: {
     id: string;
@@ -625,7 +627,7 @@ function formatLastUpdatedLabel(
   now: Date,
 ): string {
   if (!value) return "No activity";
-  const timestamp = value instanceof Date ? value.getTime() : Date.parse(value);
+  const timestamp = timestampToMillis(value) ?? Number.NaN;
   if (!Number.isFinite(timestamp)) return "No activity";
 
   const diffMs = Math.max(0, now.getTime() - timestamp);

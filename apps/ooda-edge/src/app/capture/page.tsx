@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 
+import { track } from "~/lib/analytics";
 import { useTRPC } from "~/trpc/react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 
@@ -93,6 +94,7 @@ export default function CapturePage() {
   const createThread = useMutation(
     trpc.threads.create.mutationOptions({
       onSuccess: (rows: unknown) => {
+        track("thread_created", { source: "capture" });
         const t = (Array.isArray(rows) ? rows[0] : rows) as
           | { slug?: string }
           | undefined;
@@ -167,7 +169,7 @@ export default function CapturePage() {
           <div className="mt-3 flex flex-wrap gap-2">
             {images.map((img, i) => (
               <div key={i} className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {/* oxlint-disable-next-line nextjs/no-img-element */}
                 <img
                   src={img.preview}
                   alt="screenshot"

@@ -361,7 +361,7 @@ describe("LinearPlanningProvider", () => {
         expect.objectContaining({
           // vitest's expect.arrayContaining/objectContaining always return
           // `any` per their own type declarations, regardless of generic.
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          
           syncFailures: expect.arrayContaining([
             expect.objectContaining({
               method: "reportMilestone",
@@ -388,7 +388,7 @@ describe("LinearPlanningProvider", () => {
         issueId: "issue-1",
         // vitest's expect.stringContaining always returns `any` per its own
         // type declarations.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         body: expect.stringContaining("Task blocked"),
       });
       expect(mockUpdateIssue).not.toHaveBeenCalled();
@@ -405,7 +405,7 @@ describe("LinearPlanningProvider", () => {
 
       expect(mockCreateComment).toHaveBeenCalledWith({
         issueId: "issue-1",
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         body: expect.stringContaining("Task failed"),
       });
       expect(mockUpdateIssue).not.toHaveBeenCalled();
@@ -434,6 +434,41 @@ describe("LinearPlanningProvider", () => {
     });
   });
 
+  describe("Kanbanger completion", () => {
+    const kanbanger = () =>
+      new LinearPlanningProvider(
+        mockDb as unknown as Db,
+        "lc_test_key",
+        "team-1",
+        "project-1",
+        "https://tasks.gmac.io",
+        "https://tasks.gmac.io/graphql",
+      );
+
+    it("never forces Done via issueUpdate — completion comes from Kanbanger gates", async () => {
+      mockCreateComment.mockResolvedValue({ id: "comment-1" });
+
+      await kanbanger().completeTask("issue-1", "run-1", { outcome: "success", summary: "Merged." });
+      await kanbanger().setStatus("issue-1", "run-1", "completed");
+
+      expect(mockTeam).not.toHaveBeenCalled();
+      expect(mockUpdateIssue).not.toHaveBeenCalled();
+      expect(mockCreateComment).toHaveBeenCalledTimes(1);
+    });
+
+    it("still moves real Linear issues to Done", async () => {
+      mockTeam.mockResolvedValue({
+        states: vi.fn().mockResolvedValue({ nodes: [{ id: "state-done", name: "Done" }] }),
+      });
+      mockUpdateIssue.mockResolvedValue({ success: true });
+      mockCreateComment.mockResolvedValue({ id: "comment-1" });
+
+      await provider.completeTask("issue-1", "run-1", { outcome: "success", summary: "Merged." });
+
+      expect(mockUpdateIssue).toHaveBeenCalledWith("issue-1", { stateId: "state-done" });
+    });
+  });
+
   describe("comment formatting", () => {
     it("includes bot prefix and taskRunId footer", async () => {
       mockCreateComment.mockResolvedValue({ id: "comment-1" });
@@ -448,12 +483,12 @@ describe("LinearPlanningProvider", () => {
         issueId: "issue-1",
         // vitest's expect.stringMatching/stringContaining always return
         // `any` per their own type declarations.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         body: expect.stringMatching(/\*\*🤖 Bob — Note\*\*/),
       });
       expect(mockCreateComment).toHaveBeenCalledWith({
         issueId: "issue-1",
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         body: expect.stringContaining("`run-abc-123`"),
       });
     });

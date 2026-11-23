@@ -1,0 +1,36 @@
+# BOB-76: drains CLIProxyAPI's usage queue on the proxy host and posts token
+# totals to the Bob gateway. Exactly one process may drain the queue; runners
+# set BOB_BUDGET_USAGE_SOURCE=remote. See docs/ops/budget-collector.md.
+[Unit]
+Description=Bob budget usage collector (CLIProxyAPI usage queue)
+After=network-online.target cli-proxy-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /opt/bob-budget-collector/current/budget-collector.mjs
+EnvironmentFile=/etc/bob-budget-collector/env
+Environment=BOB_BUDGET_SPOOL=/var/lib/bob-budget-collector/usage-ledger.json
+Environment=BOB_BUDGET_HOST_ID=labnuc
+DynamicUser=yes
+StateDirectory=bob-budget-collector
+StateDirectoryMode=0700
+Restart=always
+RestartSec=5
+# Records stay in the proxy queue for the configured retention while this is down.
+TimeoutStopSec=30
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bob SDLC: close the loop</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--foreground, #202124); font: 14px/1.5 var(--font-sans, system-ui, sans-serif); }
+  main { width: 100%; min-width: 0; }
+  h1 { font-size: 1.2rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1rem; margin: 1.5rem 0 .5rem; }
+  h3 { font-size: .9rem; margin: 0 0 .25rem; }
+  p { max-width: 75ch; margin: .5rem 0; }
+  .meta, .muted { color: var(--muted-foreground, #606773); }
+  code { font-family: var(--font-mono, Menlo, monospace); background: var(--code-background, #f1f3f5); color: var(--code-foreground, #202124); padding: 0 .2rem; border-radius: 4px; font-size: .85em; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th, td { text-align: left; vertical-align: top; padding: .45rem; border-bottom: 1px solid var(--border, #d8dce2); }
+  .badge, .chip { display: inline-block; border-radius: 999px; padding: .1rem .5rem; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+  .badge { background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #2458ac); }
+  .chip.done { background: color-mix(in srgb, var(--success, #1e8e3e) 18%, transparent); color: var(--success, #1e8e3e); }
+  .chip.todo { background: var(--muted, #f1f3f5); color: var(--muted-foreground, #606773); }
+  .chip.risk { background: var(--warning-surface, #fff4d6); color: var(--warning-foreground, #7a5200); }
+  .chip.gap { background: var(--destructive-surface, #fde7e7); color: var(--destructive, #c5221f); }
+  .callout { border-left: 3px solid var(--accent, #2458ac); background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #1a2b4d); border-radius: 0 var(--radius, .625rem) var(--radius, .625rem) 0; padding: .65rem .85rem; margin: .75rem 0; }
+  .options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: .75rem; }
+  .card { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .625rem); background: var(--card, #f7f8fa); color: var(--card-foreground, #202124); padding: .75rem; }
+  .card.recommended { border-color: var(--accent, #2458ac); box-shadow: 0 0 0 1px var(--accent, #2458ac); }
+  .card ul { margin: .4rem 0 0; padding-left: 1.1rem; }
+  /* Flow strip */
+  .flow { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; margin: .5rem 0; }
+  .st { border: 1px solid var(--border, #d8dce2); border-radius: 6px; padding: .3rem .55rem; font-size: .78rem; background: var(--card, #f7f8fa); }
+  .st.live { border-color: var(--success, #1e8e3e); }
+  .st.dead { border-style: dashed; color: var(--muted-foreground, #606773); }
+  .st.new { border-color: var(--accent, #2458ac); background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #1a2b4d); }
+  .arrow { color: var(--muted-foreground, #606773); font-size: .8rem; }
+  .flow-label { font-size: .75rem; font-weight: 600; color: var(--muted-foreground, #606773); width: 100%; margin-top: .4rem; }
+  .timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+  .timeline::before { content: ""; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: var(--border, #d8dce2); }
+  .timeline li { position: relative; padding: 0 0 1rem 1.75rem; }
+  .timeline li::before { content: ""; position: absolute; left: 0; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--background, #fff); border: 2px solid var(--border, #d8dce2); }
+  .timeline li.next::before { background: var(--accent, #2458ac); border-color: var(--accent, #2458ac); }
+  .timeline .head { display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; }
+  details { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .625rem); background: var(--card, #f7f8fa); padding: .6rem .75rem; margin: .5rem 0; }
+  summary { cursor: pointer; font-weight: 600; }
+  ul.goals { list-style: none; padding: 0; margin: .25rem 0; }
+  ul.goals li { padding-left: 1.3rem; position: relative; margin: .2rem 0; }
+  ul.goals li::before { position: absolute; left: 0; font-weight: 700; }
+  ul.goals.yes li::before { content: "✓"; color: var(--success, #1e8e3e); }
+  ul.goals.no li::before { content: "✕"; color: var(--destructive, #c5221f); }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: .75rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal { animation: rise .45s cubic-bezier(.2,.7,.3,1) both; animation-delay: calc(var(--i, 0) * 60ms); }
+    .flow .st { animation: rise .35s ease-out both; animation-delay: calc(var(--i, 0) * 70ms); }
+    .timeline li.next::before { animation: pulse 1.8s ease-in-out infinite; }
+    @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+    @keyframes pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent, #2458ac) 25%, transparent); } }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 class="reveal">Bob SDLC: close the loop from run to production <span class="badge">Accepted</span></h1>
+  <p class="meta reveal" style="--i:1">2026-11-15 · gmackie/bob (coordinator, sdlc-view, edge, TUI) + t3code (publish step) · follows BOB-75</p>
+
+  <div class="callout reveal" style="--i:2"><strong>Recommendation:</strong> Teach the coordinator the second half of its own state machine. T3 pushes the agent's branch when a run succeeds. The coordinator then opens the PR, follows ForgeGraph CI, approves on green, merges per policy, and watches the deploy until it records production evidence. Today every successful item stops in <em>Validating</em> because none of those steps exist.</div>
+
+  <h2 class="reveal" style="--i:3">What happens today</h2>
+  <div class="flow" role="img" aria-label="Today: pending, ready, running and execution succeeded work; validating is terminal; review, deploying and completed are unreachable except completionTarget execution">
+    <span class="flow-label">Implemented</span>
+    <span class="st live" style="--i:0">pending</span><span class="arrow">→</span>
+    <span class="st live" style="--i:1">ready</span><span class="arrow">→</span>
+    <span class="st live" style="--i:2">running</span><span class="arrow">⇄</span>
+    <span class="st live" style="--i:3">waiting-input</span><span class="arrow">→</span>
+    <span class="st live" style="--i:4">validating (stuck)</span>
+    <span class="flow-label">Defined in the contract, never reached</span>
+    <span class="st dead" style="--i:5">review</span><span class="arrow">→</span>
+    <span class="st dead" style="--i:6">deploying</span><span class="arrow">→</span>
+    <span class="st dead" style="--i:7">completed</span>
+  </div>
+  <div class="table-scroll reveal" style="--i:4"><table>
+    <thead><tr><th>Finding</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip gap">Gap</span> Validation, release, deploy and production evidence are contract-only; the coordinator answers 501</td><td><code>runtime/coordinator.mjs:17</code> supportedOperations; <code>contract.forge:473-596</code></td></tr>
+      <tr><td><span class="chip gap">Gap</span> A succeeded run moves to <code>validating</code> and nothing moves it on; only <code>completionTarget: execution</code> completes</td><td><code>runtime/execution.mjs:344-346</code></td></tr>
+      <tr><td><span class="chip gap">Gap</span> The agent's work is never pushed. The receipt SHA is a hidden T3 checkpoint commit ("not PR-head evidence"), so BOB-80's CI detail can only ever show <em>none</em></td><td>t3code <code>ExecutionReceipts.ts:86-152</code>; <code>apps/bob/worker/sdlc/fg.ts:36-42</code></td></tr>
+      <tr><td><span class="chip risk">Missing</span> The coordinator worker has no Forgejo or ForgeGraph token</td><td><code>deploy/coordination/README.md</code>; worker unit</td></tr>
+      <tr><td><span class="chip risk">Missing</span> Dependencies on <code>review-ready</code>, <code>merged</code> or <code>production-verified</code> can never be satisfied</td><td><code>execution.mjs:354-364</code></td></tr>
+      <tr><td><span class="chip done">Reusable</span> Fetch-only PR, status and merge code exists in the legacy pipeline; ForgeGraph has PR, gate and deploy routes</td><td><code>apps/bob-execution/ops/pr-review-reaper.mjs</code>, <code>bob-gateway.ts:1520-1668</code>, ForgeGraph <code>/api/fg/{prs,ci/gate,deploy}</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <h2 class="reveal" style="--i:5">Proposed flow</h2>
+  <div class="flow" role="img" aria-label="Proposed: running, published, validating while CI runs, review with approval, merge, deploying until production evidence, completed">
+    <span class="st live" style="--i:0">running</span><span class="arrow">→ T3 pushes branch →</span>
+    <span class="st new" style="--i:1">validating<br><small>PR open · CI on head</small></span><span class="arrow">→ CI green →</span>
+    <span class="st new" style="--i:2">review<br><small>approve · merge</small></span><span class="arrow">→ merged →</span>
+    <span class="st new" style="--i:3">deploying<br><small>deploy · health</small></span><span class="arrow">→ evidence →</span>
+    <span class="st new" style="--i:4">completed</span>
+  </div>
+  <p class="muted reveal" style="--i:6">Each step is a coordinator operation with a durable receipt and an actor, so web, mobile, the TUI and the plugin get the same buttons for free. Milestones <code>review-ready</code>, <code>merged</code> and <code>production-verified</code> are written along the way, which also unblocks plan dependencies. The coordinator writes Kanbanger state: In Review when the PR opens, Done only after production evidence.</p>
+
+  <div class="callout"><strong>Decided 2026-11-15:</strong> T3 publishes (pushes the branch and opens the PR); merge and deploy run automatically on green CI through a per-plan <code>autoMerge</code> whose default is the policy's <code>release.autoMergeDefault</code>, on in production. Tracked in BOB-82 and T3CODE-114.</div>
+  <h2 class="reveal" style="--i:7">Decision 1: who publishes the branch</h2>
+  <div class="options">
+    <section class="card recommended reveal" style="--i:8"><h3>A. T3 publishes on success <span class="badge">Recommended</span></h3><ul>
+      <li>The T3 environment commits the worktree, pushes <code>bob/&lt;ISSUE&gt;-&lt;slug&gt;</code>, and adds the pushed head to the receipt</li>
+      <li>Deterministic; the only place that holds the work and has git credentials</li>
+      <li>Costs a t3code PR and an optional receipt field</li></ul></section>
+    <section class="card reveal" style="--i:9"><h3>B. The agent pushes; the coordinator verifies</h3><ul>
+      <li>The item instructions tell the agent to push; the coordinator reads the branch head from Forgejo</li>
+      <li>No t3code change</li>
+      <li>Relies on the model following instructions; a missed push stalls silently</li></ul></section>
+    <section class="card reveal" style="--i:10"><h3>C. The coordinator pushes the bundle</h3><ul>
+      <li>Fetch T3's evidence bundle and push from hetzner-bob</li>
+      <li>Needs a bundle-transfer API and git credentials on the coordinator</li>
+      <li>Most moving parts</li></ul></section>
+  </div>
+
+  <h2 class="reveal" style="--i:11">Decision 2: how far it runs without you</h2>
+  <div class="options">
+    <section class="card recommended reveal" style="--i:12"><h3>Per plan, default: auto to merge <span class="badge">Recommended</span></h3><ul>
+      <li>Open PR and approve on green at the exact head: automatic (matches your CLAUDE.md rule)</li>
+      <li>Merge: automatic when the plan sets <code>autoMerge</code>, otherwise a tier-2 confirm in any surface</li>
+      <li>Deploy follows the repo's own merge-to-deploy; promote and rollback stay tier-3 typed confirm</li></ul></section>
+    <section class="card reveal" style="--i:13"><h3>Always confirm merges</h3><ul>
+      <li>Every merge waits for a tier-2 confirm</li>
+      <li>Safest; a pile of items waits on you in the Attention tab</li></ul></section>
+    <section class="card reveal" style="--i:14"><h3>Fully automatic</h3><ul>
+      <li>Merge on green with no confirm, as the legacy auto-merge did</li>
+      <li>Fastest; no human sees the PR before production</li></ul></section>
+  </div>
+
+  <h2 class="reveal" style="--i:15">Scope</h2>
+  <div class="two reveal" style="--i:16">
+    <div><h3>Goals</h3><ul class="goals yes">
+      <li>Every item can reach <code>completed</code> with real PR, CI, merge and deploy evidence</li>
+      <li>Release and deploy actions on web, TUI, mobile and plugin, with tiers</li>
+      <li>Milestone dependencies work for review-ready, merged and production</li>
+      <li>BOB-80's CI detail shows the real PR head</li></ul></div>
+    <div><h3>Non-goals</h3><ul class="goals no">
+      <li>Retiring the legacy auto-drain and auto-merge loops (separate track)</li>
+      <li>Running checks inside T3 (validation = ForgeGraph CI on the pushed head)</li>
+      <li>Enabling budget enforcement (still shadow until ~2026-11-22)</li></ul></div>
+  </div>
+
+  <h2 class="reveal" style="--i:17">Phases</h2>
+  <ol class="timeline">
+    <li class="next reveal" style="--i:18"><div class="head"><h3>A. Publish</h3><span class="chip todo">Todo</span></div>
+      <p class="muted">t3code pushes the branch on success; the receipt carries <code>publishedHead {branch, commitSha}</code>; the coordinator stores it on the attempt and shows it in ItemSnapshot.</p>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Optional <code>publishedHead</code> on ExecutionReceipt and <code>release</code> on ItemSnapshot; regenerate</td><td><code>coordination/src/contract.forge</code>, <code>generated/</code></td><td><code>npm run verify</code> byte-equal</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Storage v6: <code>coordination_release</code> (attempt, branch, head, PR ref, CI state, approval, merge SHA, deploy ref)</td><td><code>storage/src/model.forge</code>, <code>0006_release.sql</code></td><td>upgrade v5→v6 test, rollback</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>T3: commit and push the worktree branch when a Bob run succeeds; fill <code>publishedHead</code></td><td>t3code <code>coordination/ExecutionReceipts.ts</code></td><td>t3code tests; pushed branch on Forgejo</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+    <li class="reveal" style="--i:19"><div class="head"><h3>B. Release driver</h3><span class="chip todo">Todo</span></div>
+      <p class="muted">A new worker step: open the PR, follow the ForgeGraph CI gate for the head SHA, record validation, approve on green, merge per policy. Implements RequestValidation, RecordValidationReceipt and RequestRelease.</p>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Fetch-only Forgejo/ForgeGraph port (PR create/approve/merge, gate, mergeability) with fakes</td><td><code>runtime/forge-port.mjs</code></td><td>unit tests against recorded responses</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Release state machine: validating → review → merged; idempotent per step, stale-head safe</td><td><code>runtime/release.mjs</code>, <code>worker.mjs</code></td><td>scenario tests incl. head moved, CI red, merge conflict</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Milestones <code>review-ready</code>, <code>merged</code>; dependents ready on them; completionTarget honoured</td><td><code>execution.mjs</code></td><td>dependency tests</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Kanbanger: link PR, set In Review</td><td><code>issue-effects.mjs</code></td><td>effect tests</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+    <li class="reveal" style="--i:20"><div class="head"><h3>C. Deploy and evidence</h3><span class="chip todo">Todo</span></div>
+      <p class="muted">After merge, find the ForgeGraph deployment of the merge commit, check app health, record ProductionEvidence, complete the item, set Kanbanger Done. RequestDeployment promote/rollback as tier-3 commands.</p>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Deployment watcher (deploy history by app + SHA, health) → RecordProductionEvidence</td><td><code>runtime/deploy.mjs</code></td><td>tests; no evidence without health</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>RequestDeployment promote/rollback through ForgeGraph</td><td><code>runtime/deploy.mjs</code></td><td>tests with fake ForgeGraph</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+    <li class="reveal" style="--i:21"><div class="head"><h3>D. Surfaces</h3><span class="chip todo">Todo</span></div>
+      <p class="muted">Add RequestRelease and RequestDeployment to the relayed operations and tiers; PR, CI and deploy detail in item and attempt views; TUI keys (<code>m</code> merge, <code>o</code> open PR); flip <code>validating</code> from "stalled" to live.</p>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Commands, tiers and presentation edges</td><td><code>sdlc-view/src/{commands,presentation}.ts</code>, <code>runtime/edge.mjs</code></td><td>unmapped-enum CI check</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Web actions and release panel; TUI keys and attempt pane; mobile sheets</td><td><code>apps/bob</code>, <code>apps/bob-tui</code>, <code>apps/mobile-bob</code></td><td>component tests; TUI snapshot tests</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+    <li class="reveal" style="--i:22"><div class="head"><h3>E. Rollout</h3><span class="chip todo">Todo</span></div>
+      <p class="muted">Scoped Forgejo and ForgeGraph tokens for the worker (root:bob 0640), coordinator release with storage v6, Worker deploy, t3code release. Acceptance: one real pilot item goes from running to completed with a PR, green CI, merge, deploy and health evidence, watched live in the TUI.</p></li>
+  </ol>
+
+  <h2 class="reveal" style="--i:23">Risks</h2>
+  <p class="reveal" style="--i:24"><span class="chip risk">High</span> An auto-merge ships a bad change. <span class="muted">Merge only on green CI at the exact head with an approval at that head; merge is opt-in per plan; rollback is one tier-3 command.</span></p>
+  <p class="reveal" style="--i:25"><span class="chip risk">Medium</span> The legacy auto-merge and the coordinator both act on the same PR. <span class="muted">The coordinator only touches PRs it opened (recorded in its release table); legacy loops ignore <code>bob/</code> branches it owns.</span></p>
+  <p class="reveal" style="--i:26"><span class="chip risk">Medium</span> The t3code change is in another repo with its own owner. <span class="muted">The receipt field is optional, so Bob can ship first and fall back to reading the branch head from Forgejo (option B) until T3 releases.</span></p>
+</main>
+</body>
+</html>

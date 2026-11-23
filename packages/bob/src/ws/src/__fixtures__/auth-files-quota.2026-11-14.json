@@ -1,0 +1,440 @@
+{
+  "files": [
+    {
+      "provider": "claude",
+      "account_type": "oauth",
+      "status": "active",
+      "status_message": "",
+      "disabled": false,
+      "unavailable": false,
+      "quota": {
+        "observed_at": "2026-11-14T15:06:13.00673144-05:00",
+        "signals": {
+          "Anthropic-Ratelimit-Unified-7d-Reset": "1794744000",
+          "Anthropic-Ratelimit-Unified-7d-Status": "allowed",
+          "Anthropic-Ratelimit-Unified-7d-Utilization": "0.47",
+          "Anthropic-Ratelimit-Unified-Fallback-Percentage": "0.5",
+          "Anthropic-Ratelimit-Unified-Overage-Disabled-Reason": "out_of_credits",
+          "Anthropic-Ratelimit-Unified-Overage-Status": "rejected",
+          "Anthropic-Ratelimit-Unified-Representative-Claim": "seven_day",
+          "Anthropic-Ratelimit-Unified-Reset": "1794744000",
+          "Anthropic-Ratelimit-Unified-Status": "allowed"
+        }
+      },
+      "model_quotas": {
+        "claude-haiku-5-5": {
+          "observed_at": "2026-11-13T15:37:35.957298671-05:00",
+          "signals": {
+            "Anthropic-Ratelimit-Unified-7d-Reset": "1794744000",
+            "Anthropic-Ratelimit-Unified-7d-Status": "allowed",
+            "Anthropic-Ratelimit-Unified-7d-Utilization": "0.23",
+            "Anthropic-Ratelimit-Unified-Fallback-Percentage": "0.5",
+            "Anthropic-Ratelimit-Unified-Overage-Disabled-Reason": "out_of_credits",
+            "Anthropic-Ratelimit-Unified-Overage-Status": "rejected",
+            "Anthropic-Ratelimit-Unified-Representative-Claim": "seven_day",
+            "Anthropic-Ratelimit-Unified-Reset": "1794744000",
+            "Anthropic-Ratelimit-Unified-Status": "allowed"
+          }
+        },
+        "claude-opus-5": {
+          "observed_at": "2026-11-14T15:01:15.228164729-05:00",
+          "signals": {
+            "Anthropic-Ratelimit-Unified-7d-Reset": "1794744000",
+            "Anthropic-Ratelimit-Unified-7d-Status": "allowed",
+            "Anthropic-Ratelimit-Unified-7d-Utilization": "0.46",
+            "Anthropic-Ratelimit-Unified-Fallback-Percentage": "0.5",
+            "Anthropic-Ratelimit-Unified-Overage-Disabled-Reason": "out_of_credits",
+            "Anthropic-Ratelimit-Unified-Overage-Status": "rejected",
+            "Anthropic-Ratelimit-Unified-Representative-Claim": "seven_day",
+            "Anthropic-Ratelimit-Unified-Reset": "1794744000",
+            "Anthropic-Ratelimit-Unified-Status": "allowed"
+          }
+        },
+        "claude-opus-5-5": {
+          "observed_at": "2026-11-14T15:06:13.00673144-05:00",
+          "signals": {
+            "Anthropic-Ratelimit-Unified-7d-Reset": "1794744000",
+            "Anthropic-Ratelimit-Unified-7d-Status": "allowed",
+            "Anthropic-Ratelimit-Unified-7d-Utilization": "0.47",
+            "Anthropic-Ratelimit-Unified-Fallback-Percentage": "0.5",
+            "Anthropic-Ratelimit-Unified-Overage-Disabled-Reason": "out_of_credits",
+            "Anthropic-Ratelimit-Unified-Overage-Status": "rejected",
+            "Anthropic-Ratelimit-Unified-Representative-Claim": "seven_day",
+            "Anthropic-Ratelimit-Unified-Reset": "1794744000",
+            "Anthropic-Ratelimit-Unified-Status": "allowed"
+          }
+        },
+        "claude-sonnet-4-6": {
+          "observed_at": "2026-11-11T20:10:27.229533552-05:00",
+          "signals": {
+            "Anthropic-Ratelimit-Unified-7d-Reset": "1794744000",
+            "Anthropic-Ratelimit-Unified-7d-Status": "allowed",
+            "Anthropic-Ratelimit-Unified-7d-Utilization": "0.12",
+            "Anthropic-Ratelimit-Unified-Fallback-Percentage": "0.5",
+            "Anthropic-Ratelimit-Unified-Overage-Disabled-Reason": "out_of_credits",
+            "Anthropic-Ratelimit-Unified-Overage-Status": "rejected",
+            "Anthropic-Ratelimit-Unified-Representative-Claim": "seven_day",
+            "Anthropic-Ratelimit-Unified-Reset": "1794744000",
+            "Anthropic-Ratelimit-Unified-Status": "allowed"
+          }
+        },
+        "claude-sonnet-5-5": {
+          "observed_at": "2026-11-08T08:54:23.432816336-05:00",
+          "signals": {
+            "Anthropic-Ratelimit-Unified-7d-Reset": "1794744000",
+            "Anthropic-Ratelimit-Unified-7d-Status": "allowed",
+            "Anthropic-Ratelimit-Unified-7d-Utilization": "0.01",
+            "Anthropic-Ratelimit-Unified-Fallback-Percentage": "0.5",
+            "Anthropic-Ratelimit-Unified-Overage-Disabled-Reason": "out_of_credits",
+            "Anthropic-Ratelimit-Unified-Overage-Status": "rejected",
+            "Anthropic-Ratelimit-Unified-Representative-Claim": "seven_day",
+            "Anthropic-Ratelimit-Unified-Reset": "1794744000",
+            "Anthropic-Ratelimit-Unified-Status": "allowed"
+          }
+        }
+      },
+      "cooldowns": [],
+      "success": 64092,
+      "failed": 105,
+      "id": "auth-0",
+      "name": "claude-0.json",
+      "email": "user0@example.com"
+    },
+    {
+      "provider": "claude",
+      "account_type": "oauth",
+      "status": "error",
+      "status_message": "invalid grant (retrying)",
+      "disabled": false,
+      "unavailable": true,
+      "quota": {
+        "observed_at": "2026-11-02T16:00:38.068519831-05:00",
+        "signals": {
+          "Anthropic-Ratelimit-Unified-7d-Reset": "1794150000",
+          "Anthropic-Ratelimit-Unified-7d-Status": "allowed",
+          "Anthropic-Ratelimit-Unified-7d-Utilization": "0.15",
+          "Anthropic-Ratelimit-Unified-Fallback-Percentage": "0.5",
+          "Anthropic-Ratelimit-Unified-Overage-Disabled-Reason": "out_of_credits",
+          "Anthropic-Ratelimit-Unified-Overage-Status": "rejected",
+          "Anthropic-Ratelimit-Unified-Representative-Claim": "seven_day",
+          "Anthropic-Ratelimit-Unified-Reset": "1794150000",
+          "Anthropic-Ratelimit-Unified-Status": "allowed"
+        }
+      },
+      "model_quotas": {
+        "claude-opus-5": {
+          "observed_at": "2026-11-02T16:00:38.068519831-05:00",
+          "signals": {
+            "Anthropic-Ratelimit-Unified-7d-Reset": "1794150000",
+            "Anthropic-Ratelimit-Unified-7d-Status": "allowed",
+            "Anthropic-Ratelimit-Unified-7d-Utilization": "0.15",
+            "Anthropic-Ratelimit-Unified-Fallback-Percentage": "0.5",
+            "Anthropic-Ratelimit-Unified-Overage-Disabled-Reason": "out_of_credits",
+            "Anthropic-Ratelimit-Unified-Overage-Status": "rejected",
+            "Anthropic-Ratelimit-Unified-Representative-Claim": "seven_day",
+            "Anthropic-Ratelimit-Unified-Reset": "1794150000",
+            "Anthropic-Ratelimit-Unified-Status": "allowed"
+          }
+        },
+        "claude-opus-5-5": {
+          "observed_at": "2026-11-02T08:28:54.187387396-05:00",
+          "signals": {
+            "Anthropic-Ratelimit-Unified-7d-Reset": "1794150000",
+            "Anthropic-Ratelimit-Unified-7d-Status": "allowed",
+            "Anthropic-Ratelimit-Unified-7d-Utilization": "0.15",
+            "Anthropic-Ratelimit-Unified-Fallback-Percentage": "0.5",
+            "Anthropic-Ratelimit-Unified-Overage-Disabled-Reason": "out_of_credits",
+            "Anthropic-Ratelimit-Unified-Overage-Status": "rejected",
+            "Anthropic-Ratelimit-Unified-Representative-Claim": "seven_day",
+            "Anthropic-Ratelimit-Unified-Reset": "1794150000",
+            "Anthropic-Ratelimit-Unified-Status": "allowed"
+          }
+        },
+        "claude-sonnet-5-5": {
+          "observed_at": "2026-11-01T23:25:59.317827609-05:00",
+          "signals": {
+            "Anthropic-Ratelimit-Unified-7d-Reset": "1794150000",
+            "Anthropic-Ratelimit-Unified-7d-Status": "allowed",
+            "Anthropic-Ratelimit-Unified-7d-Utilization": "0.11",
+            "Anthropic-Ratelimit-Unified-Fallback-Percentage": "0.5",
+            "Anthropic-Ratelimit-Unified-Overage-Disabled-Reason": "out_of_credits",
+            "Anthropic-Ratelimit-Unified-Overage-Status": "rejected",
+            "Anthropic-Ratelimit-Unified-Representative-Claim": "seven_day",
+            "Anthropic-Ratelimit-Unified-Reset": "1794150000",
+            "Anthropic-Ratelimit-Unified-Status": "allowed"
+          }
+        }
+      },
+      "cooldowns": [],
+      "success": 6566,
+      "failed": 19,
+      "id": "auth-1",
+      "name": "claude-1.json",
+      "email": "user1@example.com"
+    },
+    {
+      "provider": "codex",
+      "account_type": "oauth",
+      "status": "active",
+      "status_message": "",
+      "disabled": false,
+      "unavailable": false,
+      "quota": {
+        "observed_at": "2026-11-14T15:05:55.055730912-05:00",
+        "signals": {
+          "X-Codex-Active-Limit": "premium",
+          "X-Codex-Credits-Balance": "52492.0080920000",
+          "X-Codex-Credits-Has-Credits": "True",
+          "X-Codex-Credits-Unlimited": "False",
+          "X-Codex-Plan-Type": "pro",
+          "X-Codex-Primary-Over-Secondary-Limit-Percent": "0",
+          "X-Codex-Primary-Reset-After-Seconds": "438602",
+          "X-Codex-Primary-Reset-At": "1795125344",
+          "X-Codex-Primary-Used-Percent": "8",
+          "X-Codex-Primary-Window-Minutes": "10080",
+          "X-Codex-Secondary-Reset-After-Seconds": "0",
+          "X-Codex-Secondary-Used-Percent": "0",
+          "X-Codex-Secondary-Window-Minutes": "0"
+        }
+      },
+      "model_quotas": {
+        "gpt-5.6-luna": {
+          "observed_at": "2026-11-01T23:13:20.68377874-05:00",
+          "signals": {
+            "X-Codex-Active-Limit": "premium",
+            "X-Codex-Credits-Balance": "52492.0080920000",
+            "X-Codex-Credits-Has-Credits": "True",
+            "X-Codex-Credits-Unlimited": "False",
+            "X-Codex-Plan-Type": "pro",
+            "X-Codex-Primary-Over-Secondary-Limit-Percent": "0",
+            "X-Codex-Primary-Reset-After-Seconds": "311275",
+            "X-Codex-Primary-Reset-At": "1793904058",
+            "X-Codex-Primary-Used-Percent": "51",
+            "X-Codex-Primary-Window-Minutes": "10080",
+            "X-Codex-Secondary-Reset-After-Seconds": "0",
+            "X-Codex-Secondary-Used-Percent": "0",
+            "X-Codex-Secondary-Window-Minutes": "0"
+          }
+        },
+        "gpt-5.6-terra": {
+          "observed_at": "2026-11-01T23:16:45.180421441-05:00",
+          "signals": {
+            "X-Codex-Active-Limit": "premium",
+            "X-Codex-Credits-Balance": "52492.0080920000",
+            "X-Codex-Credits-Has-Credits": "True",
+            "X-Codex-Credits-Unlimited": "False",
+            "X-Codex-Plan-Type": "pro",
+            "X-Codex-Primary-Over-Secondary-Limit-Percent": "0",
+            "X-Codex-Primary-Reset-After-Seconds": "311058",
+            "X-Codex-Primary-Reset-At": "1793904058",
+            "X-Codex-Primary-Used-Percent": "51",
+            "X-Codex-Primary-Window-Minutes": "10080",
+            "X-Codex-Secondary-Reset-After-Seconds": "0",
+            "X-Codex-Secondary-Used-Percent": "0",
+            "X-Codex-Secondary-Window-Minutes": "0"
+          }
+        },
+        "gpt-6-astra": {
+          "observed_at": "2026-11-14T10:59:23.702399717-05:00",
+          "signals": {
+            "X-Codex-Active-Limit": "premium",
+            "X-Codex-Credits-Balance": "52492.0080920000",
+            "X-Codex-Credits-Has-Credits": "True",
+            "X-Codex-Credits-Unlimited": "False",
+            "X-Codex-Plan-Type": "pro",
+            "X-Codex-Primary-Over-Secondary-Limit-Percent": "0",
+            "X-Codex-Primary-Reset-After-Seconds": "453385",
+            "X-Codex-Primary-Reset-At": "1795125344",
+            "X-Codex-Primary-Used-Percent": "5",
+            "X-Codex-Primary-Window-Minutes": "10080",
+            "X-Codex-Secondary-Reset-After-Seconds": "0",
+            "X-Codex-Secondary-Used-Percent": "0",
+            "X-Codex-Secondary-Window-Minutes": "0"
+          }
+        },
+        "gpt-6-luna": {
+          "observed_at": "2026-11-14T14:55:21.003353172-05:00",
+          "signals": {
+            "X-Codex-Active-Limit": "premium",
+            "X-Codex-Credits-Balance": "52492.0080920000",
+            "X-Codex-Credits-Has-Credits": "True",
+            "X-Codex-Credits-Unlimited": "False",
+            "X-Codex-Plan-Type": "pro",
+            "X-Codex-Primary-Over-Secondary-Limit-Percent": "0",
+            "X-Codex-Primary-Reset-After-Seconds": "439228",
+            "X-Codex-Primary-Reset-At": "1795125344",
+            "X-Codex-Primary-Used-Percent": "8",
+            "X-Codex-Primary-Window-Minutes": "10080",
+            "X-Codex-Secondary-Reset-After-Seconds": "0",
+            "X-Codex-Secondary-Used-Percent": "0",
+            "X-Codex-Secondary-Window-Minutes": "0"
+          }
+        },
+        "gpt-6.1-sol": {
+          "observed_at": "2026-11-14T15:05:55.055730912-05:00",
+          "signals": {
+            "X-Codex-Active-Limit": "premium",
+            "X-Codex-Credits-Balance": "52492.0080920000",
+            "X-Codex-Credits-Has-Credits": "True",
+            "X-Codex-Credits-Unlimited": "False",
+            "X-Codex-Plan-Type": "pro",
+            "X-Codex-Primary-Over-Secondary-Limit-Percent": "0",
+            "X-Codex-Primary-Reset-After-Seconds": "438602",
+            "X-Codex-Primary-Reset-At": "1795125344",
+            "X-Codex-Primary-Used-Percent": "8",
+            "X-Codex-Primary-Window-Minutes": "10080",
+            "X-Codex-Secondary-Reset-After-Seconds": "0",
+            "X-Codex-Secondary-Used-Percent": "0",
+            "X-Codex-Secondary-Window-Minutes": "0"
+          }
+        }
+      },
+      "cooldowns": [],
+      "success": 11445,
+      "failed": 38,
+      "id": "auth-2",
+      "name": "codex-2.json",
+      "email": "user2@example.com"
+    },
+    {
+      "provider": "codex",
+      "account_type": "oauth",
+      "status": "active",
+      "status_message": "",
+      "disabled": false,
+      "unavailable": false,
+      "quota": {
+        "observed_at": "2026-11-14T15:05:56.327971407-05:00",
+        "signals": {
+          "X-Codex-Active-Limit": "premium",
+          "X-Codex-Credits-Balance": "58981.9937765000",
+          "X-Codex-Credits-Has-Credits": "True",
+          "X-Codex-Credits-Unlimited": "False",
+          "X-Codex-Plan-Type": "pro",
+          "X-Codex-Primary-Over-Secondary-Limit-Percent": "0",
+          "X-Codex-Primary-Reset-After-Seconds": "314389",
+          "X-Codex-Primary-Reset-At": "1795001129",
+          "X-Codex-Primary-Used-Percent": "11",
+          "X-Codex-Primary-Window-Minutes": "10080",
+          "X-Codex-Secondary-Reset-After-Seconds": "0",
+          "X-Codex-Secondary-Used-Percent": "0",
+          "X-Codex-Secondary-Window-Minutes": "0"
+        }
+      },
+      "model_quotas": {
+        "gpt-5.6-terra": {
+          "observed_at": "2026-11-01T23:16:39.347241043-05:00",
+          "signals": {
+            "X-Codex-Active-Limit": "premium",
+            "X-Codex-Credits-Balance": "58981.9937765000",
+            "X-Codex-Credits-Has-Credits": "True",
+            "X-Codex-Credits-Unlimited": "False",
+            "X-Codex-Plan-Type": "pro",
+            "X-Codex-Primary-Over-Secondary-Limit-Percent": "0",
+            "X-Codex-Primary-Reset-After-Seconds": "181163",
+            "X-Codex-Primary-Reset-At": "1793774154",
+            "X-Codex-Primary-Used-Percent": "84",
+            "X-Codex-Primary-Window-Minutes": "10080",
+            "X-Codex-Secondary-Reset-After-Seconds": "0",
+            "X-Codex-Secondary-Used-Percent": "0",
+            "X-Codex-Secondary-Window-Minutes": "0"
+          }
+        },
+        "gpt-6-astra": {
+          "observed_at": "2026-11-14T10:59:18.34699897-05:00",
+          "signals": {
+            "X-Codex-Active-Limit": "premium",
+            "X-Codex-Credits-Balance": "58981.9937765000",
+            "X-Codex-Credits-Has-Credits": "True",
+            "X-Codex-Credits-Unlimited": "False",
+            "X-Codex-Plan-Type": "pro",
+            "X-Codex-Primary-Over-Secondary-Limit-Percent": "0",
+            "X-Codex-Primary-Reset-After-Seconds": "329180",
+            "X-Codex-Primary-Reset-At": "1795001129",
+            "X-Codex-Primary-Used-Percent": "8",
+            "X-Codex-Primary-Window-Minutes": "10080",
+            "X-Codex-Secondary-Reset-After-Seconds": "0",
+            "X-Codex-Secondary-Used-Percent": "0",
+            "X-Codex-Secondary-Window-Minutes": "0"
+          }
+        },
+        "gpt-6-luna": {
+          "observed_at": "2026-11-14T14:55:25.896629302-05:00",
+          "signals": {
+            "X-Codex-Active-Limit": "premium",
+            "X-Codex-Credits-Balance": "58981.9937765000",
+            "X-Codex-Credits-Has-Credits": "True",
+            "X-Codex-Credits-Unlimited": "False",
+            "X-Codex-Plan-Type": "pro",
+            "X-Codex-Primary-Over-Secondary-Limit-Percent": "0",
+            "X-Codex-Primary-Reset-After-Seconds": "315005",
+            "X-Codex-Primary-Reset-At": "1795001129",
+            "X-Codex-Primary-Used-Percent": "11",
+            "X-Codex-Primary-Window-Minutes": "10080",
+            "X-Codex-Secondary-Reset-After-Seconds": "0",
+            "X-Codex-Secondary-Used-Percent": "0",
+            "X-Codex-Secondary-Window-Minutes": "0"
+          }
+        },
+        "gpt-6.1-sol": {
+          "observed_at": "2026-11-14T15:05:56.327971407-05:00",
+          "signals": {
+            "X-Codex-Active-Limit": "premium",
+            "X-Codex-Credits-Balance": "58981.9937765000",
+            "X-Codex-Credits-Has-Credits": "True",
+            "X-Codex-Credits-Unlimited": "False",
+            "X-Codex-Plan-Type": "pro",
+            "X-Codex-Primary-Over-Secondary-Limit-Percent": "0",
+            "X-Codex-Primary-Reset-After-Seconds": "314389",
+            "X-Codex-Primary-Reset-At": "1795001129",
+            "X-Codex-Primary-Used-Percent": "11",
+            "X-Codex-Primary-Window-Minutes": "10080",
+            "X-Codex-Secondary-Reset-After-Seconds": "0",
+            "X-Codex-Secondary-Used-Percent": "0",
+            "X-Codex-Secondary-Window-Minutes": "0"
+          }
+        }
+      },
+      "cooldowns": [],
+      "success": 11484,
+      "failed": 26,
+      "id": "auth-3",
+      "name": "codex-3.json",
+      "email": "user3@example.com"
+    },
+    {
+      "provider": "kimi",
+      "account_type": "oauth",
+      "status": "active",
+      "status_message": "",
+      "disabled": false,
+      "unavailable": false,
+      "quota": {
+        "signals": {}
+      },
+      "cooldowns": [],
+      "success": 0,
+      "failed": 0,
+      "id": "auth-4",
+      "name": "kimi-4.json",
+      "email": "user4@example.com"
+    },
+    {
+      "provider": "xai",
+      "account_type": "oauth",
+      "status": "active",
+      "status_message": "",
+      "disabled": false,
+      "unavailable": false,
+      "quota": {
+        "signals": {}
+      },
+      "cooldowns": [],
+      "success": 0,
+      "failed": 0,
+      "id": "auth-5",
+      "name": "xai-5.json",
+      "email": "user5@example.com"
+    }
+  ]
+}

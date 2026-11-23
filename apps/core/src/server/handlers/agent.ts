@@ -40,8 +40,8 @@ export const agentHandlerMap = AgentRpc.middleware(AuthMiddleware).of({
     cwd,
   }) =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const session = yield* AgentSession.asEffect();
+      const user = yield* CurrentUser;
+      const session = yield* AgentSession;
       const created = yield* session.create({
         tenantId: user.tenantId,
         userId: user.userId,
@@ -60,8 +60,8 @@ export const agentHandlerMap = AgentRpc.middleware(AuthMiddleware).of({
   "agent.sendTurn": ({ conversationId, prompt }) =>
     Stream.unwrap(
       Effect.gen(function* () {
-        const user = yield* CurrentUser.asEffect();
-        const session = yield* AgentSession.asEffect();
+        const user = yield* CurrentUser;
+        const session = yield* AgentSession;
         const stream = yield* session.sendTurn({
           conversationId,
           tenantId: user.tenantId,
@@ -74,8 +74,8 @@ export const agentHandlerMap = AgentRpc.middleware(AuthMiddleware).of({
 
   "agent.cancelSession": ({ conversationId }) =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const session = yield* AgentSession.asEffect();
+      const user = yield* CurrentUser;
+      const session = yield* AgentSession;
       yield* session.cancel({
         conversationId,
         tenantId: user.tenantId,
@@ -84,8 +84,8 @@ export const agentHandlerMap = AgentRpc.middleware(AuthMiddleware).of({
 
   "agent.closeSession": ({ conversationId }) =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const session = yield* AgentSession.asEffect();
+      const user = yield* CurrentUser;
+      const session = yield* AgentSession;
       yield* session.close({
         conversationId,
         tenantId: user.tenantId,
@@ -94,8 +94,8 @@ export const agentHandlerMap = AgentRpc.middleware(AuthMiddleware).of({
 
   "agent.getTranscript": ({ conversationId }) =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const db = yield* GmackoDb.asEffect();
+      const user = yield* CurrentUser;
+      const db = yield* GmackoDb;
 
       const convRows = yield* Effect.promise(async () =>
         db

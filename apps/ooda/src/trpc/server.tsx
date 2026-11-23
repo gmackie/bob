@@ -8,6 +8,7 @@ import type { AppRouter } from "@gmacko/ooda/api";
 import { appRouter, createTRPCContext } from "@gmacko/ooda/api";
 import { initAuth } from "@gmacko/core/auth";
 import { db } from "@gmacko/ooda/db/client";
+import { getConfiguredNodeVault } from "@gmacko/ooda/vault/node-host";
 
 import { createQueryClient } from "./query-client";
 
@@ -32,6 +33,7 @@ const createContext = cache(async () => {
   return createTRPCContext({
     headers: heads,
     auth,
+    vaultHost: (await getConfiguredNodeVault())?.routeHost,
   });
 });
 
@@ -51,24 +53,23 @@ export function HydrateClient(props: { children: React.ReactNode }) {
     </HydrationBoundary>
   );
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export function prefetch<T extends ReturnType<TRPCQueryOptions<any>>>(
   queryOptions: T,
 ) {
   const queryClient = getQueryClient();
   if (queryOptions.queryKey[1]?.type === "infinite") {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any
     void queryClient.prefetchInfiniteQuery(queryOptions as any);
   } else {
     void queryClient.prefetchQuery(queryOptions);
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export async function fetchQuery<T extends ReturnType<TRPCQueryOptions<any>>>(
   queryOptions: T,
 ) {
   const queryClient = getQueryClient();
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+  
   return queryClient.fetchQuery(queryOptions);
 }

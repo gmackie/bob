@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 import {
   BobConflictError,
   BobForbiddenError,
@@ -127,6 +127,26 @@ export const OperationsRpc = RpcGroup.make(
       action: Schema.Literals(["start", "stop"]),
     }),
     success: Schema.Struct({ ok: Schema.Boolean, requestId: Schema.String }),
+    error,
+  }),
+  // BOB-76 budget cockpit. The state is the governor's read model; its shape
+  // is BudgetStateWire / BudgetVerdict from @bob/ws (validated there, not here).
+  Rpc.make("budget.state", {
+    payload: Schema.Struct({}),
+    success: Schema.Record(Schema.String, Schema.Unknown),
+    error,
+  }),
+  Rpc.make("budget.throughput", {
+    payload: Schema.Struct({}),
+    success: Schema.Record(Schema.String, Schema.Unknown),
+    error,
+  }),
+  Rpc.make("budget.setPolicy", {
+    payload: Schema.Struct({
+      policy: Schema.Record(Schema.String, Schema.Unknown),
+      note: Schema.optional(text(1, 500)),
+    }),
+    success: Schema.Record(Schema.String, Schema.Unknown),
     error,
   }),
   Rpc.make("proxyControl.set", {

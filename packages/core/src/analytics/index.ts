@@ -8,7 +8,7 @@
 //
 // Real implementation deferred to Phase 7 (Bob migration). Driver-agnostic
 // (Segment / PostHog / Plausible / Mixpanel adapters land per Bob's needs).
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, Schema, Context } from "effect";
 
 export interface AnalyticsEvent {
   readonly name: string;
@@ -18,7 +18,7 @@ export interface AnalyticsEvent {
   readonly timestamp?: Date;
 }
 
-export class AnalyticsNotImplementedError extends Schema.TaggedErrorClass<AnalyticsNotImplementedError>()(
+export class AnalyticsNotImplementedError extends Schema.TaggedError<AnalyticsNotImplementedError>()(
   "AnalyticsNotImplementedError",
   {
     reason: Schema.String,
@@ -40,7 +40,7 @@ export interface AnalyticsShape {
   ) => Effect.Effect<void, AnalyticsNotImplementedError>;
 }
 
-export const Analytics = ServiceMap.Service<AnalyticsShape>(
+export const Analytics = Context.Service<AnalyticsShape>(
   "@gmacko/analytics/Analytics",
 );
 

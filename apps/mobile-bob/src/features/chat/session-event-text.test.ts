@@ -74,6 +74,14 @@ describe("session event text extraction", () => {
     expect(text).toBe("The session is now running.");
   });
 
+  it("leaves planning task events out of the transcript", () => {
+    expect(
+      extractSessionEventText("planning_drafts", {
+        tasks: [{ title: "Ship the panel", description: "Visible on iPhone." }],
+      }),
+    ).toBe("");
+  });
+
   it("extracts readable error messages", () => {
     expect(
       extractSessionEventText("error", {

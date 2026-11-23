@@ -6,6 +6,8 @@
     "skipLibCheck": true,
     "target": "ES2022",
     "lib": ["ES2022"],
+    /** TS 7 defaults `types` to []; Bob packages run on Node. */
+    "types": ["node"],
     "allowJs": true,
     "resolveJsonModule": true,
     "moduleDetection": "force",

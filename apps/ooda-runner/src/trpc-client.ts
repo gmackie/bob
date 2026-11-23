@@ -29,6 +29,27 @@ export function createRunnerTRPCClient(
 
 export type RunnerTRPCClient = ReturnType<typeof createRunnerTRPCClient>;
 
+type SessionEvent = Parameters<
+  RunnerTRPCClient["runner"]["pushSessionEvent"]["mutate"]
+>[0];
+
+/**
+ * Push one streamed session event without waiting for it. A failed push loses
+ * that event only; left unhandled, the rejection ends the runner process and
+ * orphans every running session (BOB-57).
+ */
+export function streamSessionEvent(
+  trpc: RunnerTRPCClient,
+  event: SessionEvent,
+): void {
+  trpc.runner.pushSessionEvent.mutate(event).catch((error: unknown) => {
+    console.warn(
+      `[runner] session ${event.sessionId}: ${event.type} event not recorded:`,
+      error instanceof Error ? error.message : error,
+    );
+  });
+}
+
 /**
  * Adapt the tRPC client's `research` router into the flat
  * `ResearchTRPCSurface` the buddy-tool handlers call. Each surface method is

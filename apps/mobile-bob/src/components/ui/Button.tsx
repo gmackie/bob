@@ -1,6 +1,7 @@
 import { Pressable, Text, View } from "react-native";
 
 interface ButtonProps {
+  testID?: string;
   children: React.ReactNode;
   onPress: () => void;
   variant?: "primary" | "secondary" | "ghost";
@@ -18,6 +19,7 @@ const variantTextClasses = {
 
 export function Button({
   children,
+  testID,
   onPress,
   variant = "primary",
   size = "default",
@@ -36,6 +38,7 @@ export function Button({
 
   return (
     <Pressable
+      testID={testID}
       onPress={onPress}
       disabled={disabled}
       className={`${baseClasses} ${sizeClasses} ${variantClasses[variant]} ${className} ${disabled ? "opacity-50" : "active:opacity-90"}`}

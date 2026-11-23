@@ -21,10 +21,26 @@ const GATEWAY_PUBLIC_URL =
   process.env.GATEWAY_PUBLIC_URL ??
   process.env.EXPO_PUBLIC_GATEWAY_URL ??
   (isHostedEnv ? "wss://ws.blder.bot" : undefined);
+// OTA updates come from Preflight (BOB-113), not EAS Update. The server signs
+// every manifest with Bob's `ota_code_signing_key` from the Preflight vault;
+// certs/ota-code-signing.pem is its public certificate, and a binary only
+// accepts updates signed by the certificate it was built with. Preflight's
+// channels are development, preview and production.
+const PREFLIGHT_OTA_URL =
+  process.env.PREFLIGHT_OTA_URL ??
+  "https://preflight.forgegraf.com/api/preflight/v1/ota/bob";
+const getUpdatesChannel = () => {
+  if (APP_VARIANT === "production") return "production";
+  if (APP_VARIANT === "preview" || APP_VARIANT === "staging") return "preview";
+  return "development";
+};
 const updatesConfig = {
   checkAutomatically: "ON_LOAD",
   fallbackToCacheTimeout: 0,
-  url: "https://u.expo.dev/e1dd0ab0-4dc1-40f8-b066-7cb91fde1759",
+  url: PREFLIGHT_OTA_URL,
+  codeSigningCertificate: "./certs/ota-code-signing.pem",
+  codeSigningMetadata: { keyid: "main", alg: "rsa-v1_5-sha256" },
+  requestHeaders: { "expo-channel-name": getUpdatesChannel() },
 };
 
 const SENTRY_DSN = process.env.SENTRY_DSN;
@@ -119,8 +135,8 @@ module.exports = ({ config }) => {
       },
     ],
     // Enables native push: adds the iOS aps-environment entitlement and the
-    // Android notification channel/icon. APNs key + FCM credentials are
-    // configured on EAS (eas credentials), not here.
+    // Android notification channel/icon. The APNs key and FCM credentials
+    // belong to the push sender (Preflight), not to this config.
     "expo-notifications",
   ];
 
@@ -142,11 +158,11 @@ module.exports = ({ config }) => {
     //   "You're currently using the bare workflow, where runtime version
     //    policies are not supported. You must set your runtime version manually."
     // It has to be a literal. "fingerprint" was accepted but hashed the bare
-    // ios/ directory, which EAS mutates after the local fingerprint is computed
-    // (pod install writes into ios/, autoIncrement bumps CURRENT_PROJECT_VERSION),
-    // so CONFIGURE_EXPO_UPDATES failed every production build with "Runtime
-    // version calculated on local machine not equal to runtime version
-    // calculated during build." A literal is identical on both sides.
+    // ios/ directory, which the build mutates after the fingerprint is computed
+    // (pod install writes into ios/, the build number bumps
+    // CURRENT_PROJECT_VERSION), so the runtime version calculated locally never
+    // matched the one calculated during the build. A literal is identical on
+    // both sides, and it is what Preflight OTA publishes against.
     // Keep this in step with `version` above when the app version changes.
     runtimeVersion: "0.1.1",
     newArchEnabled: true,
@@ -159,6 +175,8 @@ module.exports = ({ config }) => {
       infoPlist: {
         CFBundleDisplayName: getAppName(),
         ITSAppUsesNonExemptEncryption: false,
+        // GMA-774: the SDLC item Live Activity (widget extension ios/BobLiveActivityWidget).
+        NSSupportsLiveActivities: true,
         "UISupportedInterfaceOrientations~ipad": [
           "UIInterfaceOrientationPortrait",
           "UIInterfaceOrientationPortraitUpsideDown",
@@ -177,6 +195,12 @@ module.exports = ({ config }) => {
       },
     },
     android: {
+      // EAS provides google-services.json as the GOOGLE_SERVICES_JSON file env
+      // var; FCM registration needs it in the build. Local runs without it are
+      // unchanged.
+      ...(process.env.GOOGLE_SERVICES_JSON
+        ? { googleServicesFile: process.env.GOOGLE_SERVICES_JSON }
+        : {}),
       package: getBundleId(),
       adaptiveIcon: {
         foregroundImage:

@@ -7,7 +7,7 @@
 //     plan locks this: only the middleware knows how to populate
 //     `CurrentUser`; procedures just assume it's present in their handler
 //     environment.
-//   - Tagged errors flow through directly: `Schema.TaggedErrorClass`
+//   - Tagged errors flow through directly: `Schema.TaggedError`
 //     instances ARE Schemas (per Task 2 drift notes), usable as the `error:`
 //     field without wrapping.
 //   - Where a procedure can fail with multiple tagged errors, we use
@@ -17,7 +17,7 @@
 //     "wrong format"; we don't introduce a separate error class just for the
 //     not-found case — fewer wire types = simpler consumer code).
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 import {
   AlreadyApprovedError,

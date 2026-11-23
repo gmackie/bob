@@ -12,9 +12,51 @@ import {
   hasConflicts,
 } from "@gmacko/ooda/vault";
 
-import { publicProcedure, authedProcedure } from "../trpc";
+import { authedProcedure } from "../trpc";
+import type { VaultRouteHost } from "../../vault/vault-route-host";
+import { VaultService } from "../../vault/vault-service";
+import { VaultWriterError } from "../../vault/writer";
+import { VersionedStorageError } from "../../vault/versioned-storage";
+
+async function executeHosted<T>(
+  host: VaultRouteHost,
+  actor: string,
+  kind: "personal" | "research",
+  operation: (service: VaultService) => Promise<T>,
+): Promise<T> {
+  try {
+    return await host.execute(actor, kind, operation);
+  } catch (error) {
+    if (error instanceof VersionedStorageError &&
+        (error.code === "NotAuthorized" || error.code === "NotReady")) {
+      throw new TRPCError({
+        code: error.code === "NotAuthorized" ? "FORBIDDEN" : "PRECONDITION_FAILED",
+        message: error.code === "NotAuthorized" ? "Vault access denied" : "Vault generation is closed",
+      });
+    }
+    throw error;
+  }
+}
 
 const vaultKindSchema = z.enum(["personal", "research"]);
+
+/** Delete/move: hosted Forge service when configured, else the local vault. */
+async function fileChange(
+  host: VaultRouteHost | undefined,
+  actor: string,
+  kind: "personal" | "research",
+  operation: (service: VaultService) => Promise<unknown>,
+) {
+  try {
+    const publication = host
+      ? await executeHosted(host, actor, kind, operation)
+      : await operation(new VaultService({ path: getVaultPath(kind), name: kind, kind }));
+    return { success: true, publication };
+  } catch (error) {
+    if (error instanceof VaultWriterError) throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+    throw error;
+  }
+}
 
 const ENV_VARS: Record<z.infer<typeof vaultKindSchema>, string> = {
   personal: "PERSONAL_VAULT_PATH",
@@ -42,8 +84,8 @@ function getVaultPath(kind: z.infer<typeof vaultKindSchema>): string {
 }
 
 export const vaultRouter = {
-  list: publicProcedure
-    .meta({ openapi: { method: "GET", path: "/api/vault", tags: ["vault"] } })
+  list: authedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/vault", tags: ["vault"], protect: true } })
     .input(
       z.object({
         vaultKind: vaultKindSchema,
@@ -51,13 +93,14 @@ export const vaultRouter = {
       }),
     )
     .output(z.any())
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      if (ctx.vaultHost) return executeHosted(ctx.vaultHost, ctx.userId, input.vaultKind, (service) => service.list(input.glob));
       const vaultPath = getVaultPath(input.vaultKind);
       return listFiles(vaultPath, input.glob);
     }),
 
-  read: publicProcedure
-    .meta({ openapi: { method: "GET", path: "/api/vault/read", tags: ["vault"] } })
+  read: authedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/vault/read", tags: ["vault"], protect: true } })
     .input(
       z.object({
         vaultKind: vaultKindSchema,
@@ -65,7 +108,8 @@ export const vaultRouter = {
       }),
     )
     .output(z.any())
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      if (ctx.vaultHost) return executeHosted(ctx.vaultHost, ctx.userId, input.vaultKind, (service) => service.read(input.filePath));
       const vaultPath = getVaultPath(input.vaultKind);
       return readFile(vaultPath, input.filePath);
     }),
@@ -81,12 +125,30 @@ export const vaultRouter = {
       }),
     )
     .output(z.any())
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      if (ctx.vaultHost) return executeHosted(ctx.vaultHost, ctx.userId, input.vaultKind, async (service) => ({
+        success: true,
+        publication: await service.write(input.filePath, input.content, input.frontmatter),
+      }));
       const vaultPath = getVaultPath(input.vaultKind);
       await writeFile(vaultPath, input.filePath, input.content, input.frontmatter);
-      await commitAndPush(vaultPath, `write: ${input.filePath}`);
-      return { success: true };
+      const publication = await commitAndPush(vaultPath, `write: ${input.filePath}`);
+      return { success: true, publication };
     }),
+
+  delete: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/vault/delete", tags: ["vault"], protect: true } })
+    .input(z.object({ vaultKind: vaultKindSchema, filePath: z.string() }))
+    .output(z.any())
+    .mutation(({ input, ctx }) => fileChange(ctx.vaultHost, ctx.userId, input.vaultKind,
+      (service) => service.remove(input.filePath))),
+
+  move: authedProcedure
+    .meta({ openapi: { method: "POST", path: "/api/vault/move", tags: ["vault"], protect: true } })
+    .input(z.object({ vaultKind: vaultKindSchema, from: z.string(), to: z.string() }))
+    .output(z.any())
+    .mutation(({ input, ctx }) => fileChange(ctx.vaultHost, ctx.userId, input.vaultKind,
+      (service) => service.move(input.from, input.to))),
 
   promote: authedProcedure
     .meta({ openapi: { method: "POST", path: "/api/vault/promote", tags: ["vault"], protect: true } })
@@ -100,31 +162,39 @@ export const vaultRouter = {
       }),
     )
     .output(z.any())
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      if (ctx.vaultHost) return executeHosted(ctx.vaultHost, ctx.userId, input.vaultKind, async (service) => ({
+        success: true,
+        publication: (await service.promote(input.threadId, input.noteId, input.content, input.frontmatter)).publication,
+      }));
       const vaultPath = getVaultPath(input.vaultKind);
       const filePath = `notes/${input.threadId}/${input.noteId}.md`;
       await writeFile(vaultPath, filePath, input.content, input.frontmatter);
-      await commitAndPush(
+      const publication = await commitAndPush(
         vaultPath,
         `promote: ${input.noteId} from thread ${input.threadId}`,
       );
-      return { success: true };
+      return { success: true, publication };
     }),
 
   sync: authedProcedure
     .meta({ openapi: { method: "POST", path: "/api/vault/sync", tags: ["vault"], protect: true } })
     .input(z.object({ vaultKind: vaultKindSchema }))
     .output(z.any())
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      if (ctx.vaultHost) return executeHosted(ctx.vaultHost, ctx.userId, input.vaultKind, (service) => service.sync());
       const vaultPath = getVaultPath(input.vaultKind);
       return pull(vaultPath);
     }),
 
-  health: publicProcedure
-    .meta({ openapi: { method: "GET", path: "/api/vault/health", tags: ["vault"] } })
+  health: authedProcedure
+    .meta({ openapi: { method: "GET", path: "/api/vault/health", tags: ["vault"], protect: true } })
     .input(z.object({ vaultKind: vaultKindSchema }))
     .output(z.any())
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      if (ctx.vaultHost) return executeHosted(ctx.vaultHost, ctx.userId, input.vaultKind, async (service) => ({
+        isHealthy: await service.isHealthy(),
+      }));
       const vaultPath = getVaultPath(input.vaultKind);
       const locked = await isLocked(vaultPath);
       const conflicts = await hasConflicts(vaultPath);

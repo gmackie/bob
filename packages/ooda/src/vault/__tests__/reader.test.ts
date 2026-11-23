@@ -105,3 +105,26 @@ This is the body.`;
     });
   });
 });
+
+it("rejects reads through external aliases and Git metadata aliases", async () => {
+  const fs = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = await fs.mkdtemp(join(tmpdir(), "vault-read-boundary-"));
+  try {
+    const vault = join(root, "vault"),
+      outside = join(root, "outside");
+    await fs.mkdir(vault);
+    await fs.mkdir(outside);
+    await fs.mkdir(join(vault, ".git"));
+    await fs.writeFile(join(outside, "private.md"), "private");
+    await fs.writeFile(join(vault, ".git/config"), "credential reference");
+    await fs.symlink(outside, join(vault, "external"));
+    await fs.symlink(join(vault, ".git"), join(vault, "metadata"));
+    await expect(readFile(vault, "external/private.md")).rejects.toThrow();
+    await expect(readFile(vault, ".git/config")).rejects.toThrow();
+    await expect(readFile(vault, "metadata/config")).rejects.toThrow();
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});

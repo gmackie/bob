@@ -1,6 +1,8 @@
 // Shared WebSocket protocol types for client and server.
 // This is the single source of truth — both gateway and clients import from here.
 
+import type { BobSessionUsageWire, BudgetMeterWire, BudgetSessionLinkWire, UsageBucketWire } from "./budget-meters";
+
 export type SessionStatus =
   | "provisioning"
   | "starting"
@@ -21,6 +23,8 @@ export type EventDirection = "client" | "agent" | "system";
 export type SessionEventType =
   | "output_chunk"
   | "message_final"
+  // Parsed task list from a planning agent. The gateway writes plan drafts from it.
+  | "planning_drafts"
   | "input"
   | "tool_call"
   | "tool_result"
@@ -104,6 +108,13 @@ export interface ProxyAccountWire {
    * auth_index). Needed to refresh, enable or disable it; neither is a secret.
    */
   ref?: { name?: string; authIndex?: string };
+  /**
+   * Subscription utilization from the provider's own rate-limit headers, as the
+   * proxy last saw them (BOB-76). Absent when the proxy captured none.
+   */
+  meters?: BudgetMeterWire[];
+  /** The same, per model, where the provider meters models separately. */
+  modelMeters?: Record<string, BudgetMeterWire[]>;
 }
 
 export interface ProxyUsageWire {
@@ -211,6 +222,19 @@ export interface ClientPing {
   type: "ping";
   ts: string;
   hostSnapshot?: HostSnapshotWire;
+}
+
+/**
+ * Daemon → gateway: token-ledger running totals from the inference proxy's
+ * usage queue (BOB-76). Absolute values, so the gateway upserts and a resend
+ * is harmless. Carries no keys, addresses or interactive session ids.
+ */
+export interface ClientBudgetUsage {
+  type: "budget_usage";
+  buckets: UsageBucketWire[];
+  sessions: BobSessionUsageWire[];
+  /** Agent CLI session id → Bob run session, for per-run and per-item cost. */
+  links?: BudgetSessionLinkWire[];
 }
 
 /**
@@ -756,7 +780,8 @@ export type ClientMessage =
   | ClientAgentAuthPrompt
   | ClientAgentAuthResult
   | ClientDispatchState
-  | ClientProxyControlResult;
+  | ClientProxyControlResult
+  | ClientBudgetUsage;
 
 export type ServerMessage =
   | ServerHelloOk

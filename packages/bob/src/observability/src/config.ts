@@ -1,6 +1,8 @@
+import { resolveIntegrationConfig } from "@bob/config/integrations";
+
 export type ObservabilitySurface = "api" | "job" | "gateway";
 
-export type EnvMap = Record<string, string | undefined>;
+export type EnvMap = Readonly<Record<string, unknown>>;
 
 export interface SentryConfig {
   enabled: boolean;
@@ -33,14 +35,15 @@ const DEFAULT_TRACES_SAMPLE_RATE = 0.1;
 
 function readEnvString(env: EnvMap, ...keys: string[]): string | undefined {
   for (const key of keys) {
-    const value = env[key]?.trim();
+    const raw = env[key];
+    const value = typeof raw === "string" ? raw.trim() : undefined;
     if (value) return value;
   }
   return undefined;
 }
 
 function readSampleRate(env: EnvMap): number {
-  const raw = env.SENTRY_TRACES_SAMPLE_RATE?.trim();
+  const raw = readEnvString(env, "SENTRY_TRACES_SAMPLE_RATE");
   if (!raw) return DEFAULT_TRACES_SAMPLE_RATE;
   const parsed = Number.parseFloat(raw);
   return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1
@@ -52,6 +55,7 @@ export function resolveObservabilityConfig(
   options: ResolveObservabilityConfigOptions,
 ): ObservabilityConfig {
   const env = options.env ?? process.env;
+  const integrations = resolveIntegrationConfig(env);
   const sentryDsn = readEnvString(
     env,
     "SENTRY_DSN",
@@ -77,13 +81,13 @@ export function resolveObservabilityConfig(
     environment:
       readEnvString(env, "FG_STAGE", "APP_ENV", "NODE_ENV") ?? "development",
     sentry: {
-      enabled: Boolean(sentryDsn),
-      dsn: sentryDsn,
+      enabled: integrations.sentry.enabled,
+      dsn: integrations.sentry.enabled ? sentryDsn : undefined,
       tracesSampleRate: readSampleRate(env),
     },
     posthog: {
-      enabled: Boolean(posthogKey),
-      apiKey: posthogKey,
+      enabled: integrations.posthog.enabled,
+      apiKey: integrations.posthog.enabled ? posthogKey : undefined,
       host: posthogHost,
     },
     tenantId: readEnvString(env, "BOB_TENANT_ID"),

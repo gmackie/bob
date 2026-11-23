@@ -52,7 +52,7 @@ export function useSessionStream(
     enabled: !!sessionId,
     // Re-fetch whenever SSE notifies us of a new event.
     // sseTicket is bumped by the EventSource listener.
-    // eslint-disable-next-line @tanstack/query/no-rest-destructuring
+    
     refetchInterval: false,
   });
 
@@ -103,7 +103,7 @@ export function useSessionStream(
     if (sseTicket > 0) {
       void eventsQuery.refetch();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react/exhaustive-deps
   }, [sseTicket]);
 
   // Open EventSource for live streaming notifications

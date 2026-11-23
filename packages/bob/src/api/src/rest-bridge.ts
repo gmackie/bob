@@ -21,8 +21,8 @@ import {
   FetchHttpClient,
   HttpClient,
   HttpClientRequest,
-} from "effect/unstable/http";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+} from "effect/http";
+import { RpcClient, RpcSerialization } from "effect/rpc";
 
 type WebHandler = (request: Request) => Promise<Response>;
 

@@ -10,15 +10,15 @@ import { Duration, Effect, Schedule } from "effect";
  * heartbeat, claimWork, reportEvent, unregister) so transient network
  * errors don't break the runtime loop.
  *
- * Composition uses `Schedule.both` (AND intersection) rather than
- * `Schedule.intersect`, which is not a named export in Effect 4. `both`
- * recurs only while both sub-schedules want to recur, giving us the cap
- * behavior from `Schedule.recurs(5)`.
+ * Composition uses `Schedule.max` (Effect 4.1; formerly `Schedule.both`):
+ * it recurs only while every sub-schedule wants to recur and waits the
+ * longer of their delays, giving us the cap behavior from
+ * `Schedule.recurs(5)`.
  */
-export const retrySchedule = Schedule.both(
+export const retrySchedule = Schedule.max([
   Schedule.exponential(Duration.millis(100), 2.0).pipe(Schedule.jittered),
   Schedule.recurs(5),
-);
+]);
 
 /**
  * Convenience helper: apply `retrySchedule` to an effect. Returns the effect

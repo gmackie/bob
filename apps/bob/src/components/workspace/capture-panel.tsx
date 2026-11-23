@@ -249,7 +249,7 @@ export function CapturePanel({ sessionId }: CapturePanelProps) {
             className="relative block max-h-full max-w-full"
             title="Click to open full size"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {/* oxlint-disable-next-line nextjs/no-img-element */}
             <img
               src={activeCapture.url}
               alt={`Capture from ${activeCapture.capturedAt}`}
@@ -381,7 +381,7 @@ export function CapturePanel({ sessionId }: CapturePanelProps) {
                   }`}
                   title={new Date(cap.capturedAt).toLocaleTimeString()}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {/* oxlint-disable-next-line nextjs/no-img-element */}
                   <img
                     src={cap.url}
                     alt={`Capture ${idx + 1}`}

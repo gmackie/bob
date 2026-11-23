@@ -1,0 +1,6 @@
+{
+  "spec": "§2.1",
+  "frames": [
+    [ { "_tag": "Pong" }, { "_tag": "Exit", "requestId": "$id", "exit": { "_tag": "Success", "value": { "sequence": 4190 } } } ]
+  ]
+}

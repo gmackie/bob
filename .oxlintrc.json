@@ -21,6 +21,61 @@
     "anti-slop/no-unknown-type-aliases": "error",
     "anti-slop/no-unsafe-dictionary-type": "warn",
     "anti-slop/no-widen-then-assert": "error",
-    "anti-slop/require-safety-comment-for-type-assertion": "warn"
-  }
+    "anti-slop/require-safety-comment-for-type-assertion": "warn",
+    "typescript/consistent-type-imports": [
+      "warn",
+      {
+        "prefer": "type-imports"
+      }
+    ],
+    "typescript/no-non-null-assertion": "error",
+    "import/consistent-type-specifier-style": [
+      "warn",
+      "prefer-top-level"
+    ],
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "process",
+            "importNames": [
+              "env"
+            ],
+            "message": "Use `import { env } from '~/env'` instead to ensure validated types."
+          }
+        ]
+      }
+    ],
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "warn",
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ]
+  },
+  "plugins": [
+    "typescript",
+    "import",
+    "react",
+    "nextjs"
+  ],
+  "ignorePatterns": [
+    ".claude/**",
+    "**/.git/**",
+    "**/.jj/**",
+    "**/.next/**",
+    "**/.turbo/**",
+    "**/coverage/**",
+    "**/dist/**",
+    "**/dist-electron/**",
+    "**/node_modules/**",
+    "**/.expo/**",
+    "**/expo-plugins/**",
+    "**/metro-shims/**",
+    "**/generated/**"
+  ]
 }

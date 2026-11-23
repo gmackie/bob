@@ -37,6 +37,8 @@ import type { SessionEventRecord } from "./persistence.js";
 import { pushToUser } from "./push.js";
 import { workspaceOwnerId } from "./auth.js";
 import { ProxyAlertNotifier } from "./proxy-alert-notifier.js";
+import { ingestAccountStates, ingestBudgetUsage, ingestMeterSamples, type BudgetStore } from "./budget-ingest.js";
+import { recordMeterSamples, upsertBobSessions, upsertBudgetAccounts, upsertSessionLinks, upsertUsageBuckets } from "@bob/db";
 import { enqueueTransition } from "./outbox.js";
 import { parsePrUrl } from "./pr-url.js";
 import { orphanReapCutoffs } from "./reap-orphans.js";
@@ -45,6 +47,8 @@ import {
   TERMINAL_SESSION_STATUSES,
   reconciledRunStatus,
 } from "./reconcile-runs.js";
+import { syncSessionPlanningDrafts } from "./planning-drafts-db.js";
+import { commitSessionPlanningIssues } from "./commit-planning-issues.js";
 
 const REPLAY_LIMIT = 500;
 
@@ -98,6 +102,7 @@ const BLOCKED_ABANDON_MS = 24 * 60 * 60_000;
 // query per connected daemon). This is the reliable dispatch path — the CF
 // Worker cannot reach /internal/nudge over HTTP post-supersession.
 const PENDING_DELIVERY_INTERVAL_MS = 15_000;
+const PENDING_OFFER_RETRY_MS = 30_000;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (s: unknown): s is string => typeof s === "string" && UUID_RE.test(s);
@@ -117,10 +122,9 @@ interface Connection {
   workspaceSubscriptionVersion: number;
   workspaceScopeId?: string;
   workspaceStatusFilter?: SessionStatus[];
-  // Daemon only: sessionIds already delivered via session_available on this
-  // connection, so the periodic pending-delivery tick doesn't re-send (and
-  // trigger a double-claim) for a session already handed over.
-  deliveredSessions?: Set<string>;
+  // An offer is not a claim: a busy daemon leaves it pending. Rate-limit
+  // retries while allowing delivery again once capacity becomes available.
+  deliveredSessions?: Map<string, number>;
   hostSnapshot?: HostSnapshotWire;
 }
 
@@ -157,6 +161,9 @@ export interface RelayConfig {
   validateDaemonAuth: (token: string, workspaceId: string) => Promise<string | null>;
 }
 
+
+
+export const budgetStore: BudgetStore = { recordMeterSamples, upsertBobSessions, upsertBudgetAccounts, upsertSessionLinks, upsertUsageBuckets };
 
 export class Relay {
   private readonly cfg: RelayConfig;
@@ -858,6 +865,14 @@ export class Relay {
           });
         }
         return;
+      // BOB-76 token ledger. Daemon-only: the totals decide how much budget the
+      // governor believes is left, so a browser must not be able to write them.
+      case "budget_usage":
+        if (conn.kind === "daemon" && conn.workspaceId) {
+          await ingestBudgetUsage(db, budgetStore, { workspaceId: conn.workspaceId, hostId: conn.hostId ?? "unknown" }, msg)
+            .catch((error) => console.error("[relay] budget_usage failed:", error instanceof Error ? error.message : error));
+        }
+        return;
       case "ping":
         this.send(conn, { type: "pong", ts: new Date().toISOString() });
         // Daemon pings double as liveness. The runner LEASE is the
@@ -871,6 +886,12 @@ export class Relay {
             // One push to the owner when the proxy stops serving; nothing per
             // heartbeat and nothing on recovery. Never blocks the heartbeat.
             void this.proxyAlerts.observe(conn.workspaceId, msg.hostSnapshot);
+            // BOB-76: keep each distinct subscription meter reading. Never
+            // blocks or fails the heartbeat.
+            void ingestMeterSamples(db, budgetStore, { workspaceId: conn.workspaceId, hostId: conn.hostId ?? "unknown" }, msg.hostSnapshot)
+              .catch((error) => console.error("[relay] budget meter samples failed:", error instanceof Error ? error.message : error));
+            void ingestAccountStates(db, budgetStore, { workspaceId: conn.workspaceId, hostId: conn.hostId ?? "unknown" }, msg.hostSnapshot)
+              .catch((error) => console.error("[relay] budget account states failed:", error instanceof Error ? error.message : error));
           }
           await db
             .update(runnerLeases)
@@ -1126,14 +1147,14 @@ export class Relay {
    * reach the gateway's /internal/nudge over HTTP (ws.blder.bot serves only the
    * WS upgrade; a Worker-side nudge silently no-ops). Without a live nudge, a
    * session created while the daemon is already connected would otherwise sit
-   * pending until the next reconnect. Per-connection dedup via
-   * `deliveredSessions` avoids re-sending (and double-claiming) a session
-   * already handed over; a claimed session leaves `status='pending'` so it also
-   * naturally drops out of the query.
+   * pending until the next reconnect. Unclaimed offers retry after a short
+   * cooldown because runners may decline at capacity. Claimed sessions leave
+   * `status='pending'` and naturally drop out of the query; runners deduplicate
+   * offers against their active executions.
    */
   private async deliverPendingSessionsToDaemon(conn: Connection): Promise<void> {
     if (conn.kind !== "daemon" || !conn.userId || !conn.workspaceId) return;
-    if (!conn.deliveredSessions) conn.deliveredSessions = new Set<string>();
+    if (!conn.deliveredSessions) conn.deliveredSessions = new Map<string, number>();
 
     const pending = await db.query.chatConversations.findMany({
       where: and(
@@ -1141,8 +1162,13 @@ export class Relay {
         eq(chatConversations.userId, conn.userId),
       ),
     });
+    const pendingIds = new Set(pending.map((session) => session.id));
+    for (const id of conn.deliveredSessions.keys()) {
+      if (!pendingIds.has(id)) conn.deliveredSessions.delete(id);
+    }
     for (const session of pending) {
-      if (conn.deliveredSessions.has(session.id)) continue;
+      const lastOffer = conn.deliveredSessions.get(session.id);
+      if (lastOffer !== undefined && Date.now() - lastOffer < PENDING_OFFER_RETRY_MS) continue;
       // Don't re-offer work this host has already proven it can't spawn; leave
       // it pending for a daemon that can (see spawnFailureAgent).
       if (this.hostCannotRun(conn, session.agentType)) continue;
@@ -1173,10 +1199,11 @@ export class Relay {
 
       const personaMetadata = (session as any).personaMetadata as Record<string, unknown> | null;
 
-      // Mark delivered BEFORE send so a send that races the next tick is not
-      // double-emitted; a genuinely undelivered session (socket dead) will be
-      // re-picked on the daemon's next connect via the same method.
-      conn.deliveredSessions.add(session.id);
+      // Enrichment awaits can overlap another poll. Recheck and reserve the
+      // cooldown synchronously before sending so overlapping ticks emit once.
+      const latestOffer = conn.deliveredSessions.get(session.id);
+      if (latestOffer !== undefined && Date.now() - latestOffer < PENDING_OFFER_RETRY_MS) continue;
+      conn.deliveredSessions.set(session.id, Date.now());
       this.send(conn, {
         type: "session_available",
         sessionId: session.id,
@@ -1992,6 +2019,43 @@ export class Relay {
     return tenantId;
   }
 
+  private async ingestPlanningDrafts(event: ClientSessionEvent): Promise<void> {
+    if (event.eventType !== "planning_drafts") return;
+    // Drafts and their board issues are written before the ack. A crash leaves
+    // the frame unacked. The issue id makes the retry skip createIssue.
+    const result = await syncSessionPlanningDrafts(event.sessionId, event.payload);
+    const committed = await commitSessionPlanningIssues(event.sessionId);
+    if (result.changed && result.workspaceId) {
+      await this.broadcastWorkspaceIdInvalidation(
+        result.workspaceId,
+        "planning_session_produced_drafts",
+        event.sessionId,
+        {
+          action: result.created > 0 ? "created" : "updated",
+          draftIds: result.draftIds,
+          projectId: result.projectId,
+        },
+      );
+    }
+    if (committed.committed > 0 && committed.workspaceId) {
+      await this.broadcastWorkspaceIdInvalidation(
+        committed.workspaceId,
+        "planning_session_produced_tasks",
+        event.sessionId,
+        {
+          committed: committed.committed,
+          taskIds: committed.tasks.map((task) => task.taskId),
+          draftIds: committed.tasks.map((task) => task.draftId),
+        },
+      );
+    }
+    if (committed.retry) {
+      throw new Error(
+        `Planning issues for session ${event.sessionId} will be retried`,
+      );
+    }
+  }
+
   // ── Daemon session_event → persist + fan out ───────────────────────
 
   /**
@@ -2078,6 +2142,9 @@ export class Relay {
         );
         return;
       }
+      // Drafts are written before the ack. A crash here leaves the frame
+      // unacked, and the retry is idempotent, so the task list is not lost.
+      await this.ingestPlanningDrafts(event);
       this.send(conn, {
         type: "event_ack",
         sessionId: event.sessionId,
@@ -2124,6 +2191,7 @@ export class Relay {
       };
 
       await this.cfg.persistEvent(record);
+      await this.ingestPlanningDrafts(event);
     }
 
     // Fan out to all subscribers of this session
@@ -2247,6 +2315,9 @@ export class Relay {
           error?: string;
           reason?: string;
           message?: string;
+          phase?: string;
+          modelStarted?: boolean;
+          retryable?: boolean;
           pullRequestUrl?: string;
           branch?: string;
           baseBranch?: string;
@@ -2255,6 +2326,8 @@ export class Relay {
     const errorMessage =
       summary?.error ?? summary?.message ?? summary?.reason ?? undefined;
     const isError = msg.status === "error" || msg.status === "failed";
+    const branchAdmissionBlocked = isError && summary?.code === "INVALID_BRANCH" &&
+      summary.phase === "worktree_admission" && summary.modelStarted === false && summary.retryable === false;
 
     // Learn "this host can't run that agent" from a spawn failure so the next
     // pending-delivery tick doesn't hand it the same kind of work again.
@@ -2347,9 +2420,15 @@ export class Relay {
         if (taskRun.workItemId) {
           await db
             .update(workItems)
-            .set({ status: msg.status === "completed" ? "in_review" : "ready" })
+            .set({ status: msg.status === "completed" ? "in_review" : branchAdmissionBlocked ? "blocked" : "ready" })
             .where(eq(workItems.id, taskRun.workItemId));
         }
+      }
+
+      // Public dispatches can link a work item without creating a task_run.
+      // A deterministic admission failure must stop their provider loop too.
+      if (branchAdmissionBlocked && !taskRun?.workItemId && session.workItemId) {
+        await db.update(workItems).set({ status: "blocked" }).where(eq(workItems.id, session.workItemId));
       }
 
       // Bridge: update agent_runs for dashboard (idempotent)

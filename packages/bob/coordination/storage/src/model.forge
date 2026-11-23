@@ -1,0 +1,136 @@
+/// Internal storage; not a public CRUD surface. The adapter owns transactions.
+export resource CoordinationPlan @tenant @versioned {
+  id : id
+  owner : text length 1..128
+  definition : json
+  state : text length 1..32
+  list by owner
+}
+export resource CoordinationItem @tenant @versioned {
+  id : id
+  owner : text length 1..128
+  planId : text length 1..128
+  snapshot : json
+  list by owner, planId
+}
+export resource CoordinationOperation @tenant {
+  id : id
+  owner : text length 1..128
+  receipt : json
+  list by owner
+}
+export resource CoordinationEvent @tenant {
+  id : id
+  owner : text length 1..128
+  resourceId : text length 1..128
+  resourceVersion : integer >= 1
+  sequence : integer >= 1
+  recordedAt : datetime
+  unique sequence
+  list by owner, sequence
+}
+
+export resource CoordinationAttempt @tenant {
+  id : id
+  owner : text length 1..128
+  planId : text length 1..128
+  itemId : text length 1..128
+  requestId : text length 1..128
+  operationId : text length 1..128
+  request : json
+  state : text length 1..32
+  admission : json?
+  terminal : json?
+  lastSequence : integer >= 0
+  leaseOwner : text? length 1..128
+  leaseUntil : integer?
+  unique requestId
+  list by owner, planId, state
+}
+
+/// Kanbanger lifecycle effects. A row commits in the same transaction as the
+/// coordination fact it reports; a worker delivers it later. Never a public API.
+export resource CoordinationIssueEffect @tenant {
+  id : id
+  owner : text length 1..128
+  attemptId : text length 1..128
+  fact : text length 1..64
+  payload : json
+  status : text length 1..32
+  deliveryAttempts : integer >= 0
+  nextAttemptAt : integer >= 0
+  lastError : text? length 1..2000
+  leaseOwner : text? length 1..128
+  leaseUntil : integer?
+  createdAt : datetime
+  deliveredAt : datetime?
+  unique attemptId, fact
+  list by owner, status, nextAttemptAt
+}
+
+/// Append-only audit of mutating coordination commands (BOB-79): rows are
+/// inserted, never updated or replaced. id is a random row id; commandId is the
+/// command's idempotency key (commandId; requestId for RequestExecution), and one
+/// command may have several rows (refusals, acceptance, later completion). owner
+/// is the principal's trusted actorId; actor is the human a relaying host (the
+/// SDLC edge) verified, null for direct principal calls. outcome is the Operation
+/// state on success or the error code on refusal. Never a public API.
+export resource CoordinationCommandLog @tenant {
+  id : id
+  commandId : text length 1..128
+  owner : text length 1..128
+  operation : text length 1..64
+  actor : text? length 1..200
+  resourceId : text? length 1..128
+  operationId : text? length 1..128
+  outcome : text length 1..128
+  createdAt : datetime
+  list by owner, createdAt
+  list by commandId
+}
+
+/// Answers to pending t3 questions (BOB-80), queued by ResolveInput in the same
+/// transaction that moves the item back to running. The tail relay delivers each
+/// row once with t3 runtime-request.respond (commandId stable per attempt and
+/// prompt) and erases `answers` when it settles. id is `<attemptId>:<promptId>`;
+/// status is pending, delivered or abandoned. Never a public API.
+export resource CoordinationInputDelivery @tenant {
+  id : id
+  owner : text length 1..128
+  attemptId : text length 1..128
+  itemId : text length 1..128
+  threadId : text length 1..128
+  promptId : text length 1..1024
+  commandId : text length 1..128
+  operationId : text length 1..128
+  answers : json?
+  status : text length 1..32
+  deliveryAttempts : integer >= 0
+  nextAttemptAt : integer >= 0
+  lastError : text? length 1..128
+  createdAt : datetime
+  settledAt : datetime?
+  unique attemptId, promptId
+  list by owner, status, nextAttemptAt
+}
+
+/// Releases of succeeded attempts (BOB-82). id is the attemptId. The worker's
+/// release driver carries each row from publish to production under a lease and
+/// polls Forgejo and ForgeGraph at nextCheckAt. stage mirrors ReleaseStatus.stage;
+/// data holds the ReleaseStatus plus a pending RequestRelease/RequestDeployment
+/// command, if any. Never a public API.
+export resource CoordinationRelease @tenant {
+  id : id
+  owner : text length 1..128
+  itemId : text length 1..128
+  planId : text length 1..128
+  stage : text length 1..32
+  data : json
+  checkAttempts : integer >= 0
+  nextCheckAt : integer >= 0
+  leaseOwner : text? length 1..128
+  leaseUntil : integer?
+  createdAt : datetime
+  updatedAt : datetime
+  list by owner, stage, nextCheckAt
+}

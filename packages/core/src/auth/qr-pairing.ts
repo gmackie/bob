@@ -181,12 +181,12 @@ export function qrPairing(options?: QrPairingOptions) {
           );
           if (!pending) throw invalid();
           if (pending.expiresAt < new Date()) {
-            await ctx.context.internalAdapter.deleteVerificationValue(pending.id);
+            await ctx.context.internalAdapter.deleteVerificationByIdentifier(pending.identifier);
             throw invalid();
           }
 
           // Single-use: consume the pending row before minting anything.
-          await ctx.context.internalAdapter.deleteVerificationValue(pending.id);
+          await ctx.context.internalAdapter.deleteVerificationByIdentifier(pending.identifier);
           await ctx.context.internalAdapter.createVerificationValue({
             identifier: `${CLAIMED_PREFIX}:${hash}`,
             value: "{}",
@@ -202,8 +202,7 @@ export function qrPairing(options?: QrPairingOptions) {
           if (!user) throw invalid();
 
           const session = await ctx.context.internalAdapter.createSession(
-            user.id,
-            ctx,
+            user.id
           );
           if (!session) {
             throw ctx.error("INTERNAL_SERVER_ERROR", {
@@ -326,10 +325,8 @@ export function qrPairing(options?: QrPairingOptions) {
 
           // Single-approval: consume the user-code row and flip the device
           // row to approved (delete + recreate — the adapter has no update).
-          await ctx.context.internalAdapter.deleteVerificationValue(userRow.id);
-          await ctx.context.internalAdapter.deleteVerificationValue(
-            deviceRow.id,
-          );
+          await ctx.context.internalAdapter.deleteVerificationByIdentifier(userRow.identifier);
+          await ctx.context.internalAdapter.deleteVerificationByIdentifier(deviceRow.identifier);
           await ctx.context.internalAdapter.createVerificationValue({
             identifier: `${DEVICE_PREFIX}:${deviceHash}`,
             value: JSON.stringify({
@@ -365,9 +362,7 @@ export function qrPairing(options?: QrPairingOptions) {
           }
 
           // Single-use: consume before minting the session.
-          await ctx.context.internalAdapter.deleteVerificationValue(
-            deviceRow.id,
-          );
+          await ctx.context.internalAdapter.deleteVerificationByIdentifier(deviceRow.identifier);
 
           const user = await ctx.context.internalAdapter.findUserById(
             state.userId,
@@ -377,8 +372,7 @@ export function qrPairing(options?: QrPairingOptions) {
           }
 
           const session = await ctx.context.internalAdapter.createSession(
-            user.id,
-            ctx,
+            user.id
           );
           if (!session) {
             throw ctx.error("INTERNAL_SERVER_ERROR", {

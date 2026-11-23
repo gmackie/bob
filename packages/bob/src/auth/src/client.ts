@@ -4,6 +4,8 @@ import { createAuthClient } from "better-auth/react";
 export interface ExpoAuthStorage {
   setItem: (key: string, value: string) => unknown;
   getItem: (key: string) => string | null;
+  setItemAsync: (key: string, value: string) => Promise<void>;
+  getItemAsync: (key: string) => Promise<string | null>;
 }
 
 export function createBobAuthClient(options?: { baseURL?: string }) {

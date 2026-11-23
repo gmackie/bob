@@ -7,7 +7,7 @@
 // NOTE: not exported from the package barrel yet — Task 17 handles the
 // public surface.
 import { and, eq, gt } from "drizzle-orm";
-import { Effect, Layer, ServiceMap } from "effect";
+import { Effect, Layer, Context } from "effect";
 
 import { GmackoDb } from "@gmacko/core/db";
 import {
@@ -47,7 +47,7 @@ export interface SessionsShape {
   ) => Effect.Effect<SessionValidationResult, SessionExpiredError>;
 }
 
-export class Sessions extends ServiceMap.Service<Sessions, SessionsShape>()(
+export class Sessions extends Context.Service<Sessions, SessionsShape>()(
   "@gmacko/auth/Sessions",
 ) {}
 
@@ -58,7 +58,7 @@ export const layerSessions: Layer.Layer<
 > = Layer.effect(Sessions)(
   Effect.gen(function* () {
     const db = yield* GmackoDb;
-    const auth = yield* BetterAuth.asEffect();
+    const auth = yield* BetterAuth;
 
     const validateToken: SessionsShape["validateToken"] = (token) =>
       Effect.gen(function* () {

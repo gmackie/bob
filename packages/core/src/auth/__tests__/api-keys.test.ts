@@ -56,7 +56,7 @@ afterEach(async () => {
 describe("@gmacko/auth ApiKeys service", () => {
   it.effect("issueKey stores a hashed row and returns plaintext with gmk_ prefix + 12-char keyPrefix", () =>
     Effect.gen(function* () {
-      const svc = yield* ApiKeys.asEffect();
+      const svc = yield* ApiKeys;
       const issued = yield* svc.issueKey({
         userId: USER_ID,
         tenantId: TENANT_ID,
@@ -82,7 +82,7 @@ describe("@gmacko/auth ApiKeys service", () => {
 
   it.effect("validateKey returns userId/tenantId/email/permissions for an issued key", () =>
     Effect.gen(function* () {
-      const svc = yield* ApiKeys.asEffect();
+      const svc = yield* ApiKeys;
       const issued = yield* svc.issueKey({
         userId: USER_ID,
         tenantId: TENANT_ID,
@@ -102,7 +102,7 @@ describe("@gmacko/auth ApiKeys service", () => {
     "validateKey agrees with the shared plain validateApiKey on shared fields",
     () =>
       Effect.gen(function* () {
-        const svc = yield* ApiKeys.asEffect();
+        const svc = yield* ApiKeys;
         const issued = yield* svc.issueKey({
           userId: USER_ID,
           tenantId: TENANT_ID,
@@ -127,7 +127,7 @@ describe("@gmacko/auth ApiKeys service", () => {
 
   it.effect("validateKey rejects non-API-key strings with 'Not an API key'", () =>
     Effect.gen(function* () {
-      const svc = yield* ApiKeys.asEffect();
+      const svc = yield* ApiKeys;
       const caught = yield* svc.validateKey("not_a_key").pipe(
         Effect.catchTag("InvalidApiKeyError", (err) => Effect.succeed(err)),
       );
@@ -138,7 +138,7 @@ describe("@gmacko/auth ApiKeys service", () => {
 
   it.effect("validateKey rejects an unissued gmk_ prefixed key with 'not found'", () =>
     Effect.gen(function* () {
-      const svc = yield* ApiKeys.asEffect();
+      const svc = yield* ApiKeys;
       const caught = yield* svc.validateKey("gmk_unissuedrandomkeyvalue").pipe(
         Effect.catchTag("InvalidApiKeyError", (err) => Effect.succeed(err)),
       );
@@ -149,7 +149,7 @@ describe("@gmacko/auth ApiKeys service", () => {
 
   it.effect("revokeKey causes subsequent validateKey to fail with 'revoked'", () =>
     Effect.gen(function* () {
-      const svc = yield* ApiKeys.asEffect();
+      const svc = yield* ApiKeys;
       const issued = yield* svc.issueKey({
         userId: USER_ID,
         tenantId: TENANT_ID,
@@ -166,7 +166,7 @@ describe("@gmacko/auth ApiKeys service", () => {
 
   it.effect("issueKey with negative ttlMs produces an immediately-expired key", () =>
     Effect.gen(function* () {
-      const svc = yield* ApiKeys.asEffect();
+      const svc = yield* ApiKeys;
       const issued = yield* svc.issueKey({
         userId: USER_ID,
         tenantId: TENANT_ID,
@@ -183,7 +183,7 @@ describe("@gmacko/auth ApiKeys service", () => {
 
   it.effect("listForUser returns keys ordered by createdAt DESC, including revoked", () =>
     Effect.gen(function* () {
-      const svc = yield* ApiKeys.asEffect();
+      const svc = yield* ApiKeys;
       const first = yield* svc.issueKey({
         userId: USER_ID,
         tenantId: TENANT_ID,
@@ -216,7 +216,7 @@ describe("@gmacko/auth ApiKeys service", () => {
 
   it.effect("isApiKey honors default and custom prefix lists", () =>
     Effect.gen(function* () {
-      const defaultSvc = yield* ApiKeys.asEffect();
+      const defaultSvc = yield* ApiKeys;
       expect(defaultSvc.isApiKey("gmk_something")).toBe(true);
       expect(defaultSvc.isApiKey("bob_abc")).toBe(false);
       expect(defaultSvc.isApiKey(null)).toBe(false);
@@ -228,7 +228,7 @@ describe("@gmacko/auth ApiKeys service", () => {
         layerGmackoDb(ctx.db),
       );
       const multiResult = yield* Effect.gen(function* () {
-        const svc = yield* ApiKeys.asEffect();
+        const svc = yield* ApiKeys;
         return {
           gmk: svc.isApiKey("gmk_abc"),
           bob: svc.isApiKey("bob_abc"),
@@ -246,7 +246,7 @@ describe("@gmacko/auth ApiKeys service", () => {
         layerGmackoDb(ctx.db),
       );
       const issued = yield* Effect.gen(function* () {
-        const svc = yield* ApiKeys.asEffect();
+        const svc = yield* ApiKeys;
         return yield* svc.issueKey({
           userId: USER_ID,
           tenantId: TENANT_ID,

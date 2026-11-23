@@ -1,4 +1,4 @@
-import { ServiceMap } from "effect";
+import { Context } from "effect";
 import type {
   TenantId,
   TenantMemberRole,
@@ -17,7 +17,7 @@ export interface CurrentUserShape {
   readonly gatewayToken?: string;
 }
 
-export class CurrentUser extends ServiceMap.Service<
+export class CurrentUser extends Context.Service<
   CurrentUser,
   CurrentUserShape
 >()("@gmacko/rpc/CurrentUser") {}
@@ -36,7 +36,7 @@ export interface RunnerSessionShape {
   readonly tenantId: string;
 }
 
-export class RunnerSession extends ServiceMap.Service<
+export class RunnerSession extends Context.Service<
   RunnerSession,
   RunnerSessionShape
 >()("@gmacko/rpc/RunnerSession") {}

@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subscription budget governor</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--foreground, #202124); font: 14px/1.55 var(--font-sans, system-ui, sans-serif); }
+  main { width: 100%; min-width: 0; }
+  h1 { font-size: 1.25rem; margin: 0 0 .25rem; letter-spacing: -.01em; }
+  h2 { font-size: 1.02rem; margin: 1.75rem 0 .5rem; padding-bottom: .3rem; border-bottom: 1px solid var(--border, #d8dce2); }
+  h3 { font-size: .9rem; margin: 0 0 .25rem; }
+  p { max-width: 78ch; margin: .5rem 0; }
+  a { color: var(--accent-surface-foreground, #2458ac); }
+  .meta, .muted { color: var(--muted-foreground, #606773); }
+  .meta span + span::before { content: "·"; margin: 0 .45rem; }
+  :focus-visible { outline: 2px solid var(--ring, #2458ac); outline-offset: 3px; }
+  code, pre { font-family: var(--font-mono, Menlo, Consolas, monospace); font-size: .86em; background: var(--code-background, #f1f3f5); color: var(--code-foreground, #202124); }
+  code { padding: .05rem .3rem; border-radius: 4px; }
+  pre { padding: .75rem; border-radius: var(--radius, .625rem); overflow-x: auto; line-height: 1.4; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  th, td { text-align: left; vertical-align: top; padding: .45rem .5rem; border-bottom: 1px solid var(--border, #d8dce2); }
+  th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted-foreground, #606773); }
+  svg { max-width: 100%; }
+  ul { padding-left: 1.15rem; margin: .4rem 0; }
+  li { margin: .15rem 0; }
+
+  .badge, .chip { display: inline-block; border-radius: 999px; padding: .1rem .5rem; font-size: .72rem; font-weight: 600; white-space: nowrap; vertical-align: middle; }
+  .badge { background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #2458ac); }
+  .chip.done { background: color-mix(in srgb, var(--success, #1e8e3e) 18%, transparent); color: var(--success, #1e8e3e); }
+  .chip.active { background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #2458ac); }
+  .chip.todo { background: var(--muted, #f1f3f5); color: var(--muted-foreground, #606773); }
+  .chip.risk { background: var(--warning-surface, #fff4d6); color: var(--warning-foreground, #7a5200); }
+  .chip.bad { background: var(--destructive-surface, #fde7e7); color: var(--destructive, #b3261e); }
+
+  .callout { border-left: 3px solid var(--accent, #2458ac); background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #1a2b4d); border-radius: 0 var(--radius, .625rem) var(--radius, .625rem) 0; padding: .65rem .85rem; margin: .75rem 0; }
+  .callout.warn { border-left-color: var(--warning, #b7791f); background: var(--warning-surface, #fff4d6); color: var(--warning-foreground, #7a5200); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: .65rem; }
+  .card { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .625rem); background: var(--card, #f7f8fa); color: var(--card-foreground, #202124); padding: .7rem .8rem; }
+  .card.recommended { border-color: var(--accent, #2458ac); box-shadow: 0 0 0 1px var(--accent, #2458ac); }
+  .card .k { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-foreground, #606773); }
+  .card .v { font-weight: 650; margin: .15rem 0 .25rem; }
+  .card p { font-size: .85rem; margin: 0; }
+
+  .goals { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+  @media (max-width: 560px) { .goals { grid-template-columns: 1fr; } }
+  .goals ul { list-style: none; padding: 0; }
+  .goals li { padding-left: 1.3rem; position: relative; }
+  .goals .yes li::before { content: "✓"; position: absolute; left: 0; color: var(--success, #1e8e3e); font-weight: 700; }
+  .goals .no li::before { content: "✕"; position: absolute; left: 0; color: var(--muted-foreground, #606773); font-weight: 700; }
+
+  /* Architecture diagram */
+  figure { margin: .75rem 0; }
+  figure.diagram { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .625rem); background: var(--card, #f7f8fa); padding: .5rem; overflow-x: auto; }
+  figure.diagram svg { display: block; min-width: 620px; width: 100%; height: auto; }
+  figcaption { font-size: .8rem; color: var(--muted-foreground, #606773); margin-top: .35rem; }
+  .n rect { fill: var(--background, #fff); stroke: var(--border, #c9ced6); stroke-width: 1.2; }
+  .n.hl rect { stroke: var(--accent, #2458ac); stroke-width: 1.8; }
+  .n.new rect { stroke-dasharray: 5 3; }
+  .n text { fill: var(--foreground, #202124); font: 600 12px var(--font-sans, system-ui); }
+  .n text.s { fill: var(--muted-foreground, #606773); font: 400 10.5px var(--font-sans, system-ui); }
+  .grp { fill: none; stroke: var(--border, #d8dce2); stroke-dasharray: 2 4; }
+  .grpl { fill: var(--muted-foreground, #606773); font: 700 10px var(--font-mono, monospace); letter-spacing: .08em; }
+  .flow { fill: none; stroke: var(--muted-foreground, #8a909a); stroke-width: 1.4; marker-end: url(#arr); }
+  .flow.hot { stroke: var(--accent, #2458ac); stroke-width: 1.8; }
+  .lbl { fill: var(--muted-foreground, #606773); font: 10px var(--font-mono, monospace); }
+  #arr path { fill: var(--muted-foreground, #8a909a); }
+
+  /* Simulator */
+  .sim { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: .9rem; align-items: start; }
+  @media (max-width: 640px) { .sim { grid-template-columns: 1fr; } }
+  .sim .controls label { display: block; font-size: .78rem; margin: 0 0 .55rem; }
+  .sim .controls label span { display: flex; justify-content: space-between; }
+  .sim .controls output { font-family: var(--font-mono, monospace); color: var(--accent-surface-foreground, #2458ac); font-weight: 600; }
+  .sim input[type=range] { width: 100%; accent-color: var(--accent, #2458ac); }
+  .sim .chart { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .625rem); background: var(--card, #f7f8fa); padding: .4rem; }
+  .sim svg { width: 100%; height: 230px; display: block; }
+  .readout { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: .5rem; margin-top: .6rem; }
+  .readout div { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .625rem); padding: .45rem .6rem; background: var(--card, #f7f8fa); }
+  .readout b { display: block; font: 700 1.05rem var(--font-mono, monospace); }
+  .readout small { color: var(--muted-foreground, #606773); font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; }
+  .legend { display: flex; flex-wrap: wrap; gap: .8rem; font-size: .75rem; color: var(--muted-foreground, #606773); margin: .35rem .2rem 0; }
+  .legend i { display: inline-block; width: 12px; height: 3px; vertical-align: middle; margin-right: .3rem; border-radius: 2px; }
+
+  /* Ladder */
+  .ladder { list-style: none; padding: 0; margin: .5rem 0; counter-reset: rung; }
+  .ladder li { counter-increment: rung; display: grid; grid-template-columns: 1.6rem 9rem 1fr; gap: .5rem; align-items: baseline; padding: .4rem 0; border-bottom: 1px solid var(--border, #d8dce2); }
+  .ladder li::before { content: counter(rung); font: 700 .8rem var(--font-mono, monospace); color: var(--accent-surface-foreground, #2458ac); }
+  .ladder b { font-size: .88rem; }
+  .ladder span { font-size: .85rem; color: var(--muted-foreground, #606773); }
+  @media (max-width: 520px) { .ladder li { grid-template-columns: 1.4rem 1fr; } .ladder span { grid-column: 2; } }
+
+  .progress { display: flex; gap: 3px; height: 8px; margin: .5rem 0 1rem; }
+  .progress span { flex: 1; border-radius: 3px; background: var(--muted, #e6e8eb); transform-origin: left; }
+  .progress span.done { background: var(--success, #1e8e3e); }
+  .progress span.active { background: var(--accent, #2458ac); }
+
+  .timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+  .timeline::before { content: ""; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: var(--border, #d8dce2); }
+  .timeline > li { position: relative; padding: 0 0 1rem 1.75rem; }
+  .timeline > li::before { content: ""; position: absolute; left: 0; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--background, #fff); border: 2px solid var(--border, #d8dce2); }
+  .timeline > li.done::before { background: var(--success, #1e8e3e); border-color: var(--success, #1e8e3e); }
+  .timeline > li.active::before { background: var(--accent, #2458ac); border-color: var(--accent, #2458ac); }
+  .timeline .head { display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; }
+  .timeline p { margin: .2rem 0; }
+
+  /* Risk matrix */
+  .risk { display: grid; grid-template-columns: 4.5rem repeat(3, 1fr); gap: 3px; font-size: .75rem; }
+  .risk .ax { color: var(--muted-foreground, #606773); display: flex; align-items: center; justify-content: center; text-align: center; padding: .2rem; }
+  .risk .cell { min-height: 3.4rem; border-radius: 6px; padding: .3rem; display: flex; flex-wrap: wrap; gap: .25rem; align-content: flex-start; }
+  .risk .l { background: color-mix(in srgb, var(--success, #1e8e3e) 10%, transparent); }
+  .risk .m { background: color-mix(in srgb, var(--warning, #b7791f) 14%, transparent); }
+  .risk .h { background: color-mix(in srgb, var(--destructive, #b3261e) 14%, transparent); }
+  .risk .cell span { background: var(--background, #fff); border: 1px solid var(--border, #d8dce2); border-radius: 999px; padding: .05rem .45rem; font-weight: 600; }
+
+  details { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .625rem); background: var(--card, #f7f8fa); padding: .55rem .75rem; margin: .6rem 0; }
+  summary { cursor: pointer; font-weight: 600; }
+  details[open] summary { margin-bottom: .4rem; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal { animation: rise .45s cubic-bezier(.2,.7,.3,1) both; animation-delay: calc(var(--i, 0) * 60ms); }
+    .progress span { animation: grow .5s ease-out both; animation-delay: calc(300ms + var(--i, 0) * 60ms); }
+    .timeline > li.active::before { animation: pulse 1.8s ease-in-out infinite; }
+    .flow { stroke-dasharray: 6 5; animation: march 1.6s linear infinite; }
+    .flow.static { animation: none; stroke-dasharray: none; }
+    @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+    @keyframes grow { from { transform: scaleX(0); } }
+    @keyframes pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent, #2458ac) 25%, transparent); } }
+    @keyframes march { to { stroke-dashoffset: -22; } }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 class="reveal">Subscription budget governor &amp; Budget cockpit <span class="badge">Design approved</span></h1>
+  <p class="meta reveal" style="--i:1"><span>2026-11-14</span><span>gmackie/bob @ bob-76-budget-governor</span><span>BOB-76</span><span>Claude</span></p>
+
+  <div class="callout reveal" style="--i:2"><strong>Recommendation:</strong> Build a pure budget governor into Bob's existing <code>autoDrain</code> tick. It reads each subscription's own weekly and 5-hour meters through the runner host, attributes spend with CLIProxyAPI's per-key ledger, and paces Bob's autonomous work to fill each account to its landing target by reset without touching the reserve kept for your interactive sessions. Steering happens from a new <code>/budget</code> cockpit whose levers preview their effect live before you commit them.</div>
+
+  <h2 class="reveal" style="--i:3">Overview</h2>
+  <p>CLIProxyAPI already fronts six subscription accounts (2× Claude, 2× Codex, Kimi, xAI), and Bob already routes every runner path through it. Proxy health is already visible on the Nodes page and in the mobile app (<a href="2026-09-20-cliproxy-monitoring-and-navigation.html">2026-09-20 plan</a>, Phases 1–2). Bob also has a cron-driven backlog driver (<code>packages/bob/src/api/src/handlers/autoDrain.ts</code>) that paces a <em>daily run count</em> (<code>services/health/pacing.ts</code>).</p>
+  <p>That leaves four gaps:</p>
+  <ul>
+    <li>Nothing knows how much of a subscription's <strong>weekly</strong> budget is left. Bob only sees a cooldown after a limit has already been hit.</li>
+    <li>Pacing counts runs, not budget, and ignores each account's own reset time.</li>
+    <li>Budget left over at the end of the week is wasted instead of being turned into planning.</li>
+    <li>There's nowhere to see or steer any of this.</li>
+  </ul>
+
+  <h2 class="reveal" style="--i:4">Decisions made</h2>
+  <div class="grid">
+    <section class="card reveal" style="--i:5"><div class="k">Authority</div><div class="v">Fill the remainder</div><p>The governor steers only Bob-dispatched work. Your interactive sessions are measured and forecast, never throttled.</p></section>
+    <section class="card reveal" style="--i:6"><div class="k">Measurement</div><div class="v">Meters + ledger</div><p>Provider 5-hour and weekly meters are the source of truth. The CLIProxyAPI usage ledger provides attribution and estimates for Kimi and xAI.</p></section>
+    <section class="card reveal" style="--i:7"><div class="k">Surplus</div><div class="v">Full ladder + BizPulse</div><p>Grooming, pulling work forward, discovering new issues, and BizPulse venture work. Each tier can be switched on or off and ordered; "lapse" is the floor.</p></section>
+    <section class="card reveal" style="--i:8"><div class="k">Hook point (revised after Phase 0)</div><div class="v">Shared module, both dispatchers</div><p>Production runs on legacy <code>autoDrain</code>, which sits at its flat 40 runs/day cap almost every day. The durable coordinator (<code>packages/bob/coordination</code>) had 0 dispatches in 7 days. The governor is one shared pure module: <code>autoDrain</code> uses it now in place of the flat cap, and the coordinator later gates <code>dispatchOne</code> by <code>executionProfileId</code>.</p></section>
+    <section class="card reveal" style="--i:8"><div class="k">Surface</div><div class="v">Web cockpit + mobile glance</div><p>A full <code>/budget</code> page in <code>apps/bob</code>, plus gauges, mode control and pushes on mobile Home.</p></section>
+  </div>
+
+  <h2 class="reveal" style="--i:9">Goals &amp; non-goals</h2>
+  <div class="goals">
+    <div class="yes"><h3>Goals</h3><ul>
+      <li>Each subscription ends its week within ±5% of its landing target.</li>
+      <li>Your interactive reserve and 5-hour headroom are never consumed by Bob.</li>
+      <li>Work is routed to whichever subscription has budget, not round-robin.</li>
+      <li>Every work item carries its cost in tokens and in % of a week.</li>
+      <li>A 4-week forecast of what the backlog will absorb, per project.</li>
+      <li>Levers you can understand before you pull them.</li>
+    </ul></div>
+    <div class="no"><h3>Non-goals</h3><ul>
+      <li>Throttling or rerouting interactive traffic at the proxy.</li>
+      <li>Replacing CLIProxyAPI's own control panel.</li>
+      <li>Metered API-key spend (dollar budgets). Subscriptions only.</li>
+      <li>Autonomous durable writes from surplus tiers. They produce proposals.</li>
+      <li>Rewriting autoDrain's work selection beyond adding tiers and making routing budget-aware.</li>
+    </ul></div>
+  </div>
+
+  <h2 class="reveal" style="--i:10">Architecture</h2>
+  <figure class="diagram reveal" style="--i:11">
+    <svg viewBox="0 0 760 330" role="img" aria-labelledby="archT archD">
+      <title id="archT">Budget governor data flow</title>
+      <desc id="archD">On the runner host, a meter poller and a usage poller read CLIProxyAPI and send a budget block on the heartbeat. Bob server ingests samples and ledger rows; the governor reads them plus the policy levers inside the autoDrain tick and dispatches work to Kanbanger and BizPulse via proposals. The web cockpit and mobile glance read state and write levers.</desc>
+      <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <rect class="grp" x="8" y="18" width="210" height="300" rx="10"/><text class="grpl" x="18" y="34">RUNNER HOST</text>
+      <rect class="grp" x="240" y="18" width="300" height="300" rx="10"/><text class="grpl" x="250" y="34">BOB SERVER</text>
+      <rect class="grp" x="562" y="18" width="190" height="300" rx="10"/><text class="grpl" x="572" y="34">SURFACES · TRACKERS</text>
+
+      <g class="n"><rect x="22" y="48" width="182" height="44" rx="8"/><text x="34" y="67">CLIProxyAPI</text><text class="s" x="34" y="83">6 accounts · 2 API keys used</text></g>
+      <g class="n new hl"><rect x="22" y="120" width="182" height="44" rx="8"/><text x="34" y="139">meter-poller</text><text class="s" x="34" y="155">5h + weekly % · resets_at</text></g>
+      <g class="n new hl"><rect x="22" y="180" width="182" height="44" rx="8"/><text x="34" y="199">usage-poller</text><text class="s" x="34" y="215">tokens by account×key×model</text></g>
+      <g class="n"><rect x="22" y="250" width="182" height="44" rx="8"/><text x="34" y="269">proxy-monitor</text><text class="s" x="34" y="285">exists · heartbeat</text></g>
+
+      <g class="n new"><rect x="256" y="48" width="268" height="44" rx="8"/><text x="268" y="67">budget ingest → Postgres</text><text class="s" x="268" y="83">meter_samples · usage_ledger · decisions</text></g>
+      <g class="n new hl"><rect x="256" y="130" width="160" height="56" rx="8"/><text x="268" y="152">governor (pure)</text><text class="s" x="268" y="170">allowance[account×tier]</text></g>
+      <g class="n new"><rect x="428" y="130" width="96" height="56" rx="8"/><text x="440" y="152">policy</text><text class="s" x="440" y="170">levers</text></g>
+      <g class="n"><rect x="256" y="230" width="268" height="56" rx="8"/><text x="268" y="252">autoDrain tick (exists)</text><text class="s" x="268" y="270">tier pick · budget-aware chooseAgent</text></g>
+
+      <g class="n new hl"><rect x="578" y="48" width="160" height="44" rx="8"/><text x="590" y="67">/budget cockpit</text><text class="s" x="590" y="83">web · runs governor in browser</text></g>
+      <g class="n new"><rect x="578" y="110" width="160" height="44" rx="8"/><text x="590" y="129">mobile glance</text><text class="s" x="590" y="145">gauges · mode · pushes</text></g>
+      <g class="n"><rect x="578" y="196" width="160" height="40" rx="8"/><text x="590" y="221">Kanbanger</text></g>
+      <g class="n"><rect x="578" y="252" width="160" height="40" rx="8"/><text x="590" y="277">BizPulse (proposals)</text></g>
+
+      <path class="flow" d="M113 92 V120"/><path class="flow" d="M60 92 C10 130 10 190 22 202"/>
+      <path class="flow hot" d="M204 142 C230 142 230 70 256 70"/><path class="flow hot" d="M204 202 C235 202 235 80 256 80"/>
+      <text class="lbl" x="208" y="112">heartbeat</text>
+      <path class="flow hot" d="M336 92 V130"/><path class="flow" d="M428 158 H416"/>
+      <path class="flow hot" d="M336 186 V230"/>
+      <path class="flow" d="M524 250 C550 250 550 216 578 216"/><path class="flow" d="M524 270 C550 270 550 272 578 272"/>
+      <path class="flow" d="M578 70 H524"/><text class="lbl" x="530" y="64">RPC</text>
+      <path class="flow" d="M578 140 C548 140 548 168 524 168"/><text class="lbl" x="530" y="186">levers</text>
+    </svg>
+    <figcaption>Dashed boxes are new. The management key and account credentials stay on the runner host; only percentages, reset times and masked labels cross the heartbeat.</figcaption>
+  </figure>
+  <details class="mermaid-source"><summary>Diagram source</summary><pre>flowchart LR
+  subgraph HOST[Runner host]
+    PX[CLIProxyAPI] --&gt; MP[meter-poller] &amp; UP[usage-poller]
+    PM[proxy-monitor]
+  end
+  subgraph SRV[Bob server]
+    IN[budget ingest] --&gt; GOV[governor pure] --&gt; AD[autoDrain tick]
+    POL[policy] --&gt; GOV
+  end
+  MP &amp; UP -- heartbeat --&gt; IN
+  AD --&gt; KB[Kanbanger]
+  AD --&gt; BP[BizPulse proposals]
+  UI[/budget cockpit/] -- RPC --&gt; IN
+  UI -- levers --&gt; POL
+  MOB[mobile glance] --&gt; POL</pre></details>
+
+  <p><strong>Attribution is exact, not inferred.</strong> Bob runners already authenticate to the proxy with a dedicated <code>CLIPROXY_API_KEY</code>, and CLIProxyAPI reports usage by API key. So every token spent on that key is Bob's and everything else is interactive. The ledger then adds tier and work-item tags from Bob's own run records.</p>
+
+  <h2 class="reveal" style="--i:12">Pacing math — try it</h2>
+  <p>For each account on each tick: forecast interactive use to reset (<code>Î</code>), compute spendable budget <code>S = max(0, landing − used − reserve − Î)</code>, and spread <code>S</code> evenly until <code>reset − landing buffer</code>. In the final release window, unused reserve unlocks gradually. Dividing by the measured cost per run converts the rate into run slots. The 5-hour ceiling then zeroes an account's slots for any tick where its short window is too hot.</p>
+  <p class="muted">The sliders below run this same arithmetic on one account. The real cockpit does the same thing for every account against the live policy.</p>
+  <div class="sim reveal" style="--i:13">
+    <div>
+      <div class="chart"><svg id="simChart" viewBox="0 0 480 230" preserveAspectRatio="none" role="img" aria-label="Projected weekly utilization for one account"></svg>
+        <div class="legend"><span><i style="background:var(--chart-2,#888)"></i>interactive</span><span><i style="background:var(--accent,#2458ac)"></i>total: you + Bob (dashed = projected)</span><span><i style="background:var(--chart-4,#c49)"></i>landing target</span><span><i style="background:color-mix(in srgb,var(--warning,#b7791f) 45%,transparent);height:8px"></i>reserve band</span></div>
+      </div>
+      <div class="readout" aria-live="polite">
+        <div><small>Bob pace now</small><b id="oRate">–</b></div>
+        <div><small>Runs / day</small><b id="oRuns">–</b></div>
+        <div><small>Projected at reset</small><b id="oLand">–</b></div>
+        <div><small>Released in final window</small><b id="oRel">–</b></div>
+      </div>
+      <p id="oNote" class="muted" style="font-size:.82rem"></p>
+    </div>
+    <form class="controls" onsubmit="return false" aria-label="Simulator levers">
+      <label><span>Weekly used now <output id="vU"></output></span><input id="iU" type="range" min="0" max="95" value="38"></label>
+      <label><span>Hours to reset <output id="vH"></output></span><input id="iH" type="range" min="4" max="168" value="96"></label>
+      <label><span>Interactive forecast <output id="vI"></output></span><input id="iI" type="range" min="0" max="0.5" step="0.01" value="0.15"></label>
+      <label><span>Interactive reserve <output id="vR"></output></span><input id="iR" type="range" min="0" max="40" value="15"></label>
+      <label><span>Landing target <output id="vL"></output></span><input id="iL" type="range" min="50" max="100" value="98"></label>
+      <label><span>Reserve release window <output id="vW"></output></span><input id="iW" type="range" min="0" max="48" value="12"></label>
+      <label><span>Cost per run <output id="vC"></output></span><input id="iC" type="range" min="0.2" max="5" step="0.1" value="1.2"></label>
+    </form>
+  </div>
+
+  <h2 class="reveal" style="--i:14">Levers</h2>
+  <div class="table-scroll"><table>
+    <thead><tr><th>Lever</th><th>Scope</th><th>Default</th><th>Effect</th></tr></thead>
+    <tbody>
+      <tr><td>Mode: Run / Pause / Boost ×N until t</td><td>global</td><td>Run</td><td>Boost raises pace but never crosses the reserve or 5h ceiling; Pause and Boost both expire on their own.</td></tr>
+      <tr><td>Interactive reserve</td><td>subscription</td><td>15%</td><td>Budget held back for you until the release window.</td></tr>
+      <tr><td>5h ceiling for Bob</td><td>subscription</td><td>80%</td><td>Bob gets 0 slots on an account above this.</td></tr>
+      <tr><td>Landing target</td><td>subscription</td><td>98%</td><td>How full the account should be at reset.</td></tr>
+      <tr><td>Landing buffer / release window</td><td>subscription</td><td>2h / 12h</td><td>Stop before reset; unlock unused reserve late.</td></tr>
+      <tr><td>Pace shape</td><td>global</td><td>even</td><td>even · working-hours · front-load · back-load.</td></tr>
+      <tr><td>Surplus ladder</td><td>tier</td><td>order below, all on</td><td>Order, on/off, max share of surplus.</td></tr>
+      <tr><td>Model per tier</td><td>tier</td><td>inherit</td><td>e.g. grooming on Sonnet, delivery on Opus.</td></tr>
+      <tr><td>Project weights</td><td>project</td><td>equal</td><td>Share across Kanbanger projects and BizPulse ventures.</td></tr>
+      <tr><td>Concurrency cap · per-run cost cap</td><td>global</td><td>existing config · 5% of weekly</td><td>Slot ceiling; runaway runs are stopped.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 style="margin-top:1rem">Surplus ladder</h3>
+  <p class="muted">Delivery always has first claim. Only budget the governor projects will go unused flows down the ladder.</p>
+  <ol class="ladder">
+    <li><b>Delivery</b><span><code>ready</code>/<code>todo</code> Kanbanger issues through the existing dispatch path.</span></li>
+    <li><b>Groom &amp; plan</b><span>Specs, acceptance criteria, estimates and splits for backlog issues. Proposals move them to <code>todo</code>. Unestimated items come first.</span></li>
+    <li><b>Pull forward</b><span>Dispatch <code>backlog</code> items that are normally held behind the manual gate.</span></li>
+    <li><b>Discovery</b><span>Survey repos (tech debt, test gaps, failing CI, TODOs) and propose new issues.</span></li>
+    <li><b>BizPulse</b><span>Growth, compliance, devops and research personas on startup ventures, through <code>packages/ooda/src/integrations/bizpulse-adapter.ts</code> proposals.</span></li>
+    <li><b>Lapse</b><span>The floor: anything still unallocated is left unused.</span></li>
+  </ol>
+
+  <h2 class="reveal" style="--i:15">The cockpit</h2>
+  <pre aria-label="Budget page wireframe">┌ Budget ───────────────────────────────────── [ Run | Pause | Boost ×1.5 until 18:00 ▾ ] ┐
+│ ◉ Claude A  ◉ Claude B  ◉ Codex A  ◉ Codex B  ◉ Kimi·est  ◉ xAI·est                     │
+│ outer ring: weekly (you ▓ / Bob ▒ / reserve ░) · inner: 5h · centre: landing · reset    │
+├──────────────────────────────────────────────────────┬──────────────────────────────────┤
+│ WEEK RIVER  actual (solid) · projection (dashed)     │ LEVERS               ● 2 drafts  │
+│ ghost = projection under draft levers · ▏now scrub   │ Reserve     ──●──── 15%          │
+├──────────────────────────────────────────────────────┤ …                                │
+│ SURPLUS LADDER  drag · toggle · cap                  │ +6 runs · landing 91% → 97%      │
+│ 1 Delivery ███████ 34 runs · next BOB-412, FG-88     │ [ Discard ]       [ Commit ⌘⏎ ]  │
+├──────────────────────────────────────────────────────┼──────────────────────────────────┤
+│ THROUGHPUT (done / planned · cost %wk · median/item) │ WHY  decision feed               │
+│ CAPACITY PLANNER  W+0 … W+4 columns, drag to reflow  │ 14:05 Codex B 5h 83% → 0 slots…  │
+└──────────────────────────────────────────────────────┴──────────────────────────────────┘</pre>
+  <p class="muted" style="font-size:.8rem">Wireframe values are illustrative only.</p>
+  <div class="grid">
+    <section class="card"><div class="v">Draft → preview → commit</div><p>The governor ships as a shared pure module, so the browser reruns it on every lever drag and redraws the ghost projection. Commit shows the diff and its predicted impact, and logs it with an author.</p></section>
+    <section class="card"><div class="v">Everything clicks through</div><p>Gauge slices open runs, ladder rows open Kanbanger issues or BizPulse proposals, and each decision opens the full inputs for its tick.</p></section>
+    <section class="card"><div class="v">Honest confidence</div><p>Values estimated from the ledger get a hatched fill and an "est." label. Stale meters turn grey with their age. Forecasts show a range, not a single number.</p></section>
+    <section class="card"><div class="v">Fast hands</div><p><kbd>P</kbd> pause, <kbd>B</kbd> boost, <kbd>⌘⏎</kbd> commit, with a 10-second undo toast. Pause and Boost both expire on their own. Respects reduced motion; light and dark themes.</p></section>
+    <section class="card"><div class="v">Throughput per project</div><p>Done vs planned this week, cost as % of a week, median cost per item, and a 4-week trend for each Kanbanger project and BizPulse venture.</p></section>
+    <section class="card"><div class="v">Capacity planner</div><p>Weeks W+0 to W+4, each sized to that week's net capacity and filled by priority × project weight with estimated item costs. It shows backlog depth in weeks; "Commit plan" writes target cycles to Kanbanger.</p></section>
+  </div>
+
+  <h3 style="margin-top:1rem">Cost per work item</h3>
+  <p>Runs record tokens from the agent CLI's own usage events into <code>token_usage_sessions</code> (<code>packages/bob/src/schema/src/agents.ts:196</code>), tagged with account, model, tier and work item. A per-account conversion rate (meter % per weighted token) is fitted each week from meter movement against ledger tokens, which gives every item a cost in % of a week summed across retries and review fixes. When an item closes, its cost is written back to the Kanbanger issue. Estimates for backlog items come from similar past items (same project, type, size label), shown as a range with a confidence level. Backlog depth under 1 week of capacity shifts surplus toward grooming and discovery.</p>
+
+  <h2 class="reveal" style="--i:16">Phases</h2>
+  <div class="progress" role="img" aria-label="Design and Phase 0 done; 7 phases remaining">
+    <span class="done" style="--i:0"></span><span class="done" style="--i:1"></span><span style="--i:2"></span><span style="--i:3"></span><span style="--i:4"></span><span style="--i:5"></span><span style="--i:6"></span><span style="--i:7"></span><span style="--i:8"></span>
+  </div>
+  <ol class="timeline">
+    <li class="done"><div class="head"><h3>Design</h3><span class="chip done">Done</span></div><p class="muted">Brainstormed and approved section by section on 2026-11-14. BOB-76 is In Progress.</p></li>
+
+    <li class="done"><div class="head"><h3>Phase 0 — Spike</h3><span class="chip done">Done 2026-11-14</span></div><p class="muted">Measured against the live proxy (fork <code>3bd9e323</code>, via the runner host's management key; values redacted) and upstream v8.0.72 source.</p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Question</th><th>Finding</th><th>Design consequence</th></tr></thead>
+        <tbody>
+          <tr><td>Per-account meters?</td><td><strong>Already captured.</strong> <code>auth-files</code> carries <code>quota.signals</code> and <code>model_quotas</code>: the raw rate-limit headers from each account's latest response, with <code>observed_at</code>. Claude: weekly utilization, status, reset. Codex: window used %, window length, reset, plan, credits.</td><td>The meter poller reads <code>auth-files</code>. <strong>No unofficial OAuth usage endpoints</strong>, and no extra credential handling.</td></tr>
+          <tr><td>Meter freshness</td><td>Passive: a reading only refreshes when the account serves traffic, and isn't persisted across proxy restarts.</td><td>An idle account keeps its last value, flagged "est." once it's older than its refresh age. The first dispatched run refreshes it.</td></tr>
+          <tr><td>5-hour windows</td><td>No Claude 5h headers observed; the representative claim is <code>seven_day</code>. Codex Pro reports one 10,080-minute window, with the secondary window at 0.</td><td>The 5h ceiling only applies when a 5h signal is present; otherwise status and cooldowns stand in for it.</td></tr>
+          <tr><td>Usage ledger</td><td><code>/v0/management/usage</code> is <strong>404</strong> (removed in v8). The replacement <code>/usage-queue?count=N</code> pops records destructively and keeps them only 60s by default. Each record has <code>auth_index</code>, provider, model, <code>api_key</code>, <code>session_id</code>, full token breakdown and the response's rate-limit headers.</td><td>The usage poller drains the queue every ≤20s on the runner host and persists the records. Attribution compares <code>api_key</code> on the host (only bob/interactive leaves it); <code>session_id</code> joins records to Bob runs; per-request headers give per-run meter deltas.</td></tr>
+          <tr><td>Per-run tokens in Bob</td><td><code>token_usage_sessions</code> exists but <strong>nothing writes it</strong>. Both CLIs already emit usage in the JSON the runner captures (Claude <code>result</code>, Codex <code>turn.completed</code>), read at 3 call sites of <code>extractAgentResponse</code>.</td><td>Add <code>extractAgentUsage</code> next to it as a cross-check; the proxy ledger is the primary source.</td></tr>
+          <tr><td>Kimi / xAI</td><td>Kimi: 5h rolling + monthly (weekly on legacy plans); usage endpoint <code>api.kimi.com/coding/v1/usages</code>; not observed by the proxy. xAI: no windows or usage endpoint; a 429 <code>free-usage-exhausted</code> → 24h cooldown.</td><td>Both estimate-only from the ledger at first. Kimi meter poll is an optional follow-up; for xAI, a cooldown means exhausted.</td></tr>
+          <tr><td>Live state</td><td>Claude A: 46% weekly, resets Sun 06:00 CST. <strong>Claude B: <code>invalid grant</code> since 2026-11-02</strong>. Codex A 8% / Codex B 11% weekly.</td><td>Re-authorize Claude B (needs you). The governor should alert on any account erroring for more than an hour.</td></tr>
+        </tbody></table></div>
+      <p class="muted">Fixture: <code>apps/ooda-runner/src/budget/__fixtures__/auth-files-quota.2026-11-14.json</code> (identifiers replaced).</p></li>
+
+    
+<li class="active"><div class="head"><h3>Phase 1 — Collect</h3><span class="chip active">Code complete · not deployed</span></div><p class="muted">The meter poller was folded into the existing <code>proxy-monitor</code> heartbeat (it already fetches <code>auth-files</code>). The ledger travels as a new <code>budget_usage</code> daemon message; the gateway validates it field by field and upserts with <code>GREATEST</code>, so resends are idempotent and totals never shrink. Policy and decision tables moved to Phase 2 with the governor. Still open: joining proxy <code>session_id</code> to Bob runs (needs a production check that it equals the agent CLI session id) and <code>extractAgentUsage</code>.</p>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Wire model: <code>BudgetSnapshotWire</code> (meters per account and window, ledger delta, sampledAt); optional <code>budget?</code> on the host snapshot</td><td><code>packages/bob/src/ws/src/protocol.ts</code>, new <code>budget-wire.ts</code></td><td>Type tests; redaction test (no email or token survives)</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Meter poller: parse <code>auth-files</code> <code>quota.signals</code> per provider (Claude unified-*, Codex primary/secondary); fails closed to <code>stale</code></td><td><code>apps/ooda-runner/src/budget/meter-poller.ts</code> (new), extends <code>proxy-monitor.ts</code></td><td>Tests against the 2026-11-14 fixture; unknown or missing signals → stale, never a crash</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Usage poller: drain <code>/usage-queue</code> every ≤20s; map <code>api_key</code> → bob/interactive on the host and drop the raw key; keep <code>session_id</code>; buffer to disk if the server is unreachable</td><td><code>apps/ooda-runner/src/budget/usage-poller.ts</code> (new)</td><td>Fixture tests: Bob key → bob, others → interactive; no <code>api_key</code>, IP or user agent in the output</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Tables <code>budget_meter_samples</code>, <code>budget_usage_ledger</code>, <code>budget_policy</code>, <code>budget_decisions</code>; ingest from heartbeat</td><td><code>packages/bob/src/schema/src/budget.ts</code> (new), drizzle migration, gateway ingest</td><td>Migration applies; ingest test; production samples visible</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Per-run token capture in ooda-runner, if Phase 0 finds it missing</td><td><code>apps/ooda-runner/src/agent-jobs/</code></td><td>Run fixture yields a <code>token_usage_sessions</code> row tagged with account and work item</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+
+    <li><div class="head"><h3>Phase 2 — Shadow governor</h3><span class="chip todo">Todo</span></div>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Pure <code>governor(state, policy, now)</code>: interactive forecast, reserve, landing, 5h ceiling, release window, tier allocation</td><td><code>packages/bob/src/api/src/services/budget/governor.ts</code> (new; importable by web)</td><td>Table tests per rule; property tests (allowance ≤ spendable; Pause ⇒ 0)</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Interactive forecast (hour-of-week EWMA) and run-cost model</td><td><code>services/budget/forecast.ts</code> (new)</td><td>Replay against recorded weeks</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>autoDrain calls the governor in <strong>shadow</strong>: logs its decisions, dispatch unchanged</td><td><code>handlers/autoDrain.ts</code></td><td>Decisions table fills in production; dispatch behaviour unchanged</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+
+    <li><div class="head"><h3>Phase 3 — See</h3><span class="chip todo">Todo</span></div>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>RPC <code>budget.get</code>, <code>budget.history</code>, <code>budget.decisions</code>, <code>budget.throughput</code></td><td><code>packages/core/src/contracts</code>, <code>packages/bob/src/api/src/handlers/budget.ts</code> (new)</td><td>Handler tests; contract typechecks in all clients</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Read-only <code>/budget</code> page: gauges, week river, why feed, throughput; sidebar entry</td><td><code>apps/bob/src/app/(dashboard)/budget/</code> (new)</td><td>View-model vitest; <code>/qa</code> pass; light and dark; 390px wide</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+
+    <li><div class="head"><h3>Phase 4 — Steer</h3><span class="chip risk">Gate: replay ±5%</span></div>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Levers panel: draft, live simulation, diff, commit, undo; mode control with expiry; keyboard shortcuts</td><td><code>budget/_components/levers-panel.tsx</code> (new)</td><td>Simulator parity test (browser and server give the same output)</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Governor <strong>enforces</strong>; budget-aware <code>chooseAgent</code> routes to the subscription with budget</td><td><code>autoDrain.ts</code>, <code>services/automation/agentHealthRouter.ts</code></td><td>One week of shadow review signed off; landing within ±5% in replay</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Runaway-cost kill per run</td><td>runner session control</td><td>Test: a run over the cap is stopped and the reason recorded</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+
+    <li><div class="head"><h3>Phase 5 — Surplus ladder</h3><span class="chip todo">Todo</span></div>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Tier pickers: groom (planner persona), pull-forward, discovery, BizPulse personas</td><td><code>autoDrain-pick.ts</code>, <code>handlers/planning.ts</code>, <code>docs/personas/*.yaml</code></td><td>Each tier gets budget only when there's projected surplus; tests per tier</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>All tier output goes through proposals (Kanbanger rewrites, new issues, BizPulse actions)</td><td><code>packages/ooda/src/contracts/v1/proposals.ts</code>, app composition</td><td>Product-boundary test still passes; no direct durable writes</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Draggable ladder UI with share caps</td><td><code>budget/_components/ladder.tsx</code> (new)</td><td>Keyboard reordering works</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+
+    <li><div class="head"><h3>Phase 6 — Plan</h3><span class="chip todo">Todo</span></div>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Weekly conversion-rate fit; cost per item in tokens and % of a week</td><td><code>services/budget/item-cost.ts</code> (new)</td><td>Fit tests on fixtures; item totals include retries</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Write cost back to Kanbanger at close</td><td><code>services/tracker/trackerMirror.ts</code></td><td>Comment appears on a test issue</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Estimates from similar items; 4-week capacity planner; "Commit plan" writes target cycles to Kanbanger</td><td><code>services/budget/planner.ts</code>, <code>budget/_components/planner.tsx</code> (new)</td><td>Backtest: last 4 weeks' forecast vs actual</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+
+    <li><div class="head"><h3>Phase 7 — Mobile &amp; certify</h3><span class="chip todo">Todo</span></div>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Home glance: gauges, mode control, proposals in "Needs you"</td><td><code>apps/mobile-bob/src/features/home/</code></td><td>Model tests; simulator check</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Pushes <code>budget_projected_miss</code> and <code>budget_reserve_breach</code></td><td><code>packages/bob/src/notifications/src/preferences.ts</code>, gateway push-gate</td><td>Each fires once per state change</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Deploy runner, server, gateway and app; record production evidence on BOB-76</td><td>—</td><td>Deployment IDs and health checks recorded; one live week lands within ±5%</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+  </ol>
+
+  <h2 class="reveal" style="--i:17">Risks &amp; mitigations</h2>
+  <div class="risk" role="table" aria-label="Risks by likelihood (rows) and impact (columns)">
+    <div class="ax"></div><div class="ax">Low impact</div><div class="ax">Medium</div><div class="ax">High impact</div>
+    <div class="ax">Likely</div><div class="cell m"><span>R4 forecast noise</span></div><div class="cell h"><span>R1 meter endpoints change</span></div><div class="cell h"></div>
+    <div class="ax">Possible</div><div class="cell l"></div><div class="cell m"><span>R3 cost attribution</span><span>R5 proposal fatigue</span></div><div class="cell h"><span>R2 interactive lockout</span></div>
+    <div class="ax">Unlikely</div><div class="cell l"></div><div class="cell l"><span>R6 credential leak</span></div><div class="cell m"></div>
+  </div>
+  <details><summary>Mitigations</summary><ul>
+    <li><strong>R1</strong> Meters are provider response headers captured by the proxy fork, not a documented API. Header names are pinned in fixtures. A missing or renamed signal marks the meter stale and the governor falls back to the ledger with a 10% safety margin. It fails closed. Phase 0 found no need for the unofficial OAuth usage endpoints.</li>
+    <li><strong>R7</strong> Ledger loss: queue records expire after 60s. Poll every ≤20s, alert when a poll gap exceeds 45s, and consider raising <code>redis-usage-queue-retention-seconds</code> on the proxy (a config change on labnuc, needs approval).</li>
+    <li><strong>R8</strong> Terms of service: Anthropic's published terms (Feb 2026) restrict using subscription OAuth tokens in third-party tools. That applies to the existing CLIProxyAPI setup as a whole, which this plan builds on but doesn't change. The governor raises usage volume on that setup.</li>
+
+    <li><strong>R2</strong> Bob could starve your interactive sessions. The 5-hour ceiling, the reserve, and a reserve-breach push guard against it; Pause takes effect on the next tick; Boost can't cross either guard.</li>
+    <li><strong>R3</strong> Concurrent runs blur meter deltas. Per-run tokens come from the CLIs; the conversion rate is fitted weekly across many runs, not per run.</li>
+    <li><strong>R4</strong> Interactive use is bursty. Use an hour-of-week EWMA with a confidence band, and project with the upper band while the week is young.</li>
+    <li><strong>R5</strong> Surplus tiers could flood you with proposals. Each tier has a share cap, proposals are grouped per tier in "Needs you", and a tier auto-pauses when unreviewed proposals pass a threshold.</li>
+    <li><strong>R6</strong> Credential exposure. Pollers run on the runner host only; the existing redaction tests are extended to the budget block.</li>
+  </ul></details>
+
+  <h2 class="reveal" style="--i:18">Verification</h2>
+  <ul>
+    <li><code>pnpm exec turbo run test --concurrency=1 -- --no-file-parallelism</code> green, including governor property tests and replay tests.</li>
+    <li><code>scripts/verify-product-boundary.test.mjs</code> passes: budget code lives in <code>packages/bob</code>; BizPulse is reached only through OODA contracts and proposals.</li>
+    <li>Shadow week: decisions reviewed against what actually happened before enforcement is enabled.</li>
+    <li>Production: one enforced week per subscription lands within ±5% of target with zero reserve breaches. Evidence recorded on BOB-76.</li>
+  </ul>
+
+  <h2 class="reveal" style="--i:19">Open questions</h2>
+  <ul>
+    <li>Do Kimi and xAI have real weekly windows, or should they be treated as rolling daily budgets? (Phase 0)</li>
+    <li>Kanbanger cost writeback: a comment, or a custom field if Kanbanger supports one?</li>
+    <li>Should the cockpit also show subscriptions not behind the proxy (for example a direct Cursor plan) as read-only?</li>
+  </ul>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const ids = ["U","H","I","R","L","W","C"];
+  const css = (n, f) => (getComputedStyle(document.documentElement).getPropertyValue(n).trim() || f);
+  function model(p) {
+    const H = p.H, buf = Math.min(2, H / 4), W = Math.min(p.W, Math.max(0, H - buf));
+    const interTotal = p.I * H;                                 // % until reset
+    const S = Math.max(0, p.L - p.U - p.R - interTotal);         // spendable now
+    const runHrs = Math.max(0.5, H - buf);
+    const rate = S / runHrs;                                     // %/h before release
+    const relRate = W > 0 ? p.R / W : 0;                         // reserve unlock rate
+    const land = Math.min(100, p.U + interTotal + S + (W > 0 ? p.R : 0));
+    return { buf, W, S, rate, relRate, land, interTotal, runHrs };
+  }
+  function draw() {
+    const p = Object.fromEntries(ids.map(k => [k, parseFloat($("i"+k).value)]));
+    $("vU").textContent = p.U + "%"; $("vH").textContent = p.H + "h";
+    $("vI").textContent = p.I.toFixed(2) + "%/h"; $("vR").textContent = p.R + "%";
+    $("vL").textContent = p.L + "%"; $("vW").textContent = p.W + "h"; $("vC").textContent = p.C.toFixed(1) + "%";
+    const m = model(p);
+    const svg = $("simChart"), Wd = 480, Ht = 230, pad = 26;
+    const x = (h) => pad + (h / 168) * (Wd - pad - 8), y = (v) => Ht - 18 - (v / 100) * (Ht - 30);
+    const now = 168 - p.H;
+    // build series: interactive cumulative and total cumulative
+    const ptsI = [], ptsT = [];
+    const pastI = p.U * 0.55;                                    // illustrative: assumes 55% of past use was yours
+    for (let h = 0; h <= 168; h += 2) {
+      let vi, vt;
+      if (h <= now) { const f = now ? h / now : 1; vi = pastI * f; vt = p.U * f; }
+      else {
+        const t = h - now; vi = pastI + p.I * t;
+        const bobPre = m.rate * Math.min(t, m.runHrs);
+        const relStart = m.runHrs - m.W;
+        const rel = m.W > 0 ? m.relRate * Math.max(0, Math.min(t, m.runHrs) - relStart) : 0;
+        vt = Math.min(100, p.U + p.I * t + bobPre + rel);
+      }
+      ptsI.push([x(h), y(vi)]); ptsT.push([x(h), y(vt)]);
+    }
+    const line = (pts) => pts.map((q, i) => (i ? "L" : "M") + q[0].toFixed(1) + " " + q[1].toFixed(1)).join(" ");
+    const acc = css("--accent", "#2458ac"), c2 = css("--chart-2", "#888"), c4 = css("--chart-4", "#c49"), mu = css("--muted-foreground", "#777"), bd = css("--border", "#ddd"), wn = css("--warning", "#b7791f");
+    const nowX = x(now);
+    const relX = x(now + m.runHrs - m.W);
+    svg.innerHTML = `
+      ${[0,25,50,75,100].map(v => `<line x1="${pad}" x2="${Wd-8}" y1="${y(v)}" y2="${y(v)}" stroke="${bd}" stroke-width="1"/><text x="2" y="${y(v)+3}" font-size="9" fill="${mu}">${v}</text>`).join("")}
+      <rect x="${pad}" y="${y(p.L)}" width="${Wd-pad-8}" height="${Math.max(0, y(p.L - p.R) - y(p.L))}" fill="${wn}" opacity=".16"/>
+      ${m.W > 0 ? `<rect x="${relX}" y="12" width="${Math.max(0, x(168 - m.buf) - relX)}" height="${Ht-30}" fill="${wn}" opacity=".08"/>` : ""}
+      <line x1="${pad}" x2="${Wd-8}" y1="${y(p.L)}" y2="${y(p.L)}" stroke="${c4}" stroke-dasharray="5 4" stroke-width="1.5"/>
+      <line x1="${nowX}" x2="${nowX}" y1="12" y2="${Ht-18}" stroke="${mu}" stroke-width="1"/>
+      <text x="${nowX+3}" y="20" font-size="9" fill="${mu}">now</text>
+      <path d="${line(ptsI)}" fill="none" stroke="${c2}" stroke-width="2"/>
+      <path d="${line(ptsT.filter(q => q[0] <= nowX + .1))}" fill="none" stroke="${acc}" stroke-width="2.4"/>
+      <path d="${line(ptsT.filter(q => q[0] >= nowX - .1))}" fill="none" stroke="${acc}" stroke-width="2.4" stroke-dasharray="6 4"/>
+      <text x="${Wd-10}" y="${Ht-4}" font-size="9" fill="${mu}" text-anchor="end">reset</text>
+      <text x="${pad}" y="${Ht-4}" font-size="9" fill="${mu}">week start</text>`;
+    $("oRate").textContent = m.rate.toFixed(2) + "%/h";
+    $("oRuns").textContent = (m.rate * 24 / p.C).toFixed(1);
+    $("oLand").textContent = m.land.toFixed(0) + "%";
+    $("oRel").textContent = (m.W > 0 ? p.R : 0) + "%";
+    $("oNote").textContent = m.S === 0
+      ? "No spendable budget: interactive forecast plus reserve already reach the landing target. Bob gets 0 slots and surplus tiers stay dark."
+      : `Bob may spend ${m.S.toFixed(1)}% of this account before the release window, then up to ${(m.W>0?p.R:0)}% more if you don't use your reserve.`;
+  }
+  ids.forEach(k => $("i"+k).addEventListener("input", draw));
+  draw();
+  const theme = document.querySelector("style#t3-theme");
+  if (theme) new MutationObserver(draw).observe(theme, { childList: true, characterData: true, subtree: true });
+  new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
+})();
+</script>
+</body>
+</html>

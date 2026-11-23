@@ -120,6 +120,7 @@ export function getSessionHref(sessionId: string, workspaceId?: string | null) {
 const NOTIFICATION_STATIC_ROUTES = [
   "/",
   "/home",
+  "/today",
   "/chat",
   "/planning",
   "/tasks",
@@ -143,6 +144,17 @@ function withSearch<const Path extends string>(path: Path, search: string) {
   return search ? (`${path}?${search}` as const) : path;
 }
 
+/** A coordinator item id as it may appear in a route: one plain segment, no separators. */
+const PLAIN_ITEM_ID = /^[A-Za-z0-9][A-Za-z0-9._:~-]{0,199}$/;
+
+/**
+ * The Attention screen for an SDLC item (BOB-75 Phase 4). An id that is missing or not a
+ * plain id opens the Attention list instead, so a crafted payload cannot reach another route.
+ */
+export function getAttentionHref(itemId?: string | null): Extract<Href, string> {
+  return itemId && PLAIN_ITEM_ID.test(itemId) ? `/attention/${encodeURIComponent(itemId)}` : "/attention";
+}
+
 /** Push payloads are untrusted strings, not proof that a mobile route exists. */
 function getNotificationUrlHref(
   value?: string | null,
@@ -157,6 +169,8 @@ function getNotificationUrlHref(
       (route) => route === pathname,
     );
     if (fixed) return withSearch(fixed, search);
+    // The web's SDLC routes (inbox rows written by the edge): /sdlc and /sdlc?item=<id>.
+    if (pathname === "/sdlc") return getAttentionHref(url.searchParams.get("item"));
     const parts = pathname.split("/");
     const id = parts[2];
     if (!id) return null;
@@ -203,7 +217,13 @@ export function getNotificationTargetHref(data: {
   workspaceId?: string | null;
   sessionId?: string | null;
   url?: string | null;
+  type?: string | null;
+  itemId?: string | null;
 }): Extract<Href, string> | null {
+  // SDLC pushes (BOB-75 Phase 4) name a coordinator item, not a work item.
+  if (data.type === "sdlc") {
+    return getAttentionHref(data.itemId);
+  }
   if (data.workItemId)
     return getWorkItemHref(data.workItemId, data.workspaceId);
   // Ad-hoc runs (blocked/host_unknown/terminal pushes) have no work item —

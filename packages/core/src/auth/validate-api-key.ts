@@ -106,7 +106,7 @@ export function isApiKeyLike(
  * irrelevant).
  */
 export async function validateApiKey(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  
   db: PgDatabase<any, any, any>,
   plaintext: string | null | undefined,
   prefixes: readonly string[] = API_KEY_PREFIXES,

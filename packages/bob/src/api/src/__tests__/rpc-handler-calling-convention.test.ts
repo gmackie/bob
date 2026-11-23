@@ -27,7 +27,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@bob/db/client", () => ({ db: {} }));
 
-import { Effect, ServiceMap } from "effect";
+import { Effect, Context } from "effect";
 
 import { CurrentUser } from "@gmacko/core/rpc/context";
 import { GmackoDb } from "@gmacko/core/db";
@@ -36,13 +36,13 @@ import { liftHandlers } from "../rpc-server.js";
 
 /** Run a lifted handler with the two services it reads per-request. */
 function run<A>(effect: Effect.Effect<A, unknown, unknown>) {
-  const services = ServiceMap.empty().pipe(
-    ServiceMap.add(GmackoDb, {} as never),
-    ServiceMap.add(CurrentUser, { userId: "user-1" } as never),
+  const services = Context.empty().pipe(
+    Context.add(GmackoDb, {} as never),
+    Context.add(CurrentUser, { userId: "user-1" } as never),
   );
   return Effect.runPromise(
     (effect as Effect.Effect<A, unknown, never>).pipe(
-      Effect.provideServices(services),
+      Effect.provideContext(services),
     ),
   );
 }

@@ -1,15 +1,3 @@
-// Daily digest of the autonomous loop.
-//
-// Once per UTC day (first cron tick at/after BOB_DIGEST_HOUR_UTC) collect the
-// last 24h of loop metrics and post them where a human will see them:
-//   1. a comment on the pinned "📊 Bob daily digest" tracker issue — found by
-//      title via the tracker API and created (project-less, so the importer
-//      never turns it into work) on first run, and
-//   2. a Bob in-app notification for the workspace owner.
-// "Already posted today" is derived from the pinned issue's own comments (the
-// newest digest comment's date), so no Bob-side state is needed and a retry
-// can never double-post. Best-effort; never throws into the cron.
-
 import { and, eq, gt, inArray, sql } from "@bob/db";
 import { db } from "@bob/db/client";
 import {
@@ -22,13 +10,14 @@ import {
   workspaceIntegrations,
   workspaceMembers,
 } from "@bob/db/schema";
-import { LinearClient } from "@linear/sdk";
 
 import type { DigestMetrics } from "../services/digest/renderDigest.js";
+import { DIGEST_DATE, publishDigest } from "../services/digest/destination.js";
 import { digestNotes, renderDigest } from "../services/digest/renderDigest.js";
+import { digestStore } from "../services/digest/store.js";
+import { digestTracker } from "../services/digest/tracker.js";
 
-export const PINNED_TITLE = "📊 Bob daily digest";
-const DIGEST_DATE = /daily digest — (\d{4}-\d{2}-\d{2})/;
+export { PINNED_TITLE } from "../services/digest/destination.js";
 
 export interface DailyDigestResult {
   posted: boolean;
@@ -38,7 +27,9 @@ export interface DailyDigestResult {
 }
 
 /** Newest digest date already posted on the pinned issue (from its comments). */
-export function lastPostedDate(commentBodies: readonly string[]): string | null {
+export function lastPostedDate(
+  commentBodies: readonly string[],
+): string | null {
   let last: string | null = null;
   for (const body of commentBodies) {
     const m = DIGEST_DATE.exec(body);
@@ -56,63 +47,97 @@ export async function dailyDigest(opts: {
   const now = opts.now ?? new Date();
   const hour = opts.hourUtc ?? 13;
   const today = now.toISOString().slice(0, 10);
-  if (!opts.force && now.getUTCHours() < hour) return { posted: false, reason: "before digest hour" };
+  if (!opts.force && now.getUTCHours() < hour)
+    return { posted: false, reason: "before digest hour" };
 
-  const integ = await db.query.workspaceIntegrations.findFirst({
-    where: and(eq(workspaceIntegrations.provider, "linear"), eq(workspaceIntegrations.enabled, true)),
+  const integrations = await db.query.workspaceIntegrations.findMany({
+    where: and(
+      eq(workspaceIntegrations.provider, "linear"),
+      eq(workspaceIntegrations.enabled, true),
+    ),
   });
-  if (!integ?.apiKey) return { posted: false, reason: "no tracker integration" };
-
-  const client = new LinearClient({
-    apiKey: integ.apiKey,
-    ...(integ.linearApiUrl ? { apiUrl: integ.linearApiUrl } : {}),
-  });
-
-  // Locate (or create) the pinned issue by exact title.
-  const found = await client.issues({ first: 5, filter: { title: { eq: PINNED_TITLE } } });
-  let pinned = found.nodes[0];
-  if (!pinned) {
-    const team = integ.linearTeamId;
-    if (!team) return { posted: false, reason: "no team id to create pinned issue" };
-    const created = await client.createIssue({
-      teamId: team,
-      title: PINNED_TITLE,
-      description:
-        "Bob posts a daily summary of the autonomous loop here as comments. Keep this card in Backlog; Bob never works it.",
-    });
-    pinned = await created.issue;
-    if (!pinned) return { posted: false, reason: "failed to create pinned issue" };
+  const results: DailyDigestResult[] = [];
+  for (const integ of integrations) {
+    if (!integ.apiKey || !integ.linearTeamId) continue;
+    const apiUrl = integ.linearApiUrl ?? "https://api.linear.app/graphql";
+    const scope = JSON.stringify([
+      integ.workspaceId,
+      apiUrl,
+      integ.linearTeamId,
+    ]);
+    const result = await publishDigest(
+      {
+        scope,
+        workspaceId: integ.workspaceId,
+        date: today,
+        render: async () =>
+          renderDigest(
+            await collectMetrics(today, opts.dailyCap ?? 40, integ.workspaceId),
+          ),
+      },
+      digestStore,
+      digestTracker({
+        apiKey: integ.apiKey,
+        apiUrl,
+        teamId: integ.linearTeamId,
+        retireLocal: async (id) => {
+          await db
+            .update(workItems)
+            .set({ status: "canceled" })
+            .where(
+              and(
+                eq(workItems.workspaceId, integ.workspaceId),
+                eq(workItems.externalProvider, "linear"),
+                eq(workItems.externalId, id),
+              ),
+            );
+        },
+      }),
+    );
+    if (result.posted && result.text) {
+      const owner = await db.query.workspaceMembers.findFirst({
+        where: eq(workspaceMembers.workspaceId, integ.workspaceId),
+        columns: { userId: true },
+        orderBy: (m, { asc }) => [asc(m.joinedAt)],
+      });
+      if (owner)
+        await db
+          .insert(notifications)
+          .values({
+            userId: owner.userId,
+            type: "batch_completed",
+            title: `Bob daily digest — ${today}`,
+            body: result.text.slice(0, 2000),
+            url: result.url,
+          });
+    }
+    results.push({ posted: result.posted, date: today, text: result.text });
   }
-
-  const comments = await pinned.comments({ first: 100 });
-  const already = lastPostedDate(comments.nodes.map((c) => c.body));
-  if (!opts.force && already === today) return { posted: false, reason: "already posted today", date: today };
-
-  const metrics = await collectMetrics(today, opts.dailyCap ?? 40);
-  const text = renderDigest(metrics);
-
-  await client.createComment({ issueId: pinned.id, body: text });
-
-  // In-app notification for the workspace owner.
-  const owner = await db.query.workspaceMembers.findFirst({
-    where: eq(workspaceMembers.workspaceId, integ.workspaceId),
-    columns: { userId: true },
-    orderBy: (m, { asc }) => [asc(m.joinedAt)],
-  });
-  if (owner) {
-    await db.insert(notifications).values({
-      userId: owner.userId,
-      type: "batch_completed",
-      title: `Bob daily digest — ${today}`,
-      body: text.slice(0, 2000),
-      url: pinned.url,
-    });
-  }
-
-  return { posted: true, date: today, text };
+  return {
+    posted: results.some((r) => r.posted),
+    date: today,
+    reason: results.length ? undefined : "no tracker integration",
+    text:
+      results
+        .filter((r) => r.text)
+        .map((r) => r.text)
+        .join("\n\n") || undefined,
+  };
 }
 
-async function collectMetrics(date: string, capTotal: number): Promise<DigestMetrics> {
+async function collectMetrics(
+  date: string,
+  capTotal: number,
+  workspaceId: string,
+): Promise<DigestMetrics> {
+  const workspaceItems = db
+    .select({ id: workItems.id })
+    .from(workItems)
+    .where(eq(workItems.workspaceId, workspaceId));
+  const workspaceSessions = db
+    .select({ id: chatConversations.id })
+    .from(chatConversations)
+    .where(inArray(chatConversations.workItemId, workspaceItems));
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   const [runs] = await db
@@ -123,7 +148,12 @@ async function collectMetrics(date: string, capTotal: number): Promise<DigestMet
       capUsed: sql<number>`count(*) filter (where coalesce(${taskRuns.runPhase},'execute')='execute' and ${taskRuns.createdAt} >= date_trunc('day', now()))::int`,
     })
     .from(taskRuns)
-    .where(gt(taskRuns.createdAt, since));
+    .where(
+      and(
+        gt(taskRuns.createdAt, since),
+        inArray(taskRuns.workItemId, workspaceItems),
+      ),
+    );
 
   const [prs] = await db
     .select({
@@ -131,7 +161,8 @@ async function collectMetrics(date: string, capTotal: number): Promise<DigestMet
       merged: sql<number>`count(*) filter (where ${pullRequests.mergedAt} >= ${since})::int`,
       closed: sql<number>`count(*) filter (where ${pullRequests.closedAt} >= ${since} and ${pullRequests.status}='closed')::int`,
     })
-    .from(pullRequests);
+    .from(pullRequests)
+    .where(inArray(pullRequests.sessionId, workspaceSessions));
 
   const [deploys] = await db
     .select({
@@ -139,7 +170,13 @@ async function collectMetrics(date: string, capTotal: number): Promise<DigestMet
       failed: sql<number>`count(*) filter (where ${workItemArtifacts.title}='Deploy failed')::int`,
     })
     .from(workItemArtifacts)
-    .where(and(eq(workItemArtifacts.producerId, "deploy-tracker"), gt(workItemArtifacts.createdAt, since)));
+    .where(
+      and(
+        eq(workItemArtifacts.producerId, "deploy-tracker"),
+        gt(workItemArtifacts.createdAt, since),
+        inArray(workItemArtifacts.workItemId, workspaceItems),
+      ),
+    );
 
   const sessions = await db
     .select({
@@ -148,14 +185,23 @@ async function collectMetrics(date: string, capTotal: number): Promise<DigestMet
       n: sql<number>`count(*)::int`,
     })
     .from(chatConversations)
-    .where(gt(chatConversations.createdAt, since))
+    .where(
+      and(
+        gt(chatConversations.createdAt, since),
+        inArray(chatConversations.workItemId, workspaceItems),
+      ),
+    )
     .groupBy(chatConversations.agentType, chatConversations.status);
 
   const queueRows = await db
     .select({ status: workItems.status, n: sql<number>`count(*)::int` })
     .from(workItems)
+    .where(eq(workItems.workspaceId, workspaceId))
     .groupBy(workItems.status);
-  const q = Object.fromEntries(queueRows.map((r) => [r.status, r.n])) as Record<string, number>;
+  const q = Object.fromEntries(queueRows.map((r) => [r.status, r.n])) as Record<
+    string,
+    number
+  >;
 
   // Lead time: first claim of THIS attempt → merge. An item can have sessions
   // from earlier abandoned attempts weeks back (HABIT-9 had a July run), so
@@ -169,23 +215,43 @@ async function collectMetrics(date: string, capTotal: number): Promise<DigestMet
       )::timestamptz)) / 60`,
     })
     .from(pullRequests)
-    .innerJoin(chatConversations, eq(chatConversations.id, pullRequests.sessionId))
-    .where(and(gt(pullRequests.mergedAt, since), inArray(pullRequests.status, ["merged"])));
-  const leadVals = leads.map((l) => Number(l.minutes)).filter((v) => Number.isFinite(v) && v >= 0).sort((a, b) => a - b);
+    .innerJoin(
+      chatConversations,
+      eq(chatConversations.id, pullRequests.sessionId),
+    )
+    .where(
+      and(
+        gt(pullRequests.mergedAt, since),
+        inArray(pullRequests.status, ["merged"]),
+        inArray(pullRequests.sessionId, workspaceSessions),
+      ),
+    );
+  const leadVals = leads
+    .map((l) => Number(l.minutes))
+    .filter((v) => Number.isFinite(v) && v >= 0)
+    .sort((a, b) => a - b);
   const mid = leadVals[Math.floor(leadVals.length / 2)];
   const medianLeadMinutes = mid === undefined ? null : Math.round(mid);
 
   const byAgent = new Map<string, { completed: number; errored: number }>();
-  let sessionsCompleted = 0, sessionsErrored = 0, sessionsBlocked = 0;
+  let sessionsCompleted = 0,
+    sessionsErrored = 0,
+    sessionsBlocked = 0;
   for (const s of sessions) {
     const key = s.agent;
     const a = byAgent.get(key) ?? { completed: 0, errored: 0 };
-    if (s.status === "completed") { a.completed += s.n; sessionsCompleted += s.n; }
-    else if (s.status === "error" || s.status === "failed") { a.errored += s.n; sessionsErrored += s.n; }
-    else if (s.status === "blocked") sessionsBlocked += s.n;
+    if (s.status === "completed") {
+      a.completed += s.n;
+      sessionsCompleted += s.n;
+    } else if (s.status === "error" || s.status === "failed") {
+      a.errored += s.n;
+      sessionsErrored += s.n;
+    } else if (s.status === "blocked") sessionsBlocked += s.n;
     byAgent.set(key, a);
   }
-  const agents = [...byAgent.entries()].map(([agent, v]) => ({ agent, ...v })).sort((x, y) => y.completed - x.completed);
+  const agents = [...byAgent.entries()]
+    .map(([agent, v]) => ({ agent, ...v }))
+    .sort((x, y) => y.completed - x.completed);
 
   const partial: Omit<DigestMetrics, "notes"> = {
     date,

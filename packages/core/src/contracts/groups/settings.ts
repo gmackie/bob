@@ -25,7 +25,7 @@ const settingsError = Schema.Union([
 ]);
 
 import { WireTimestamp } from "../schemas/wire-timestamp.js";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 import {
   UserPreferencesSchema,

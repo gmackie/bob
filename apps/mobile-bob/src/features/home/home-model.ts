@@ -1,6 +1,9 @@
 import type { Href } from "expo-router";
+
 import type { HostSnapshotWire } from "@bob/ws";
 import { buildProxyPanel } from "@bob/ws";
+
+import { timestampToMillis } from "~/lib/timestamps";
 
 /**
  * Phone home: triage.
@@ -88,9 +91,7 @@ export const HOME_SECTION_LIMIT = 5;
 
 function toMillis(value: string | Date | null | undefined): number {
   if (!value) return 0;
-  const date = value instanceof Date ? value : new Date(value);
-  const ms = date.getTime();
-  return Number.isNaN(ms) ? 0 : ms;
+  return timestampToMillis(value) ?? 0;
 }
 
 function toRow(item: HomeWorkItemInput): HomeRow {
@@ -114,7 +115,10 @@ function toRow(item: HomeWorkItemInput): HomeRow {
  * agree on what counts as an outage. A stale snapshot yields nothing: an old
  * "unreachable" is not evidence of an outage now.
  */
-function infrastructureRows(snapshot: HostSnapshotWire | null | undefined, now: Date): HomeRow[] {
+function infrastructureRows(
+  snapshot: HostSnapshotWire | null | undefined,
+  now: Date,
+): HomeRow[] {
   if (!snapshot) return [];
   const panel = buildProxyPanel(snapshot, now);
   if (!panel || panel.tone === "grey") return [];
@@ -166,7 +170,10 @@ function section(
 }
 
 export function buildHomeTriage(
-  input: { workItems: readonly HomeWorkItemInput[]; hostSnapshot?: HostSnapshotWire | null },
+  input: {
+    workItems: readonly HomeWorkItemInput[];
+    hostSnapshot?: HostSnapshotWire | null;
+  },
   options: { limit?: number; now?: Date } = {},
 ): HomeTriage {
   const limit = options.limit ?? HOME_SECTION_LIMIT;

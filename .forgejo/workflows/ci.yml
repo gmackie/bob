@@ -5,21 +5,38 @@ on:
     branches: [master]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   FG_REGISTRY_TOKEN: ${{ secrets.FG_REGISTRY_TOKEN }}
-  NODE_VERSION: "24"
+  NODE_VERSION: "26.13.1"
 
 jobs:
   research-backend:
     name: Research backend
     runs-on: ubuntu-latest
+    env:
+      # Use Python from our Forgejo runner image; never fetch it from GitHub.
+      UV_PYTHON_DOWNLOADS: never
+      UV_PYTHON: python3
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - uses: https://github.com/astral-sh/setup-uv@v6
+      - name: Install pinned Python tooling
+        run: |
+          set -euo pipefail
+          python3 -c 'import sys; assert sys.version_info >= (3, 12), "Runner requires Python 3.12+"'
+          python3 -m venv "$RUNNER_TEMP/bob-ci-tools"
+          "$RUNNER_TEMP/bob-ci-tools/bin/python" -m pip install \
+            --index-url https://pypi.org/simple --only-binary=:all: \
+            --require-hashes --no-deps -r scripts/ci-python-tools.txt
+          echo "$RUNNER_TEMP/bob-ci-tools/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bob-ci-tools/bin/uv" --version
 
       - name: Install locked Python dependencies
         working-directory: packages/research-backend
@@ -83,8 +100,9 @@ jobs:
     # test/emulate-setup.ts / emulate.config.yaml for how it's now served.
     runs-on: ubuntu-latest
     # Run 1166 spent 20 minutes on passing serial checks and lost reporting.
-    # Keep concurrency bounded, but budget 30 minutes from measured duration.
-    timeout-minutes: 30
+    # Keep concurrency bounded, but budget 45 minutes: run 1215 (2026-10-01) ran
+    # the full 30 on a loaded runner and timed out after all packages had passed.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -104,7 +122,7 @@ jobs:
         run: node --test scripts/bob-execution-runtime.test.mjs
 
       - name: Validate OODA runner Node runtime
-        run: node --test scripts/verify-ooda-runner-node-runtime.test.mjs
+        run: node --test scripts/verify-ooda-runner-node-runtime.test.mjs scripts/verify-ooda-runner-source.test.mjs
 
       - name: Validate OODA durable-work rollout
         run: node --test scripts/verify-ooda-durable-work-rollout.test.mjs
@@ -118,6 +136,17 @@ jobs:
       - name: Validate Bob/OODA product boundary
         run: node --test scripts/verify-product-boundary.test.mjs
 
+      - name: Validate the debug overlay border stays off the CPU
+        run: node --test scripts/verify-debug-overlay.test.mjs
+
+      - name: Validate the deploy report waits for this commit's Worker version
+        run: node --test scripts/forgegraph-deploy-report.test.mjs
+
+      - name: Validate Hermes shepherd ops and versioned config
+        run: |
+          node --test apps/hermes-shepherd/test/ops-contract.test.mjs
+          python3 -m unittest discover -s apps/hermes-shepherd/test -v
+
       # Drives the real reaper against real dirs and real processes. The bug it
       # guards was entirely in what the script did to the OS, so this must run
       # on a Linux runner where the /proc path is the one exercised.
@@ -130,6 +159,12 @@ jobs:
           echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/forgegraph.npmrc" >> "$GITHUB_ENV"
 
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
+
+      # apps/bob/worker/sdlc/exporter.e2e.test.ts runs the real coordinator runtime,
+      # a standalone npm package (own lockfile) outside the pnpm workspace.
+      - name: Install coordination runtime dependencies
+        working-directory: packages/bob/coordination
+        run: npm ci --ignore-scripts --registry=https://registry.npmjs.org
 
       - name: Install PostgreSQL tools for owned observability test
         run: |
@@ -190,12 +225,16 @@ jobs:
       - name: Lint
         id: lint
         # Serialize for the same reason as typecheck above: `pnpm lint` is
-        # `turbo run lint --continue`, which fans out one eslint process per
+        # `turbo run lint --continue`, which fans out one oxlint process per
         # package with no concurrency cap. Each is 600-800MB, so a full fan-out
         # exhausted RAM *and* swap on the shared runner host — load average
-        # reached 150 with every eslint stuck in uninterruptible sleep, which
+        # reached 150 with every oxlint stuck in uninterruptible sleep, which
         # degraded the Forgejo instance sharing that box until the processes
         # were killed. Serial lint cannot collectively exhaust memory.
+        # The API lint program exceeds the runner's default 1.5GB heap; keep
+        # the larger heap limited to this serial step inside the 5GB container.
+        env:
+          NODE_OPTIONS: --max-old-space-size=2048
         continue-on-error: true
         run: node scripts/ci-check-phase.mjs lint -- pnpm exec turbo run lint --continue --concurrency=1 --summarize
 
@@ -359,7 +398,7 @@ jobs:
   #
   # NOTE: this is a CODE-ONLY deploy. The `predeploy` DB migration
   # (scripts/migrate-hetzner.sh) reaches Postgres over Tailscale and cannot run
-  # on a cloud runner, so it's intentionally skipped here (we call `vinext deploy`
+  # on a cloud runner, so it's intentionally skipped here (we call `wrangler deploy`
   # directly, not `pnpm deploy`). When a deploy includes schema changes, run
   # migrations first from a Tailscale-connected host:
   #   DATABASE_URL=$(forge db url --app bob) pnpm -F @bob/db migrate
@@ -404,7 +443,16 @@ jobs:
           echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/forgegraph.npmrc" >> "$GITHUB_ENV"
 
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
-      - name: Deploy CF Worker (vinext deploy, code-only)
+      - name: Build CF Worker
+        working-directory: apps/bob
+        run: pnpm exec vinext build
+      # This job is the only production deploy: ForgeGraph records it from the
+      # report below instead of deploying again. `vinext-cloudflare deploy` is this build
+      # plus a bare `wrangler deploy`, which cannot stamp FG_COMMIT_HASH, and
+      # ForgeGraph's source-order guard refuses any later deploy (rollbacks
+      # included) while the serving version carries no stamp.
+      - name: Deploy CF Worker (code-only)
+        id: deploy
         working-directory: apps/bob
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -412,7 +460,21 @@ jobs:
         # Wrangler occasionally reaches Cloudflare but times out waiting for its
         # API response. Retry only that exact transient; configuration, auth,
         # build, and other deploy failures still fail on the first attempt.
-        run: ../../scripts/retry-cloudflare-command.sh pnpm exec vinext deploy
+        run: ../../scripts/retry-cloudflare-command.sh pnpm exec wrangler deploy --var "FG_COMMIT_HASH:${{ github.sha }}"
+      - name: Report deploy to ForgeGraph
+        id: report
+        working-directory: apps/bob
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FG_API_TOKEN: ${{ secrets.FORGEGRAPH_TOKEN }}
+        run: ../../scripts/forgegraph-deploy-report.sh success bob blder-bot https://bob.blder.bot/api/health
+      - name: Report deploy failure to ForgeGraph
+        if: failure() && (steps.deploy.outcome == 'failure' || steps.report.outcome == 'failure')
+        working-directory: apps/bob
+        env:
+          FG_API_TOKEN: ${{ secrets.FORGEGRAPH_TOKEN }}
+        run: ../../scripts/forgegraph-deploy-report.sh failed bob blder-bot "CI wrangler deploy, stamp check, or health check failed"
 
   # OODA is promoted independently from the Bob web worker and only after the
   # guarded database bootstrap has completed. The repository secret is a
@@ -470,4 +532,6 @@ jobs:
           test -n "${RESEARCH_SERVICE_TOKEN}"
           printf '%s' "${FORGEGRAPH_API_KEY}" | pnpm exec wrangler secret put FORGEGRAPH_API_KEY --name ooda-blder-bot
           printf '%s' "${RESEARCH_SERVICE_TOKEN}" | pnpm exec wrangler secret put RESEARCH_SERVICE_TOKEN --name ooda-blder-bot
-          ../../scripts/retry-cloudflare-command.sh pnpm exec vinext deploy
+          # vinext 1.4.6 moved `vinext deploy` to @vinext/cloudflare (BOB-118).
+          # The Worker was built above, so skip the rebuild (and on retries).
+          ../../scripts/retry-cloudflare-command.sh pnpm exec vinext-cloudflare deploy --skip-build

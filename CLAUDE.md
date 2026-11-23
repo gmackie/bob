@@ -24,8 +24,8 @@ Reference (gmacko stack):
 
 Bob (copied verbatim, runs unchanged):
 - `apps/bob/` — Bob's main web app (Vite + CF Workers).
-- `apps/mobile-bob/` — Bob mobile (Expo 55).
-- `apps/desktop-bob/` — Bob desktop (Electron 40).
+- `apps/mobile-bob/` — Bob mobile (Expo 58).
+- `apps/desktop-bob/` — Bob desktop (Electron 45).
 - `apps/bob-server/` — Bob's Node server.
 - `apps/bob-ws-gateway/` — Bob's realtime gateway.
 - `apps/bob-execution/` — Bob's execution runner.
@@ -35,15 +35,15 @@ Eventual 6-app target: `apps/{core,bob,ooda,mobile-core,mobile-bob,mobile-ooda}`
 ### Tooling
 
 - `tooling/typescript`, `tooling/tailwind` — gmacko shared configs.
-- `tooling/bob-{typescript,tailwind,eslint,prettier,github}` — Bob's tooling, dirs renamed; package names preserved as `@bob/*`.
+- `tooling/bob-{typescript,tailwind,oxlint,prettier,github}` — Bob's tooling, dirs renamed; package names preserved as `@bob/*`.
 
 ## Stack
 
 Three stacks coexist until per-area migrations land:
 
-- **Gmacko reference:** Effect 4.0.0-beta.43, Effect-RPC, Drizzle ORM, PGlite/PostgreSQL, Next.js 16, React 19, Expo 55, Tailwind CSS 4, NativeWind 5, CVA, Anthropic SDK.
-- **Bob:** tRPC, better-auth, Pusher, Vite, CF Workers, Expo 55, Electron 40, Drizzle, React 19.
-- **OODA:** tRPC v11.7, Drizzle ORM 0.45, Next.js 16, Vitest 4, Python/FastAPI sidecar (`packages/research-backend/`). Schema + runner convergence in Phase 8B; tRPC → Effect-RPC in Phase 8C.
+- **Gmacko reference:** Effect 4.1.4, Effect-RPC, Drizzle ORM, PGlite/PostgreSQL, Next.js 16, React 19, Expo 58, Tailwind CSS 4, NativeWind 5, CVA, Anthropic SDK.
+- **Bob:** tRPC, better-auth, Pusher, Vite, CF Workers, Expo 58, Electron 45, Drizzle, React 19.
+- **OODA:** tRPC v11.7, Drizzle ORM 0.45, Next.js 16, Vitest 5, Python/FastAPI sidecar (`packages/research-backend/`). Schema + runner convergence in Phase 8B; tRPC → Effect-RPC in Phase 8C.
 
 ## Themes
 
@@ -82,7 +82,7 @@ pnpm exec turbo run test --concurrency=1 -- --no-file-parallelism
 ## Key Patterns
 
 - RPC contracts defined with Effect/Schema + `Rpc.make()`.
-- Services use Effect `ServiceMap.Service` + Layer pattern.
+- Services use Effect `Context.Service` + Layer pattern.
 - Web/mobile clients use typed fetch + React Query (no Effect runtime in browser).
 - All UI components use CSS custom properties for theming.
 - Bob's tRPC pattern coexists with Effect-RPC pending per-area migration.
@@ -136,3 +136,8 @@ Key routing rules:
 - Ship/deploy/PR → invoke /ship or /land-and-deploy
 - Save progress → invoke /context-save
 - Resume context → invoke /context-restore
+
+## Deploy Configuration
+
+- Production deploy: merging to `master` runs the `deploy` job in `.forgejo/workflows/ci.yml`, which ships `blder-bot` and reports it to ForgeGraph. It is the only deploy per merge: do not run `forge deploy create production` after merging. See `deploy/README.md` for schema releases and rollbacks.
+- Verify: `forge deploy history --stage production` shows the merged commit as active, and `https://bob.blder.bot/api/health` returns 200.

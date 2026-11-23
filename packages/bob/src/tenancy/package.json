@@ -14,11 +14,11 @@
     "clean": "git clean -xdf .cache .turbo dist node_modules"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "0.45.4",
     "@bob/schema": "workspace:*"
   },
   "devDependencies": {
     "@bob/tsconfig": "workspace:*",
-    "typescript": "catalog:"
+    "typescript": "7.0.2"
   }
 }

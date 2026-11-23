@@ -9,7 +9,7 @@
 // Real implementation deferred to Phase 7 (Bob migration). The stub will swap
 // in a Model Context Protocol bridge that surfaces `agent.toolUse` events from
 // `@gmacko/agent`.
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, Schema, Context } from "effect";
 
 export interface McpToolSchema {
   readonly name: string;
@@ -17,7 +17,7 @@ export interface McpToolSchema {
   readonly inputSchema: Record<string, unknown>;
 }
 
-export class McpServerNotImplementedError extends Schema.TaggedErrorClass<McpServerNotImplementedError>()(
+export class McpServerNotImplementedError extends Schema.TaggedError<McpServerNotImplementedError>()(
   "McpServerNotImplementedError",
   {
     reason: Schema.String,
@@ -40,7 +40,7 @@ export interface McpServerShape {
   }) => Effect.Effect<unknown, McpServerNotImplementedError>;
 }
 
-export const McpServer = ServiceMap.Service<McpServerShape>(
+export const McpServer = Context.Service<McpServerShape>(
   "@gmacko/mcp-server/McpServer",
 );
 

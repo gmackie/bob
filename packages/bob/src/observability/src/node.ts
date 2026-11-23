@@ -36,10 +36,11 @@ export function initNodeObservability(config: ObservabilityConfig): void {
       dsn: config.sentry.dsn,
       environment: config.environment,
       // OTLP owns spans and sampling when configured. Sentry retains error
-      // reporting and isolated scopes through the shared context manager.
+      // reporting; since Sentry 11 its scopes are isolated by its own
+      // AsyncLocalStorage strategy, independent of the OTel context manager.
       ...(sharedTelemetry
         ? {
-            skipOpenTelemetrySetup: true,
+            enableOpenTelemetrySetup: false,
             tracesSampleRate: 0,
             defaultIntegrations:
               Sentry.getDefaultIntegrationsWithoutPerformance().map(
@@ -63,7 +64,6 @@ export function initNodeObservability(config: ObservabilityConfig): void {
     if (sharedTelemetry) {
       initTelemetry({
         serviceName: config.serviceName,
-        contextManager: new Sentry.SentryContextManager(),
         textMapPropagator: new SentryPropagator(),
       });
     }

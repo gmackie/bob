@@ -20,15 +20,15 @@
 // Service-composition note: `HttpServerRequest` is read by the middleware
 // at handler-call time, but `RpcServer.makeNoSerialization` captures
 // services at server-build time (see `RpcServer.js:45 services = yield*
-// Effect.services()`). So `HttpServerRequest` must be in the ambient
+// Effect.context()`). So `HttpServerRequest` must be in the ambient
 // environment when `RpcTest.makeClient` is evaluated — not just as a
 // dependency of `layerAuthMiddleware`. We therefore provide it at the top
 // level of each test's composed layer.
 import { afterEach, beforeEach, describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, Layer, Schema } from "effect";
-import { Rpc, RpcGroup, RpcTest } from "effect/unstable/rpc";
-import { HttpServerRequest } from "effect/unstable/http";
+import { Rpc, RpcGroup, RpcTest } from "effect/rpc";
+import { HttpServerRequest } from "effect/http";
 
 import { createTestDb } from "@gmacko/core/db/testing";
 import { layerGmackoDb } from "@gmacko/core/db";
@@ -81,7 +81,7 @@ const TestGroup = RpcGroup.make(WhoAmIRpc).middleware(AuthMiddleware);
 const handlersLayer = TestGroup.toLayer({
   "test.whoAmI": () =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
+      const user = yield* CurrentUser;
       return {
         userId: user.userId as string,
         tenantId: user.tenantId as string,

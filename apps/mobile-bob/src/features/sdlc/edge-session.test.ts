@@ -1,0 +1,329 @@
+import type { ItemSnapshot } from "@bob/sdlc-view";
+import { describe, expect, it } from "vitest";
+
+import { ACK_TIMEOUT_MS, asAttemptMessage, createSession, reconnectDelay } from "./edge-session";
+import type {SocketHandlers} from "./edge-session";
+import { item, must, plan, TOPOLOGY } from "./test-fixtures";
+
+function harness() {
+  const sockets: { handlers: SocketHandlers; sent: unknown[]; closed: boolean }[] = [];
+  const timers: (() => void)[] = [];
+  let id = 0;
+  const session = createSession({
+    open: (handlers) => {
+      const s = { handlers, sent: [] as unknown[], closed: false };
+      sockets.push(s);
+      return { send: (d) => s.sent.push(JSON.parse(d)), close: () => { s.closed = true; } };
+    },
+    newId: () => `cmd-${++id}`,
+    random: () => 0.5,
+    setTimer: (fn) => { timers.push(fn); return timers.length; },
+    clearTimer: () => undefined,
+  });
+  const last = () => must(sockets.at(-1), "socket");
+  const deliver = (m: unknown) => last().handlers.onMessage(JSON.stringify(m));
+  return { session, sockets, timers, last, deliver };
+}
+
+const snapshot = (seq = 1, items: ItemSnapshot[] = [item("p1", { itemId: "i1", state: "running" })]) => ({
+  type: "snapshot", epoch: "e1", seq, plans: [plan("p1", [{ itemId: "i1", state: "running" }])], items, topology: TOPOLOGY, coordinatorSeenAt: 5,
+});
+
+describe("edge session", () => {
+  it("says hello with no cursor first, then resumes from seq and epoch after a reconnect", () => {
+    const h = harness();
+    h.session.start();
+    h.last().handlers.onOpen();
+    expect(h.last().sent[0]).toEqual({ type: "hello", cursor: null, epoch: null });
+    h.deliver(snapshot(4));
+    expect(h.session.state.view.seq).toBe(4);
+    h.last().handlers.onClose();
+    expect(h.session.state.connection).toBe("reconnecting");
+    must(h.timers.shift(), "timer")();
+    h.last().handlers.onOpen();
+    expect(h.last().sent[0]).toEqual({ type: "hello", cursor: 4, epoch: "e1" });
+  });
+
+  it("routes command statuses to commands, attempt messages to the watched item, edge messages to the view", () => {
+    const h = harness();
+    h.session.start();
+    h.last().handlers.onOpen();
+    h.deliver(snapshot());
+    const id = h.session.send({ operation: "ReconcileItem", input: { itemId: "i1" } }, "Reconcile");
+    expect(h.last().sent.at(-1)).toMatchObject({ type: "command", commandId: id, operation: "ReconcileItem" });
+    h.deliver({ type: "commandAccepted", commandId: id });
+    expect(h.session.state.commands.entries[id]?.status).toBe("accepted");
+    const viewBefore = h.session.state.view;
+
+    h.session.watch("i1");
+    expect(h.last().sent.at(-1)).toEqual({ type: "watch", itemId: "i1" });
+    h.deliver({ type: "tail", frame: { itemId: "i1", attemptId: "a", threadId: "t", lines: ["hi"], threadStatus: "running", at: "x" } });
+    h.deliver({ type: "ci", itemId: "i1", available: true, sha: "abc", summary: "2/3", phases: [{ name: "test", status: "running" }], at: "x" });
+    // Another item's detail is ignored.
+    h.deliver({ type: "tail", frame: { itemId: "other", attemptId: "a", threadId: "t", lines: ["no"], threadStatus: "running", at: "x" } });
+    expect(h.session.state.attempt?.tail?.lines).toEqual(["hi"]);
+    expect(h.session.state.attempt?.ci).toMatchObject({ available: true, summary: "2/3" });
+    h.deliver({ type: "tailUnavailable", itemId: "i1", reason: "relay quiet" });
+    expect(h.session.state.attempt?.tailUnavailable).toBe("relay quiet");
+    expect(h.session.state.view).toBe(viewBefore);
+
+    h.deliver({ type: "commandResult", commandId: id, ok: true, operation: { contractVersion: "1", operationId: "o", commandId: id, state: "succeeded", resourceId: "i1", resourceVersion: 2 } });
+    expect(h.session.state.commands.entries[id]?.status).toBe("succeeded");
+  });
+
+  it("re-sends in-flight commands with the same commandId and the watch on a new socket", () => {
+    const h = harness();
+    h.session.start();
+    const id = h.session.send({ operation: "CancelItem", input: { itemId: "i1", expectedVersion: 1 } }, "Cancel item", { confirmed: true });
+    h.session.watch("i1");
+    expect(h.last().sent).toEqual([]); // not open yet
+    h.last().handlers.onOpen();
+    expect(h.last().sent).toEqual([
+      { type: "hello", cursor: null, epoch: null },
+      { type: "command", commandId: id, operation: "CancelItem", input: { itemId: "i1", expectedVersion: 1 }, confirm: { confirmed: true } },
+      { type: "watch", itemId: "i1" },
+    ]);
+  });
+
+  it("watches the focused item first, then desks, within the edge's cap, and writes only on change (BOB-98)", () => {
+    const h = harness();
+    h.session.start();
+    h.last().handlers.onOpen();
+    h.session.watch("f");
+    h.session.watchDesks(["d1", "f", "d2", "d3", "d4", "d5", "d6"]);
+    expect(h.session.state.watching).toEqual(["f", "d1", "d2", "d3", "d4", "d5"]);
+    expect(h.last().sent.at(-1)).toEqual({ type: "watch", itemIds: ["f", "d1", "d2", "d3", "d4", "d5"] });
+    const sent = h.last().sent.length;
+    h.session.watchDesks(["d1", "f", "d2", "d3", "d4", "d5", "d6"]);
+    h.session.watchDesks(["d1", "d2", "d3", "d4", "d5", "d7"]); // d7 is past the cap: same set
+    expect(h.last().sent).toHaveLength(sent);
+
+    const tail = (itemId: string, line: string) => ({ type: "tail", frame: { itemId, attemptId: "a", threadId: "t", lines: [line], threadStatus: "running", at: "x" } });
+    h.deliver(tail("d2", "desk"));
+    h.deliver(tail("f", "focus"));
+    h.deliver(tail("d6", "unwatched"));
+    expect(h.session.state.attempts.d2?.tail?.lines).toEqual(["desk"]);
+    expect(h.session.state.attempt?.tail?.lines).toEqual(["focus"]);
+    expect(h.session.state.attempts.d6).toBeUndefined();
+
+    // A desk that leaves drops its detail; one that stays keeps it.
+    h.session.watchDesks(["d2"]);
+    expect(h.last().sent.at(-1)).toEqual({ type: "watch", itemIds: ["f", "d2"] });
+    expect(Object.keys(h.session.state.attempts)).toEqual(["f", "d2"]);
+    expect(h.session.state.attempts.d2?.tail?.lines).toEqual(["desk"]);
+
+    // No desks: back to the single form the edge has always taken.
+    h.session.watchDesks([]);
+    expect(h.last().sent.at(-1)).toEqual({ type: "watch", itemId: "f" });
+    h.session.watch(null);
+    expect(h.last().sent.at(-1)).toEqual({ type: "watch", itemId: null });
+    expect(h.session.state.attempt).toBeNull();
+    expect(h.session.state.watching).toEqual([]);
+  });
+
+  it("re-sends the watch set and the shipped request on a new socket and folds shipped entries (BOB-95)", () => {
+    const h = harness();
+    h.session.start();
+    h.session.watchDesks(["a", "b"]);
+    h.session.followShipped();
+    h.last().handlers.onOpen();
+    expect(h.last().sent).toEqual([
+      { type: "hello", cursor: null, epoch: null },
+      { type: "watch", itemIds: ["a", "b"] },
+      { type: "shipped" },
+    ]);
+    const entry = (itemId: string, at: number) => ({ itemId, planId: "p", issue: `BOB-${itemId}`, repository: "bob", at });
+    h.deliver({ type: "shipped", replace: true, entries: [entry("a", 1)] });
+    h.deliver({ type: "shipped", replace: false, entries: [entry("b", 2)] });
+    expect(h.session.state.shipped?.map((e) => e.itemId)).toEqual(["b", "a"]);
+    expect(h.session.state.view.epoch).toBeNull();
+
+    h.last().handlers.onClose();
+    must(h.timers.shift(), "timer")();
+    h.last().handlers.onOpen();
+    expect(h.last().sent.slice(1)).toEqual([{ type: "watch", itemIds: ["a", "b"] }, { type: "shipped" }]);
+    h.deliver({ type: "shipped", replace: true, entries: [entry("c", 3)] });
+    expect(h.session.state.shipped?.map((e) => e.itemId)).toEqual(["c"]);
+  });
+
+  it("sends Live Activity registrations now when live, else the latest per item on the next socket (GMA-774)", () => {
+    const h = harness();
+    h.session.start();
+    const token = "ab".repeat(32);
+    h.session.registerLiveActivity({ type: "liveActivity", itemId: "i1", token: "00".repeat(32), app: "com.gmacko.bob.dev" });
+    h.session.registerLiveActivity({ type: "liveActivity", itemId: "i1", token, app: "com.gmacko.bob.dev" });
+    h.session.registerLiveActivity({ type: "liveActivity", itemId: "i2", token: null, app: "com.gmacko.bob.dev" });
+    expect(h.last().sent).toEqual([]);
+    h.last().handlers.onOpen();
+    expect(h.last().sent.slice(1)).toEqual([
+      { type: "liveActivity", itemId: "i1", token, app: "com.gmacko.bob.dev" },
+      { type: "liveActivity", itemId: "i2", token: null, app: "com.gmacko.bob.dev" },
+    ]);
+    h.session.registerLiveActivity({ type: "liveActivity", itemId: "i3", token });
+    expect(h.last().sent.at(-1)).toEqual({ type: "liveActivity", itemId: "i3", token });
+    h.last().handlers.onClose();
+    must(h.timers.at(-1), "timer")();
+    h.last().handlers.onOpen();
+    expect(h.last().sent).toEqual([{ type: "hello", cursor: null, epoch: null }]); // already delivered, not repeated
+  });
+
+  it("asks once for a snapshot after a seq gap", () => {
+    const h = harness();
+    h.session.start();
+    h.last().handlers.onOpen();
+    h.deliver(snapshot(1));
+    h.deliver({ type: "delta", seq: 3, plans: [], items: [], coordinatorSeenAt: 6 });
+    h.deliver({ type: "delta", seq: 4, plans: [], items: [], coordinatorSeenAt: 7 });
+    const hellos = h.last().sent.filter((m) => (m as { type: string }).type === "hello");
+    expect(hellos).toEqual([{ type: "hello", cursor: null, epoch: null }, { type: "hello", cursor: null, epoch: null }]);
+    expect(h.session.state.view.needsResync).toBe(true);
+  });
+
+  it("stops reconnecting on 401/403 and restarts on start()", () => {
+    const h = harness();
+    h.session.start();
+    h.last().handlers.onRejected(403);
+    h.last().handlers.onClose();
+    expect(h.session.state.connection).toBe("auth-failed");
+    expect(h.session.state.error).toContain("403");
+    expect(h.timers).toHaveLength(0);
+    h.session.start();
+    expect(h.sockets).toHaveLength(2);
+    expect(h.session.state.connection).toBe("connecting");
+  });
+
+  it("ignores junk and messages from a replaced socket", () => {
+    const h = harness();
+    h.session.start();
+    const old = h.last();
+    old.handlers.onOpen();
+    h.deliver("not json at all");
+    h.deliver({ type: "mystery" });
+    old.handlers.onClose();
+    must(h.timers.shift(), "timer")();
+    old.handlers.onMessage(JSON.stringify(snapshot(9)));
+    expect(h.session.state.view.seq).toBe(0);
+  });
+
+  it("wake() reconnects at once while waiting out a backoff", () => {
+    const h = harness();
+    h.session.start();
+    h.last().handlers.onClose();
+    expect(h.sockets).toHaveLength(1);
+    h.session.wake();
+    expect(h.sockets).toHaveLength(2);
+  });
+
+  it("wake() replaces a socket that looks open, so a half-dead one cannot stay live", () => {
+    const h = harness();
+    h.session.start();
+    const old = h.last();
+    old.handlers.onOpen();
+    h.deliver(snapshot(3));
+    expect(h.session.state.connection).toBe("live");
+    h.session.wake();
+    expect(old.closed).toBe(true);
+    expect(h.sockets).toHaveLength(2);
+    expect(h.session.state.connection).toBe("reconnecting");
+    old.handlers.onMessage(JSON.stringify(snapshot(9))); // late frames from the old socket are ignored
+    old.handlers.onClose();
+    expect(h.timers).toHaveLength(0);
+    h.last().handlers.onOpen();
+    expect(h.last().sent[0]).toEqual({ type: "hello", cursor: 3, epoch: "e1" });
+    expect(h.session.state.connection).toBe("live");
+  });
+
+  it("stop() closes the socket and stops showing live; wake() while stopped does nothing", () => {
+    const h = harness();
+    h.session.start();
+    h.last().handlers.onOpen();
+    h.session.stop();
+    expect(h.last().closed).toBe(true);
+    expect(h.session.state.connection).toBe("reconnecting");
+    h.session.wake();
+    expect(h.sockets).toHaveLength(1);
+    h.session.start();
+    expect(h.sockets).toHaveLength(2);
+  });
+
+  it("backs off 1 s, 2 s, 4 s … capped at 30 s", () => {
+    expect([0, 1, 2, 10].map((a) => reconnectDelay(a, () => 0.5))).toEqual([1000, 2000, 4000, 30000]);
+  });
+});
+
+describe("asAttemptMessage", () => {
+  it("strips terminal controls from tail lines, statuses, CI text and reasons", () => {
+    const tail = asAttemptMessage({ type: "tail", frame: { itemId: "i", attemptId: "a", threadId: "t", lines: ["\u001b[32mok\u001b[0m", "bell\u0007", 7], threadStatus: "run\u0000ning", at: "now" } });
+    expect(tail).toEqual({ type: "tail", frame: { itemId: "i", attemptId: "a", threadId: "t", lines: ["ok", "bell", ""], threadStatus: "running", at: "now" } });
+    expect(asAttemptMessage({ type: "ci", itemId: "i", available: true, sha: "abc", summary: "\u001b[1m2/3\u001b[0m", phases: [{ name: "te\u0000st", status: "passed" }, null], at: "now" }))
+      .toMatchObject({ summary: "2/3", phases: [{ name: "test", status: "passed" }] });
+    expect(asAttemptMessage({ type: "ci", itemId: "i", available: false, reason: "no\u001b[2K ci", at: "now" })).toMatchObject({ reason: "no ci" });
+    expect(asAttemptMessage({ type: "tailUnavailable", itemId: "i", reason: "\u009b31mquiet" })).toEqual({ type: "tailUnavailable", itemId: "i", reason: "quiet" });
+    expect(asAttemptMessage({ type: "tail", frame: { itemId: "i" } })).toBeNull();
+  });
+});
+
+describe("command answer deadline (BOB-89)", () => {
+  function ackHarness() {
+    const sockets: { handlers: SocketHandlers; sent: unknown[]; closed: boolean }[] = [];
+    const timers: { fn: () => void; ms: number }[] = [];
+    let id = 0;
+    let clock = 1_000;
+    const session = createSession({
+      open: (handlers) => {
+        const s = { handlers, sent: [] as unknown[], closed: false };
+        sockets.push(s);
+        return { send: (d) => s.sent.push(JSON.parse(d)), close: () => { s.closed = true; } };
+      },
+      newId: () => `cmd-${++id}`,
+      now: () => clock,
+      random: () => 0.5,
+      setTimer: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+      clearTimer: () => undefined,
+    });
+    const last = () => must(sockets.at(-1), "socket");
+    return { session, sockets, timers, last, advance: (ms: number) => { clock += ms; } };
+  }
+  const pause = { operation: "ControlPlan", input: { planId: "p1", expectedVersion: 2, action: "pause" } } as const;
+
+  it("replaces a socket that never answers a command, and resends it with the same commandId", () => {
+    const h = ackHarness();
+    h.session.start();
+    const first = h.last();
+    first.handlers.onOpen();
+    h.session.send(pause, "Pause");
+    const deadline = must(h.timers.find((t) => t.ms === ACK_TIMEOUT_MS), "deadline");
+    h.advance(ACK_TIMEOUT_MS);
+    deadline.fn();
+    expect(first.closed).toBe(true);
+    expect(h.sockets).toHaveLength(2);
+    h.last().handlers.onOpen();
+    expect(h.last().sent.filter((m) => (m as { type: string }).type === "command")).toEqual([expect.objectContaining({ commandId: "cmd-1" })]);
+    expect(h.session.state.connection).toBe("live");
+  });
+
+  it("keeps a socket that answers in time", () => {
+    const h = ackHarness();
+    h.session.start();
+    h.last().handlers.onOpen();
+    h.session.send(pause, "Pause");
+    h.last().handlers.onMessage(JSON.stringify({ type: "commandAccepted", commandId: "cmd-1" }));
+    h.advance(ACK_TIMEOUT_MS);
+    must(h.timers.find((t) => t.ms === ACK_TIMEOUT_MS), "deadline").fn();
+    expect(h.sockets).toHaveLength(1);
+    expect(h.last().closed).toBe(false);
+    expect(h.session.state.commands.entries["cmd-1"]?.status).toBe("accepted");
+  });
+
+  it("does nothing once stopped", () => {
+    const h = ackHarness();
+    h.session.start();
+    h.last().handlers.onOpen();
+    h.session.send(pause, "Pause");
+    const deadline = must(h.timers.find((t) => t.ms === ACK_TIMEOUT_MS), "deadline");
+    h.session.stop();
+    h.advance(ACK_TIMEOUT_MS);
+    deadline.fn();
+    expect(h.sockets).toHaveLength(1);
+  });
+});

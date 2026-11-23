@@ -104,3 +104,17 @@ export const gatewayConfig = pgTable("gateway_config", (t) => ({
     .timestamp({ mode: "string", withTimezone: true })
     .$onUpdateFn(() => sql`now()`),
 }));
+
+// Reporting records never become executable work items.
+export const digestDestinations = pgTable("digest_destinations", (t) => ({
+  scope: t.text().primaryKey(),
+  workspaceId: t.uuid().notNull(),
+  issueId: t.text(),
+  phase: t.text().notNull().default("ready"),
+}));
+export const digestDeliveries = pgTable("digest_deliveries", (t) => ({
+  key: t.text().primaryKey(),
+  scope: t.text().notNull(),
+  date: t.text().notNull(),
+  phase: t.text().notNull().default("ready"),
+}));

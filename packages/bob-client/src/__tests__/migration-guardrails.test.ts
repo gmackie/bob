@@ -141,6 +141,29 @@ describe("Bob Effect-RPC migration guardrails", () => {
           "",
         );
       }
+      // BizPulse owns this endpoint: the intake client reads BizPulse's own
+      // tRPC briefing route at the configured BizPulse apiUrl. It is not a
+      // Bob-owned /api/trpc surface. Strip that one reference and keep
+      // checking the file for any other tRPC use.
+      if (
+        file === "packages/bob/src/api/src/services/intake/bizpulseIntake.ts"
+      ) {
+        expect(text).toContain("BizPulse serves tRPC");
+        text = text.replace("`${base}/api/trpc/tasks.todayBriefing`", "");
+        text = text.replace("`GET /api/trpc/tasks.todayBriefing`", "");
+      }
+      // BizPulse owns this endpoint too: the SDLC edge reads BizPulse's
+      // repos.list (startup -> repo topology) at the configured BizPulse apiUrl.
+      if (file === "apps/bob/worker/sdlc/topology.ts") {
+        expect(text).toContain("BizPulse serves tRPC");
+        text = text.replace("`${base}/api/trpc/repos.list?input=${input}`", "");
+      }
+      if (file === "apps/bob/worker/sdlc/topology.test.ts") {
+        text = text.replace(
+          '"https://pulse.test/api/trpc/repos.list?input=%7B%22json%22%3A%7B%7D%7D"',
+          "",
+        );
+      }
       return text.includes("/api/trpc");
     });
 

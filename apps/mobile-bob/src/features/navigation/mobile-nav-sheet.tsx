@@ -1,4 +1,4 @@
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 
 import { colors } from "~/lib/colors";
@@ -29,12 +29,17 @@ export function MobileNavSheet({
     moreHrefs.has(d.href),
   );
 
+  // Keep the native view mounted. Unmounting and recreating this overlay
+  // makes iOS drop the app's accessibility elements on the second open, so
+  // VoiceOver and XCUITest can no longer see "Go to".
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}
+    <View
+      pointerEvents={visible ? "auto" : "none"}
+      accessibilityElementsHidden={!visible}
+      importantForAccessibility={visible ? "auto" : "no-hide-descendants"}
+      collapsable={false}
+      className="absolute inset-0 z-50 justify-end"
+      style={{ opacity: visible ? 1 : 0 }}
     >
       <View className="flex-1 justify-end">
         <Pressable
@@ -52,8 +57,19 @@ export function MobileNavSheet({
             style={{ backgroundColor: colors.border }}
           />
           <View className="mb-3 flex-row items-center justify-between">
-            <Text className="text-foreground text-lg font-semibold">Go to</Text>
-            <Pressable onPress={onClose} className="active:opacity-70">
+            <Text
+              accessibilityRole="header"
+              accessibilityLabel="Go to"
+              className="text-foreground text-lg font-semibold"
+            >
+              Go to
+            </Text>
+            <Pressable
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              className="active:opacity-70"
+            >
               <Text className="text-accent text-sm font-semibold">Close</Text>
             </Pressable>
           </View>
@@ -91,6 +107,6 @@ export function MobileNavSheet({
           </ScrollView>
         </View>
       </View>
-    </Modal>
+    </View>
   );
 }

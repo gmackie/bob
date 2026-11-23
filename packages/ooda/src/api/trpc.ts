@@ -7,12 +7,19 @@ import type { AuthInstance } from "@gmacko/core/auth";
 import { validateApiKey } from "@gmacko/core/auth/validate-api-key";
 import { db } from "@gmacko/ooda/db/client";
 
+import type { VaultRouteHost } from "../vault/vault-route-host";
+
 import type { OodaRolloutCapabilityV1 } from "../contracts/v1";
 import { resolveOodaRolloutPolicy } from "../kernel/rollout-policy";
 
 export const createTRPCContext = async (opts: {
   headers: Headers;
   auth?: AuthInstance;
+  /** Trusted, process-shared host; never construct from request input. */
+  vaultHost?: VaultRouteHost;
+  /** Actor from a verified edge vault assertion (vault/origin-assertion.ts).
+   * Only the Node vault route sets it, and only `vault.*` procedures honour it. */
+  vaultActor?: string;
   // On the CF Workers edge, callers inject the per-request Hyperdrive client
   // (apps/ooda-edge's lazy proxy) — the module-level `db` binds its
   // prepared-statement config at import time, before the edge sets its
@@ -20,7 +27,10 @@ export const createTRPCContext = async (opts: {
   // module `db` for the Node runtime.
   db?: typeof db;
 }) => {
-  return { db: opts.db ?? db, headers: opts.headers, auth: opts.auth };
+  return { db: opts.db ?? db, headers: opts.headers, auth: opts.auth,
+    ...(opts.vaultHost ? { vaultHost: opts.vaultHost } : {}),
+    ...(opts.vaultHost && opts.vaultActor ? { vaultActor: opts.vaultActor } : {}),
+  };
 };
 
 export const t = initTRPC
@@ -80,7 +90,12 @@ export const trustedRunnerProcedure = t.procedure.use(async ({ ctx, next }) => {
   return next();
 });
 
-export const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
+export const authedProcedure = t.procedure.use(async ({ ctx, next, path }) => {
+  if ("vaultActor" in ctx && ctx.vaultActor && path.startsWith("vault.")) {
+    return next({
+      ctx: { ...ctx, userId: ctx.vaultActor, email: "", session: { user: { id: ctx.vaultActor, email: "" } } },
+    });
+  }
   if (!ctx.auth) {
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",

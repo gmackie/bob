@@ -1,0 +1,11 @@
+#!/bin/sh
+# Fast-forward the read-only vault mirror (~/obsidian-vault) from Cloudflare
+# Artifacts. Never discards local edits: a dirty or diverged mirror is skipped
+# and reported. Make edits in a worktree and submit them with bob-vault-submit.
+set -u
+MIRROR="${BOB_VAULT_MIRROR:-$HOME/obsidian-vault}"
+cd "$MIRROR" || exit 1
+if [ -n "$(git status --porcelain)" ]; then echo "$(date -u +%FT%TZ) skipped: mirror has local changes"; exit 2; fi
+"${BOB_VAULT_GIT:-$HOME/.local/bin/bob-vault-git}" fetch -q origin main || { echo "$(date -u +%FT%TZ) fetch failed"; exit 1; }
+git merge -q --ff-only origin/main || { echo "$(date -u +%FT%TZ) skipped: mirror diverged from origin/main"; exit 3; }
+echo "$(date -u +%FT%TZ) at $(git rev-parse --short HEAD)"

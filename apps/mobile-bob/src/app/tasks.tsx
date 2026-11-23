@@ -81,6 +81,7 @@ export default function TasksScreen() {
         router.push(getTabletTaskLaneHref(targetLane, selectedWorkspaceId))
       }
       onOpenWorkItem={handleOpenWorkItem}
+      onOpenToday={() => router.push("/today")}
       onOpenTaskTab={(tab) =>
         router.push(getMobileTaskTabHref(tab, selectedWorkspaceId))
       }

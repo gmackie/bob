@@ -3,6 +3,7 @@ import {
   Text,
   View,
   ScrollView,
+  type ScrollViewInstance,
   Pressable,
   TextInput,
   KeyboardAvoidingView,
@@ -194,7 +195,7 @@ export function PlanningPane({
   onStopSession,
   onShowArtifact,
 }: PlanningPaneProps) {
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const [inputText, setInputText] = useState("");
 
   const messages = useMemo(() => eventsToChatMessages(events), [events]);

@@ -3,12 +3,19 @@ import { join } from "node:path";
 import { stat } from "node:fs/promises";
 
 import { listFiles, readFile } from "./reader";
-import { writeFile } from "./writer";
+import { moveFile, removeFile, writeFile } from "./writer";
 import { commitAndPush, pull, isLocked } from "./git";
+import { LocalGitStorage } from "./local-git-storage";
 import type { VaultConfig, VaultFile } from "./types";
+import { VersionedStorageError, type PublicationRecord } from "./versioned-storage";
+
+export interface PromoteResult {
+  filePath: string;
+  publication: PublicationRecord;
+}
 
 export class VaultService {
-  constructor(private config: VaultConfig) {}
+  constructor(private config: VaultConfig, private publication?: import("./git").CommitAndPushOptions["storage"]) {}
 
   /** List .md files in the vault, optionally filtered by glob. */
   async list(glob?: string): Promise<string[]> {
@@ -20,37 +27,67 @@ export class VaultService {
     return readFile(this.config.path, filePath);
   }
 
-  /** Write a file to the vault and commit the change. */
+  /**
+   * Write a file to the vault, commit, and publish. The returned record says
+   * whether the change is durably published or only saved locally.
+   */
   async write(
     filePath: string,
     content: string,
     frontmatter?: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<PublicationRecord> {
     await writeFile(this.config.path, filePath, content, frontmatter);
-    await commitAndPush(this.config.path, `vault: update ${filePath}`);
+    return commitAndPush(this.config.path, `vault: update ${filePath}`, this.publication ? {storage:this.publication} : {});
+  }
+
+  /** Delete an existing file, commit, and publish. */
+  async remove(filePath: string): Promise<PublicationRecord> {
+    await removeFile(this.config.path, filePath);
+    return commitAndPush(this.config.path, `vault: delete ${filePath}`, this.publication ? {storage:this.publication} : {});
+  }
+
+  /** Rename a file (never over an existing one) as one published commit. */
+  async move(from: string, to: string): Promise<PublicationRecord> {
+    await moveFile(this.config.path, from, to);
+    return commitAndPush(this.config.path, `vault: move ${from} -> ${to}`, this.publication ? {storage:this.publication} : {});
   }
 
   /**
    * Promote a note from a thread into the vault.
-   * Writes to `notes/{threadId}/{noteId}.md`, commits, and returns the path.
+   * Writes to `notes/{threadId}/{noteId}.md`, commits, publishes, and
+   * returns the path together with the publication record.
    */
   async promote(
     threadId: string,
     noteId: string,
     content: string,
     frontmatter?: Record<string, unknown>,
-  ): Promise<string> {
+  ): Promise<PromoteResult> {
     const filePath = `notes/${threadId}/${noteId}.md`;
     await writeFile(this.config.path, filePath, content, frontmatter);
-    await commitAndPush(
+    const publication = await commitAndPush(
       this.config.path,
       `promote: ${noteId} from thread ${threadId}`,
+      this.publication ? {storage:this.publication} : {},
     );
-    return filePath;
+    return { filePath, publication };
+  }
+
+  /** Reconcile non-final publications using the selected provider replay policy. */
+  async replayPending(): Promise<PublicationRecord[]> {
+    return (this.publication ?? new LocalGitStorage(this.config.path)).replayPending();
+  }
+
+  /** Publications that are not yet durably published. */
+  async listUnpublished(): Promise<PublicationRecord[]> {
+    return (this.publication ?? new LocalGitStorage(this.config.path)).listUnpublished();
   }
 
   /** Pull latest changes from origin. */
   async sync(): Promise<{ filesChanged: number; conflicts: boolean }> {
+    if (this.publication && this.publication.capabilities().provider !== "local-git") {
+      throw new VersionedStorageError("UnsupportedCapability", "Selected vault publication provider does not support local Git synchronization");
+    }
     return pull(this.config.path);
   }
 

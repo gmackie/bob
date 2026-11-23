@@ -21,8 +21,11 @@ belongs in secret environment configuration, never checked-in plaintext.
 The separate existing Bob host API is not the public Worker or desktop runtime.
 To instrument its existing versioned runtime without replacing the app build,
 bundle `packages/core/src/telemetry/node.ts` as `telemetry-node.cjs` using esbuild
-with `--bundle --platform=node --format=cjs`, and stage it alongside
-`start-host.mjs`. Launch with explicit runtime directory, port and bind address:
+with `--bundle --platform=node --format=cjs
+--inject:scripts/otel/import-meta-url-shim.js --define:import.meta.url=importMetaUrl`,
+and stage it alongside `start-host.mjs`. The shim is required: OpenTelemetry's
+ESM builds call `createRequire(import.meta.url)`, which is undefined in CJS output.
+Launch with explicit runtime directory, port and bind address:
 
 ```
 node start-host.mjs /path/to/existing/runtime 3200 127.0.0.1

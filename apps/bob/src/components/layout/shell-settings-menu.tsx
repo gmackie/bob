@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { cn } from "@gmacko/core/ui";
 
+import { resetUser } from "~/lib/analytics";
 import { useBobQueryClient } from "~/rpc/react";
 import {
   buildShellSettingsActions,
@@ -47,6 +48,7 @@ export function ShellSettingsMenu() {
   const actions = buildShellSettingsActions(currentWorkspace?.id);
 
   async function handleLogout() {
+    resetUser();
     await fetch("/api/auth/sign-out", { method: "POST" }).catch(
       () => undefined,
     );

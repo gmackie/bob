@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Notifications, scheduleLocalNotification } from "@bob/notifications";
 
 import { rpc } from "~/utils/api";
-import { authClient } from "~/utils/auth";
+import { authClient, getSessionCookie } from "~/utils/auth";
 import { getBaseUrl } from "~/utils/base-url";
 
 type CespSeverity = "info" | "warning" | "error";
@@ -333,7 +333,7 @@ export function CESPNotificationsProvider({ children }: ProvidersProps) {
     const since = sinceRef.current;
     const until = new Date().toISOString();
 
-    const sessionCookie = authClient.getCookie();
+    const sessionCookie = getSessionCookie();
     const headers: Record<string, string> = {};
     if (sessionCookie) {
       headers.Cookie = sessionCookie;

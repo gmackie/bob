@@ -1,3 +1,4 @@
+import { PINNED_TITLE, REPORT_MARKER } from "../services/digest/destination.js";
 // Autonomous backlog driver.
 //
 // The batch-dispatch queue-drain engine (dispatchCheckProgress) only advances
@@ -17,28 +18,22 @@ import {
   taskRuns,
   workItems,
 } from "@bob/db/schema";
+import { trackerIdentifierOf } from "@bob/work-items/branch-name";
 
 import { formatWorkItemIdentifier } from "./workItems";
 import { pickAcrossProjects } from "./autoDrain-pick";
 import { mirrorWorkItemEvent } from "../services/tracker/trackerMirror.js";
+import {
+  changesRequestedPrompt,
+  readChangesRequested,
+} from "../services/tracker/changesRequested.js";
 import type { AgentHealthVerdict } from "../services/automation/agentHealthRouter.js";
 import { assessAgentHealth, chooseAgent } from "../services/automation/agentHealthRouter.js";
 import { paceDailyBudget } from "../services/health/pacing.js";
-
-// Sessions actively holding a runner execution slot. Mirrors the runner's own
-// busy check (its activeSessions map) — NOT "idle", which means the agent
-// finished its turn and isn't consuming compute (and old idle sessions linger).
-const ACTIVE_SESSION_STATUSES = [
-  "pending",
-  "provisioning",
-  "starting",
-  "running",
-  // Paused awaiting a human decision — still active (the run isn't dead).
-  "blocked",
-  "stopping",
-  // Lease expired: contact lost, process fate unknown — still active.
-  "host_unknown",
-];
+import { ACTIVE_SESSION_STATUSES } from "../services/automation/activeSessions.js";
+import { allocateSurplus, governState } from "@bob/ws";
+import { AGENT_PROVIDER, evaluateBudget, nextBudgetedAgent, recordDecision  } from "../services/budget/state.js";
+import type {BudgetEvaluation} from "../services/budget/state.js";
 
 // Work-item statuses the driver will pick up and dispatch. "ready" is the
 // explicit/promoted queue; "todo" is planned work — included so the driver
@@ -132,6 +127,17 @@ export async function autoDrainBacklog(
     .where(inArray(chatConversations.status, ACTIVE_SESSION_STATUSES));
   const running = runningRows[0]?.running ?? 0;
 
+  // BOB-76 subscription budget governor. It always decides and records; it
+  // only steers dispatch once policy.enforce is on (after a shadow week). A
+  // failure here leaves the legacy daily-cap pacing in charge.
+  let budgetEval: BudgetEvaluation | undefined;
+  try {
+    budgetEval = await evaluateBudget();
+  } catch (err) {
+    console.warn("[auto-drain] budget governor unavailable; legacy pacing applies:", err);
+  }
+  const enforce = budgetEval?.verdict.enforce === true;
+
   // Count only EXECUTE runs against the daily cap. Review/repair sessions
   // also insert task_runs (run_phase 'review'/'repair') and are already
   // bounded by their own per-tick budgets in autoMergeReview — letting them
@@ -161,7 +167,47 @@ export async function autoDrainBacklog(
           burst: opts.burst ?? cfg.concurrency,
         })
       : { allowance: remainingToday, earned: cfg.dailyCap, pacingBinds: false };
-  const budget = Math.min(freeSlots, remainingToday, pacing.allowance);
+  const legacyBudget = Math.min(freeSlots, remainingToday, pacing.allowance);
+  const budget = enforce && budgetEval ? Math.min(freeSlots, budgetEval.verdict.totalSlots) : legacyBudget;
+  if (budgetEval) await recordDecision(budgetEval, legacyBudget);
+  if (budgetEval) {
+    const evaluation = budgetEval;
+    await import("../services/budget/alerts.js")
+      .then(async ({ budgetAlerts, sendBudgetAlerts }) => {
+        const { assembled } = governState(evaluation.state, new Date(evaluation.state.at));
+        await sendBudgetAlerts(budgetAlerts(evaluation.state, evaluation.verdict, assembled));
+      })
+      .catch((err: unknown) => console.warn("[auto-drain] budget alerts skipped:", err));
+  }
+  // Post finished items' cost to their Kanbanger issues: bounded and
+  // best-effort, and placed here so it runs on every tick, not only on ticks
+  // that dispatch.
+  await import("../services/budget/cost.js")
+    .then(({ reportFinishedItemCosts }) => reportFinishedItemCosts())
+    .catch((err: unknown) => console.warn("[auto-drain] cost report skipped:", err));
+  const remainingByProvider = new Map(
+    Object.entries(budgetEval?.verdict.byProvider ?? {}).map(([provider, entry]) => [provider, entry.slots]),
+  );
+  // Surplus ladder (enforcement only): slots delivery could not use flow to
+  // grooming, pull-forward, discovery and BizPulse. Planning tiers run on
+  // Claude, so they are capped by Claude's remaining slots.
+  const spendSurplus = async (leftover: number) => {
+    if (!enforce || !budgetEval || leftover <= 0) return;
+    try {
+      const { runSurplusTiers, surplusDemand } = await import("../services/budget/surplus.js");
+      const demand = await surplusDemand();
+      const allocation = allocateSurplus(leftover, { delivery: 0, ...demand }, budgetEval.state.policy.tiers);
+      let claude = remainingByProvider.get("claude") ?? 0;
+      for (const tier of ["groom", "discovery", "bizpulse"] as const) {
+        allocation[tier] = Math.min(allocation[tier], claude);
+        claude -= allocation[tier];
+      }
+      const started = await runSurplusTiers(allocation);
+      if (started.length) console.log(`[auto-drain] surplus: ${started.map((s) => s.tier).join(", ")}`);
+    } catch (err) {
+      console.warn("[auto-drain] surplus tiers skipped:", err);
+    }
+  };
 
   const base = { running, dispatchedToday: today, items: [] as AutoDrainResult["items"] };
   if (budget <= 0) {
@@ -171,7 +217,9 @@ export async function autoDrainBacklog(
       reason:
         freeSlots <= 0
           ? "no free slots"
-          : remainingToday <= 0
+          : enforce
+            ? `budget governor: no slots (${budgetEval?.verdict.mode ?? "run"})`
+            : remainingToday <= 0
             ? "daily cap reached"
             : `paced (${today}/${pacing.earned} earned so far today)`,
     };
@@ -188,6 +236,8 @@ export async function autoDrainBacklog(
     where: and(
       inArray(workItems.status, DISPATCHABLE_STATUSES),
       eq(workItems.kind, "task"),
+      sql`${workItems.title} <> ${PINNED_TITLE}`,
+      sql`coalesce(${workItems.description}, '') not like ${`%${REPORT_MARKER}%`}`,
     ),
     orderBy: [
       sql`case when ${workItems.status} = 'ready' then 0 else 1 end`,
@@ -197,6 +247,7 @@ export async function autoDrainBacklog(
     limit: budget * 4,
   });
   if (ready.length === 0) {
+    await spendSurplus(budget);
     return { ...base, dispatched: 0, reason: "no dispatchable items" };
   }
 
@@ -235,6 +286,24 @@ export async function autoDrainBacklog(
 
   const dispatchedItems: AutoDrainResult["items"] = [];
   for (const wi of picked) {
+    // Under enforcement the agent is chosen before the claim, from providers
+    // the governor gave slots to. A pin to an ungoverned agent (no proxy
+    // budget behind it) is honoured; a pin to a governed provider with no
+    // slots waits for a later tick.
+    let budgetedAgent: string | undefined;
+    if (enforce) {
+      const override = wi.agentTypeOverride;
+      const overrideProvider = override ? AGENT_PROVIDER[override] : undefined;
+      if (override && (!overrideProvider || (remainingByProvider.get(overrideProvider) ?? 0) > 0)) {
+        budgetedAgent = override;
+      } else if (override) {
+        continue;
+      } else {
+        const healthy = verdicts.filter((v) => v.healthy).map((v) => v.agent);
+        budgetedAgent = nextBudgetedAgent(healthy.length ? healthy : agents, remainingByProvider);
+        if (!budgetedAgent) break;
+      }
+    }
     try {
       // Guard against a concurrent dispatch: only proceed if still dispatchable.
       const claimed = await db
@@ -255,7 +324,14 @@ export async function autoDrainBacklog(
             columns: { key: true },
           })
         : null;
+      // A Kanbanger-imported item runs under its human identifier (GMA-612):
+      // it names the branch (bob/GMA-612-<slug>), the session/PR title and
+      // the commit trailer, which is how Kanbanger and ForgeGraph tie the
+      // PR, CI and deploy back to the issue. The issue UUID in external_id
+      // used to be the identifier, so none of that evidence ever linked.
+      const trackerIdentifier = trackerIdentifierOf(wi);
       const identifier =
+        trackerIdentifier ??
         wi.externalId ??
         formatWorkItemIdentifier({
           projectKey: project?.key ?? null,
@@ -263,8 +339,17 @@ export async function autoDrainBacklog(
           id: wi.id,
         });
 
+      // A reviewer requested changes in Kanbanger and there was no open PR to
+      // repair: re-run the task with their note as part of its input.
+      const changes = readChangesRequested(wi.sourceMetadata);
+      const description =
+        changes?.prUrl === null
+          ? [wi.description?.trim(), changesRequestedPrompt(changes.note)].filter(Boolean).join("\n\n")
+          : wi.description;
+
       // Prefer a per-item agent override, else health-gated rotation.
       const agentType =
+        budgetedAgent ??
         wi.agentTypeOverride ??
         chooseAgent(agents, verdicts, today + dispatchedItems.length).agent;
 
@@ -274,16 +359,35 @@ export async function autoDrainBacklog(
           id: wi.id,
           identifier,
           title: wi.title,
-          description: wi.description,
+          description,
           workspaceId: wi.workspaceId ?? "",
           projectId: wi.projectId ?? "",
           assigneeId: null,
           labels: [],
           priority: 0,
+          externalId: wi.externalId,
+          externalProvider: wi.externalProvider,
+          ...(wi.externalUrl ? { url: wi.externalUrl } : {}),
         },
         { agentType },
       );
       dispatchedItems.push({ id: wi.id, identifier, agentType });
+      const dispatchedProvider = AGENT_PROVIDER[agentType];
+      if (enforce && dispatchedProvider) {
+        remainingByProvider.set(dispatchedProvider, (remainingByProvider.get(dispatchedProvider) ?? 0) - 1);
+      }
+      if (changes?.prUrl === null) {
+        await db
+          .update(workItems)
+          .set({
+            sourceMetadata: {
+              ...wi.sourceMetadata,
+              changesRequested: { ...changes, dispatchedAt: new Date().toISOString() },
+            },
+          })
+          .where(eq(workItems.id, wi.id))
+          .catch(() => undefined);
+      }
       // Mirror the claim to the tracker (Kanbanger card → In Progress +
       // comment). Best-effort; the mirror never blocks dispatch.
       await mirrorWorkItemEvent(db, wi.id, { kind: "claimed", agentType }).catch(
@@ -299,6 +403,8 @@ export async function autoDrainBacklog(
       console.error(`[auto-drain] dispatch failed for ${wi.id}:`, err);
     }
   }
+
+  await spendSurplus(budget - dispatchedItems.length);
 
   return {
     running,

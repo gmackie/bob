@@ -184,3 +184,48 @@ its userData directory. Connected origins have distinct persistent partitions.
 Page navigation cannot overwrite the supervisor title. The server-derived local
 capability marks host execution unavailable in the shell and prevents gateway
 transport construction; hosted/connected gateway behavior is unchanged.
+
+## Startup without Node or a package manager (PULSE-20)
+
+Staging emits `runtime-resources.json`; electron-builder must copy this alongside
+`bob-server`, `blder`, and `db-migrations`. The manifest checks launch JavaScript,
+the built app (server chunks and client assets), and migrations before local
+packaged startup. It does not hash every transitive dependency or replace OS signature validation. Missing or
+changed resources produce a named error with reinstall guidance. In packaged
+mode, inherited `BOB_NODE`, `BOB_VINEXT_CLI`, `BOB_BLDER_DIR`, migration paths and
+`BOB_DESKTOP_DEV` cannot redirect services to an old installation or dev tools.
+
+After building an unpacked app, run the non-publishing acceptance check:
+
+```sh
+node apps/desktop-bob/scripts/verify-bundled-startup.mjs \
+  '/Applications/Bob Test.app/Contents/Resources' \
+  '/Applications/Bob Test.app/Contents/MacOS/Bob'
+```
+
+On a machine without Node, use the bundled executable to run this same script:
+`ELECTRON_RUN_AS_NODE=1 /path/to/Bob verify-bundled-startup.mjs <resources> /path/to/Bob`.
+Copy the validation script alongside the build for that check.
+
+It launches the actual bob-server/Vinext services with the supplied Electron
+executable, an empty PATH, an isolated HOME and new data, then verifies proxy
+authentication and the real application auth/database endpoint. Save its JSON
+output with the build artifact. Repeat after moving/replacing the app in a path
+with spaces, using the new installation's executable and resources. This is an
+automated runtime check; also launch the app normally on a clean machine/VM with
+neither Node nor pnpm installed and record OS, architecture, artifact SHA, visible
+startup and shutdown results. An empty-PATH check is not a clean-machine GUI test.
+
+For a disposable copy of the app, delete `blder/dist/server/index.js` and launch
+normally: expect `Bob startup failed` naming that file and advising reinstall.
+Restore it, alter a byte and repeat for checksum corruption. Do not regenerate
+the manifest after damaging the copy. Unit tests cover both failure modes and
+resource relocation. Keep the issue open until final-package/clean-machine
+validation evidence is attached; a staged-resource check alone is insufficient.
+
+The package command copies the bundled shell and a dependency-free manifest to
+`.packaging/desktop-shell` after building. electron-builder uses that app root;
+server dependencies remain in `extraResources`. This avoids expanding the entire
+workspace dependency graph (which exhausted the collector's heap in validation).
+When adding a new shell dependency, ensure `tsdown.config.ts` bundles it before
+packaging; the isolated shell manifest deliberately contains no runtime packages.

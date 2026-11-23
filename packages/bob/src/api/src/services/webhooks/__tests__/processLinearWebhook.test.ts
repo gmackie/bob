@@ -93,6 +93,11 @@ vi.mock("@bob/execution/runtime/taskExecutor", () => ({
   executeTask: (...args: Parameters<typeof ExecuteTaskFn>) => mockExecuteTask(...args),
 }));
 
+const mockApplyChangesRequested = vi.fn<(...args: unknown[]) => Promise<unknown>>();
+vi.mock("../../tracker/changesRequested", () => ({
+  applyChangesRequested: (...args: unknown[]) => mockApplyChangesRequested(...args),
+}));
+
 const { processLinearWebhook } = await import("../processLinearWebhook");
 
 interface LinearWebhookLabel {
@@ -263,5 +268,40 @@ describe("processLinearWebhook", () => {
       "delivery-7",
       "DB connection failed",
     );
+  });
+
+  it("routes a Kanbanger `Changes requested:` comment to the work item", async () => {
+    mockApplyChangesRequested.mockResolvedValueOnce({ applied: true, workItemId: "wi-1", route: "repair" });
+    const payload = {
+      action: "create",
+      type: "Comment",
+      data: { id: "comment-1", body: "Changes requested: add a test", issueId: "linear-issue-1", issue: { id: "linear-issue-1", identifier: "BOB-42" } },
+    };
+
+    await processLinearWebhook("Comment", payload, "delivery-8");
+
+    expect(mockApplyChangesRequested).toHaveBeenCalledWith(mockDb, {
+      issueKeys: ["linear-issue-1", "linear-issue-1", "BOB-42"],
+      commentId: "comment-1",
+      body: "Changes requested: add a test",
+      source: "webhook",
+    });
+    expect(mockMarkDeliveryProcessed).toHaveBeenCalledWith("delivery-8");
+  });
+
+  it("does not strand an in_review item as in_progress when the reviewer bounces it", async () => {
+    const payload = makeIssuePayload({ action: "update", updatedFrom: { stateId: "review-state" } });
+    payload.data.state = { id: "state-2", name: "In Progress", type: "started" };
+    dbQueryMocks.workItemsFindFirst.mockResolvedValueOnce({
+      id: "work-item-1",
+      status: "in_review",
+      externalId: "linear-issue-1",
+      externalProvider: "linear",
+    });
+
+    await processLinearWebhook("Issue", payload, "delivery-9");
+
+    expect(dbUpdateMock).not.toHaveBeenCalled();
+    expect(mockMarkDeliveryProcessed).toHaveBeenCalledWith("delivery-9");
   });
 });

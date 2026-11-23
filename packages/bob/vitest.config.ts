@@ -11,8 +11,8 @@ import { defineConfig } from "vitest/config";
 // which need no Postgres). The nested packages run via their own turbo
 // targets (@bob/api#test, @bob/db#test, …).
 const NESTED_PACKAGES = [
-  "agents", "api", "auth", "chat", "ci", "config", "cookies", "db",
-  "execution", "git", "notifications", "observability", "projects", "secrets", "settings",
+  "agents", "api", "arcade", "auth", "chat", "ci", "config", "cookies", "db",
+  "execution", "git", "notifications", "observability", "projects", "sdlc-view", "secrets", "settings",
   "telemetry", "tenancy", "webhooks", "work-items", "ws",
 ];
 

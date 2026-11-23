@@ -18,13 +18,13 @@
   },
   "dependencies": {
     "@gmacko/bob-client": "workspace:*",
-    "better-sqlite3": "^11.0.0",
-    "drizzle-orm": "^0.45.2",
+    "better-sqlite3": "13.2.0",
+    "drizzle-orm": "0.45.4",
     "@bob/schema": "workspace:*"
   },
   "devDependencies": {
     "@bob/tsconfig": "workspace:*",
-    "@types/better-sqlite3": "^7.6.0",
-    "typescript": "catalog:"
+    "@types/better-sqlite3": "9.6.0",
+    "typescript": "7.0.2"
   }
 }

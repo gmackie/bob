@@ -2,7 +2,7 @@
 //
 // The tagged errors (`ProjectNotFoundError`, `ProjectSlugConflictError`)
 // come straight from the source package — they are already
-// `Schema.TaggedErrorClass` instances, so they can be used directly as
+// `Schema.TaggedError` instances, so they can be used directly as
 // the `error:` field without re-declaring them here.
 //
 // Procedures do NOT take `tenantId` in their payload — the handler reads
@@ -23,7 +23,7 @@
 //
 // Phase 7B-4B Task 8: Added 6 gitProvider RPCs + 7 git RPCs — 56 total.
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 import {
   ProjectNotFoundError,

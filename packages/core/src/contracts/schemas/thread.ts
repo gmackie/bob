@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Schema, Effect } from "effect";
 
 import { WireTimestamp } from "./wire-timestamp.js";
 
@@ -18,7 +18,7 @@ export type Thread = typeof Thread.Type;
 
 export const CreateThreadInput = Schema.Struct({
   title: Schema.String.check(Schema.isMinLength(1)).check(Schema.isMaxLength(256)),
-  tags: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
+  tags: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.sync(() => []))),
 });
 
 export const UpdateThreadStatusInput = Schema.Struct({

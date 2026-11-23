@@ -1,6 +1,11 @@
 import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
-import { expoClient } from "@better-auth/expo/client";
+import {
+  expoClient,
+  getCookie as formatSessionCookie,
+  storageAdapter,
+} from "@better-auth/expo/client";
+import { magicLinkClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
 import { getAuthBaseUrl } from "~/config/env";
@@ -14,6 +19,7 @@ import { getMobileAuthScheme } from "./oauth";
 const realAuthClient = createAuthClient({
   baseURL: getAuthBaseUrl(),
   plugins: [
+    magicLinkClient(),
     expoClient({
       scheme: getMobileAuthScheme(Constants.expoConfig?.scheme),
       storagePrefix: "bob",
@@ -52,3 +58,15 @@ function createDevAuthClient() {
 export const authClient = isDevAuthBypassEnabled()
   ? createDevAuthClient()
   : realAuthClient;
+
+// better-auth 1.7 made `authClient.getCookie()` async. Request-header builders
+// here are synchronous, so read the same (chunked) cookie record the expo
+// plugin maintains through its sync storage path. `bob_cookie` is the plugin's
+// `${storagePrefix}_cookie` key.
+const sessionCookieStorage = storageAdapter(SecureStore);
+
+/** The session cookie header value, read synchronously ("" when signed out). */
+export function getSessionCookie(): string {
+  if (isDevAuthBypassEnabled()) return getDevAuthBypassCookie();
+  return formatSessionCookie(sessionCookieStorage.getItem("bob_cookie"));
+}

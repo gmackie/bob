@@ -164,10 +164,10 @@ describe("Planning webhook routing", () => {
       eventType: "state",
       // vitest's expect.objectContaining always returns `any` per its own
       // type declarations, regardless of generic argument.
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      
       payload: expect.objectContaining({
         workflowStatus: "working",
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- same vitest any-return as above
+         // same vitest any-return as above
         resolution: expect.objectContaining({
           commentId: "comment-1",
           source: "planning_comment",
@@ -228,7 +228,7 @@ describe("Planning webhook routing", () => {
       eventType: "external_reply",
       // vitest's expect.objectContaining always returns `any` per its own
       // type declarations, regardless of generic argument.
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      
       payload: expect.objectContaining({
         type: "planning_comment_late",
         commentId: "comment-2",
@@ -288,7 +288,7 @@ describe("Planning webhook routing", () => {
       eventType: "state",
       // vitest's expect.objectContaining always returns `any` per its own
       // type declarations, regardless of generic argument.
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      
       payload: expect.objectContaining({
         workflowStatus: "working",
         source: "planning_comment",

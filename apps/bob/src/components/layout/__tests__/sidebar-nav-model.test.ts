@@ -66,8 +66,11 @@ describe("sidebar nav model", () => {
     expect(getSidebarUtilityItems().map((item) => item.label)).toEqual([
       "Onboarding",
       "Discovery",
+      "Executions",
       "Pull Requests",
+      "SDLC",
       "Nodes",
+      "Budget",
       "Hermes",
       "Settings",
     ]);

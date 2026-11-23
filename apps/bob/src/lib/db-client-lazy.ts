@@ -15,18 +15,52 @@ type DatabaseClient = ReturnType<typeof drizzle<typeof schema>>;
 
 const als = new AsyncLocalStorage<DatabaseClient>();
 
-export function createDbClient(databaseUrl: string, isHyperdrive: boolean): DatabaseClient {
+/** A drizzle client and a way to close its connection. */
+export interface ClosableDb {
+  db: DatabaseClient;
+  end: (options: { timeout: number }) => Promise<void>;
+}
+
+function openDb(databaseUrl: string, isHyperdrive: boolean): ClosableDb {
   const client = postgres(databaseUrl, {
     ssl: isHyperdrive ? false : "require",
     max: 1,
     prepare: !isHyperdrive,
   });
-  return drizzle(tracePostgres(client), { schema, casing: "snake_case" });
+  return {
+    db: drizzle(tracePostgres(client), { schema, casing: "snake_case" }),
+    end: (options) => client.end(options),
+  };
+}
+
+export function createDbClient(databaseUrl: string, isHyperdrive: boolean): DatabaseClient {
+  return openDb(databaseUrl, isHyperdrive).db;
 }
 
 export function runWithDb<T>(databaseUrl: string, isHyperdrive: boolean, fn: () => T): T {
   const client = createDbClient(databaseUrl, isHyperdrive);
   return als.run(client, fn);
+}
+
+/**
+ * runWithDb for a long-lived isolate (a Durable Object), which, unlike a request, is not
+ * torn down when the work ends: the connection is closed after `fn` settles, success or
+ * error. Request paths keep runWithDb. `open` is for tests.
+ */
+export async function runWithDbClosing<T>(
+  databaseUrl: string,
+  isHyperdrive: boolean,
+  fn: () => Promise<T>,
+  open: (databaseUrl: string, isHyperdrive: boolean) => ClosableDb = openDb,
+): Promise<T> {
+  const { db: client, end } = open(databaseUrl, isHyperdrive);
+  try {
+    return await als.run(client, fn);
+  } finally {
+    await end({ timeout: 5 }).catch((error: unknown) => {
+      console.warn("[db] closing the connection failed:", error instanceof Error ? error.message : error);
+    });
+  }
 }
 
 function getDb(): DatabaseClient {

@@ -159,7 +159,7 @@ it("encodes denied filesystem access using the declared Effect RPC error contrac
 });
 
 it("passes the real lifted filesystem RPC payload to an authorized local operator", async () => {
-  const { Effect, ServiceMap } = await import("effect");
+  const { Effect, Context } = await import("effect");
   const { CurrentUser } = await import("@gmacko/core/rpc/context");
   const { GmackoDb } = await import("@gmacko/core/db");
   const { makeAgentHandlers } = await import("../../rpc-layers/agent");
@@ -169,27 +169,27 @@ it("passes the real lifted filesystem RPC payload to an authorized local operato
   // Until capability injection is wired this fails closed; the positive
   // outcome pins both the server composition service and payload adapter.
   const { LocalFilesystemAuthority } = await import("../local-filesystem-authority");
-  const services = ServiceMap.empty().pipe(
-    ServiceMap.add(GmackoDb, {} as never),
-    ServiceMap.add(CurrentUser, { userId: ctx.userId } as never),
-    ServiceMap.add(LocalFilesystemAuthority, { kind: "local-operator", userId: ctx.userId, roots: [root] }),
+  const services = Context.empty().pipe(
+    Context.add(GmackoDb, {} as never),
+    Context.add(CurrentUser, { userId: ctx.userId } as never),
+    Context.add(LocalFilesystemAuthority, { kind: "local-operator", userId: ctx.userId, roots: [root] }),
   );
   const handler = liftHandlers(makeAgentHandlers)["agent.filesystem.read"];
-  const effect = handler({ path: path.join(root, "local.txt") } as never).pipe(Effect.provideServices(services));
+  const effect = handler({ path: path.join(root, "local.txt") } as never).pipe(Effect.provideContext(services));
   await expect(Effect.runPromise(effect as EffectType.Effect<unknown, unknown, never>)).resolves.toEqual({ content: "local content" });
 });
 
 it("propagates server-granted filesystem authority through tRPC and denies hosted callers", async () => {
   const { appRouter } = await import("../../root");
-  type Context = Parameters<typeof appRouter.createCaller>[0];
+  type CallerContext = Parameters<typeof appRouter.createCaller>[0];
   const root = makeTempDir();
   const file = path.join(root, "local.txt");
   writeFileSync(file, "local content");
   const base = { db: {}, session: { user: { id: ctx.userId } }, apiKeyAuth: null };
-  const denied = appRouter.createCaller(base as unknown as Context);
+  const denied = appRouter.createCaller(base as unknown as CallerContext);
   await expect(denied.filesystem.read({ path: file })).rejects.toMatchObject({ code: "FORBIDDEN" });
-  const local = appRouter.createCaller({ ...base, filesystem: { kind: "local-operator", userId: ctx.userId, roots: [root] } } as unknown as Context);
+  const local = appRouter.createCaller({ ...base, filesystem: { kind: "local-operator", userId: ctx.userId, roots: [root] } } as unknown as CallerContext);
   await expect(local.filesystem.read({ path: file })).resolves.toEqual({ content: "local content" });
-  const other = appRouter.createCaller({ ...base, filesystem: { kind: "local-operator", userId: "different-user", roots: [root] } } as unknown as Context);
+  const other = appRouter.createCaller({ ...base, filesystem: { kind: "local-operator", userId: "different-user", roots: [root] } } as unknown as CallerContext);
   await expect(other.filesystem.read({ path: file })).rejects.toMatchObject({ code: "FORBIDDEN" });
 });

@@ -455,6 +455,7 @@ export default function WorkItemDetailScreen() {
             onOpenSession={(sessionId) =>
               router.push(getSessionHref(sessionId, workItem.workspaceId))
             }
+            onOpenRun={(href) => router.push(href)}
           />
         ) : null}
 

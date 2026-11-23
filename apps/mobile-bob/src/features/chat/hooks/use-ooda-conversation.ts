@@ -16,7 +16,7 @@ import { v4 as uuidv4 } from "uuid";
 import type { OodaOutboxItem } from "../ooda-outbox";
 import type { OodaMessageTimelineItem } from "../ooda-timeline";
 import { env } from "~/config/env";
-import { authClient } from "~/utils/auth";
+import { getSessionCookie } from "~/utils/auth";
 import { getMobileAuthHeaders } from "~/utils/auth-headers";
 import { isDevAuthBypassEnabled } from "~/utils/dev-auth-bypass";
 import {
@@ -58,7 +58,7 @@ export function useOodaConversation() {
         baseUrl: env.oodaApiUrl,
         headers: () =>
           getMobileAuthHeaders(
-            authClient.getCookie(),
+            getSessionCookie(),
             isDevAuthBypassEnabled(),
           ),
       }),

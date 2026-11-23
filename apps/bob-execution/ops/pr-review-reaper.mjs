@@ -15,7 +15,7 @@
 //   REAPER_STATE    (default ~/.bob-pr-reaper-seen.json)
 
 import { execFile } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 

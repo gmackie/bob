@@ -1,70 +1,39 @@
-import { Redirect, router, useLocalSearchParams } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import type { ServerEvent } from "@bob/ws";
+import { Redirect, router, Stack, useLocalSearchParams } from "expo-router";
 
 import { AgentThreadView } from "~/components/tablet/AgentThreadView";
 import { Screen } from "~/components/ui";
-import {
-  getMobileDetailBackAction,
-  getMobileTasksDashboardHref,
-} from "~/features/tablet/navigation";
+import { SessionSummaryView } from "~/features/sessions/SessionSummaryView";
+import { useSessionSummary } from "~/features/sessions/use-session-summary";
+import { getMobileTasksDashboardHref } from "~/features/tablet/navigation";
+import { getMobileOutcomeWorkItemHref } from "~/features/tablet/work-item-entry";
 import { useGateway } from "~/hooks/use-gateway";
 import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { colors } from "~/lib/colors";
+import { hapticSelection } from "~/lib/haptics";
 import { authClient } from "~/utils/auth";
-import { LiveChecksCard } from "~/features/runs/LiveChecksCard";
 
 /**
- * A run is awaiting approval when a permission_request event has no matching
- * permission_resolved. The latest unresolved request drives the banner;
- * approving/denying resolves it via the gateway → daemon → CLI.
+ * A session on the phone.
  *
- * Pure and module-scoped: the React Compiler (experiments.reactCompiler, see
- * app.config.js) memoizes the call site for us, so a manual useMemo here is
- * redundant — and unpreservable, which is what tripped
- * react-hooks/preserve-manual-memoization ("memoized in source but not in
- * compilation output").
+ * Opens on the summary: status, what the agent is doing or how it ended, what
+ * it is waiting on, the checks, its last message and the moments that
+ * mattered. The full event stream is one tap away behind "Thread"; it used to
+ * be the only thing here, with the raw session id for a title, so reviewing a
+ * run that finished while you were away meant reading it end to end.
  */
-export function derivePendingPermission(
-  events: ServerEvent[],
-): { requestId: string; toolName?: string } | null {
-  const resolved = new Set<string>();
-  let latestRunStatus: string | undefined;
-  for (const event of events) {
-    if (event.eventType === ("permission_resolved" as never)) {
-      const requestId = (event.payload as { requestId?: string }).requestId;
-      if (requestId) resolved.add(requestId);
-    } else if (event.eventType === ("status_change" as never)) {
-      const status = (event.payload as { status?: string }).status;
-      if (status) latestRunStatus = status;
-    }
-  }
-  // Once the run leaves "blocked" (resumed or ended), any lingering request is
-  // stale — clear the banner. status_change events are always replayed even
-  // when chatty output is truncated, so this stays correct.
-  if (latestRunStatus !== undefined && latestRunStatus !== "blocked") {
-    return null;
-  }
-  // The newest UNRESOLVED request drives the banner. Keep scanning past a
-  // resolved newest request to surface an older still-pending one (the adapter
-  // supports concurrent pending prompts) instead of stopping early.
-  for (let i = events.length - 1; i >= 0; i--) {
-    const event = events[i];
-    if (!event) continue;
-    if (event.eventType === ("permission_request" as never)) {
-      const payload = event.payload as { requestId?: string; toolName?: string };
-      if (payload.requestId && !resolved.has(payload.requestId)) {
-        return { requestId: payload.requestId, toolName: payload.toolName };
-      }
-    }
-  }
-  return null;
-}
+
+type SessionView = "summary" | "thread";
+
+const VIEWS: readonly { key: SessionView; label: string }[] = [
+  { key: "summary", label: "Summary" },
+  { key: "thread", label: "Thread" },
+];
 
 export default function ExecutionSessionScreen() {
-  const { data: session, isPending } = authClient.useSession();
-  const params = useLocalSearchParams<{ sessionId: string }>();
+  const { data: authSession, isPending } = authClient.useSession();
+  const params = useLocalSearchParams<{ sessionId: string; view?: string }>();
   const rawSessionIdParam: unknown = params.sessionId;
   const sessionId = Array.isArray(rawSessionIdParam)
     ? (rawSessionIdParam[0] as string | undefined)
@@ -72,6 +41,7 @@ export default function ExecutionSessionScreen() {
   const gateway = useGateway();
   const { selectedWorkspaceId } = useSelectedWorkspace();
   const {
+    sessions,
     selectSession,
     selectedSessionEvents,
     sendInput,
@@ -79,6 +49,9 @@ export default function ExecutionSessionScreen() {
     approve,
     reportRunView,
   } = gateway;
+  const [view, setView] = useState<SessionView>(
+    params.view === "thread" ? "thread" : "summary",
+  );
 
   useEffect(() => {
     if (!sessionId) return;
@@ -89,7 +62,13 @@ export default function ExecutionSessionScreen() {
     return () => selectSession(null);
   }, [selectSession, reportRunView, sessionId]);
 
-  const pendingPermission = derivePendingPermission(selectedSessionEvents);
+  const { summary, resolveAwaitingInput, isResolvingInput } = useSessionSummary(
+    {
+      sessionId: sessionId ?? "",
+      gatewaySessions: sessions,
+      events: selectedSessionEvents,
+    },
+  );
 
   if (isPending) {
     return (
@@ -99,7 +78,7 @@ export default function ExecutionSessionScreen() {
     );
   }
 
-  if (!session) {
+  if (!authSession) {
     return <Redirect href="/" />;
   }
 
@@ -107,84 +86,88 @@ export default function ExecutionSessionScreen() {
     return <Redirect href={getMobileTasksDashboardHref(selectedWorkspaceId)} />;
   }
 
-  const backAction = getMobileDetailBackAction({
-    source: "execution-session",
-    workspaceId: selectedWorkspaceId,
-  });
+  const liveSession = sessions.find(
+    (candidate) => candidate.sessionId === sessionId,
+  );
+  const workItemId = liveSession?.workItemId ?? null;
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="bg-background flex-1">
+      <Stack.Screen options={{ title: summary.title }} />
       <View
-        className="flex-row items-center justify-between px-4 py-3"
+        className="flex-row items-center justify-between gap-3 px-4 py-2"
         style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
       >
-        <View className="min-w-0 flex-1 pr-4">
-          <Text className="text-xs uppercase tracking-[0.18em] text-muted">
-            Session Output
-          </Text>
-          <Text className="mt-1 text-sm font-semibold text-foreground" numberOfLines={1}>
-            {sessionId}
-          </Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={backAction.accessibilityLabel}
-          onPress={() => router.replace(backAction.href)}
-          className="rounded-md px-3 py-2 active:opacity-70"
-          style={{ backgroundColor: colors.secondary }}
-        >
-          <Text className="text-sm font-semibold text-foreground">{backAction.label}</Text>
-        </Pressable>
-      </View>
-      {pendingPermission ? (
         <View
-          className="px-4 py-3"
-          style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
-          accessibilityRole="alert"
+          className="flex-row rounded-lg p-1"
+          style={{ backgroundColor: colors.secondary }}
+          accessibilityRole="tablist"
         >
-          <Text className="text-xs uppercase tracking-[0.18em] text-muted">
-            Approval needed
-          </Text>
-          <Text className="mt-1 text-sm text-foreground">
-            {pendingPermission.toolName
-              ? `The agent wants to use ${pendingPermission.toolName}.`
-              : "The agent is waiting for your approval."}
-          </Text>
-          <View className="mt-3 flex-row gap-3">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Approve the pending request"
-              onPress={() => approve(sessionId, pendingPermission.requestId, "allow")}
-              className="flex-1 items-center rounded-md px-3 py-2 active:opacity-70"
-              style={{ backgroundColor: colors.primary }}
-            >
-              <Text className="text-sm font-semibold text-background">Approve</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Deny the pending request"
-              onPress={() => approve(sessionId, pendingPermission.requestId, "deny")}
-              className="flex-1 items-center rounded-md px-3 py-2 active:opacity-70"
-              style={{ backgroundColor: colors.secondary }}
-            >
-              <Text className="text-sm font-semibold text-foreground">Deny</Text>
-            </Pressable>
-          </View>
+          {VIEWS.map((item) => {
+            const isActive = view === item.key;
+            return (
+              <Pressable
+                key={item.key}
+                testID={`session-view-${item.key}`}
+                accessibilityRole="tab"
+                accessibilityLabel={item.label}
+                accessibilityState={{ selected: isActive }}
+                onPress={() => {
+                  hapticSelection();
+                  setView(item.key);
+                }}
+                className="rounded-md px-4 py-1.5 active:opacity-70"
+                style={{
+                  backgroundColor: isActive ? colors.primary : "transparent",
+                  minHeight: 32,
+                  justifyContent: "center",
+                }}
+              >
+                <Text
+                  className="text-xs font-semibold"
+                  style={{ color: isActive ? colors.background : colors.muted }}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
-      ) : null}
-      {/* The lights, above the transcript. On a phone this is what a person
-          is actually watching: a phase goes amber while it runs and green when
-          it passes, without them touching anything. Reading it out of the
-          scrolling thread is not the same job. */}
-      <View className="px-4">
-        <LiveChecksCard events={selectedSessionEvents} />
       </View>
-      <AgentThreadView
-        sessionId={sessionId}
-        events={selectedSessionEvents}
-        onSendInput={sendInput}
-        onStopSession={stopSession}
-      />
+
+      {view === "summary" ? (
+        <SessionSummaryView
+          testID="session-summary"
+          summary={summary}
+          onApprove={(requestId, decision) =>
+            approve(sessionId, requestId, decision)
+          }
+          onResolveAwaitingInput={resolveAwaitingInput}
+          isResolvingInput={isResolvingInput}
+          onStop={() => stopSession(sessionId)}
+          onOpenThread={() => setView("thread")}
+          onOpenWorkItem={
+            workItemId
+              ? () =>
+                  router.push(
+                    getMobileOutcomeWorkItemHref(
+                      workItemId,
+                      selectedWorkspaceId,
+                    ),
+                  )
+              : undefined
+          }
+        />
+      ) : (
+        <AgentThreadView
+          sessionId={sessionId}
+          events={selectedSessionEvents}
+          onSendInput={sendInput}
+          onStopSession={stopSession}
+          title={summary.title}
+          canStop={summary.isActive}
+        />
+      )}
     </View>
   );
 }

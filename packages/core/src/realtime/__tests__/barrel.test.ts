@@ -27,7 +27,7 @@ describe("@gmacko/realtime barrel", () => {
   });
 
   it("re-exports makeRealtimeChannelTag, layerRealtime, and tagged errors", () => {
-    // Tag factory is callable and produces a `ServiceMap.Service` tag (a
+    // Tag factory is callable and produces a `Context.Service` tag (a
     // callable / function-shaped value in Effect 4). Identity / `.key`
     // semantics are exercised in `channel.test.ts`; here we only assert the
     // symbol resolves through the barrel.

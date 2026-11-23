@@ -51,6 +51,10 @@ import {
   normalizeProviderId,
   parseProviderStream,
 } from "../providers/runtime.js";
+import {
+  extractPlanningDrafts,
+  PLANNING_DRAFT_INSTRUCTION,
+} from "../planning/extract-plan-drafts.js";
 import { abortable } from "./abortable.js";
 import { DurableJournal } from "./durable-journal.js";
 import { claudeOracleArgs } from "./oracle-args.js";
@@ -820,9 +824,7 @@ function buildPrompt(session: ServerSessionAvailable): string {
   }
 
   if (session.sessionType === "planning") {
-    parts.push(
-      "\n\nAnalyze the codebase and create a structured plan with draft tasks.",
-    );
+    parts.push(`\n\n${PLANNING_DRAFT_INSTRUCTION}`);
   } else {
     parts.push("\n\nImplement this task. Create a commit when done.");
   }
@@ -1022,6 +1024,12 @@ function runAgent(
       );
 
       if (code === 0) {
+        if (session.sessionType === "planning") {
+          const tasks = extractPlanningDrafts(output);
+          if (tasks.length > 0) {
+            sendEvent(sessionId, "planning_drafts", "agent", { tasks });
+          }
+        }
         sendEvent(sessionId, "message_final", "agent", {
           content: output.slice(-2000),
           role: "assistant",

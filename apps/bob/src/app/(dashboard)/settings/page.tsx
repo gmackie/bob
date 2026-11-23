@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
@@ -51,6 +52,7 @@ export default function SettingsPage() {
         </CollapsibleSection>
         <CollapsibleSection title="Integrations" sectionId="integrations" defaultOpen forceOpen={openSection === "integrations"}>
           <IntegrationsSection />
+          <Link href="/settings/bizpulse" className="underline">Connect BizPulse</Link>
         </CollapsibleSection>
         <CollapsibleSection title="Git Providers" sectionId="git-providers" defaultOpen>
           <GitProvidersSection />

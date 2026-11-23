@@ -1015,6 +1015,8 @@ export interface TabletSidebarProps {
   onOpenSession?: (id: string) => void;
   onRefresh?: () => void;
   onOpenSettings?: () => void;
+  /** Bob Arcade: the live SDLC floor (BOB-92). */
+  onOpenArcade?: () => void;
 }
 
 export function TabletSidebar({
@@ -1033,6 +1035,7 @@ export function TabletSidebar({
   onOpenSession,
   onRefresh,
   onOpenSettings,
+  onOpenArcade,
 }: TabletSidebarProps) {
   const { workspace: primaryWorkspace } = useSelectedWorkspace();
   const workItemsQuery = useQuery(
@@ -1154,6 +1157,24 @@ export function TabletSidebar({
         <OodaConversationsTab />
       ) : null}
 
+      {onOpenArcade ? (
+        <View style={{ borderTopWidth: 1, borderTopColor: colors.border }}>
+          <Pressable
+            testID="tablet-sidebar-arcade"
+            onPress={onOpenArcade}
+            accessibilityRole="button"
+            accessibilityLabel="Open the Arcade: watch agents work the SDLC live"
+            className="flex-row items-center justify-between px-4 py-3 active:opacity-70"
+          >
+            <Text className="text-sm font-semibold" style={{ color: colors.accent }}>
+              ▶ Arcade
+            </Text>
+            <Text className="text-xs" style={{ color: colors.muted }}>
+              Live SDLC floor
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
       {onOpenSettings ? (
         <View style={{ borderTopWidth: 1, borderTopColor: colors.border }}>
           <Pressable

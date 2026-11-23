@@ -13,23 +13,24 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bob/api": "workspace:*",
     "@bob/db": "workspace:*",
     "@bob/notifications": "workspace:*",
     "@bob/observability": "workspace:*",
     "@bob/ws": "workspace:*",
-    "@neondatabase/serverless": "^0.10.4",
-    "drizzle-orm": "^0.45.2",
-    "pg": "^8.17.1",
-    "ws": "catalog:",
+    "@neondatabase/serverless": "1.2.1",
+    "drizzle-orm": "0.45.4",
+    "pg": "8.23.1",
+    "ws": "8.23.0",
     "@gmacko/core": "workspace:*"
   },
   "devDependencies": {
     "@bob/tsconfig": "workspace:*",
-    "@types/node": "catalog:",
-    "@types/ws": "catalog:",
-    "tsup": "catalog:",
-    "tsx": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "^4.1.11"
+    "@types/node": "26.6.6",
+    "@types/ws": "8.18.2",
+    "tsup": "9.0.0",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.1.1"
   }
 }

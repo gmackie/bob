@@ -16,6 +16,7 @@ import {
 import { Input } from "@gmacko/core/ui/input";
 import { Textarea } from "@gmacko/core/ui/textarea";
 
+import { track } from "~/lib/analytics";
 import { useBobQueryClient } from "~/rpc/react";
 
 interface CreateProjectDialogProps {
@@ -103,6 +104,7 @@ export function CreateProjectDialog({
   const createProject = useMutation(
     bobQuery("project.create").mutationOptions({
       onSuccess: () => {
+        track("project_created", { source: "manual" });
         toast("Project created");
         onOpenChange(false);
         resetForm();

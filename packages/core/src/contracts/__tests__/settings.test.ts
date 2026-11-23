@@ -7,7 +7,7 @@
 //   3. Sub-namespace coverage: general (13), cookies (5), system (2).
 import { describe, expect, it } from "vitest";
 import { Effect, Schema } from "effect";
-import { RpcTest } from "effect/unstable/rpc";
+import { RpcTest } from "effect/rpc";
 
 import {
   SettingsRpc,

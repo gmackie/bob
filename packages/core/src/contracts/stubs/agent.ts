@@ -9,7 +9,7 @@
 //   - `RpcGroup.toLayer(handlers)` builds the server-side Layer consumed by
 //     `RpcServer.layerHttp`. Streaming handlers may return `Stream<A, E, R>`
 //     directly OR `Effect<Queue.Dequeue<A, E | Cause.Done>, EX, R>` per
-//     `effect/unstable/rpc/Rpc.d.ts:277`. This stub returns `Stream` directly
+//     `effect/rpc/Rpc.d.ts:277`. This stub returns `Stream` directly
 //     (simplest shape — no queue bookkeeping needed).
 //   - `RpcGroup.of(handlers)` returns the raw handler record typed against
 //     the group. Exposing both the Layer (for server mounting) and the raw

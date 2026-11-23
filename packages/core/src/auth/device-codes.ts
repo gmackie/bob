@@ -20,7 +20,7 @@
 // surface.
 import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { Effect, Layer, ServiceMap } from "effect";
+import { Effect, Layer, Context } from "effect";
 
 import { GmackoDb } from "@gmacko/core/db";
 import { deviceCodes as deviceCodesTable } from "@gmacko/core/db/schema/device-codes";
@@ -63,7 +63,7 @@ export interface DeviceCodesShape {
   ) => Effect.Effect<PollResult, InvalidDeviceCodeError>;
 }
 
-export class DeviceCodes extends ServiceMap.Service<DeviceCodes, DeviceCodesShape>()(
+export class DeviceCodes extends Context.Service<DeviceCodes, DeviceCodesShape>()(
   "@gmacko/auth/DeviceCodes",
 ) {}
 

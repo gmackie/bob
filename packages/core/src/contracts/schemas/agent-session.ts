@@ -152,7 +152,7 @@ export type WorkflowStateWire = Schema.Schema.Type<typeof WorkflowStateSchema>;
 // --- Errors -----------------------------------------------------------------
 
 /** Raised when a session lease is already held by another gateway. */
-export class SessionLeaseConflictError extends Schema.TaggedErrorClass<SessionLeaseConflictError>()(
+export class SessionLeaseConflictError extends Schema.TaggedError<SessionLeaseConflictError>()(
   "SessionLeaseConflictError",
   {
     sessionId: Schema.String,

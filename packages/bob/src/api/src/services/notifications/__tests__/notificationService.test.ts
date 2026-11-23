@@ -93,6 +93,26 @@ describe("notificationService", () => {
     expect(result.id).toBe("notif-1");
   });
 
+  it("pushes pushBody instead of the inbox body when given, and keeps body in the inbox row", async () => {
+    sendPushNotification.mockResolvedValueOnce({ success: true, sent: 1, failed: 0, errors: [] });
+
+    await createInAppNotification(db, {
+      userId: "user-2",
+      type: "work_item_commented",
+      title: "BOB-71 needs your answer",
+      body: "gmackie/bob · plan p: rotate the prod key?",
+      pushBody: "gmackie/bob · open Bob to answer",
+    });
+
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({ body: "gmackie/bob · plan p: rotate the prod key?" }),
+    );
+    expect(sendPushNotification).toHaveBeenCalledWith(
+      "user-2",
+      expect.objectContaining({ body: "gmackie/bob · open Bob to answer" }),
+    );
+  });
+
   it("skips push when push:false", async () => {
     await createInAppNotification(db, {
       userId: "user-2",
