@@ -755,6 +755,18 @@ export default Sentry.withSentry(
               );
               return apiKeyAuth ? { userId: apiKeyAuth.userId, permissions: apiKeyAuth.permissions } : null;
             },
+            async (ticket) => {
+              const { connectionString, isHyperdrive } =
+                getHyperdriveConnectionString(runtimeEnv);
+              return runWithDb(connectionString, isHyperdrive, async () => {
+                const [{ db }, { makeOAuthStore }, { consumeSdlcTicket }] = await Promise.all([
+                  import("@bob/db/client"),
+                  import("../src/server/mcp/store"),
+                  import("../src/server/mcp/sdlc-ticket"),
+                ]);
+                return consumeSdlcTicket(makeOAuthStore(db), ticket);
+              });
+            },
           );
         }
 

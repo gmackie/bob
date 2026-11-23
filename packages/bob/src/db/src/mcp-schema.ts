@@ -2,6 +2,7 @@ import { users } from "@gmacko/core/db/schema/auth";
 import { index, pgTable } from "drizzle-orm/pg-core";
 
 import { workspaces } from "@bob/schema/tenancy";
+import { workItems } from "@bob/schema/work-items";
 
 export const mcpOAuthClients = pgTable("mcp_oauth_clients", (t) => ({
   id: t.text().primaryKey(),
@@ -49,3 +50,20 @@ export const mcpOAuthCredentials = pgTable(
     index("mcp_oauth_credentials_grant_idx").on(t.grantId),
   ],
 );
+/** A person's approval to dispatch a work item from the MCP planning review. */
+export const mcpDispatchApprovals = pgTable("mcp_dispatch_approvals", (t) => ({
+  workItemId: t
+    .uuid()
+    .primaryKey()
+    .references(() => workItems.id, { onDelete: "cascade" }),
+  workspaceId: t
+    .uuid()
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  approvedBy: t
+    .text()
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  approvedAt: t.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  dispatchedAt: t.timestamp({ withTimezone: true }),
+}));

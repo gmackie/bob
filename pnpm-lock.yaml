@@ -421,6 +421,9 @@ importers:
       '@vitejs/plugin-rsc':
         specifier: 0.5.27
         version: 0.5.27(react-dom@19.2.8(react@19.2.8))(react-server-dom-webpack@19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.106.2(esbuild@0.28.1)))(react@19.2.8)(vite@8.0.16(@types/node@22.19.17)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.0))
+      esbuild:
+        specifier: 0.28.1
+        version: 0.28.1
       react-server-dom-webpack:
         specifier: 19.2.8
         version: 19.2.8(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(webpack@5.106.2(esbuild@0.28.1))

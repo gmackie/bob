@@ -312,6 +312,40 @@ describe("handleSdlcRoute: native clients (device API key)", () => {
   });
 });
 
+describe("handleSdlcRoute: MCP Apps views (single-use ticket)", () => {
+  const ticketed = (ticket: string, origin = "null") =>
+    req(`/api/sdlc/ws?ticket=${ticket}`, { headers: { upgrade: "websocket", origin, cookie: "session=s" } });
+  const tickets = (valid: Record<string, string>) => {
+    const left = new Map(Object.entries(valid));
+    return vi.fn(async (ticket: string) => {
+      const user = left.get(ticket) ?? null;
+      left.delete(ticket);
+      return user;
+    });
+  };
+  const call = (request: Request, e: FakeEnv, consume: (ticket: string) => Promise<string | null>, session = vi.fn(async () => "u1")) =>
+    handleSdlcRoute(request, e as unknown as SdlcRouteEnv, session, async () => null, consume);
+
+  it("accepts a valid ticket from a sandboxed frame's opaque Origin once, forwarding only its user", async () => {
+    const e = env();
+    const consume = tickets({ t1: "u3" });
+    const session = vi.fn(async () => "u1");
+    expect((await call(ticketed("t1"), e, consume, session)).status).toBe(200);
+    expect(e.SDLC_EDGE.calls).toEqual([{ path: "/ws", method: "GET", body: "", upgrade: "websocket", cookie: null, user: "u3" }]);
+    expect((await call(ticketed("t1"), e, consume, session)).status).toBe(401);
+    expect(session).not.toHaveBeenCalled();
+  });
+  it("answers 401 to an unknown ticket and 403 to a ticket whose user is not on SDLC_VIEWER_USER_IDS", async () => {
+    const e = env();
+    expect((await call(ticketed("nope"), e, tickets({}))).status).toBe(401);
+    expect((await call(ticketed("t2"), e, tickets({ t2: "u2" }))).status).toBe(403);
+    expect(e.SDLC_EDGE.calls).toHaveLength(0);
+  });
+  it("without a ticket consumer (the default), a ticketed upgrade is 401", async () => {
+    expect((await route(ticketed("t1", ORIGIN), env(), "u1")).status).toBe(401);
+  });
+});
+
 describe("handleSdlcRoute: other paths", () => {
   it("answers 404 to an unknown /api/sdlc path", async () => {
     expect((await route(req("/api/sdlc/other"), env(), "u1")).status).toBe(404);

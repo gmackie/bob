@@ -7,10 +7,13 @@ import {
 import type { makeOAuth } from "./oauth";
 import { READ_SCOPE, WRITE_SCOPE } from "./oauth";
 import type { McpToolService } from "./tools";
+import type { makeApps } from "./apps";
+import { McpToolError } from "./errors";
 import type { OAuthGrant } from "./types";
 
 const MAX_BODY = 32_768;
-// Never return driver errors, stack traces, tokens or internal paths.
+// Never return driver errors, stack traces, tokens or internal paths; only an
+// McpToolError message, which is written for the caller.
 const FAILED =
   "Tool call failed. Check the tool arguments, granted scopes, and workspace access.";
 
@@ -30,6 +33,7 @@ export function makeMcpTransport(
   oauth: ReturnType<typeof makeOAuth>,
   tools: McpToolService,
   allowedOrigins: string[] = [],
+  apps?: ReturnType<typeof makeApps>,
 ) {
   const origin = new URL(oauth.resource).origin;
   return createMcpHandler<BobPrincipal>({
@@ -80,14 +84,18 @@ export function makeMcpTransport(
                     : { result: value },
                 isError: false,
               };
-            } catch {
+            } catch (e) {
               return {
-                content: [{ type: "text", text: FAILED }],
+                content: [
+                  { type: "text", text: e instanceof McpToolError ? e.message : FAILED },
+                ],
                 isError: true,
               };
             }
           },
         }),
       ),
+    // MCP Apps views: static HTML whose data comes back through tools/call.
+    ...(apps ? { resources: { list: () => apps.list(), read: (uri: string) => apps.read(uri) } } : {}),
   });
 }

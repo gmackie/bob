@@ -14,6 +14,11 @@ const KIND_ORDER: Record<BeatKind, number> = {
   "release.stage": 6,
   milestone: 7,
   "item.left": 8,
+  // Attempt beats never come from sdlcBeats; listed so the order is total.
+  "agent.activity": 9,
+  "agent.action": 10,
+  "ci.phase": 11,
+  "ci.green": 12,
 };
 
 const issueOf = (plan: PlanSnapshot | undefined, itemId: string) =>

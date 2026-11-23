@@ -30,6 +30,34 @@ return at most 100 recent entries, with optional `projectId` and `status` filter
 | `bob_get_work_item` | `bob:read` |
 | `bob_update_work_item` | `bob:write` |
 | `bob_add_comment` | `bob:write` |
+| `bob_workspace` | `bob:read` |
+| `bob_planning_review` | `bob:read` |
+| `bob_runs_list` | `bob:read` |
+| `bob_sdlc` | `bob:read` |
+| `bob_planning_approve` (view only) | `bob:write` |
+| `bob_planning_dispatch` | `bob:write` |
+| `bob_sdlc_connect` (view only) | `bob:write` |
+
+## Views (MCP Apps)
+
+Hosts that render MCP Apps get three `ui://` views, listed by `resources/list`:
+`ui://bob/workspace.html` (from `bob_workspace`), `ui://bob/planning-review.html`
+(from `bob_planning_review` and `bob_planning_dispatch`) and `ui://bob/sdlc.html`
+(from `bob_sdlc`). The T3 Code Bob plugin opens them as panels. They are bundled
+into `src/server/mcp/views/generated.ts`; after changing a view, run
+`pnpm --filter @bob/blder exec tsx scripts/build-mcp-views.ts`.
+
+Dispatch from the planning review needs a person's approval first:
+`bob_planning_approve` records it in `mcp_dispatch_approvals`, and
+`bob_planning_dispatch` spends it once. Tools marked view only declare
+`_meta.ui.visibility: ["app"]`; a host that ignores visibility can still hand
+them to a model. Dispatch is off unless `BOB_OODA_DISPATCH_ENABLED=true`, the
+same switch as REST dispatch.
+
+The SDLC view opens `/api/sdlc/ws` itself. Its sandboxed frame has no session
+cookie, so `bob_sdlc_connect` mints a 60-second single-use ticket for the socket
+URL; the user must still be on `SDLC_VIEWER_USER_IDS`. The view's resource
+declares the edge origin in `_meta.ui.csp.connectDomains`.
 
 MCP protocol versions: `2025-11-25`, `2025-06-18`, and `2025-03-26`.
 POST requests require `Accept: application/json, text/event-stream`. Responses
@@ -44,7 +72,8 @@ tools will need additional support.
 
 ## Operations
 
-Apply `packages/bob/src/db/drizzle/0037_mcp_oauth.sql` through the existing Bob
+Apply `packages/bob/src/db/drizzle/0037_mcp_oauth.sql` and
+`0043_mcp_dispatch_approvals.sql` through the existing Bob
 guarded production migration runner (`pnpm --filter @bob/blder predeploy`) before deploying the Worker. The schema is additive. Set
 `FRONTEND_URL` to the canonical public origin; discovery and token audiences
 never trust request Host headers. Existing Bob session auth and Postgres are

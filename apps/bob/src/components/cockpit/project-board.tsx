@@ -35,63 +35,93 @@ function segments(row: BoardRow) {
 export function ProjectBoard({ board, selected, onSelect }: { board: Board; selected: string | null; onSelect: (row: BoardRow | null) => void }) {
   const max = Math.max(1, ...board.rows.map((r) => r.lanes.queue + r.active));
   return (
-    <div className="px-3 pb-2 font-mono text-[10px] tracking-widest text-[#8a7758]" aria-label="Projects board">
-      <div className="flex items-center gap-3 pb-1">
-        <span>
-          ALL PROJECTS · <b className="text-[12px] text-[#ffd27a]">{board.started}</b> STARTED
+    <div className="border-b border-[#292016] bg-[#14100b]/80 px-3 py-2 font-mono text-[10px] tracking-widest text-[#8a7758]" aria-label="Projects board">
+      <div className="flex flex-wrap items-center gap-3 pb-1.5">
+        <span className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#d4850a]" />
+          CONNECTED PROJECTS · <b className="text-[12px] text-[#ffd27a]">{board.started}</b> STARTED
         </span>
-        {board.failed ? <span className="text-[#ff6b6b]">{board.failed} RED</span> : null}
-        <span className="ml-auto">
-          STALE <b className="text-[12px]" style={{ color: STALE_COLOR }}>{board.stale}</b>
-        </span>
-        {selected ? (
-          <button type="button" onClick={() => onSelect(null)} className="rounded border border-[#6a5638] px-2 py-0.5 text-[#ffd27a] hover:brightness-125">
-            ALL PROJECTS
-          </button>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 pb-1 normal-case tracking-normal">
-        {BOARD_LANES.map((lane) => (
-          <span key={lane} className="inline-flex items-center gap-1">
-            <i className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: LANE_FILL[lane] }} />
-            {LANE_LABEL[lane]}
+        {board.failed ? (
+          <span className="rounded border border-[#ff6b6b]/40 bg-[#ff6b6b]/10 px-1.5 py-[0.5px] font-bold text-[#ff6b6b]">
+            {board.failed} RED
           </span>
-        ))}
-        <span className="inline-flex items-center gap-1">
-          <i className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: STALE_COLOR }} />
-          untouched 7d+
-        </span>
-      </div>
-      <ul className="max-h-[220px] overflow-y-auto">
-        {board.rows.map((row) => (
-          <li key={row.projectId}>
+        ) : null}
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 normal-case tracking-normal text-[10px]">
+          {BOARD_LANES.map((lane) => (
+            <span key={lane} className="inline-flex items-center gap-1 rounded bg-[#1d1710] px-1.5 py-[0.5px]">
+              <i className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: LANE_FILL[lane] }} />
+              {LANE_LABEL[lane]}
+            </span>
+          ))}
+          <span className="inline-flex items-center gap-1 rounded bg-[#1d1710] px-1.5 py-[0.5px]">
+            <i className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: STALE_COLOR }} />
+            untouched 7d+
+          </span>
+        </div>
+        <span className="ml-auto flex items-center gap-2">
+          <span>
+            STALE <b className="text-[12px]" style={{ color: STALE_COLOR }}>{board.stale}</b>
+          </span>
+          {selected ? (
             <button
               type="button"
-              onClick={() => onSelect(row)}
-              aria-label={boardRowSummary(row)}
-              aria-pressed={selected === row.projectId}
-              className={`grid w-full grid-cols-[110px_1fr_32px] items-center gap-2 border-t border-[#2a231a] py-1.5 text-left normal-case tracking-normal hover:bg-white/5 ${selected === row.projectId ? "bg-white/10" : ""}`}
+              onClick={() => onSelect(null)}
+              className="rounded-full border border-[#ffd27a]/60 bg-[#2a2013] px-2.5 py-0.5 text-[#ffd27a] transition-colors hover:brightness-125"
             >
-              <span className="truncate text-[11px] text-[#e9dcc4]">{row.name}</span>
-              <span className="flex h-3 overflow-hidden rounded-sm bg-[#241d15]">
-                <span className="flex h-full" style={{ width: `${((row.lanes.queue + row.active) / max) * 100}%` }}>
-                  {segments(row).map((s) => (
-                    <span
-                      key={s.key}
-                      className="h-full"
-                      style={{
-                        flex: s.value,
-                        backgroundColor: s.color,
-                        backgroundImage: s.striped ? "repeating-linear-gradient(135deg, #ff9f43 0 3px, #7a4a17 3px 6px)" : undefined,
-                      }}
-                    />
-                  ))}
-                </span>
-              </span>
-              <span className="text-right text-[11px] font-bold" style={{ color: row.stale ? STALE_COLOR : "#8a7758" }}>{row.stale}</span>
+              ALL PROJECTS
             </button>
-          </li>
-        ))}
+          ) : null}
+        </span>
+      </div>
+      <ul className="max-h-[210px] space-y-1 overflow-y-auto pr-0.5">
+        {board.rows.map((row) => {
+          const isSelected = selected === row.projectId;
+          const total = row.lanes.queue + row.active;
+          return (
+            <li key={row.projectId}>
+              <button
+                type="button"
+                onClick={() => onSelect(row)}
+                aria-label={boardRowSummary(row)}
+                aria-pressed={isSelected}
+                className="grid w-full grid-cols-[124px_1fr_44px] items-center gap-2.5 rounded-lg border px-2 py-1.5 text-left normal-case tracking-normal transition-all hover:bg-[#221b13]"
+                style={{
+                  borderColor: isSelected ? "#ffd27a88" : "#251d14",
+                  backgroundColor: isSelected ? "#261e14" : "#17120d",
+                  boxShadow: isSelected ? "0 0 12px rgba(212,133,10,0.2)" : undefined,
+                }}
+              >
+                <span className="flex items-center gap-1.5 truncate text-[11px] font-semibold text-[#efe3cd]">
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: isSelected ? "#ffd27a" : row.active > 0 ? "#6fb4ff" : "#5e4e3a" }}
+                  />
+                  <span className="truncate">{row.name}</span>
+                </span>
+                <span className="flex h-3.5 overflow-hidden rounded-full border border-[#2c2319] bg-[#0c0907] p-[1px] shadow-inner">
+                  <span className="flex h-full gap-[1px] overflow-hidden rounded-full" style={{ width: `${(total / max) * 100}%` }}>
+                    {segments(row).map((s) => (
+                      <span
+                        key={s.key}
+                        className="h-full first:rounded-l-full last:rounded-r-full"
+                        style={{
+                          flex: s.value,
+                          backgroundColor: s.color,
+                          backgroundImage: s.striped
+                            ? "repeating-linear-gradient(135deg, #ff9f43 0 3px, #7a4a17 3px 6px)"
+                            : "linear-gradient(180deg, rgba(255,255,255,0.28) 0%, transparent 60%)",
+                        }}
+                      />
+                    ))}
+                  </span>
+                </span>
+                <span className="text-right text-[11px] font-bold tabular-nums" style={{ color: row.stale ? STALE_COLOR : "#8a7758" }}>
+                  {row.stale}
+                </span>
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -113,25 +143,28 @@ export function IssuePanel({ view, issue, now, context, send, onClose }: {
   const days = Math.floor((now - issue.updatedAt) / 86_400_000);
   const pr = issue.pr;
   return (
-    <aside className="mx-3 mb-3 rounded-md border border-white/10 bg-[#1b1611] p-3 text-sm text-[#e9dcc4]" aria-label={`Issue ${issue.key}`}>
+    <aside
+      className="mx-3 mb-3 rounded-xl border border-[#3d3020] bg-gradient-to-b from-[#1e1812] to-[#15110c] p-3.5 text-sm text-[#e9dcc4] shadow-lg"
+      aria-label={`Issue ${issue.key}`}
+    >
       <div className="flex items-center gap-2">
-        <b>{issue.key}</b>
-        <span className="truncate text-xs text-[#8a7758]">{issue.project?.name ?? issue.team ?? ""}</span>
-        <button type="button" onClick={onClose} className="ml-auto text-[#8a7758] hover:text-white" aria-label="Close issue">✕</button>
+        <b className="font-mono text-[#ffd27a]">{issue.key}</b>
+        <span className="truncate rounded bg-[#261e15] px-1.5 py-0.5 font-mono text-[11px] text-[#a69271]">{issue.project?.name ?? issue.team ?? ""}</span>
+        <button type="button" onClick={onClose} className="ml-auto rounded px-1.5 py-0.5 text-[#8a7758] hover:bg-white/10 hover:text-white" aria-label="Close issue">✕</button>
       </div>
-      <p className="mt-1">{issue.title}</p>
-      <p className="mt-1 text-xs text-[#8a7758]">
+      <p className="mt-1.5 font-medium text-[#f4ead7]">{issue.title}</p>
+      <p className="mt-1 font-mono text-xs text-[#8a7758]">
         {issue.state.name} · {days <= 0 ? "changed today" : `untouched ${days}d`}
         {attention === "stalled" ? " · stale" : ""}
       </p>
-      <p className="mt-1 text-xs" style={{ color: pr?.checks === "failure" ? "#ff6b6b" : "#8a7758" }}>
+      <p className="mt-1 font-mono text-xs" style={{ color: pr?.checks === "failure" ? "#ff6b6b" : pr?.checks === "success" ? "#7dffb0" : "#8a7758" }}>
         {pr
           ? `PR #${pr.number} · ${pr.state === "merged" ? "merged, waiting for production" : pr.state === "closed" ? "closed" : pr.checks ? CHECKS_TEXT[pr.checks] : "no checks yet"}`
           : "No pull request linked."}
       </p>
-      <p className="mt-2 flex gap-3 text-xs">
-        {issue.url ? <a className="text-[#ffd27a] underline" href={issue.url} target="_blank" rel="noreferrer">Open in Kanbanger</a> : null}
-        {pr ? <a className="text-[#ffd27a] underline" href={pr.url} target="_blank" rel="noreferrer">Open PR #{pr.number}</a> : null}
+      <p className="mt-2 flex gap-3 font-mono text-xs">
+        {issue.url ? <a className="rounded border border-[#4a3b28] bg-[#211a12] px-2 py-0.5 text-[#ffd27a] hover:brightness-125" href={issue.url} target="_blank" rel="noreferrer">Open in Kanbanger ↗</a> : null}
+        {pr ? <a className="rounded border border-[#4a3b28] bg-[#211a12] px-2 py-0.5 text-[#ffd27a] hover:brightness-125" href={pr.url} target="_blank" rel="noreferrer">Open PR #{pr.number} ↗</a> : null}
       </p>
       <ActionsPanel label="Issue actions" resourceId={issue.id} options={issueCommands(issue, coordinated)} target={issue.key} context={context} send={send} />
     </aside>

@@ -56,9 +56,12 @@ export function releaseCommentFor(id, payload, issue) {
   if (payload.headSha) lines.push(`- Head: \`${payload.headSha}\``);
   if (payload.mergeSha) lines.push(`- Merge commit: \`${payload.mergeSha}\``);
   if (payload.appSlug) lines.push(`- ForgeGraph app: \`${payload.appSlug}\`${payload.deploymentId ? `, production deployment \`${payload.deploymentId}\`` : ''}`);
+  if (payload.artifactRef) lines.push(`- Artifact: \`${payload.artifactRef}\``);
+  if (payload.deployedSha) lines.push(`- Deployed commit: \`${payload.deployedSha}\``);
+  if (payload.verifiedAt) lines.push(`- Health: ${payload.health} at ${payload.verifiedAt}`);
   if (payload.note) lines.push(`- Note: ${payload.note}`);
   lines.push('', payload.fact === 'production-verified'
-    ? 'A production deployment containing the merge is active and app health is not critical, so Bob marked the issue done.'
+    ? 'The active production deployment contains the merge, has a recorded artifact and reports healthy app health, so Bob marked the issue done.'
     : payload.fact === 'review-ready' ? 'CI is green on the exact head. Bob moved the issue to review; it is done only after production is verified.'
       : payload.fact === 'rolled-back' ? 'Bob moved the issue back to in progress.'
       : 'Bob changed no issue state for this step.', '', effectMarker(id));
@@ -77,10 +80,21 @@ async function releaseState(client, issue, kind, names) {
 
 function claim(coordinator, { now, leaseMs, token }) {
   return coordinator.transaction(() => {
-    const row = coordinator.db.prepare("SELECT * FROM coordination_issue_effect WHERE tenant=? AND owner=? AND status='pending' AND next_attempt_at<=? AND (lease_until IS NULL OR lease_until<=?) ORDER BY rowid LIMIT 1")
-      .get(coordinator.tenant, coordinator.owner, now, now);
+    const row = coordinator.db.prepare(`
+      SELECT e.* FROM coordination_issue_effect e
+      WHERE e.tenant=? AND e.owner=?
+        AND (e.status='pending' OR (e.status='delivered' AND e.fact='rolled-back'))
+        AND e.next_attempt_at<=? AND (e.lease_until IS NULL OR e.lease_until<=?)
+        AND NOT EXISTS (
+          SELECT 1 FROM coordination_issue_effect busy
+          WHERE busy.tenant=e.tenant AND busy.status='pending' AND busy.lease_until>?
+            AND json_extract(busy.payload,'$.issue.integrationId')=json_extract(e.payload,'$.issue.integrationId')
+            AND json_extract(busy.payload,'$.issue.workspaceId')=json_extract(e.payload,'$.issue.workspaceId')
+            AND json_extract(busy.payload,'$.issue.issueId')=json_extract(e.payload,'$.issue.issueId')
+        ) ORDER BY e.rowid LIMIT 1`)
+      .get(coordinator.tenant, coordinator.owner, now, now, now);
     if (!row) return null;
-    coordinator.db.prepare('UPDATE coordination_issue_effect SET lease_owner=?,lease_until=? WHERE tenant=? AND id=?').run(token, now + leaseMs, coordinator.tenant, row.id);
+    coordinator.db.prepare("UPDATE coordination_issue_effect SET status='pending',lease_owner=?,lease_until=? WHERE tenant=? AND id=?").run(token, now + leaseMs, coordinator.tenant, row.id);
     return row;
   });
 }
@@ -94,8 +108,8 @@ function settle(coordinator, row, token, { now, outcome, error, random }) {
       coordinator.db.prepare('UPDATE coordination_issue_effect SET delivery_attempts=?,last_error=?,next_attempt_at=?,lease_owner=NULL,lease_until=NULL WHERE tenant=? AND id=?')
         .run(attempts, error, now + backoffMs(current.delivery_attempts, random), coordinator.tenant, row.id);
     } else {
-      coordinator.db.prepare('UPDATE coordination_issue_effect SET status=?,delivery_attempts=?,last_error=?,delivered_at=?,lease_owner=NULL,lease_until=NULL WHERE tenant=? AND id=?')
-        .run(outcome, attempts, error ?? null, outcome === 'delivered' ? new Date(now).toISOString() : null, coordinator.tenant, row.id);
+      coordinator.db.prepare('UPDATE coordination_issue_effect SET status=?,delivery_attempts=?,last_error=?,delivered_at=?,next_attempt_at=?,lease_owner=NULL,lease_until=NULL WHERE tenant=? AND id=?')
+        .run(outcome, attempts, error ?? null, outcome === 'delivered' ? new Date(now).toISOString() : null, now + 60_000, coordinator.tenant, row.id);
     }
     return outcome;
   });
@@ -123,6 +137,7 @@ async function perform(client, row, payload, { inProgressStateName, reviewStateN
     // A rollback reopens a done issue; nothing else moves a closed one.
     const closed = issue.state && (release.state === 'reopen' ? ['canceled', 'cancelled'] : ['completed', 'canceled', 'cancelled']).includes(issue.state.type);
     const target = closed ? null : await releaseState(client, issue, release.state, { reviewStateName, doneStateName, inProgressStateName });
+    if (!closed && !target && release.state === 'reopen') throw new KanbangerError('ReopenStateUnavailable', 'Cannot reconcile rollback without an in-progress state', { retryable: true });
     if (target && target.id !== issue.state?.id) stateAction = (await client.updateIssueState(issue.id, target.id)).state.name;
   }
   const marker = effectMarker(row.id);
@@ -130,6 +145,26 @@ async function perform(client, row, payload, { inProgressStateName, reviewStateN
   await client.createComment(issue.id, release ? releaseCommentFor(row.id, payload, issue) : commentFor(row.id, payload, issue));
   if (!(await client.issueComments(issue.id)).some(comment => comment.body.includes(marker))) throw new KanbangerError('KanbangerReadBackMismatch', 'Created comment is not visible on read-back', { retryable: true });
   return { action: 'comment-created', issue: issue.identifier, ...(stateAction ? { state: stateAction } : {}) };
+}
+
+/** A remote write cannot be fenced with a local snapshot check. Rearm the durable
+ * reopening obligation if a closure became invalid, even if another worker took
+ * its expired lease and already delivered the original rollback effect. The rearm
+ * is committed before settling the closure, so retries survive process death. */
+function invalidateClosure(coordinator, payload) {
+  if (payload.fact !== 'production-verified') return false;
+  return coordinator.transaction(() => {
+    const { snapshot } = coordinator.item(payload.itemId);
+    if (snapshot.currentAttemptId === payload.attemptId && snapshot.state === 'completed'
+      && snapshot.release?.stage === 'production-verified' && snapshot.release.deploymentId === payload.deploymentId) return false;
+    const rollback = coordinator.db.prepare("SELECT * FROM coordination_issue_effect WHERE tenant=? AND owner=? AND attempt_id=? AND fact='rolled-back' ORDER BY rowid DESC LIMIT 1")
+      .get(coordinator.tenant, coordinator.owner, snapshot.currentAttemptId);
+    if (rollback && snapshot.state !== 'completed') {
+      coordinator.db.prepare("UPDATE coordination_issue_effect SET status='pending',next_attempt_at=0 WHERE tenant=? AND id=? AND lease_owner IS NULL")
+        .run(coordinator.tenant, rollback.id);
+    }
+    return true;
+  });
 }
 
 /** Delivers at most one pending effect. Returns { delivered: false } when idle. */
@@ -146,6 +181,19 @@ export async function deliverIssueEffect(coordinator, client, { now = Date.now()
   if (!coordinator.context.issueProjects.some(project => ['integrationId', 'workspaceId', 'teamId', 'projectId'].every(key => project[key] === payload.issue[key]))) {
     return { ...base, outcome: settle(coordinator, row, token, { now, outcome: 'rejected', error: 'Issue project is outside the trusted policy' }), error: { code: 'Forbidden' } };
   }
+  // Rollback effects remain periodic reconciliation obligations. This also repairs
+  // a late remote write whose worker died after losing its lease. Stop when a newer
+  // attempt or a new verified delivery owns the issue lifecycle.
+  if (payload.fact === 'rolled-back') {
+    const { snapshot } = coordinator.item(payload.itemId);
+    if (snapshot.currentAttemptId !== payload.attemptId || snapshot.state === 'completed') {
+      return { ...base, outcome: settle(coordinator, row, token, { now, outcome: 'skipped', error: 'Rollback is no longer current' }) };
+    }
+  }
+  // Recovery also handles a crash after the remote write but before settlement.
+  if (invalidateClosure(coordinator, payload)) {
+    return { ...base, outcome: settle(coordinator, row, token, { now, outcome: 'skipped', error: 'Production verification is no longer current' }) };
+  }
   let result;
   try {
     result = await perform(client, row, payload, { inProgressStateName, ...(reviewStateName ? { reviewStateName } : {}), ...(doneStateName ? { doneStateName } : {}) });
@@ -156,6 +204,9 @@ export async function deliverIssueEffect(coordinator, client, { now = Date.now()
     return { ...base, outcome: settle(coordinator, row, token, { now, outcome, error: message, random }), error: { code, message: error.message } };
   }
   coordinator.fault('before-effect-settle');
+  if (invalidateClosure(coordinator, payload)) {
+    return { ...base, outcome: settle(coordinator, row, token, { now, outcome: 'skipped', error: 'Production verification changed during delivery' }) };
+  }
   return { ...base, ...result, outcome: settle(coordinator, row, token, { now, outcome: 'delivered' }) };
 }
 

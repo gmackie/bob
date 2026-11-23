@@ -72,6 +72,9 @@ export type VerifyApiKey = (key: string) => Promise<VerifiedApiKey | null>;
  * The socket can send commands, so a key needs `write` or `admin`; a read-only key is
  * refused. Device-login keys are minted with ["read", "write"] (api/v1/device/approve).
  */
+/** Resolves a single-use socket ticket (bob_sdlc_connect, src/server/mcp/sdlc-ticket.ts) to its user; null when unknown, used or expired. */
+export type ConsumeTicket = (ticket: string) => Promise<string | null>;
+
 export const keyMayConnect = (permissions: readonly string[]) => permissions.includes("write") || permissions.includes("admin");
 
 const error = (status: number, message: string) => Response.json({ error: message }, { status });
@@ -84,7 +87,9 @@ const error = (status: number, message: string) => Response.json({ error: messag
  * GET /api/sdlc/ws: a websocket for a user on SDLC_VIEWER_USER_IDS: a browser by session
  *   cookie with a same-origin Origin, or a native client (no Origin) by `Authorization:
  *   Bearer <device API key>` with `write` or `admin` permission
- *   (read-only: 403). A foreign Origin is refused whatever else is sent.
+ *   (read-only: 403), or an MCP Apps view by `?ticket=` from bob_sdlc_connect (any Origin:
+ *   its sandboxed frame has an opaque one; the single-use ticket is the credential).
+ *   Otherwise a foreign Origin is refused whatever else is sent.
  * Both go to the one SdlcEdge Durable Object named by SDLC_EDGE_WORKSPACE_ID; until that
  * and the binding exist, both answer 503 before checking anything else.
  */
@@ -93,6 +98,7 @@ export async function handleSdlcRoute(
   env: SdlcRouteEnv,
   getUserId: () => Promise<string | null>,
   verifyApiKey: VerifyApiKey = async () => null,
+  consumeTicket: ConsumeTicket = async () => null,
 ): Promise<Response> {
   const { pathname } = new URL(request.url);
   const namespace = env.SDLC_EDGE;
@@ -144,8 +150,11 @@ export async function handleSdlcRoute(
     // Origin and no bearer, or a foreign Origin, the answer stays 403.
     const origin = request.headers.get("origin");
     const authorization = request.headers.get("authorization");
+    const ticket = new URL(request.url).searchParams.get("ticket");
     let userId: string | null;
-    if (origin === null && authorization?.startsWith("Bearer ")) {
+    if (ticket !== null) {
+      userId = await consumeTicket(ticket);
+    } else if (origin === null && authorization?.startsWith("Bearer ")) {
       const key = authorization.slice(7).trim();
       const verified = key ? await verifyApiKey(key) : null;
       if (verified && !keyMayConnect(verified.permissions)) return error(403, "insufficient permission");

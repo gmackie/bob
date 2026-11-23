@@ -1,6 +1,6 @@
 // The projects board (BOB-99): the Arcade's opening view once the edge carries Kanbanger
-// issues. One row per project: a bar of its open work by lane, with the stale part last and
-// orange, and the stale count on the right. Tapping a row opens that project's floor.
+// issues. One row per project: a glowing segmented bar of its open work by lane, with the
+// stale part last and orange, and the stale count on the right. Tapping opens that floor.
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { BOARD_LANES, boardRowSummary, PARCEL_TONE } from "@bob/arcade";
 import type { Board, BoardLane, BoardRow } from "@bob/arcade";
@@ -38,19 +38,44 @@ function Row({ row, max, onPress }: { row: BoardRow; max: number; onPress: (row:
       accessibilityRole="button"
       accessibilityLabel={boardRowSummary(row)}
       testID={`arcade-board-row-${row.projectId}`}
-      style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9, borderTopWidth: 1, borderTopColor: "#2a231a", opacity: pressed ? 0.6 : 1 })}
+      style={({ pressed }) => ({
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+        paddingVertical: 10,
+        paddingHorizontal: 10,
+        marginBottom: 6,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: "#282017",
+        backgroundColor: "#17120d",
+        opacity: pressed ? 0.65 : 1,
+      })}
     >
-      <Text numberOfLines={1} style={{ width: 96, fontFamily: MONO, fontSize: 11, color: "#e9dcc4" }}>
+      <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: row.active > 0 ? "#6fb4ff" : "#5e4e3a" }} />
+      <Text numberOfLines={1} style={{ width: 92, fontFamily: MONO, fontSize: 11, fontWeight: "700", color: "#efe3cd" }}>
         {row.name}
       </Text>
-      <View style={{ flex: 1, height: 12, borderRadius: 3, overflow: "hidden", backgroundColor: "#241d15", flexDirection: "row" }}>
-        <View style={{ width: `${(total / max) * 100}%`, flexDirection: "row" }}>
+      <View
+        style={{
+          flex: 1,
+          height: 13,
+          borderRadius: 7,
+          borderWidth: 1,
+          borderColor: "#2d241a",
+          overflow: "hidden",
+          backgroundColor: "#0b0907",
+          padding: 1.5,
+          flexDirection: "row",
+        }}
+      >
+        <View style={{ width: `${(total / max) * 100}%`, flexDirection: "row", gap: 1, borderRadius: 5, overflow: "hidden" }}>
           {barSegments(row).map((s) => (
             <View key={s.key} style={{ flex: s.value, backgroundColor: s.color }} />
           ))}
         </View>
       </View>
-      <Text style={{ width: 30, textAlign: "right", fontFamily: MONO, fontSize: 11, fontWeight: "700", color: row.stale ? STALE_COLOR : STAGE.label }}>{row.stale}</Text>
+      <Text style={{ width: 28, textAlign: "right", fontFamily: MONO, fontSize: 11, fontWeight: "800", color: row.stale ? STALE_COLOR : STAGE.label }}>{row.stale}</Text>
     </Pressable>
   );
 }
@@ -59,24 +84,24 @@ export function BoardView({ board, onOpenProject }: { board: Board; onOpenProjec
   const max = Math.max(1, ...board.rows.map((r) => r.lanes.queue + r.active));
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 16 }} testID="arcade-board">
-      <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 8 }}>
-        <Text style={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1, color: STAGE.label }}>
-          ALL PROJECTS · <Text style={{ color: STAGE.labelLit, fontWeight: "800" }}>{board.started}</Text> STARTED
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8 }}>
+        <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: "700", letterSpacing: 1.2, color: STAGE.label }}>
+          CONNECTED PROJECTS · <Text style={{ color: STAGE.labelLit, fontWeight: "900" }}>{board.started}</Text> STARTED
           {board.failed ? <Text style={{ color: PARCEL_TONE.failed.fill }}>{`  ·  ${board.failed} RED`}</Text> : null}
         </Text>
-        <Text style={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1, color: STAGE.label }}>
-          STALE <Text style={{ color: STALE_COLOR, fontWeight: "800" }}>{board.stale}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: "700", letterSpacing: 1.2, color: STAGE.label }}>
+          STALE <Text style={{ color: STALE_COLOR, fontWeight: "900" }}>{board.stale}</Text>
         </Text>
       </View>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", columnGap: 12, rowGap: 4, paddingBottom: 6 }} accessible={false}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", columnGap: 8, rowGap: 4, paddingBottom: 10 }} accessible={false}>
         {BOARD_LANES.map((lane) => (
-          <View key={lane} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-            <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: LANE_FILL[lane] }} />
+          <View key={lane} style={{ flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 5, backgroundColor: "#1a140e", paddingHorizontal: 6, paddingVertical: 2 }}>
+            <View style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: LANE_FILL[lane] }} />
             <Text style={{ fontFamily: MONO, fontSize: 9, color: STAGE.label }}>{LANE_LABEL[lane]}</Text>
           </View>
         ))}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-          <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: STALE_COLOR }} />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 5, backgroundColor: "#1a140e", paddingHorizontal: 6, paddingVertical: 2 }}>
+          <View style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: STALE_COLOR }} />
           <Text style={{ fontFamily: MONO, fontSize: 9, color: STAGE.label }}>untouched 7d+</Text>
         </View>
       </View>

@@ -15,14 +15,24 @@ import {
   workItemsUpdate,
   workItemsCreateComment,
 } from "@bob/api/handlers/workItems";
-import type { OAuthGrant, OAuthIdentity } from "./types";
+import type { OAuthGrant, OAuthIdentity, OAuthStore } from "./types";
 import { READ_SCOPE, WRITE_SCOPE } from "./oauth";
+import { VIEW_URIS } from "./apps";
+import { makePlanning } from "./planning";
+import { issueSdlcTicket } from "./sdlc-ticket";
 
 const uuid = z.string().uuid();
 const page = {
   offset: z.number().int().min(0).max(10_000).default(0),
   limit: z.number().int().min(1).max(100).default(50),
 };
+type Visibility = ("model" | "app")[];
+/** MCP Apps metadata: who may call a tool, and the view it renders. */
+const callableBy = (...visibility: Visibility) => ({ ui: { visibility } });
+const opensView = (resourceUri: string) => ({
+  ui: { resourceUri, visibility: ["model", "app"] as Visibility },
+});
+const workItemId = uuid.describe("Bob work item id");
 const definitions = {
   bob_list_projects: {
     description:
@@ -74,6 +84,72 @@ const definitions = {
     }),
     write: true,
   },
+  bob_workspace: {
+    description:
+      "List work items and recent runs in the authorized workspace, optionally filtered by project or title. Renders the Bob workspace view.",
+    schema: z.strictObject({
+      projectId: uuid.optional(),
+      query: z.string().max(200).optional().describe("Case-insensitive title filter"),
+    }),
+    write: false,
+    meta: opensView(VIEW_URIS.workspace),
+  },
+  bob_planning_review: {
+    description:
+      "Show the planning review for a work item: stages, latest run evidence and the next action. A person approves dispatch from the rendered view.",
+    schema: z.strictObject({ workItemId }),
+    write: false,
+    meta: opensView(VIEW_URIS.planning),
+  },
+  bob_planning_approve: {
+    description: "Record a person's approval to dispatch a work item.",
+    schema: z.strictObject({ workItemId }),
+    write: true,
+    // App-only: the planning review view calls it when a person approves.
+    meta: callableBy("app"),
+  },
+  bob_planning_dispatch: {
+    description:
+      "Dispatch an approved work item to an agent. Fails unless a person approved it in the planning review. Requires bob:write.",
+    schema: z.strictObject({
+      workItemId,
+      agentType: z
+        .string()
+        .min(1)
+        .max(64)
+        .optional()
+        .describe("Agent type, e.g. claude or codex; defaults to Bob's configured agent"),
+    }),
+    write: true,
+    meta: opensView(VIEW_URIS.planning),
+  },
+  bob_runs_list: {
+    description:
+      "List recent runs, newest first, for the authorized workspace or one work item.",
+    schema: z.strictObject({ workItemId: workItemId.optional() }),
+    write: false,
+  },
+  bob_sdlc: {
+    description:
+      "Open the Bob SDLC view. With threadId: the plan, state, milestones, pending questions, live tail and CI of the SDLC item running that T3 thread. Without: the fleet. The view reads Bob's SDLC edge live; this tool returns no SDLC state itself.",
+    schema: z.strictObject({
+      threadId: z
+        .string()
+        .min(1)
+        .max(200)
+        .optional()
+        .describe("T3 thread id; omit for the fleet"),
+    }),
+    write: false,
+    meta: opensView(VIEW_URIS.sdlc),
+  },
+  bob_sdlc_connect: {
+    description: "A single-use URL for the SDLC view's edge socket.",
+    schema: z.strictObject({}),
+    // The socket accepts commands, so it needs what a device key needs: write.
+    write: true,
+    meta: callableBy("app"),
+  },
 };
 export interface McpToolService {
   list(grant: OAuthGrant): unknown[];
@@ -103,7 +179,14 @@ function itemView(p: typeof workItems.$inferSelect) {
     updatedAt: p.updatedAt,
   };
 }
-export function makeTools(db: Db, identity: OAuthIdentity): McpToolService {
+export function makeTools(
+  db: Db,
+  identity: OAuthIdentity,
+  options: { store: Pick<OAuthStore, "addCredential">; origin: string },
+): McpToolService {
+  const planning = makePlanning(db);
+  const edge = new URL("/api/sdlc/ws", options.origin);
+  edge.protocol = edge.protocol === "https:" ? "wss:" : "ws:";
   return {
     list: (grant) =>
       Object.entries(definitions)
@@ -117,9 +200,14 @@ export function makeTools(db: Db, identity: OAuthIdentity): McpToolService {
           annotations: {
             readOnlyHint: !d.write,
             destructiveHint: false,
-            idempotentHint: name !== "bob_add_comment",
+            idempotentHint: ![
+              "bob_add_comment",
+              "bob_planning_dispatch",
+              "bob_sdlc_connect",
+            ].includes(name),
             openWorldHint: false,
           },
+          _meta: "meta" in d ? d.meta : callableBy("model"),
         })),
     async call(grant, name, args) {
       if (!(name in definitions) || !Object.hasOwn(definitions, name))
@@ -224,6 +312,48 @@ export function makeTools(db: Db, identity: OAuthIdentity): McpToolService {
             body: comment.body,
             createdAt: comment.createdAt,
           };
+        }
+        case "bob_workspace":
+          return planning.workspace(
+            grant,
+            definitions.bob_workspace.schema.parse(args),
+          );
+        case "bob_planning_review":
+          return planning.review(
+            grant,
+            definitions.bob_planning_review.schema.parse(args).workItemId,
+          );
+        case "bob_planning_approve": {
+          const input = definitions.bob_planning_approve.schema.parse(args);
+          await planning.approve(grant, input.workItemId);
+          return { workItemId: input.workItemId, approved: true };
+        }
+        case "bob_planning_dispatch":
+          return planning.dispatch(
+            grant,
+            definitions.bob_planning_dispatch.schema.parse(args),
+          );
+        case "bob_runs_list":
+          return {
+            runs: await planning.runs(
+              grant,
+              definitions.bob_runs_list.schema.parse(args).workItemId,
+            ),
+          };
+        case "bob_sdlc": {
+          const input = definitions.bob_sdlc.schema.parse(args);
+          return input.threadId
+            ? { scope: "thread", threadId: input.threadId }
+            : { scope: "fleet" };
+        }
+        case "bob_sdlc_connect": {
+          definitions.bob_sdlc_connect.schema.parse(args);
+          const url = new URL(edge);
+          url.searchParams.set(
+            "ticket",
+            await issueSdlcTicket(options.store, grant),
+          );
+          return { url: url.toString() };
         }
         default:
           throw new Error("Unknown tool");
