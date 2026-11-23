@@ -19,6 +19,15 @@ else
   fail=1
 fi
 
+# 1b. vinext 1.4.6 moved `vinext deploy` to @vinext/cloudflare; the deploy
+#     script runs its `vinext-cloudflare` bin.
+if (cd apps/bob && pnpm exec vinext-cloudflare --version >/dev/null 2>&1); then
+  echo "  ok   vinext-cloudflare present ($(cd apps/bob && pnpm exec vinext-cloudflare --version 2>/dev/null))"
+else
+  echo "  FAIL vinext-cloudflare not resolvable — node_modules churned. Fix: pnpm install --force"
+  fail=1
+fi
+
 # 2. Do the @bob/* workspace links resolve to real source (not a dangling
 #    off-volume path)? tsconfig extends @bob/tsconfig/base.json at build time.
 node -e '
