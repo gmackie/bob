@@ -24,6 +24,7 @@ import { Button } from "@gmacko/core/ui/button";
 import { toast } from "@gmacko/core/ui/toast";
 
 import { KIND_COLOR, PRIORITY_COLOR, formatLabel } from "~/lib/design/colors";
+import { track } from "~/lib/analytics";
 import { useBobQueryClient } from "~/rpc/react";
 
 // ---------------------------------------------------------------------------
@@ -274,6 +275,7 @@ export function TaskTreeEditor({
           toast("No tasks were committed");
           return;
         }
+        track("plan_committed", { tasks: result.committed });
         toast(
           `Committed ${result.committed} task${result.committed === 1 ? "" : "s"}`,
         );

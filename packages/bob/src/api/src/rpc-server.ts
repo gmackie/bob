@@ -15,13 +15,13 @@ import { SettingsRpc } from "@gmacko/core/contracts/groups/settings";
 import { GmackoDb } from "@gmacko/core/db";
 import { CurrentUser } from "@gmacko/core/rpc/context";
 import { Effect, Layer, Option, Schema } from "effect";
-import { HttpRouter, HttpServerRequest } from "effect/unstable/http";
+import { HttpRouter, HttpServerRequest } from "effect/http";
 import {
   Rpc,
   RpcGroup,
   RpcSerialization,
   RpcServer,
-} from "effect/unstable/rpc";
+} from "effect/rpc";
 
 import type { HandlerContext } from "./handlers/context.js";
 import { LocalFilesystemAuthority } from "./handlers/local-filesystem-authority.js";
@@ -35,6 +35,7 @@ import { makeOperationsHandlers } from "./rpc-handlers/operations.js";
 import { makePlanRpcHandlers } from "./rpc-handlers/plan.js";
 import { makePlanningRpcHandlers } from "./rpc-handlers/planning.js";
 import { makePlanSessionRpcHandlers } from "./rpc-handlers/planSession.js";
+import { makeDailyPlanRpcHandlers } from "./rpc-handlers/dailyPlan.js";
 import { makePublicApiRpcHandlers } from "./rpc-handlers/publicApi.js";
 import { makeRequirementRpcHandlers } from "./rpc-handlers/requirement.js";
 import { makeSkillRpcHandlers } from "./rpc-handlers/skill.js";
@@ -136,8 +137,8 @@ export function liftHandlers<
   for (const key of keys) {
     lifted[key] = (input: never) =>
       Effect.gen(function* () {
-        const db = yield* GmackoDb.asEffect();
-        const user = yield* CurrentUser.asEffect();
+        const db = yield* GmackoDb;
+        const user = yield* CurrentUser;
         const localAuthority = yield* LocalFilesystemAuthority;
         const httpRequest = yield* Effect.serviceOption(
           HttpServerRequest.HttpServerRequest,
@@ -254,7 +255,13 @@ const planningHandlers = PlanningRpc.toLayer({
     const sk = makeSkillRpcHandlers(ctx);
     const sn = makeSnapshotRpcHandlers(ctx);
     const cp = makeCheckpointRpcHandlers(ctx);
+    const dp = makeDailyPlanRpcHandlers(ctx);
     return {
+      "planning.dailyPlan.get": dp["dailyPlan.get"],
+      "planning.dailyPlan.list": dp["dailyPlan.list"],
+      "planning.dailyPlan.generate": dp["dailyPlan.generate"],
+      "planning.dailyPlan.approve": dp["dailyPlan.approve"],
+      "planning.dailyPlan.close": dp["dailyPlan.close"],
       "planning.listWorkspaces": pl["planning.listWorkspaces"],
       "planning.listProjects": pl["planning.listProjects"],
       "planning.getProject": pl["planning.getProject"],

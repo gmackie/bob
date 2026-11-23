@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""Submit changes from a Bob vault edit worktree through the gated vault host.
+
+Usage, inside a vault worktree or clone:  bob-vault-submit [--dry-run] [--reset]
+Submits every change versus origin/main (adds, edits, deletions, renames) as
+published vault commits, using the dedicated API key in
+~/.config/bob-vault/api-key over the tailnet. Binary files are skipped.
+--reset: after everything publishes, fetch origin/main and hard-reset this
+checkout to it (for agent clones; the edits now live in origin/main).
+Environment: BOB_VAULT_HOST, BOB_VAULT_API_KEY_FILE, BOB_VAULT_GIT.
+"""
+import json, os, subprocess, sys, urllib.request, urllib.error
+
+HOST = os.environ.get("BOB_VAULT_HOST", "http://100.67.73.54:3180")
+KEY = open(os.path.expanduser(os.environ.get("BOB_VAULT_API_KEY_FILE", "~/.config/bob-vault/api-key"))).read().strip()
+DRY = "--dry-run" in sys.argv[1:]
+RESET = "--reset" in sys.argv[1:]
+GIT_WRAPPER = os.environ.get("BOB_VAULT_GIT", os.path.expanduser("~/.local/bin/bob-vault-git"))
+
+def git(*args):
+    return subprocess.run(["git", *args], check=True, capture_output=True, text=True).stdout
+
+def call(procedure, payload):
+    body = json.dumps({"json": {"vaultKind": "personal", **payload}}).encode()
+    request = urllib.request.Request(f"{HOST}/api/trpc/vault.{procedure}", data=body, method="POST",
+        headers={"authorization": "Bearer " + KEY, "content-type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            result = json.load(response)["result"]["data"]["json"]
+            return result["publication"]["state"]
+    except urllib.error.HTTPError as error:
+        try:
+            return "rejected: " + json.load(error)["error"]["json"]["message"]
+        except Exception:
+            return f"rejected: HTTP {error.code}"
+
+def text(path):
+    try:
+        return open(path, encoding="utf-8").read()
+    except UnicodeDecodeError:
+        return None
+
+os.chdir(git("rev-parse", "--show-toplevel").strip())
+changes = []
+for line in git("diff", "--name-status", "-M", "origin/main").splitlines():
+    status, *paths = line.split("\t")
+    changes.append((status[0], paths))
+for path in git("ls-files", "--others", "--exclude-standard").splitlines():
+    changes.append(("A", [path]))
+if not changes:
+    print("Nothing to submit")
+    sys.exit(0)
+
+
+failed = False
+for kind, paths in changes:
+    if kind == "D":
+        action, outcome = f"delete {paths[0]}", None if DRY else call("delete", {"filePath": paths[0]})
+    elif kind == "R":
+        old, new = paths
+        action = f"move {old} -> {new}"
+        outcome = None if DRY else call("move", {"from": old, "to": new})
+        content = text(new)
+        if outcome == "published" and content is not None and content != git("show", f"origin/main:{old}"):
+            outcome = call("write", {"filePath": new, "content": content})
+            action += " (+edit)"
+    elif kind in "AMT":
+        content = text(paths[-1])
+        if content is None:
+            print(f"skipped (binary): {paths[-1]}")
+            continue
+        action, outcome = f"write {paths[-1]}", None if DRY else call("write", {"filePath": paths[-1], "content": content})
+    else:
+        print(f"skipped ({kind}): {' '.join(paths)}")
+        continue
+    if outcome not in (None, "published"):
+        failed = True
+    print(f"{'would ' if DRY else ''}{action}{'' if outcome is None else ': ' + outcome}")
+if RESET and not failed and not DRY:
+    subprocess.run([GIT_WRAPPER, "fetch", "-q", "origin", "main"], check=True)
+    git("reset", "-q", "--hard", "origin/main")
+    git("clean", "-q", "-fd")
+    print("reset to " + git("rev-parse", "--short", "HEAD").strip())
+sys.exit(1 if failed else 0)

@@ -100,6 +100,27 @@ const workItems: TabletDashboardWorkItem[] = [
 ];
 
 describe("tablet task dashboard model", () => {
+  it("does not report an execution disconnection when a running provider has no quota snapshot", () => {
+    const cards = buildProviderCapacityCards({ sessions, workItems });
+    const codex = cards.find((card) => card.provider === "codex");
+    if (!codex) throw new Error("Codex card missing");
+    expect(codex.activeCount).toBe(2);
+    expect(codex.limitLabel).toBe("Usage unavailable");
+    expect(getProviderCapacityStatusLine(codex)).not.toMatch(/not connected/i);
+    expect(cards.find((card) => card.provider === "cursor-agent")).toMatchObject({
+      statusLabel: "Recent failure",
+      tone: "danger",
+    });
+  });
+
+  it("does not claim a live connection from historical usage alone", () => {
+    const cards = buildProviderCapacityCards({
+      sessions: [], workItems: [],
+      capacitySnapshots: [{ provider: "codex", usageLimits: [] }],
+    });
+    expect(cards.find((card) => card.provider === "codex")?.limitLabel).toBe("Recorded usage");
+  });
+
   it("keeps the Tasks dashboard header free of explanatory copy", () => {
     expect(getTaskDashboardHeaderModel()).toEqual({
       title: "Tasks",
@@ -176,7 +197,7 @@ describe("tablet task dashboard model", () => {
     });
 
     expect(cards.find((card) => card.provider === "codex")).toMatchObject({
-      limitLabel: "Capacity connected",
+      limitLabel: "Recorded usage",
       usageLimits: [
         {
           label: "5 hour usage limit",
@@ -222,7 +243,7 @@ describe("tablet task dashboard model", () => {
     });
 
     expect(cards.find((card) => card.provider === "cursor-agent")).toMatchObject({
-      limitLabel: "Capacity connected",
+      limitLabel: "Recorded usage",
       usageLimits: [
         {
           label: "Included usage",
@@ -262,7 +283,7 @@ describe("tablet task dashboard model", () => {
     }).find((entry) => entry.provider === "codex");
 
     if (!card) throw new Error("Expected Codex capacity card");
-    expect(getProviderCapacityStatusLine(card)).toBe("Capacity connected · Normal");
+    expect(getProviderCapacityStatusLine(card)).toBe("Recorded usage · Normal");
   });
 
   it("scopes provider run history to the selected workspace when available", () => {

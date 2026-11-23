@@ -29,7 +29,7 @@ import { fileURLToPath } from "node:url";
  * design conversation, not a config edit.
  *
  * Written as a node --test script rather than a lint rule because CI already
- * runs these guards, and the eslint fan-out is memory-constrained enough that
+ * runs these guards, and the oxlint fan-out is memory-constrained enough that
  * ci.yml serializes it.
  */
 

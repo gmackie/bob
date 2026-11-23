@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { LegendList } from "@legendapp/list";
+import { LegendList } from "@legendapp/list/react-native";
 
 import { colors } from "~/lib/colors";
 

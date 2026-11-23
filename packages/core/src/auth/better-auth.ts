@@ -1,4 +1,4 @@
-// Wraps better-auth as an Effect `ServiceMap.Service`.
+// Wraps better-auth as an Effect `Context.Service`.
 //
 // - `initAuth(opts)` constructs a `betterAuth(...)` instance mirroring Bob's
 //   config (drizzle adapter, github social provider, expo plugin, trusted
@@ -14,9 +14,10 @@
 import { expo } from "@better-auth/expo";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { sso } from "better-auth/plugins/sso";
+import { sso } from "@better-auth/sso";
+import { magicLink } from "better-auth/plugins";
 import { createAuthEndpoint } from "better-auth/api";
-import { Layer, ServiceMap } from "effect";import { z } from "zod/v4";
+import { Layer, Context } from "effect";import { z } from "zod/v4";
 
 import { qrPairing } from "./qr-pairing.js";
 
@@ -70,9 +71,12 @@ function devMagicLinkBypass(enabled: boolean) {
             });
           }
           const token = generateMagicLinkToken();
+          // Same record the magicLink plugin (better-auth 1.7) writes and
+          // /magic-link/verify consumes: `magic-link:`-prefixed identifier and
+          // a strict { type, email, name } value.
           await ctx.context.internalAdapter.createVerificationValue({
-            identifier: token,
-            value: JSON.stringify({ email, name, attempt: 0 }),
+            identifier: `magic-link:${token}`,
+            value: JSON.stringify({ type: "magic-link", email, name }),
             expiresAt: new Date(Date.now() + 300 * 1000),
           });
           const realBaseURL = new URL(ctx.context.baseURL);
@@ -90,7 +94,7 @@ function devMagicLinkBypass(enabled: boolean) {
 
 export type AuthInstance = ReturnType<typeof betterAuth>;
 
-export class BetterAuth extends ServiceMap.Service<BetterAuth, AuthInstance>()(
+export class BetterAuth extends Context.Service<BetterAuth, AuthInstance>()(
   "@gmacko/auth/BetterAuth",
 ) {}
 
@@ -204,14 +208,14 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
                 name?: string | null;
                 email: string;
               }) => {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see note on InitAuthOptions.db
+                 // see note on InitAuthOptions.db
                 const drizzleDb = opts.db as any;
                 const personalName =
                   user.name?.trim() ||
                   user.email.split("@")[0] ||
                   "Personal";
                 const slug = `personal-${user.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 32)}`;
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle tx type varies by driver
+                 // drizzle tx type varies by driver
                 await drizzleDb.transaction(async (tx: any) => {
                   const [tenantRow] = await tx
                     .insert(tenantsTable)
@@ -242,11 +246,19 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
           },
         };
 
+  // better-auth 1.7 validates the Drizzle schema against every plugin's
+  // tables on first use and fails auth entirely when one is missing. Register
+  // the sso plugin only when the schema carries its table: Bob's schema has no
+  // `ssoProviders`, so SSO was never reachable there (its endpoints failed on
+  // the missing model) and enabling it now would break every sign-in.
+  const ssoModel = opts.pluralizeTables ? "ssoProviders" : "ssoProvider";
+  const ssoAvailable = !opts.schema || Object.hasOwn(opts.schema, ssoModel);
+
   const config = {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see note on InitAuthOptions.db
+     // see note on InitAuthOptions.db
     database: drizzleAdapter(opts.db as any, {
       provider: "pg",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      
       ...(opts.schema ? { schema: opts.schema as any } : {}),
       ...(opts.pluralizeTables ? { usePlural: true } : {}),
     }),
@@ -255,6 +267,12 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
     user: { deleteUser: { enabled: true } },
     plugins: [
       devMagicLinkBypass(true),
+      magicLink({
+        disableSignUp: false,
+        sendMagicLink: async () => {
+          throw new Error("Email delivery is not configured. Use the reserved reviewer sign-in address or OAuth.");
+        },
+      }),
       expo(),
       // QR device pairing: web session mints a one-time code, mobile scans
       // and claims it for a real session. See ./qr-pairing.ts.
@@ -263,7 +281,7 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
       // POST /api/auth/sso/register; users then sign in by email domain. New
       // SSO users get a personal tenant from the shared user.create hook above,
       // same as GitHub/Google sign-ups.
-      sso(),
+      ...(ssoAvailable ? [sso()] : []),
     ],
     ...(emailAndPassword ? { emailAndPassword } : {}),
     socialProviders: {
@@ -322,7 +340,7 @@ export function initAuth(opts: InitAuthOptions): AuthInstance {
       : {}),
   } satisfies BetterAuthOptions;
 
-  return betterAuth(config);
+  return betterAuth<BetterAuthOptions>(config);
 }
 
 /** Provide a pre-constructed `AuthInstance` as the `BetterAuth` service. */

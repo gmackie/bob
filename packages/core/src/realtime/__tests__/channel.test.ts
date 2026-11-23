@@ -27,12 +27,12 @@ describe("@gmacko/realtime tagged errors", () => {
 });
 
 describe("@gmacko/realtime makeRealtimeChannelTag", () => {
-  it("returns a usable ServiceMap.Service tag whose key includes the name", () => {
+  it("returns a usable Context.Service tag whose key includes the name", () => {
     interface TestEvent {
       readonly count: number;
     }
     const TestCh = makeRealtimeChannelTag<TestEvent>("TestCh");
-    // ServiceMap.Service exposes the identifier as `.key` (Effect 4) — the
+    // Context.Service exposes the identifier as `.key` (Effect 4) — the
     // string we passed at construction. Keep this assertion loose enough to
     // tolerate either `.key` or `.toString()` carrying the name.
     const repr =

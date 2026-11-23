@@ -20,13 +20,11 @@ export function OPTIONS() {
  *
  * PlayTrek and other apps set LLM_BASE_URL=https://ooda.blder.bot/v1
  * during development, then switch that URL to OpenRouter / Bedrock later.
+ * Scheduled callers that need one model (DailyDose's Grok council) send
+ * `strict: true`, and `response_format: {type: "json_object"}` for JSON.
  */
 export async function POST(request: Request) {
-  let body: {
-    model?: string;
-    messages?: Array<{ role?: string; content?: unknown }>;
-    stream?: boolean;
-  };
+  let body: Parameters<typeof completeOodaOpenAiChat>[0];
   try {
     body = (await request.json()) as typeof body;
   } catch {

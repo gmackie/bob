@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TRPCError } from "@trpc/server";
+import { initializeIntegrationConfig } from "@bob/config/integrations";
 
 import {
   DEFAULT_PLAN,
@@ -156,12 +157,33 @@ describe("isQuotaEnforcementEnabled", () => {
   afterEach(() => {
     if (saved === undefined) delete process.env.ENFORCE_USAGE_QUOTAS;
     else process.env.ENFORCE_USAGE_QUOTAS = saved;
+    initializeIntegrationConfig({});
   });
 
   it("honors explicit true/false overrides", () => {
     process.env.ENFORCE_USAGE_QUOTAS = "true";
     expect(isQuotaEnforcementEnabled()).toBe(true);
     process.env.ENFORCE_USAGE_QUOTAS = "false";
+    expect(isQuotaEnforcementEnabled()).toBe(false);
+  });
+
+  it("only follows complete, explicitly enabled Stripe configuration", () => {
+    delete process.env.ENFORCE_USAGE_QUOTAS;
+    const credentials = {
+      STRIPE_SECRET_KEY: "rk_test_fixtureOnly",
+      STRIPE_WEBHOOK_SECRET: "whsec_fixtureOnly",
+      STRIPE_PRICE_PREMIUM: "price_fixturePremium",
+      STRIPE_PRICE_PRO: "price_fixturePro",
+    };
+    initializeIntegrationConfig(credentials);
+    expect(isQuotaEnforcementEnabled()).toBe(false);
+    initializeIntegrationConfig({ ...credentials, BOB_STRIPE_ENABLED: "true" });
+    expect(isQuotaEnforcementEnabled()).toBe(true);
+    initializeIntegrationConfig({
+      ...credentials,
+      BOB_STRIPE_ENABLED: "true",
+      STRIPE_WEBHOOK_SECRET: "private malformed fixture",
+    });
     expect(isQuotaEnforcementEnabled()).toBe(false);
   });
 });

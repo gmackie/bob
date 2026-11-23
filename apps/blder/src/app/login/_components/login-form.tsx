@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import { Button } from "@gmacko/core/ui/button";
 
+import { track } from "~/lib/analytics";
+
 export function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +31,7 @@ export function LoginForm() {
         throw new Error("Sign-in failed: missing redirect URL");
       }
 
+      track("login_started", { provider: "github" });
       window.location.href = data.url;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sign-in failed");

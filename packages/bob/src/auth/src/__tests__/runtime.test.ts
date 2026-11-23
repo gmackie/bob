@@ -77,7 +77,7 @@ describe("createAuthRuntime", () => {
     // with a SessionExpiredError — the point is the runtime resolves and
     // the Effect service graph works end-to-end without crashing.
     const program = Effect.gen(function* () {
-      const sessions = yield* Sessions.asEffect();
+      const sessions = yield* Sessions;
       return yield* sessions
         .validateRequest(new Headers())
         .pipe(
@@ -93,7 +93,7 @@ describe("createAuthRuntime", () => {
 
   it("resolves Sessions.validateToken with an unknown token (session error)", async () => {
     const program = Effect.gen(function* () {
-      const sessions = yield* Sessions.asEffect();
+      const sessions = yield* Sessions;
       return yield* sessions
         .validateToken("nonexistent-token")
         .pipe(

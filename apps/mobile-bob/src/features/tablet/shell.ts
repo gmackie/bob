@@ -3,6 +3,7 @@ import type { Href } from "expo-router";
 import type { ProviderKey, TaskLaneKey } from "./dashboard";
 import type { TabletQueueItem } from "./queue";
 import type { MobileWorkItemEntryView } from "./work-item-entry";
+import { timestampToMillis } from "~/lib/timestamps";
 import { appendWorkspaceParam } from "../planning/navigation";
 import {
   buildRecentOutcomeWorkItems,
@@ -32,11 +33,18 @@ export type TabletShellTarget =
   | { type: "projects-dashboard" }
   | { type: "work-item"; workItemId: string; view?: MobileWorkItemEntryView }
   | { type: "execution-session"; sessionId: string }
+  // A run record with no session to open: the sweep-ended and reconciled
+  // runs that used to link to a route that did not exist.
+  | { type: "run"; runId: string }
+  // The day's plan, progress and review.
+  | { type: "today" }
   | { type: "planning-session"; sessionId: string }
   | { type: "project"; projectId: string }
   | { type: "provider"; provider: ProviderKey }
   | { type: "task-lane"; lane: TaskLaneKey }
-  | { type: "settings" };
+  | { type: "settings" }
+  // Bob Arcade: the live SDLC floor (BOB-92). demo plays the scripted feed (dev builds only).
+  | { type: "arcade"; demo?: boolean };
 
 export interface TabletShellState {
   mode: TabletShellMode;
@@ -244,6 +252,21 @@ export function getExecutionSessionShellState(
   };
 }
 
+/** Turn a bob-dev URL into an in-app path. Ignores the Expo dev-client launcher. */
+export function pathFromAppUrl(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.hostname === "expo-development-client") return null;
+  const path = parsed.pathname.replace(/^\/+/, "");
+  const combined = [parsed.hostname, path].filter(Boolean).join("/");
+  if (!combined) return null;
+  return `/${combined}`;
+}
+
 export function getShellStateForPath(
   pathname: string,
   params: TabletShellRouteParams = {},
@@ -258,12 +281,21 @@ export function getShellStateForPath(
   const workItemView = normalizeWorkItemRouteView(readParam(params, "view"));
   const sessionId = readParam(params, "sessionId") ?? pathSegment(path, 1);
   const projectId = readParam(params, "projectId") ?? pathSegment(path, 1);
+  const runId = readParam(params, "runId") ?? pathSegment(path, 1);
 
   if (path === "/settings" || path.startsWith("/settings/")) {
     return {
       mode: currentMode,
       leftTab: getDefaultLeftRailTab(currentMode),
       target: { type: "settings" },
+    };
+  }
+
+  if (path === "/arcade" || path === "/arcade/demo") {
+    return {
+      mode: currentMode,
+      leftTab: getDefaultLeftRailTab(currentMode),
+      target: path === "/arcade/demo" ? { type: "arcade", demo: true } : { type: "arcade" },
     };
   }
 
@@ -316,20 +348,69 @@ export function getShellStateForPath(
     };
   }
 
-  if (path.startsWith("/sessions/") && sessionId) {
+  // On the tablet the route files never mount, and with a sessions index
+  // route beside the dynamic one expo-router reports the pathname as
+  // "/sessions" and carries the id in params. Either shape is a session.
+  const routeSessionId =
+    path === "/sessions"
+      ? readParam(params, "sessionId")
+      : path.startsWith("/sessions/")
+        ? sessionId
+        : undefined;
+  if (routeSessionId) {
     return {
       mode: "tasks",
       leftTab: "recent-outcomes",
-      target: { type: "execution-session", sessionId },
+      target: { type: "execution-session", sessionId: routeSessionId },
     };
   }
 
-  if (path.startsWith("/planning/sessions/") && sessionId) {
+  if (path === "/today") {
     return {
-      mode: "planning",
-      leftTab: "recent-sessions",
-      target: { type: "planning-session", sessionId },
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "today" },
     };
+  }
+
+  // The phone's sessions list; on the tablet the sidebar's Recent Outcomes
+  // rail is that list, so land on the tasks dashboard beside it.
+  if (path === "/sessions") {
+    return {
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "tasks-dashboard" },
+    };
+  }
+
+  const paramRunId = readParam(params, "runId");
+  if (path === "/runs" && paramRunId) {
+    return {
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "run", runId: paramRunId },
+    };
+  }
+
+  if (path.startsWith("/runs/") && runId) {
+    return {
+      mode: "tasks",
+      leftTab: "recent-outcomes",
+      target: { type: "run", runId },
+    };
+  }
+
+  if (path.startsWith("/planning/sessions/")) {
+    // /sessions/:id is one segment deep. A plan URL is /planning/sessions/:id,
+    // so the id is the third segment when the route params are not mounted.
+    const planningSessionId = pathSegment(path, 2) ?? readParam(params, "sessionId");
+    if (planningSessionId) {
+      return {
+        mode: "planning",
+        leftTab: "recent-sessions",
+        target: { type: "planning-session", sessionId: planningSessionId },
+      };
+    }
   }
 
   if (path.startsWith("/projects/") && projectId) {
@@ -449,10 +530,13 @@ export function getShellModeForTarget(
     case "tasks-dashboard":
     case "work-item":
     case "execution-session":
+    case "run":
+    case "today":
     case "provider":
     case "task-lane":
       return "tasks";
     case "settings":
+    case "arcade":
       return currentMode;
   }
 }
@@ -505,11 +589,14 @@ export function isNativeTabletShellTarget(target: TabletShellTarget): boolean {
     case "projects-dashboard":
     case "work-item":
     case "execution-session":
+    case "run":
+    case "today":
     case "planning-session":
     case "project":
     case "provider":
     case "task-lane":
     case "settings":
+    case "arcade":
       return true;
   }
 }
@@ -857,8 +944,8 @@ function formatShellStatusLabel(status: string): string {
 }
 
 function formatLastUpdatedLabel(value: string, now: Date): string {
-  const timestamp = new Date(value).getTime();
-  if (!Number.isFinite(timestamp)) return "No activity";
+  const timestamp = timestampToMillis(value);
+  if (timestamp === null) return "No activity";
 
   const diffMs = Math.max(0, now.getTime() - timestamp);
   const minutes = Math.floor(diffMs / 60_000);
@@ -872,9 +959,7 @@ function formatLastUpdatedLabel(value: string, now: Date): string {
 }
 
 function timestampValue(value: string | Date | null | undefined): number {
-  if (!value) return 0;
-  const timestamp = value instanceof Date ? value.getTime() : Date.parse(value);
-  return Number.isFinite(timestamp) ? timestamp : 0;
+  return timestampToMillis(value) ?? 0;
 }
 
 function formatDateValue(value: string | Date | null | undefined): string {

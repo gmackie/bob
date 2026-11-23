@@ -2,7 +2,10 @@ import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 
-import simpleGit from "simple-git";
+import { simpleGit } from "simple-git";
+
+import { LocalGitStorage } from "./local-git-storage";
+import type { PublicationRecord } from "./versioned-storage";
 
 // ---------------------------------------------------------------------------
 // Repo-scoped mutex — ensures only one git operation runs per vault path
@@ -58,13 +61,30 @@ export async function hasConflicts(vaultPath: string): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
-// Commit & push
+// Commit & publish
 // ---------------------------------------------------------------------------
 
+export interface CommitAndPushOptions {
+  /** Explicit server-owned composition; never chosen by request input. */
+  storage?: import("./versioned-storage").VersionedStoragePort & Pick<LocalGitStorage, "currentRef" | "lastObservedRemoteHead">;
+  /** Stable id for retrying the same publication. Generated when omitted. */
+  operationId?: string;
+}
+
+/**
+ * Stage and commit all working-tree changes, replay any earlier publication
+ * that never reached the remote, then publish HEAD to its branch under an
+ * expected-head precondition.
+ *
+ * Remote outcomes are returned, not thrown: inspect `state` before telling
+ * anyone the change is durably published. Local failures (index lock, not a
+ * repository, nothing resolvable) still throw.
+ */
 export async function commitAndPush(
   vaultPath: string,
   message: string,
-): Promise<void> {
+  options: CommitAndPushOptions = {},
+): Promise<PublicationRecord> {
   const release = await acquireLock(vaultPath);
   try {
     if (await isLocked(vaultPath)) {
@@ -73,10 +93,21 @@ export async function commitAndPush(
       );
     }
 
-    const git = simpleGit(vaultPath);
-    await git.add("-A");
-    await git.commit(message);
-    await git.push("origin");
+    const storage = options.storage ?? new LocalGitStorage(vaultPath);
+    const committed = await storage.commitWorkingTree(message);
+    const revision = committed ?? (await storage.resolve({ ref: "HEAD" }));
+    const ref = await storage.currentRef();
+
+    await storage.replayPending();
+
+    return storage.publish({
+      ref,
+      expectedHead: await storage.lastObservedRemoteHead(ref),
+      revision,
+      ...(options.operationId !== undefined
+        ? { operationId: options.operationId }
+        : {}),
+    });
   } finally {
     release();
   }

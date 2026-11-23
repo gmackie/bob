@@ -82,8 +82,14 @@ export class AgentJobWorker {
     this.sandboxes = new ScratchSandboxManager(config.scratchRoot);
   }
 
-  async poll(): Promise<void> {
-    if (this.stopping || this.active.size >= this.config.maxConcurrent) return;
+  /**
+   * Claim at most one job. Resolves true when the worker has work, either a job
+   * it just claimed or one still running, so the runner keeps polling at the
+   * active rate (BOB-60).
+   */
+  async poll(): Promise<boolean> {
+    if (this.stopping) return false;
+    if (this.active.size >= this.config.maxConcurrent) return true;
     if (Date.now() - this.lastCleanupAt >= 60 * 60 * 1_000) {
       this.lastCleanupAt = Date.now();
       await this.sandboxes.cleanupExpired().catch(() => {});
@@ -94,7 +100,8 @@ export class AgentJobWorker {
       classes: JOB_CLASSES,
       leaseSeconds: 90,
     });
-    if (!claim || !this.config.adapters.has(claim.job.provider)) return;
+    if (!claim) return this.active.size > 0;
+    if (!this.config.adapters.has(claim.job.provider)) return true;
 
     const controller = new AbortController();
     const promise = withTraceSpan(
@@ -119,6 +126,7 @@ export class AgentJobWorker {
       this.active.delete(claim.job.id);
     });
     this.active.set(claim.job.id, { controller, promise });
+    return true;
   }
 
   async waitForIdle(): Promise<void> {

@@ -1,3 +1,5 @@
+import Script from "next/script";
+
 import { cn } from "@gmacko/core/ui";
 import { ThemeProvider } from "@gmacko/core/ui/theme";
 import { Toaster } from "@gmacko/core/ui";
@@ -59,6 +61,15 @@ export default function RootLayout(props: { children: React.ReactNode }) {
           </div>
           <Toaster />
         </ThemeProvider>
+        <Script
+          src="/dataflare.js"
+          data-enabled={
+            process.env.NEXT_PUBLIC_DATAFLARE_ENABLED !== "false"
+              ? "true"
+              : "false"
+          }
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );

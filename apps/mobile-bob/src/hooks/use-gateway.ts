@@ -20,7 +20,7 @@ import type {
 import { BobWsClient } from "@bob/ws";
 import type { HostSnapshotWire } from "@bob/ws";
 
-import { authClient } from "~/utils/auth";
+import { authClient, getSessionCookie } from "~/utils/auth";
 import { getBaseUrl } from "~/utils/base-url";
 import { mergeGatewaySessionStatusChange } from "./gateway-sessions";
 import { invalidateGatewayEventQueries } from "./gateway-query-invalidations";
@@ -214,7 +214,7 @@ export function useGateway(): UseGatewayResult {
   }, [queryClient]);
 
   useEffect(() => {
-    const cookies = authClient.getCookie();
+    const cookies = getSessionCookie();
     if (!cookies) return;
 
     // Extract a token from cookies for the gateway hello handshake.

@@ -18,8 +18,24 @@ export interface MobileNavDestination {
 
 export const MOBILE_NAV_DESTINATIONS: readonly MobileNavDestination[] = [
   { href: "/home", label: "Home", description: "What needs you right now" },
+  {
+    href: "/attention",
+    label: "Attention",
+    description: "SDLC items waiting on you",
+  },
+  {
+    href: "/arcade",
+    label: "Arcade",
+    description: "Watch agents work the SDLC live",
+  },
+  { href: "/today", label: "Today", description: "The day's plan, progress and review" },
   { href: "/chat", label: "Chat", description: "Talk to the agent" },
   { href: "/tasks", label: "Tasks", description: "Queue and outcomes" },
+  {
+    href: "/sessions",
+    label: "Sessions",
+    description: "Agent runs: what needs you, what is going",
+  },
   { href: "/planning", label: "Planning", description: "Shape and plan work" },
   {
     href: "/pull-requests",

@@ -15,13 +15,13 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "commander": "^12.1.0"
+    "commander": "15.1.0"
   },
   "devDependencies": {
     "@bob/tsconfig": "workspace:*",
-    "@types/node": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "^4.1.11"
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2",
+    "vitest": "5.1.1"
   },
   "exports": {
     "./process-tree": {
@@ -31,6 +31,10 @@
     "./startup-timeout": {
       "types": "./dist/startup-timeout.d.ts",
       "default": "./src/startup-timeout.ts"
+    },
+    "./bundled-resources": {
+      "types": "./dist/bundled-resources.d.ts",
+      "default": "./src/bundled-resources.ts"
     }
   }
 }

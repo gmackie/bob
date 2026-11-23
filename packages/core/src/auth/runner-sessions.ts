@@ -16,7 +16,7 @@
 // = HMAC check + expiry check. TTL defaults to 1h; runners refresh by
 // re-registering (6G has no separate refresh RPC).
 import { createHmac } from "node:crypto";
-import { Effect, Layer, ServiceMap } from "effect";
+import { Effect, Layer, Context } from "effect";
 
 import { InvalidRunnerSessionError } from "./errors.js";
 
@@ -71,7 +71,7 @@ export interface RunnerSessionsShape {
   ) => Effect.Effect<RunnerSessionClaims, InvalidRunnerSessionError>;
 }
 
-export class RunnerSessions extends ServiceMap.Service<
+export class RunnerSessions extends Context.Service<
   RunnerSessions,
   RunnerSessionsShape
 >()("@gmacko/auth/RunnerSessions") {}

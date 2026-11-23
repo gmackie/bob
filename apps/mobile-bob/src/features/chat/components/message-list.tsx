@@ -1,6 +1,6 @@
 import { memo, useCallback, useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
-import { LegendList } from "@legendapp/list";
+import { LegendList } from "@legendapp/list/react-native";
 
 import type {
   OodaMessageTimelineItem,
@@ -372,7 +372,7 @@ export function MessageList({
       keyExtractor={(item) => item.id}
       getItemType={(item) => item.kind}
       estimatedItemSize={112}
-      maintainScrollAtEnd={{ onDataChange: true, onItemLayout: true }}
+      maintainScrollAtEnd={{ on: { dataChange: true, itemLayout: true } }}
       maintainScrollAtEndThreshold={0.2}
       recycleItems
       contentContainerStyle={{ paddingHorizontal: 4, paddingVertical: 16 }}

@@ -11,6 +11,38 @@
     <key>EXUpdatesRuntimeVersion</key>
     <string>0.1.1</string>
     <key>EXUpdatesURL</key>
-    <string>https://u.expo.dev/e1dd0ab0-4dc1-40f8-b066-7cb91fde1759</string>
+    <string>https://preflight.forgegraf.com/api/preflight/v1/ota/bob</string>
+    <key>EXUpdatesRequestHeaders</key>
+    <dict>
+      <key>expo-channel-name</key>
+      <string>production</string>
+    </dict>
+    <key>EXUpdatesCodeSigningCertificate</key>
+    <string>-----BEGIN CERTIFICATE-----
+MIIDETCCAfmgAwIBAgIQZtR77OfQZalzk8mKdSNvSjANBgkqhkiG9w0BAQsFADAw
+MRowGAYDVQQDDBFCb2I6IFRoZSBCbGRyIE9UQTESMBAGA1UECgwJUHJlZmxpZ2h0
+MB4XDTI2MTEyMzAzMjE1M1oXDTM2MTEyMzAzMjE1M1owMDEaMBgGA1UEAwwRQm9i
+OiBUaGUgQmxkciBPVEExEjAQBgNVBAoMCVByZWZsaWdodDCCASIwDQYJKoZIhvcN
+AQEBBQADggEPADCCAQoCggEBAMVvbd5z5MbvQFAEAnfeuwO3h2p4lzXN0DBXh+Mn
+mmaKsGUVUfSWVLtOQEDWCBFYce4VHiTuoTGK7Kuhmrm94ezkZbdaAYdpenNrDtbq
+khdNZw38rgHapXtVFChYOe5RpG/3QTbLvIH3lLqXpeGGCJGdkClGWgL57sjPVtGE
+1pxnCnIEOYv/4iFFRrAGCZVxPAutxmKvCPjfJL8rUyjR66LU2UUvWxAhyEtslG17
+bzrLbIkctDDISpSSV6pryuGRrNAyhhXTc/ELLOEMQU6J3olcw8fXwI7sNhDcM0at
+f0Zk3NmAPVE0cFsgSjpznURHZGfWF/CYjKZk3ey1JQgGQEkCAwEAAaMnMCUwDgYD
+VR0PAQH/BAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMDMA0GCSqGSIb3DQEBCwUA
+A4IBAQB3Bd0PlEPxSr8ppAtbyvxNlrOnpC0XlYX1wlU/zL/Ip+kLYP4htmE8MbiF
+8njzIMdWg5hhbFNJ+CZVTqHOSiiPvn3ww+lh7I2Ups75o26zcTiGMW/CdQR2w8KI
+O0AVYQnIrL4QHQnQ2LVF6ftZyOWu6SOC178aWwaAnjRCkNRp2YsiTJbsW5JbjsBT
+Ma794YM1eKZqSmRhNvxju4U/L0O1rkzc3jQ4XrP6EqYKsu2krlfRQAnbbrCF0d2H
+wmsgNqYE3nEXdrtd09Q//gSvomWcnmIDHYnSuk1kzBgHoQJJx5AJKV9DxXJu51oz
+1X1N3TzqetPMqTx2cyRWZpg2V35h
+-----END CERTIFICATE-----</string>
+    <key>EXUpdatesCodeSigningMetadata</key>
+    <dict>
+      <key>alg</key>
+      <string>rsa-v1_5-sha256</string>
+      <key>keyid</key>
+      <string>main</string>
+    </dict>
   </dict>
 </plist>

@@ -1,0 +1,53 @@
+{
+  "at": "2026-10-02T19:31:48Z",
+  "scope": "Actual Bob vault composed with Forge publisher, Cloudflare Artifacts and live D1 journal",
+  "status": "passed",
+  "checks": [
+    "exact vault content published",
+    "reconstructed service does not resend terminal work",
+    "lost acknowledgement stays indeterminate despite desired-head observation",
+    "recovery never repeats Git publication",
+    "revoked authorization rejects receipt replay"
+  ],
+  "gitDispatches": 2,
+  "cleanup": {
+    "remainingResources": [],
+    "errors": []
+  },
+  "tests": [
+    {
+      "name": "exact vault content published",
+      "status": "passed"
+    },
+    {
+      "name": "reconstructed service does not resend terminal work",
+      "status": "passed"
+    },
+    {
+      "name": "lost acknowledgement stays indeterminate despite desired-head observation",
+      "status": "passed"
+    },
+    {
+      "name": "recovery never repeats Git publication",
+      "status": "passed"
+    },
+    {
+      "name": "revoked authorization rejects receipt replay",
+      "status": "passed"
+    }
+  ],
+  "bobSourceSha256": {
+    "packages/ooda/scripts/verify-forge-vault.mjs": "c07a405346de3b0ebdaa5dc612da022decb0873ec605dd2f73a4e7589dc466a0",
+    "packages/ooda/src/vault/forge-publication-storage.ts": "8e33b3c5bf89e07409668d38883abb588833def9b17623f71ff742b3493c86f1",
+    "packages/ooda/src/vault/vault-service.ts": "2074adc72904ce4854e5e7d1ef5f02554d5a41f7eba8ab39cbc3039aaf5aaa79",
+    "packages/ooda/src/vault/git.ts": "56f70ba74e708a0e4d3705bf0829d73744bacb108edbf23e66c57ef38d5cd8fd"
+  },
+  "sourceSha256": {
+    "conformance/artifacts/publish-live.mjs": "b75db1140df8f3b58de82df2b759628260192ca9e73561af8da5a246ab31f016",
+    "packages/runtime/src/artifact-publication.ts": "ce5135cebd1893b1d2dbf34ef5ee61e10f720f2129e2a266eb0dcff947df0b8a",
+    "packages/runtime/src/adapters/artifact-publication-git.ts": "a43629153c42df92339ba4055d367b02cc59bf6ca726af1202c828b321a64684",
+    "packages/runtime/src/adapters/artifact-publication-sql.ts": "477e8f152f9523d3e137addbe620a2796c4659e1a6df07d314106b4fa4e66e16"
+  },
+  "nodeVersion": "v24.14.0",
+  "gitVersion": "git version 2.51.1"
+}

@@ -8,7 +8,7 @@ const target = (process.env.BOB_BUILD_TARGET ?? "cloudflare") as
   | "node";
 
 // NOTE: the Effect-RPC handler (`~/server/rpc`) used to be aliased to a 501
-// stub for the Cloudflare Workers build because `effect/unstable/rpc` was
+// stub for the Cloudflare Workers build because `effect/rpc` was
 // believed to be un-bundleable for Workers. That is no longer true — with
 // `nodejs_compat` + the node:fs/node:os/pg-native stubs below, the real handler
 // bundles and runs on workerd (verified end-to-end: ndjson dispatch + auth

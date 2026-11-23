@@ -4,7 +4,7 @@ import type {
 } from "@gmacko/ooda-client/v1";
 import { memo, useCallback, useMemo } from "react";
 import { ActivityIndicator, Modal, Pressable, Text, View } from "react-native";
-import { LegendList } from "@legendapp/list";
+import { LegendList } from "@legendapp/list/react-native";
 
 import { buildContextInspectorSummary } from "../context-inspector-model";
 

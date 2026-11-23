@@ -42,14 +42,14 @@ export const publishRouter = {
     .output(z.any())
     .mutation(async ({ input }) => {
       const websitePath = getWebsitePath();
-      const filePath = await publishDraft(websitePath, {
+      const { filePath, publication } = await publishDraft(websitePath, {
         title: input.title,
         content: input.content,
         site: input.site,
         tags: input.tags,
         date: input.date,
       });
-      return { filePath };
+      return { filePath, publication };
     }),
 
   listDrafts: publicProcedure

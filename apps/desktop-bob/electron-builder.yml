@@ -1,6 +1,7 @@
 appId: bot.blder.desktop
 productName: Bob
 directories:
+  app: .packaging/desktop-shell
   output: release
   buildResources: build
 files:
@@ -15,6 +16,7 @@ extraResources:
       - "bob-server/**/*"
       - "blder/**/*"
       - "db-migrations/**/*"
+      - "runtime-resources.json"
   - from: resources/bin
     to: bin
     filter:

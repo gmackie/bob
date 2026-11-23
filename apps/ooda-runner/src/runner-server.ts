@@ -12,12 +12,13 @@ import { GrokAdapter } from "@gmacko/ooda/agent-adapters";
 import { BuddyMcpServer } from "@gmacko/ooda/agent-adapters";
 import type { AgentAdapter, PromptImage } from "@gmacko/ooda/agent-adapters";
 import { generateRunnerToken } from "./auth/auth";
-import { promoteNote } from "@gmacko/ooda/thread-workspace";
+import { promoteRunnerNote, type RunnerVaultPublication } from "./vault-promotion";
 import { resolveThreadPath } from "@gmacko/ooda/thread-model";
 import { buildOutcomeNote } from "./ooda-callback.js";
 import {
   createRunnerTRPCClient,
   createResearchSurface,
+  streamSessionEvent,
   type RunnerTRPCClient,
 } from "./trpc-client";
 import { CapabilityRegistry } from "@gmacko/ooda/capability-registry";
@@ -30,9 +31,14 @@ import { IntegrationDeliveryWorker } from "./integrations/integration-delivery-w
 import { ExternalStatusWorker } from "./integrations/external-status-worker";
 import { createDeliveryAdapters } from "./integrations/delivery-adapters";
 import { HostTurnWorker } from "./host-turns/host-turn-worker";
+import { POLL_ACTIVE_INTERVAL_MS, PollBackoff } from "./poll-backoff";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
-const POLL_INTERVAL_MS = 2_000;
+// A session's events are re-read for promote requests when it first appears,
+// when its status changes, and otherwise at most this often (BOB-60). The
+// runner writes most of a running session's events itself, so re-reading the
+// full event list on every 2s poll was nearly always wasted.
+export const PROMOTION_RESCAN_INTERVAL_MS = 15_000;
 // Sweep stale runner_session rows (runner died mid-run) periodically. Long
 // interval — the server-side grace is 6h, so there's no value polling often.
 const REAP_INTERVAL_MS = 30 * 60_000;
@@ -229,8 +235,12 @@ export class RunnerServer {
   private trpc: RunnerTRPCClient;
   private runnerId: string | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  private pollInFlight = false;
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private pollInFlight: Promise<void> | null = null;
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  private polling = false;
+  private pollBackoff: PollBackoff | null = null;
+  /** Last promote-request scan per session: status seen and when. */
+  private promotionScans = new Map<string, { status: string; at: number }>();
   private reapTimer: ReturnType<typeof setInterval> | null = null;
   private activeSessions = new Set<string>();
   private activePromotions = new Set<string>();
@@ -244,7 +254,7 @@ export class RunnerServer {
   private integrationDeliveryWorker: IntegrationDeliveryWorker | null = null;
   private externalStatusWorker: ExternalStatusWorker | null = null;
 
-  constructor(private config: RunnerConfig) {
+  constructor(private config: RunnerConfig, private readonly vaultPublication?: RunnerVaultPublication) {
     this.sessions = new SessionManager();
     this.trpc = createRunnerTRPCClient(config.serverUrl);
     // Buddy-tool wiring: research surface the tool handlers call, plus a
@@ -285,6 +295,10 @@ export class RunnerServer {
           workspaceId: config.bobWorkspaceId,
           devDir: config.bobDevDir,
           maxConcurrent: config.bobMaxConcurrent,
+          ...(config.t3codeServerUrl ? { t3: {
+            serverUrl: config.t3codeServerUrl, authToken: config.t3codeAuthToken!,
+            modelInstanceId: config.t3codeModelInstanceId, model: config.t3codeModel,
+          } } : {}),
           // Phase 5 M2: write an OODA-dispatched run's outcome back into its
           // originating thread as a provenance-stamped note. Only fires for
           // sessions carrying an ooda correlation (dark until M1 is enabled).
@@ -299,7 +313,7 @@ export class RunnerServer {
               sessionId: outcome.sessionId,
               projectId: correlation.threadId ?? null,
               operation: () =>
-                promoteNote({
+                promoteRunnerNote({
                   storageRoot: this.config.storageRoot,
                   threadDir,
                   sessionId: outcome.sessionId,
@@ -314,7 +328,7 @@ export class RunnerServer {
                     queryOrInputRef: `bobRun:${outcome.sessionId}`,
                     canonicalSourceRef: outcome.pullRequestUrl ?? undefined,
                   },
-                }),
+                }, this.vaultPublication),
             });
           },
         },
@@ -372,25 +386,12 @@ export class RunnerServer {
       void this.heartbeat();
     }, HEARTBEAT_INTERVAL_MS);
 
-    // A slow tick must not pin another full session/event traversal every 2s.
-    // Keep terminal sessions in that traversal: users can promote their output.
-    this.pollTimer = setInterval(() => {
-      if (this.pollInFlight) return;
-      this.pollInFlight = true;
-      void (async () => {
-        try {
-          await this.pollForSessions();
-          await this.agentJobWorker?.poll();
-          await this.hostTurnWorker?.poll();
-          await this.integrationDeliveryWorker?.poll();
-          await this.externalStatusWorker?.poll();
-        } catch (error) {
-          console.warn("[runner] poll failed:", error);
-        } finally {
-          this.pollInFlight = false;
-        }
-      })();
-    }, POLL_INTERVAL_MS);
+    // Work poll: one self-scheduling chain, so a slow tick can never overlap
+    // the next. 2s while anything is active or was in the last minute, then
+    // backing off to pollIdleMaxMs (BOB-60); see poll-backoff.ts.
+    this.pollBackoff = new PollBackoff({ idleMaxMs: this.config.pollIdleMaxMs });
+    this.polling = true;
+    this.schedulePoll(POLL_ACTIVE_INTERVAL_MS);
 
     // Start stale-session reaper loop
     this.reapTimer = setInterval(() => {
@@ -582,8 +583,45 @@ export class RunnerServer {
     }
   }
 
-  private async pollForSessions(): Promise<void> {
-    if (!this.runnerId) return;
+  private schedulePoll(delayMs: number): void {
+    if (!this.polling) return;
+    this.pollTimer = setTimeout(() => {
+      this.pollTimer = null;
+      this.pollInFlight = this.pollTick().finally(() => {
+        this.pollInFlight = null;
+      });
+    }, delayMs);
+  }
+
+  private async pollTick(): Promise<void> {
+    let active = false;
+    try {
+      active = await this.pollOnce();
+    } catch (error) {
+      console.warn("[runner] poll failed:", error);
+    }
+    if (!this.polling || !this.pollBackoff) return;
+    this.schedulePoll(this.pollBackoff.next(active || this.hasLocalWork()));
+  }
+
+  /** One pass over every work source. Resolves true when any of them had work. */
+  private async pollOnce(): Promise<boolean> {
+    let active = await this.pollForSessions();
+    // Run every worker even after one reports work: each has its own queue.
+    if (await this.agentJobWorker?.poll()) active = true;
+    if (await this.hostTurnWorker?.poll()) active = true;
+    if (await this.integrationDeliveryWorker?.poll()) active = true;
+    if (await this.externalStatusWorker?.poll()) active = true;
+    return active;
+  }
+
+  private hasLocalWork(): boolean {
+    return this.activeSessions.size > 0 || this.activePromotions.size > 0;
+  }
+
+  /** Resolves true when this runner has pending or running sessions. */
+  private async pollForSessions(): Promise<boolean> {
+    if (!this.runnerId) return false;
 
     try {
       const sessions = await this.trpc.runner.listSessionsByRunner.query({
@@ -610,9 +648,39 @@ export class RunnerServer {
       }
 
       await this.processPromotionRequests(sessions);
+      return sessions.length > 0;
     } catch {
       // Polling failures are expected during startup
+      return false;
     }
+  }
+
+  /**
+   * Whether a session's events need re-reading for promote requests: on first
+   * sight, on a status change, or once the rescan interval has passed. Entries
+   * for sessions that left the list are dropped.
+   */
+  private sessionsToScan<T extends { id: string; status?: string }>(
+    sessions: T[],
+    now: number,
+  ): T[] {
+    const listed = new Set(sessions.map((session) => session.id));
+    for (const id of this.promotionScans.keys()) {
+      if (!listed.has(id)) this.promotionScans.delete(id);
+    }
+    return sessions.filter((session) => {
+      const last = this.promotionScans.get(session.id);
+      const status = session.status ?? "";
+      if (
+        last &&
+        last.status === status &&
+        now - last.at < PROMOTION_RESCAN_INTERVAL_MS
+      ) {
+        return false;
+      }
+      this.promotionScans.set(session.id, { status, at: now });
+      return true;
+    });
   }
 
   private async processPromotionRequests(
@@ -620,9 +688,10 @@ export class RunnerServer {
       id: string;
       threadId: string;
       runnerId: string;
+      status?: string;
     }[],
   ): Promise<void> {
-    for (const session of sessions) {
+    for (const session of this.sessionsToScan(sessions, Date.now())) {
       const events = await this.trpc.runner.getSessionEvents.query({
         sessionId: session.id,
       });
@@ -768,7 +837,7 @@ export class RunnerServer {
         onEvent: (event) => {
           if (event.type === "stdout") {
             bobLog += event.data;
-            void this.trpc.runner.pushSessionEvent.mutate({
+            streamSessionEvent(this.trpc, {
               sessionId: session.id,
               type: "stdout_chunk",
               content: event.data,
@@ -776,21 +845,21 @@ export class RunnerServer {
           }
           if (event.type === "stderr") {
             bobLog += event.data;
-            void this.trpc.runner.pushSessionEvent.mutate({
+            streamSessionEvent(this.trpc, {
               sessionId: session.id,
               type: "stderr_chunk",
               content: event.data,
             });
           }
           if (event.type === "thought") {
-            void this.trpc.runner.pushSessionEvent.mutate({
+            streamSessionEvent(this.trpc, {
               sessionId: session.id,
               type: "thought",
               content: event.thought?.text ?? event.data,
             });
           }
           if (event.type === "tool_call" || event.type === "tool_result") {
-            void this.trpc.runner.pushSessionEvent.mutate({
+            streamSessionEvent(this.trpc, {
               sessionId: session.id,
               type: "tool_call",
               content: JSON.stringify({
@@ -800,14 +869,14 @@ export class RunnerServer {
             });
           }
           if (event.type === "error") {
-            void this.trpc.runner.pushSessionEvent.mutate({
+            streamSessionEvent(this.trpc, {
               sessionId: session.id,
               type: "error",
               content: event.data,
             });
           }
           if (event.type === "exit") {
-            void this.trpc.runner.pushSessionEvent.mutate({
+            streamSessionEvent(this.trpc, {
               sessionId: session.id,
               type: "exit",
               content: event.data,
@@ -907,7 +976,7 @@ export class RunnerServer {
       sessionId: params.sessionId,
       projectId: params.threadId ?? params.threadSlug ?? null,
       operation: () =>
-        promoteNote({
+        promoteRunnerNote({
           storageRoot: this.config.storageRoot,
           threadDir,
           sessionId: params.sessionId,
@@ -921,7 +990,7 @@ export class RunnerServer {
             sourceType: "agent",
             queryOrInputRef: `session:${params.sessionId}`,
           },
-        }),
+        }, this.vaultPublication),
     });
 
     // Push a promotion_available event so the UI knows
@@ -967,14 +1036,18 @@ export class RunnerServer {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
+    this.polling = false;
     if (this.pollTimer) {
-      clearInterval(this.pollTimer);
+      clearTimeout(this.pollTimer);
       this.pollTimer = null;
     }
     if (this.reapTimer) {
       clearInterval(this.reapTimer);
       this.reapTimer = null;
     }
+    // Clearing the timer prevents new polls, but an active poll can still
+    // publish notes or claim work. Drain it before stopping its workers.
+    await this.pollInFlight;
     if (this.bobGateway) {
       this.bobGateway.stop();
     }

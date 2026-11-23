@@ -43,7 +43,7 @@ import {
   Exit,
   Layer,
   Ref,
-  ServiceMap,
+  Context,
   Stream,
 } from "effect";
 
@@ -136,7 +136,7 @@ export interface AgentSessionShape {
   ) => Effect.Effect<void, AgentSessionNotFoundError>;
 }
 
-export class AgentSession extends ServiceMap.Service<
+export class AgentSession extends Context.Service<
   AgentSession,
   AgentSessionShape
 >()("@gmacko/agent/AgentSession") {}

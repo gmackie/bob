@@ -10,7 +10,11 @@ import {
   runLifecycleEvents,
   taskRuns,
 } from "@bob/db/schema";
-import { generateBranchName } from "@bob/work-items/branch-name";
+import {
+  generateBranchName,
+  generateTrackerBranchName,
+  isTrackerIdentifier,
+} from "@bob/work-items/branch-name";
 import { buildBobExternalTaskMetadata } from "./externalTaskMetadata.js";
 import { applySnapshotToTask, snapshotTaskFromProvider } from "./providerSnapshot.js";
 import {
@@ -157,6 +161,21 @@ export async function gatewayRequest(
   }
 
   return response.json();
+}
+
+/**
+ * The run's feature branch. A Kanbanger/Linear-imported task whose identifier
+ * is the tracker's (`GMA-612`) gets `bob/GMA-612-<slug>` so Kanbanger and
+ * ForgeGraph can link the branch, its CI and its deploys to the issue; every
+ * other task uses `bob/<escaped identifier>/<slug>`, preserving safe historical
+ * identifiers while keeping external intake punctuation out of Git ref syntax.
+ */
+export function branchForTask(
+  task: Pick<PlanningTask, "identifier" | "title" | "externalProvider">,
+): string {
+  return task.externalProvider === "linear" && isTrackerIdentifier(task.identifier)
+    ? generateTrackerBranchName(task.identifier, task.title)
+    : generateBranchName(task.identifier, task.title);
 }
 
 export async function findRepositoryForTask(
@@ -317,7 +336,7 @@ export async function executeTask(
     };
   }
 
-  const branch = generateBranchName(task.identifier, task.title);
+  const branch = branchForTask(task);
   const selectedAgent = options?.agentType ?? "opencode";
   const executionBackend = resolveExecutionBackend();
   const t3RuntimeConfig =

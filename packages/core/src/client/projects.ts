@@ -1,7 +1,7 @@
 // Projects facade for @gmacko/client. Mirrors ProjectsRpc — 4 procedures.
 
 import { Effect } from "effect";
-import { RpcClient } from "effect/unstable/rpc";
+import { RpcClient } from "effect/rpc";
 import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
 import type { ProjectWire } from "@gmacko/core/contracts/schemas/projects";
 

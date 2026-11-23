@@ -318,7 +318,7 @@ const isDirectRun = (() => {
       fileURLToPath(import.meta.url) === resolve(process.argv[1]) ||
       // tsx resolves to the .ts file even when the entry is symlinked; cover it.
       import.meta.url.endsWith("/migrate.ts") &&
-        process.argv[1].endsWith("migrate.ts")
+        process.argv[1].endsWith("/migrate.ts")
     );
   } catch {
     return false;

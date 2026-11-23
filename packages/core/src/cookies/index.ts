@@ -22,7 +22,7 @@ export interface CookieOptions {
   readonly sameSite?: "strict" | "lax" | "none";
 }
 
-export class CookiesNotImplementedError extends Schema.TaggedErrorClass<CookiesNotImplementedError>()(
+export class CookiesNotImplementedError extends Schema.TaggedError<CookiesNotImplementedError>()(
   "CookiesNotImplementedError",
   {
     reason: Schema.String,

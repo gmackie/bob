@@ -498,7 +498,7 @@ describe("handleDeliveryEvidence", () => {
     // Should NOT update work item status
     // vitest's expect.any/objectContaining always return `any` per their own
     // type declarations, regardless of generic argument.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    
     expect(dbUpdateSetMock).not.toHaveBeenCalledWith(expect.objectContaining({ status: expect.any(String) }));
     // Should still log audit event
     expect(dbInsertValuesMock).toHaveBeenCalledWith(

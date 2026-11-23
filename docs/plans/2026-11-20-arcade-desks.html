@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bob Arcade slice 2: HUD and Agent Desks</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--foreground, #202124); font: 14px/1.5 var(--font-sans, system-ui, sans-serif); }
+  main { width: 100%; min-width: 0; }
+  h1 { font-size: 1.2rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1rem; margin: 1.5rem 0 .5rem; }
+  h3 { font-size: .9rem; margin: 0 0 .25rem; }
+  p { max-width: 75ch; margin: .5rem 0; }
+  .meta, .muted { color: var(--muted-foreground, #606773); }
+  code { font-family: var(--font-mono, Menlo, monospace); background: var(--code-background, #f1f3f5); color: var(--code-foreground, #202124); padding: 0 .2em; border-radius: 3px; font-size: .85em; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th, td { text-align: left; vertical-align: top; padding: .45rem; border-bottom: 1px solid var(--border, #d8dce2); }
+  .badge, .chip { display: inline-block; border-radius: 999px; padding: .1rem .5rem; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+  .badge { background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #2458ac); }
+  .chip.done { background: color-mix(in srgb, var(--success, #1e8e3e) 18%, transparent); color: var(--success, #1e8e3e); }
+  .chip.active { background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #2458ac); }
+  .chip.todo { background: var(--muted, #f1f3f5); color: var(--muted-foreground, #606773); }
+  .chip.risk { background: var(--warning-surface, #fff4d6); color: var(--warning-foreground, #7a5200); }
+  .callout { border-left: 3px solid var(--accent, #2458ac); background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #1a2b4d); border-radius: 0 var(--radius, .625rem) var(--radius, .625rem) 0; padding: .65rem .85rem; margin: .75rem 0; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: .75rem; }
+  .card { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .625rem); background: var(--card, #f7f8fa); color: var(--card-foreground, #202124); padding: .75rem; }
+  .card ul { margin: .4rem 0 0; padding-left: 1.1rem; }
+  .yes li::marker { content: "✓  "; color: var(--success, #1e8e3e); }
+  .no li::marker { content: "✕  "; color: var(--destructive, #c5221f); }
+  /* rank ladder */
+  .ladder { display: grid; gap: 4px; margin: .5rem 0; }
+  .rung { display: grid; grid-template-columns: 2.2rem 1fr; align-items: center; gap: .5rem; }
+  .rung b { font-family: var(--font-mono, monospace); color: var(--muted-foreground, #606773); font-size: .8rem; }
+  .rung span { border-radius: 6px; padding: .3rem .6rem; background: color-mix(in srgb, var(--chart-1, #2458ac) calc(var(--w) * 1%), var(--card, #f7f8fa)); font-size: .85rem; transform-origin: left; }
+  /* flow */
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: .5rem 0; }
+  .node { border: 1px solid var(--border, #d8dce2); border-radius: 8px; padding: .35rem .6rem; background: var(--card, #f7f8fa); font-size: .82rem; }
+  .node.new { border-color: var(--accent, #2458ac); box-shadow: 0 0 0 1px var(--accent, #2458ac); }
+  .arrow { color: var(--muted-foreground, #606773); }
+  .timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+  .timeline::before { content: ""; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: var(--border, #d8dce2); }
+  .timeline li { position: relative; padding: 0 0 1rem 1.75rem; }
+  .timeline li::before { content: ""; position: absolute; left: 0; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--background, #fff); border: 2px solid var(--border, #d8dce2); }
+  .timeline li.active::before { background: var(--accent, #2458ac); border-color: var(--accent, #2458ac); }
+  .timeline .head { display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; }
+  details { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .625rem); background: var(--card, #f7f8fa); padding: .6rem .75rem; margin: .5rem 0; }
+  summary { cursor: pointer; font-weight: 600; }
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal { animation: rise .45s cubic-bezier(.2,.7,.3,1) both; animation-delay: calc(var(--i, 0) * 70ms); }
+    .rung span { animation: grow .5s ease-out both; animation-delay: calc(250ms + var(--i, 0) * 80ms); }
+    .node.new { animation: rise .45s ease-out both; animation-delay: calc(var(--i, 0) * 90ms); }
+    .timeline li.active::before { animation: pulse 1.8s ease-in-out infinite; }
+    @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+    @keyframes grow { from { transform: scaleX(0); } }
+    @keyframes pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent, #2458ac) 25%, transparent); } }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 class="reveal">Bob Arcade slice 2: HUD + Agent Desks <span class="badge">In progress</span></h1>
+  <p class="meta reveal" style="--i:1">2026-11-20 · gmackie/bob @ BOB-98-arcade-desks · BOB-98 (epic BOB-91, phase 1)</p>
+
+  <div class="callout reveal" style="--i:2"><strong>Plan:</strong> add a pure <code>desks</code> lens to <code>@bob/arcade</code>. It picks the up-to-6 items worth watching and turns their live tail and CI into desk cards. Then switch the phone and web edge clients from watching one item to watching a set. The edge already supports a set (BOB-94, live in production) and the shipped-today feed (BOB-95). This slice is client code only: no native dependency and no runtime-version bump, so it ships over the air.</div>
+
+  <h2 class="reveal" style="--i:3">Data flow</h2>
+  <div class="flow" role="img" aria-label="Edge view flows into chooseDesks, which produces a watch set sent to the SdlcEdge; tail and CI messages come back into the desks reducer and render as desk cards">
+    <span class="node">EdgeView</span><span class="arrow">→</span>
+    <span class="node new" style="--i:1">chooseDesks(view, previous)</span><span class="arrow">→</span>
+    <span class="node new" style="--i:2">watch {itemIds ≤ 6}</span><span class="arrow">→</span>
+    <span class="node">SdlcEdge DO</span><span class="arrow">→</span>
+    <span class="node">tail · ci · tailUnavailable</span><span class="arrow">→</span>
+    <span class="node new" style="--i:3">desks(view, ids, detail)</span><span class="arrow">→</span>
+    <span class="node new" style="--i:4">Desk cards</span>
+  </div>
+  <p class="muted">The edge only sends tail and CI detail to sockets that watch an item, so whichever desks are chosen get the live data. One socket serves both the item screen and the desks: the focused item always comes first in the set, and desks fill the remaining slots.</p>
+
+  <h2 class="reveal" style="--i:4">Which items get a desk</h2>
+  <div class="ladder">
+    <div class="rung"><b>0</b><span style="--w:55;--i:0">Needs you (attention <code>needs_human</code>)</span></div>
+    <div class="rung"><b>1</b><span style="--w:42;--i:1">Agent working: <code>running</code>, <code>waiting-input</code></span></div>
+    <div class="rung"><b>2</b><span style="--w:30;--i:2">Checking: <code>validating</code>, <code>review</code>, <code>deploying</code></span></div>
+    <div class="rung"><b>3</b><span style="--w:18;--i:3">Starting: <code>reserved</code>, <code>execution-unknown</code></span></div>
+  </div>
+  <p class="muted">Ties keep the previous desk, then fall back to sorting by itemId. Kept desks hold their slot, and new ones fill the free slots. Desks only move when their item moves to a different rank or leaves the floor, and the watch message is re-sent only when the set of ids changes.</p>
+
+  <h2 class="reveal" style="--i:5">Scope</h2>
+  <div class="cols">
+    <section class="card"><h3>Goals</h3><ul class="yes">
+      <li>One <code>chooseDesks</code> and <code>desks</code> function, shared by web and native</li>
+      <li>Phone session: a watch set (focus + desks), opt in to shipped-today</li>
+      <li>Arcade on iPad: desk grid; on iPhone: desk strip; tap a desk to open its item</li>
+      <li>HUD <code>TODAY</code> count from shipped entries (local day)</li>
+      <li>Web /cockpit: a desks row and a TODAY counter</li>
+    </ul></section>
+    <section class="card"><h3>Non-goals</h3><ul class="no">
+      <li>Edge or protocol changes (already shipped)</li>
+      <li>Answering a question from a desk (it opens the item screen)</li>
+      <li>XP, sound, or replay (phase 5)</li>
+      <li>Native builds and runtime-version bumps</li>
+    </ul></section>
+  </div>
+
+  <h2 class="reveal" style="--i:6">Phases</h2>
+  <ol class="timeline">
+    <li class="active"><div class="head"><h3>1. Core lens</h3><span class="chip active">Next</span></div>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>chooseDesks + desks + shippedToday</td><td><code>packages/bob/src/arcade/src/desks.ts</code></td><td>vitest: determinism, stickiness, cap 6, rank preemption, stale/unavailable</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+    <li><div class="head"><h3>2. Mobile</h3><span class="chip todo">Todo</span></div>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Session: watch set, per-item detail, shipped opt-in</td><td><code>features/sdlc/edge-session.ts</code>, <code>use-sdlc-edge.ts</code></td><td>edge-session tests: union, re-send on reconnect, no resend when unchanged</td><td><span class="chip todo">Todo</span></td></tr>
+          <tr><td>Desks view + TODAY cell; demo feed gets tail frames</td><td><code>features/arcade/*</code></td><td>lint, tsc, jest; iPhone + iPad sim screenshots of /arcade/demo</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+    <li><div class="head"><h3>3. Web</h3><span class="chip todo">Todo</span></div>
+      <details><summary>Tasks</summary><div class="table-scroll"><table>
+        <thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Edge client watch set + shipped; desks row on the wall</td><td><code>components/sdlc/edge-client.ts</code>, <code>attempt-model.ts</code>, <code>cockpit/*</code></td><td>vitest, tsc, build</td><td><span class="chip todo">Todo</span></td></tr>
+        </tbody></table></div></details></li>
+    <li><div class="head"><h3>4. Ship</h3><span class="chip todo">Todo</span></div><p class="muted">PR → green CI → approve → merge → web deploy check → EAS update to production (10% first, then ramp) → manual-target receipts if the lockfile changed → production check → close.</p></li>
+  </ol>
+
+  <h2 class="reveal" style="--i:7">Risks</h2>
+  <p><span class="chip risk">Medium</span> The edge caps tail fan-out per socket. Desks plus the item screen share the 6 slots. <span class="muted">The focused item is always first, so the item screen never loses its live tail.</span></p>
+  <p><span class="chip risk">Low</span> Watch churn while the floor is busy. <span class="muted">Desks stay sticky, the watch is re-sent only when the ids change, and the edge replays tail and CI only for ids newly added to the set.</span></p>
+</main>
+</body>
+</html>

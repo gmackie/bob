@@ -1,0 +1,78 @@
+{
+  "contractVersion": "1",
+  "status": "pending-runtime-implementation",
+  "scenarios": [
+    {
+      "id": "command-replay",
+      "given": "admitted command and lost response",
+      "when": "same ID and payload replay",
+      "then": "same operation; stale expectedVersion does not reject accepted replay"
+    },
+    {
+      "id": "command-conflict",
+      "given": "admitted command",
+      "when": "same ID with changed target or scope",
+      "then": "idempotency conflict"
+    },
+    {
+      "id": "execution-replay",
+      "given": "execution admitted on target; response lost",
+      "when": "same requestId replay",
+      "then": "same execution and thread; no second process or worktree"
+    },
+    {
+      "id": "unknown-execution",
+      "given": "admitted execution on unreachable environment",
+      "when": "retry or handoff requested",
+      "then": "no new attempt until predecessor confirmed terminal"
+    },
+    {
+      "id": "stale-receipt",
+      "given": "new active attempt",
+      "when": "old attempt completion received",
+      "then": "retain history without advancing active work"
+    },
+    {
+      "id": "sequence-gap",
+      "given": "last event sequence N",
+      "when": "receive N+2",
+      "then": "replay or snapshot before transition"
+    },
+    {
+      "id": "cancel-race",
+      "given": "execution completed before cancellation applied",
+      "when": "cancel receipt reconciled",
+      "then": "retain actual outcome; cancellation too late"
+    },
+    {
+      "id": "schedule-overlap",
+      "given": "duplicate occurrence and ready item",
+      "when": "trigger received twice",
+      "then": "one logical admitted attempt"
+    },
+    {
+      "id": "dirty-validation",
+      "given": "dirty tested tree or PR head advanced",
+      "when": "validation/approval requested",
+      "then": "pin patch artifact; tests cannot validate a different clean head"
+    },
+    {
+      "id": "production-provenance",
+      "given": "healthy staging or old production artifact",
+      "when": "production milestone evaluated",
+      "then": "new target remains unsatisfied"
+    },
+    {
+      "id": "cross-environment",
+      "given": "target does not belong to authenticated environment",
+      "when": "execution submitted",
+      "then": "reject before admission"
+    },
+    {
+      "id": "premature-close",
+      "given": "issue closed on merge without production evidence",
+      "when": "Bob reconciles managed work",
+      "then": "reopen and record pending delivery"
+    }
+  ]
+}

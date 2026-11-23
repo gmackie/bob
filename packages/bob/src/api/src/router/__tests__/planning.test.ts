@@ -152,7 +152,7 @@ describe("planning routers", () => {
         // `any` (see @vitest/expect's type declarations), so nesting one
         // inside another object literal always trips no-unsafe-assignment
         // here — the matcher itself, not this test's own typing, is the gap.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         workspace: expect.objectContaining({
           id: workspaceId,
           slug: "builder",
@@ -189,7 +189,7 @@ describe("planning routers", () => {
       expect.objectContaining({
         // Nested expect.objectContaining always returns `any` per vitest's
         // own type declarations — see the comment above in the previous test.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         project: expect.objectContaining({
           id: projectId,
           key: "MERGE",
@@ -241,7 +241,7 @@ describe("planning routers", () => {
         kind: "task",
         // Nested expect.objectContaining always returns `any` per vitest's
         // own type declarations — see the comment earlier in this file.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        
         project: expect.objectContaining({
           id: projectId,
           key: "MERGE",
@@ -307,7 +307,7 @@ describe("planning routers", () => {
     expect(result).toMatchObject({
       // expect.objectContaining's return type is unconditionally `any` per
       // vitest's own type declarations — see the comment earlier in this file.
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      
       workItem: expect.objectContaining({
         id: taskId,
         identifier: "MERGE-12",

@@ -183,13 +183,41 @@ async function main() {
       const result = await pullVault(storageRoot);
       console.log(`  ${result.filesChanged} files changed`);
 
-      if (result.conflicts) {
+      if (result.status === "unavailable") {
+        console.error("  Remote sync unavailable. Local changes are retained.");
+        process.exitCode = 1;
+      } else if (result.conflicts) {
+        process.exitCode = 1;
         console.log(`  Conflicts in: ${result.conflictFiles.join(", ")}`);
         console.log("  Resolve conflicts, then run: ooda sync");
       } else {
-        console.log("Pushing to remote...");
-        await pushVault(storageRoot);
-        console.log("  Synced.");
+        console.log("Publishing to remote...");
+        const push = await pushVault(storageRoot);
+        for (const replayed of push.replayed) {
+          console.log(
+            `  replayed ${replayed.intent.operationId}: ${replayed.state}`,
+          );
+        }
+        const head = push.head;
+        const shortId = head.intent.revision.objectId.slice(0, 12);
+        switch (head.state) {
+          case "published":
+            console.log(`  Published ${shortId} (${head.receipt?.verifiedBy}).`);
+            break;
+          case "pending":
+            console.log(`  Saved locally; NOT published (${head.lastError}).`);
+            console.log("  Run: ooda sync when the remote is reachable.");
+            process.exitCode = 2;
+            break;
+          case "conflict":
+            console.log(`  NOT published: remote moved to ${head.observedRemoteHead}.`);
+            console.log("  Run: ooda sync to pull and merge, then sync again.");
+            process.exitCode = 2;
+            break;
+          default:
+            console.log(`  Publication ${head.state} (${head.lastError ?? "no detail"}).`);
+            process.exitCode = 2;
+        }
       }
       break;
     }

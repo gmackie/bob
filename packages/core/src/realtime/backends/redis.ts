@@ -1,4 +1,4 @@
-import { Effect, Layer, ServiceMap, Stream } from "effect";
+import { Effect, Layer, Context, Stream } from "effect";
 
 import {
   type RealtimeChannelShape,
@@ -23,7 +23,7 @@ import {
  * end-to-end.
  */
 export const layerRedis = <A>(
-  tag: ServiceMap.Service<RealtimeChannelShape<A>, RealtimeChannelShape<A>>,
+  tag: Context.Service<RealtimeChannelShape<A>, RealtimeChannelShape<A>>,
 ): Layer.Layer<RealtimeChannelShape<A>> =>
   Layer.succeed(tag, {
     publish: (channel) =>

@@ -15,8 +15,8 @@ import {
 // from the sheet.
 
 describe("MOBILE_TABS", () => {
-  it("has the five places a person on the road goes constantly, Home first", () => {
-    expect(MOBILE_TABS.map((t) => t.key)).toEqual(["home", "tasks", "chat", "nodes", "more"]);
+  it("has the places a person on the road goes constantly, Home first, Attention next", () => {
+    expect(MOBILE_TABS.map((t) => t.key)).toEqual(["home", "attention", "tasks", "chat", "nodes", "more"]);
     expect(MOBILE_TABS[0]).toMatchObject({ key: "home", href: "/home", label: "Home" });
   });
 
@@ -46,9 +46,18 @@ describe("MORE_DESTINATIONS", () => {
 describe("resolveTabForPath", () => {
   it("lights the tab that owns the current route", () => {
     expect(resolveTabForPath("/home")).toBe("home");
+    expect(resolveTabForPath("/today")).toBe("home");
     expect(resolveTabForPath("/tasks/queue")).toBe("tasks");
     expect(resolveTabForPath("/chat")).toBe("chat");
     expect(resolveTabForPath("/nodes")).toBe("nodes");
+    expect(resolveTabForPath("/attention")).toBe("attention");
+  });
+
+  it("keeps Attention lit across its drill-down and item detail", () => {
+    expect(resolveTabForPath("/attention/browse?project=p1")).toBe("attention");
+    expect(resolveTabForPath("/attention/item-1")).toBe("attention");
+    expect(resolveTabForPath("/arcade")).toBe("attention");
+    expect(tabHref("attention")).toBe("/attention");
   });
 
   it("attributes detail routes to the tab they are reached from", () => {
@@ -57,6 +66,8 @@ describe("resolveTabForPath", () => {
     expect(resolveTabForPath("/work-items/wi_1/workspace")).toBe("tasks");
     // Sessions and providers are reached from Nodes/Tasks; keep Tasks lit.
     expect(resolveTabForPath("/sessions/s_1")).toBe("tasks");
+    expect(resolveTabForPath("/sessions")).toBe("tasks");
+    expect(resolveTabForPath("/runs/r_1")).toBe("tasks");
   });
 
   it("lights More for everything behind it", () => {

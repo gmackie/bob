@@ -3,7 +3,7 @@
 // 7B-4C Task 9: +8 external.webhook.* + 9 external.publicApi.* procedures (31 total).
 // 2026-06-22 migration: +6 external.integration.* procedures (37 total).
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 import { BobNotFoundError, BobForbiddenError } from "../errors.js";
 import {

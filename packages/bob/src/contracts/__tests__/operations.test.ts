@@ -75,4 +75,24 @@ describe("renderer response parity", () => {
       value,
     );
   });
+  it("keeps the filed issue id and the work item Bob runs", () => {
+    const value = {
+      id: "d",
+      sessionId: "s",
+      workspaceId: "w",
+      projectId: "p",
+      title: "Draft",
+      kind: "task",
+      priority: "urgent",
+      sortOrder: 0,
+      status: "committed",
+      createdAt: "2026-09-16",
+      planningTaskId: "issue-1",
+      planningTaskIdentifier: "BOB-12",
+      workItemId: "work-1",
+    };
+    expect(Schema.decodeUnknownSync(PlanDraftRecordSchema)(value)).toEqual(
+      value,
+    );
+  });
 });

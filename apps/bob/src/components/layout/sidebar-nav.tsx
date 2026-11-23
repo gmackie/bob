@@ -80,6 +80,16 @@ const UTILITY_ICON: Record<SidebarUtilityItem["key"], NavItem["icon"]> = {
       <path d="M5 4.25 6.1 5.35 8.5 3 9.2 3.7 6.1 6.75 4.3 4.95 5 4.25ZM5 8.25 6.1 9.35 8.5 7 9.2 7.7 6.1 10.75 4.3 8.95 5 8.25Z" />
     </svg>
   ),
+  executions: () => (
+    <svg
+      className="size-[15px]"
+      viewBox="0 0 15 15"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M4 2.8v9.4a.5.5 0 0 0 .77.42l7.2-4.7a.5.5 0 0 0 0-.84l-7.2-4.7A.5.5 0 0 0 4 2.8Z" />
+    </svg>
+  ),
   "pull-requests": () => (
     <svg
       className="size-[15px]"
@@ -92,6 +102,34 @@ const UTILITY_ICON: Record<SidebarUtilityItem["key"], NavItem["icon"]> = {
       <circle cx="10.5" cy="3.5" r="1.5" />
       <rect x="4" y="5" width="1" height="5" />
       <path d="M10.5 5v2.5a2 2 0 0 1-2 2H7V8.5h1.5a1 1 0 0 0 1-1V5h1Z" />
+    </svg>
+  ),
+  sdlc: () => (
+    <svg
+      className="size-[15px]"
+      viewBox="0 0 15 15"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect x="1.5" y="2" width="4" height="3" rx="0.75" stroke="currentColor" />
+      <rect x="9.5" y="2" width="4" height="3" rx="0.75" stroke="currentColor" />
+      <rect x="5.5" y="10" width="4" height="3" rx="0.75" stroke="currentColor" />
+      <path d="M5.5 3.5h4M11.5 5v2.5H7.5V10" stroke="currentColor" />
+    </svg>
+  ),
+  budget: () => (
+    <svg
+      className="size-[15px]"
+      viewBox="0 0 15 15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M2.5 10.5a5 5 0 1 1 10 0" />
+      <path d="M7.5 10.5 10 6.5" />
+      <circle cx="7.5" cy="10.5" r="0.9" fill="currentColor" stroke="none" />
     </svg>
   ),
   nodes: () => (

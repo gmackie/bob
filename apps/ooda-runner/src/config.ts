@@ -12,7 +12,7 @@ export const RunnerConfigSchema = z
     port: z.coerce.number().int().min(0).max(65535).default(3001),
     // External inference access requires an explicit bind plus BOB_API_KEY.
     inferenceHost: z.string().optional(),
-    // Preserve accepted live configuration; no T3 routing consumer is enabled.
+    // When set, gateway tasks execute on this T3 server through the supervised bridge.
     t3codeServerUrl: z.string().url().optional(),
     t3codeAuthToken: z.string().optional(),
     t3codeProjectId: z.string().optional(),
@@ -84,8 +84,16 @@ export const RunnerConfigSchema = z
     grokHostModel: z.string().optional(),
     claudeHostModel: z.string().optional(),
     openaiHostModel: z.string().optional(),
+    // Idle poll ceiling (BOB-60). The work poll runs every 2s while anything is
+    // active or was active in the last minute, then backs off to this ceiling.
+    // It is also the worst-case pickup latency for work arriving on an idle
+    // runner, so keep it short.
+    pollIdleMaxMs: z.coerce.number().int().min(2_000).max(120_000).default(20_000),
   })
   .superRefine((config, context) => {
+    if (config.t3codeServerUrl && !config.t3codeAuthToken) {
+      context.addIssue({ code: "custom", path: ["t3codeAuthToken"], message: "T3 server execution requires OODA_T3CODE_AUTH_TOKEN" });
+    }
     if (config.obsidianDeliveryEnabled && !config.obsidianVaultPath) {
       context.addIssue({
         code: "custom",
@@ -157,5 +165,6 @@ export function loadConfig(): RunnerConfig {
     grokHostModel: process.env.OODA_GROK_HOST_MODEL,
     claudeHostModel: process.env.OODA_CLAUDE_HOST_MODEL,
     openaiHostModel: process.env.OODA_OPENAI_HOST_MODEL,
+    pollIdleMaxMs: process.env.OODA_RUNNER_POLL_IDLE_MAX_MS,
   });
 }

@@ -21,8 +21,8 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
 import { Duration, Effect, Layer, Ref } from "effect";
-import { HttpRouter } from "effect/unstable/http";
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { HttpRouter } from "effect/http";
+import { RpcSerialization, RpcServer } from "effect/rpc";
 
 import {
   RunnerRpc,

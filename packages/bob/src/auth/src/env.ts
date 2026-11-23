@@ -12,7 +12,7 @@
  * every access, which is what both production request-handling and the
  * tests actually need.
  *
- * This file matches the repo's `**\/env.ts` eslint ignore glob, so it's
+ * This file is the validated env module the lint guard points callers at, so it's
  * exempt from `no-restricted-properties`/`no-restricted-imports` — it's the
  * validated boundary the rule wants other modules to import from.
  */

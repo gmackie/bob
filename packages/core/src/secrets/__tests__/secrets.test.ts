@@ -60,7 +60,7 @@ afterEach(async () => {
 describe("@gmacko/secrets Secrets service", () => {
   it.effect("createSecret round-trips an envelope without leaking plaintext/ciphertext", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       const envelope = yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "github-token",
@@ -85,7 +85,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("createSecret rejects duplicate (tenantId, name) with SecretNameConflictError", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "dup",
@@ -110,7 +110,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("createSecret persists ciphertext that decrypts back to plaintext", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       const plaintext = "hunter2-ultra-secret";
       const envelope = yield* svc.createSecret({
         tenantId: TENANT_A,
@@ -141,7 +141,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("deleteSecret rejects cross-tenant deletion and preserves the row", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       const aSecret = yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "tenant-a-only",
@@ -167,7 +167,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("listForTenant returns only the calling tenant's secrets", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "a-first",
@@ -200,7 +200,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("listForTenant surfaces usesRemaining (null for unlimited, integer otherwise)", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "limited",
@@ -223,7 +223,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("getSecret returns the envelope for an existing tenant-owned secret", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       const created = yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "gh-token",
@@ -254,7 +254,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("getSecret for a non-existent id → SecretNotFoundError", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       const missingId = randomUUID() as SessionSecretId;
 
       const caught = yield* svc
@@ -271,7 +271,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("getSecret for another tenant's secret → SecretNotFoundError (cross-tenant hardening)", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       const aSecret = yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "a-only",
@@ -300,7 +300,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("decryptForUse happy path: no policy, unlimited uses → returns plaintext and writes success audit", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       const created = yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "unl",
@@ -329,7 +329,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("decryptForUse allows when templateId is in allowedTemplates", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       const created = yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "tpl-allow",
@@ -359,7 +359,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("decryptForUse denies when templateId is NOT in allowedTemplates (writes failure audit, preserves usesRemaining)", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       const created = yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "tpl-deny",
@@ -407,7 +407,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("decryptForUse allows when args[0] matches an allowedArgPrefixes entry", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       const created = yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "arg-allow",
@@ -446,7 +446,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("decryptForUse denies when no arg matches an allowedArgPrefixes entry", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       const created = yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "arg-deny",
@@ -489,7 +489,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("decryptForUse with usesRemaining=1 succeeds once, then fails with MaxUsesExceededError", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       const created = yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "one-shot",
@@ -533,7 +533,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("decryptForUse with usesRemaining=null stays null across 3 successful calls", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       const created = yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "unbounded",
@@ -570,7 +570,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("markSecretUsed writes a usage row for a tenant-owned secret without decrementing usesRemaining", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       const created = yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "audit-only",
@@ -615,7 +615,7 @@ describe("@gmacko/secrets Secrets service", () => {
 
   it.effect("markSecretUsed for another tenant's secret → SecretNotFoundError (no audit row written)", () =>
     Effect.gen(function* () {
-      const svc = yield* Secrets.asEffect();
+      const svc = yield* Secrets;
       const aSecret = yield* svc.createSecret({
         tenantId: TENANT_A,
         name: "a-only-audit",

@@ -8,7 +8,7 @@
 //
 // Real implementation deferred to Phase 7 (Bob migration). Drivers (S3, R2,
 // local FS) will land per concrete consumer needs.
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, Schema, Context } from "effect";
 
 export interface StorageObject {
   readonly key: string;
@@ -18,7 +18,7 @@ export interface StorageObject {
   readonly updatedAt: Date;
 }
 
-export class StorageNotImplementedError extends Schema.TaggedErrorClass<StorageNotImplementedError>()(
+export class StorageNotImplementedError extends Schema.TaggedError<StorageNotImplementedError>()(
   "StorageNotImplementedError",
   {
     reason: Schema.String,
@@ -46,7 +46,7 @@ export interface StorageShape {
   ) => Effect.Effect<readonly StorageObject[], StorageNotImplementedError>;
 }
 
-export const Storage = ServiceMap.Service<StorageShape>(
+export const Storage = Context.Service<StorageShape>(
   "@gmacko/storage/Storage",
 );
 

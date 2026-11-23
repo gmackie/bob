@@ -71,7 +71,7 @@ describe("@gmacko/auth Tenancy service", () => {
   it.effect("listMemberships returns 0 entries when the user has no memberships", () =>
     Effect.gen(function* () {
       yield* Effect.promise(() => seed(ctx, []));
-      const svc = yield* Tenancy.asEffect();
+      const svc = yield* Tenancy;
       const list = yield* svc.listMemberships(USER_ID);
       expect(list).toEqual([]);
     }).pipe(Effect.provide(tenancyLayer)),
@@ -86,7 +86,7 @@ describe("@gmacko/auth Tenancy service", () => {
           { tenantId: TENANT_C, role: "member" },
         ]),
       );
-      const svc = yield* Tenancy.asEffect();
+      const svc = yield* Tenancy;
       const list = yield* svc.listMemberships(USER_ID);
       expect(list).toHaveLength(3);
       expect(list).toEqual(
@@ -104,7 +104,7 @@ describe("@gmacko/auth Tenancy service", () => {
       yield* Effect.promise(() =>
         seed(ctx, [{ tenantId: TENANT_A, role: "admin" }]),
       );
-      const svc = yield* Tenancy.asEffect();
+      const svc = yield* Tenancy;
       const role = yield* svc.assertMembership(USER_ID, TENANT_A);
       expect(role).toBe("admin");
     }).pipe(Effect.provide(tenancyLayer)),
@@ -115,7 +115,7 @@ describe("@gmacko/auth Tenancy service", () => {
       yield* Effect.promise(() =>
         seed(ctx, [{ tenantId: TENANT_A, role: "owner" }]),
       );
-      const svc = yield* Tenancy.asEffect();
+      const svc = yield* Tenancy;
       const caught = yield* svc.assertMembership(USER_ID, TENANT_B).pipe(
         Effect.catchTag("NotAMemberError", (err) => Effect.succeed(err)),
       );
@@ -130,7 +130,7 @@ describe("@gmacko/auth Tenancy service", () => {
       yield* Effect.promise(() =>
         seed(ctx, [{ tenantId: TENANT_A, role: "admin" }]),
       );
-      const svc = yield* Tenancy.asEffect();
+      const svc = yield* Tenancy;
       // Should succeed with no error.
       yield* svc.assertRole(USER_ID, TENANT_A, "admin");
     }).pipe(Effect.provide(tenancyLayer)),
@@ -144,7 +144,7 @@ describe("@gmacko/auth Tenancy service", () => {
           { tenantId: TENANT_B, role: "admin" },
         ]),
       );
-      const svc = yield* Tenancy.asEffect();
+      const svc = yield* Tenancy;
       yield* svc.assertRole(USER_ID, TENANT_A, "admin");
       yield* svc.assertRole(USER_ID, TENANT_A, "member");
       yield* svc.assertRole(USER_ID, TENANT_B, "member");
@@ -156,7 +156,7 @@ describe("@gmacko/auth Tenancy service", () => {
       yield* Effect.promise(() =>
         seed(ctx, [{ tenantId: TENANT_A, role: "member" }]),
       );
-      const svc = yield* Tenancy.asEffect();
+      const svc = yield* Tenancy;
       const caught = yield* svc.assertRole(USER_ID, TENANT_A, "admin").pipe(
         Effect.catchTag("InsufficientRoleError", (err) => Effect.succeed(err)),
       );
@@ -171,7 +171,7 @@ describe("@gmacko/auth Tenancy service", () => {
       yield* Effect.promise(() =>
         seed(ctx, [{ tenantId: TENANT_A, role: "owner" }]),
       );
-      const svc = yield* Tenancy.asEffect();
+      const svc = yield* Tenancy;
       const caught = yield* svc.assertRole(USER_ID, TENANT_B, "member").pipe(
         Effect.catchTag("NotAMemberError", (err) => Effect.succeed(err)),
       );
@@ -187,7 +187,7 @@ describe("@gmacko/auth Tenancy service", () => {
           { tenantId: TENANT_B, role: "member" },
         ]),
       );
-      const svc = yield* Tenancy.asEffect();
+      const svc = yield* Tenancy;
       const m = yield* svc.resolveForUser(USER_ID, TENANT_B);
       expect(m.tenantId).toBe(TENANT_B);
       expect(m.role).toBe("member");
@@ -199,7 +199,7 @@ describe("@gmacko/auth Tenancy service", () => {
       yield* Effect.promise(() =>
         seed(ctx, [{ tenantId: TENANT_A, role: "owner" }]),
       );
-      const svc = yield* Tenancy.asEffect();
+      const svc = yield* Tenancy;
       const caught = yield* svc.resolveForUser(USER_ID, TENANT_B).pipe(
         Effect.catchTag("NotAMemberError", (err) => Effect.succeed(err)),
       );
@@ -212,7 +212,7 @@ describe("@gmacko/auth Tenancy service", () => {
       yield* Effect.promise(() =>
         seed(ctx, [{ tenantId: TENANT_A, role: "owner" }]),
       );
-      const svc = yield* Tenancy.asEffect();
+      const svc = yield* Tenancy;
       const m = yield* svc.resolveForUser(USER_ID, null);
       expect(m.tenantId).toBe(TENANT_A);
       expect(m.role).toBe("owner");
@@ -222,7 +222,7 @@ describe("@gmacko/auth Tenancy service", () => {
   it.effect("resolveForUser with no hint + zero memberships fails with TenantNotSelectedError", () =>
     Effect.gen(function* () {
       yield* Effect.promise(() => seed(ctx, []));
-      const svc = yield* Tenancy.asEffect();
+      const svc = yield* Tenancy;
       const caught = yield* svc.resolveForUser(USER_ID, null).pipe(
         Effect.catchTag("TenantNotSelectedError", (err) => Effect.succeed(err)),
       );
@@ -240,7 +240,7 @@ describe("@gmacko/auth Tenancy service", () => {
           { tenantId: TENANT_B, role: "member" },
         ]),
       );
-      const svc = yield* Tenancy.asEffect();
+      const svc = yield* Tenancy;
       const caught = yield* svc.resolveForUser(USER_ID, null).pipe(
         Effect.catchTag("TenantNotSelectedError", (err) => Effect.succeed(err)),
       );

@@ -81,8 +81,10 @@ export class HostTurnWorker {
     this.sandboxes = new ScratchSandboxManager(config.scratchRoot);
   }
 
-  async poll(): Promise<void> {
-    if (this.stopping || this.active.size >= this.config.maxConcurrent) return;
+  /** Resolves true when a turn was claimed or is still running (BOB-60). */
+  async poll(): Promise<boolean> {
+    if (this.stopping) return false;
+    if (this.active.size >= this.config.maxConcurrent) return true;
     const providers = [...this.config.adapters.values()]
       .map(hostProvider)
       .filter((provider): provider is HostProvider => provider !== null)
@@ -91,18 +93,19 @@ export class HostTurnWorker {
           (["grok", "claude", "openai"] as const).indexOf(left) -
           (["grok", "claude", "openai"] as const).indexOf(right),
       );
-    if (!providers.length) return;
+    if (!providers.length) return this.active.size > 0;
     const claim = await this.config.api.claim({
       runnerId: this.config.runnerId,
       providers,
       leaseSeconds: 300,
     });
-    if (!claim) return;
+    if (!claim) return this.active.size > 0;
     const controller = new AbortController();
     const promise = this.execute(claim, controller).finally(() => {
       this.active.delete(claim.executionId);
     });
     this.active.set(claim.executionId, { controller, promise });
+    return true;
   }
 
   async waitForIdle(): Promise<void> {

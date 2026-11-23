@@ -43,14 +43,14 @@ export type PersonaSyncResultWire = Schema.Schema.Type<
   typeof PersonaSyncResultSchema
 >;
 
-export class PersonaNotFoundError extends Schema.TaggedErrorClass<PersonaNotFoundError>()(
+export class PersonaNotFoundError extends Schema.TaggedError<PersonaNotFoundError>()(
   "PersonaNotFoundError",
   {
     personaId: Schema.String,
   },
 ) {}
 
-export class PersonaReadOnlyError extends Schema.TaggedErrorClass<PersonaReadOnlyError>()(
+export class PersonaReadOnlyError extends Schema.TaggedError<PersonaReadOnlyError>()(
   "PersonaReadOnlyError",
   {
     personaId: Schema.String,

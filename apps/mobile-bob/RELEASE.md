@@ -14,18 +14,18 @@ production-wired against the live backend; this is the build/prove flow.
 
 ## Status: Preflight-ready
 `preflight prove-app --app-dir . --platform ios --local-readiness` → **`ready`**.
-All checks pass (expo app/dev-client, scheme, bundle id, eas project/profile,
-simulator profile, Maestro flow). The fix that unblocked it: the `development`
-EAS profile is now a simulator profile (`ios.simulator: true`) — Preflight's
-simulator lane resolves the `development` profile, matching the other repos'
-convention. Device builds live under the `development:device` profile.
+All checks pass (expo app/dev-client, scheme, bundle id, simulator profile,
+Maestro flow).
 
-## EAS profiles (consumed by Preflight, built locally)
-- `development` — dev-client, **simulator**, Debug, `localhost:3000` API
-- `development:device` — same but on-device (`ios.simulator: false`)
-- `beta` — staging (`${STAGING_API_URL}`), adhoc, channel `beta`
-- `beta:production-api` — staging build pointed at prod `bob.blder.bot`
-- `production` — `${PRODUCTION_API_URL}` (falls back to `bob.blder.bot`), channel `production`
+## Build profiles (Preflight-owned)
+There is no `eas.json` (BOB-113). The simulator and development lanes derive
+their settings from the profile name: `development` builds a Debug dev client
+(`APP_VARIANT=development`), and a `preview` profile on the simulator lane
+builds a packaged app. The store lanes (`internal`, `beta`, `store`) take their
+environment, scheme and configuration from Preflight's build profiles for
+`pfapp_bob` (`GET /api/preflight/v1/apps/pfapp_bob/build-profiles`). Service
+URLs come from `API_URL`, `AUTH_URL`, `OODA_API_URL` and `GATEWAY_PUBLIC_URL`,
+with the hosted defaults in `app.config.js`.
 
 ## Build flow
 From `apps/mobile-bob`:
@@ -49,8 +49,8 @@ and reports back to the control plane. A persistent runner can be deployed (see 
 `preflight-runner` forge app) so jobs are claimed automatically.
 
 ## Credentials & providers (Preflight-owned)
-Apple/Google/OAuth credentials are managed by Preflight, not wired into eas.json
-secrets by hand:
+Apple/Google/OAuth credentials are managed by Preflight, not wired into
+build configuration by hand:
 
 ```bash
 preflight providers        # list/manage Apple + Google provider accounts
@@ -62,12 +62,58 @@ preflight setup            # guided setup for a blocked workflow
 
 Attach a secret to runner jobs with `prove-app --secret-ref <id>`.
 
+## gstack iPhone harness
+
+Debug builds embed the gstack DebugBridge (`ios/DebugBridge`, gstack 1.91.34.0).
+It listens on loopback only. Release and `Release-production` compile it out,
+so a production or TestFlight binary does not contain the bridge.
+
+Preflight's development and simulator lanes install a Debug dev client. After
+that install, drive the phone or simulator from the Mac with the gstack daemon:
+
+```bash
+GSTACK_IOS_TARGET_BUNDLE_ID=com.gmacko.bob.dev \
+  gstack-ios-qa-daemon
+```
+
+Use `com.gmacko.bob.preview` or `com.gmacko.bob` when the installed build is
+that variant, and only while the build is Debug. The daemon prints
+`READY: port=<n>`. Screenshot, elements, tap, swipe, and type go through that
+port. Bob's screens live in React Native, so the bridge has no Swift state to
+snapshot. Regenerate the package with `gstack-ios-qa-regen` after a gstack
+upgrade (`--app-source ios/BobDev --bridge-dir ios/DebugBridge` from this app).
+
 ## Verify a build
 - Install the simulator/dev build; sign in with GitHub (better-auth → `bob://`),
   confirming auth against `bob.blder.bot`.
 - Confirm data loads (tasks/planning/runs) and live sessions connect to
   `wss://ws.blder.bot`.
-- OTA after JS-only changes still uses EAS Update channels (`beta`/`production`),
-  wired in `app.config.js`.
+- OTA after JS-only changes goes through Preflight's update server
+  (`development`/`preview`/`production`); see `docs/ota-updates.md`.
 
 Source compiles clean (`pnpm typecheck`) and tests pass (`pnpm test`, 234).
+
+## Session recovery after a backend interruption
+
+A failed session lookup shows **Reconnecting to Bob** and retries after five
+seconds, when the app returns to the foreground, or when connectivity returns.
+**Try again** also retries immediately. A confirmed missing session or an
+authorization rejection still opens sign-in; recovery does not fabricate a
+cached identity or change the session cookie.
+
+The recovery candidate has passed the mobile test suite (75 files, 551 tests),
+TypeScript checking, and lint for the changed files. Simulator verification of
+this candidate is still required. The existing simulator evidence at source
+`52c59f66ae9110f7d97def3555c429d2829b83fc` demonstrates the original failure:
+after an offline cold launch, restoring the backend leaves Welcome visible until
+another cold launch. That evidence must not be attributed to this candidate.
+
+### Hosted simulator evidence
+
+For simulator evidence against the hosted Bob, auth, OODA and gateway
+services, use `--lane simulator --build-profile preview`. Preflight derives
+simulator-lane settings from the profile name alone: `preview` builds a packaged
+`com.gmacko.bob.preview` app with `APP_VARIANT=preview`, which `app.config.js`
+points at the hosted services. A `development` build uses a local OODA API and
+no gateway. (The old `development-hosted-simulator` profile lived in `eas.json`,
+which Preflight had already stopped reading.)

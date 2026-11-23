@@ -11,7 +11,7 @@
     "logs": { "enabled": true, "destinations": ["signoz-logs"] }
   },
   "main": "./worker/index.ts",
-  "compatibility_date": "2025-12-01",
+  "compatibility_date": "2026-11-16",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
   "routes": [{ "pattern": "bob.blder.bot", "custom_domain": true }],
@@ -29,6 +29,13 @@
       "id": "c1f467f772dc4ce99d99e572df74c121"
     }
   ],
+  // SDLC edge (worker/sdlc/edge-do.ts): one SQLite-backed Durable Object per
+  // coordinator workspace, holding the SDLC view and its viewers' websockets.
+  "durable_objects": {
+    "bindings": [{ "name": "SDLC_EDGE", "class_name": "SdlcEdge" }]
+  },
+  // Append new migrations; never edit or reorder an applied one.
+  "migrations": [{ "tag": "v1-sdlc-edge", "new_sqlite_classes": ["SdlcEdge"] }],
   "triggers": {
     // Autonomous backlog driver: every 5 minutes, dispatch ready work items up
     // to the concurrency cap + daily rate limit (see worker/index.ts scheduled).
@@ -55,6 +62,13 @@
     // the pipe instead of going dark until midnight. Flip to "false" for the
     // old first-come-first-served cap.
     "BOB_AUTO_DRAIN_PACING_ENABLED": "true",
+    // The daily loop: a plan built each morning (UTC hour) for approval, a
+    // review closing it each evening. BizPulse intake needs the secret
+    // BOB_BIZPULSE_API_KEY (wrangler secret put) alongside this URL.
+    "BOB_DAILY_PLAN_ENABLED": "true",
+    "BOB_DAILY_PLAN_HOUR_UTC": "12",
+    "BOB_DAILY_REVIEW_HOUR_UTC": "23",
+    "BOB_BIZPULSE_API_URL": "https://bizpulse.cc",
     // Dispatch rotation. claude restored 2026-08-23 after its weekly limit
     // reset. Review/repair stay on codex so a second provider carries that
     // load (and the reviewer is never the author's own model).
@@ -95,6 +109,19 @@
     // ForgeGraph deployment by commitSha) and post 🚀/💥 to the card + a
     // deployment artifact on the work item. Needs BOB_FORGEJO_TOKEN; uses the
     // FG_API_TOKEN secret when present. Same on/off lever as the other drivers.
-    "BOB_DEPLOY_TRACKING_ENABLED": "true"
+    "BOB_DEPLOY_TRACKING_ENABLED": "true",
+    // SDLC edge (BOB-75): the hetzner-bob coordinator's context.json workspaceId,
+    // and the user ids allowed to watch /sdlc (the Hermes operators). Emptying
+    // the workspace id is the kill switch: /api/sdlc/* then answers 503. The
+    // exporter's token is the secret SDLC_EDGE_INGEST_TOKEN, NOT a var here.
+    "SDLC_EDGE_WORKSPACE_ID": "e3d5ca9f-afaa-4276-8b8b-494eeaa80457",
+    "SDLC_VIEWER_USER_IDS": "tkE66fMc4mevdYYjtq78ALErJ7QnhAge",
+    // iOS Live Activity updates from the SDLC edge (BOB-96), sent straight to
+    // APNs (Expo does not carry them). The key is the secrets APNS_TEAM_ID,
+    // APNS_KEY_ID and APNS_PRIVATE_KEY (the .p8); until all three are set the
+    // edge only logs sdlc_live_activity_unconfigured. TestFlight and App Store
+    // builds use the production APNs environment.
+    "APNS_BUNDLE_ID": "com.gmacko.bob",
+    "APNS_ENVIRONMENT": "production"
   }
 }

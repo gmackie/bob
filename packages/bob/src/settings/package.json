@@ -12,22 +12,21 @@
   "scripts": {
     "clean": "git clean -xdf .cache .turbo dist node_modules",
     "format": "prettier --check . --ignore-path ../../.gitignore",
-    "lint": "eslint --flag unstable_native_nodejs_ts_config",
+    "lint": "oxlint -c ../../../../.oxlintrc.json",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.2",
-    "drizzle-zod": "^0.8.3",
-    "zod": "catalog:",
+    "drizzle-orm": "0.45.4",
+    "drizzle-zod": "0.8.3",
+    "zod": "4.6.7",
     "@bob/schema": "workspace:*"
   },
   "devDependencies": {
-    "@bob/eslint-config": "workspace:*",
     "@bob/prettier-config": "workspace:*",
     "@bob/tsconfig": "workspace:*",
-    "eslint": "catalog:",
-    "prettier": "catalog:",
-    "typescript": "catalog:"
+    "prettier": "3.10.1",
+    "typescript": "7.0.2",
+    "oxlint": "1.94.0"
   },
   "prettier": "@bob/prettier-config"
 }

@@ -1,4 +1,6 @@
 node_modules/
+# A symlink named node_modules is not a directory, so the slash pattern misses it.
+node_modules
 dist/
 .next/
 .turbo/
@@ -41,3 +43,10 @@ packages/research-backend/.venv/
 
 # Preserved CI reports (uploaded as workflow artifacts)
 /ci-report/
+
+# vinext 1.x build/dev outputs (its next-env.d.ts references .next types
+# that only exist after a build)
+.vinext/
+apps/bob/next-env.d.ts
+apps/blder/next-env.d.ts
+apps/ooda-edge/next-env.d.ts

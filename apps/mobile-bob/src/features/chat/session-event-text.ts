@@ -174,6 +174,8 @@ export function extractSessionEventText(
   eventType: string,
   payload: Record<string, unknown>,
 ): string {
+  if (eventType === "planning_drafts") return "";
+
   if (eventType === "tool_call") {
     const name = primitiveText(payload.name) || "tool";
     const args = toolArgumentText(payload.arguments);

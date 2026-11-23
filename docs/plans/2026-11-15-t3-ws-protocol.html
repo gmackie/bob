@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T3 WebSocket RPC</title>
+<style>
+:root { --bg:#fff; --fg:#1b1b1b; --muted:#5d5d5d; --code:#f4f3ef; --line:#ddd; --accent:#9a5b00; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#141414; --fg:#e8e6e1; --muted:#a3a09a; --code:#1f1e1c; --line:#333; --accent:#e0a040; } }
+:root[data-theme="dark"] { --bg:#141414; --fg:#e8e6e1; --muted:#a3a09a; --code:#1f1e1c; --line:#333; --accent:#e0a040; }
+body { background:var(--bg); color:var(--fg); font:15px/1.55 system-ui, sans-serif; max-width:960px; margin:0 auto; padding:24px 16px 64px; }
+h1 { font-size:1.6rem; margin-bottom:.2rem; } h2 { margin-top:2.4rem; border-bottom:1px solid var(--line); padding-bottom:.3rem; } h3 { margin-top:1.6rem; }
+pre { background:var(--code); padding:12px 14px; overflow-x:auto; border-radius:6px; font-size:13px; line-height:1.45; }
+code { background:var(--code); padding:1px 4px; border-radius:3px; font-size:.92em; } pre code { background:none; padding:0; }
+cite, .cite { color:var(--muted); font-style:normal; font-size:.88em; }
+table { border-collapse:collapse; width:100%; font-size:.92em; display:block; overflow-x:auto; } th, td { border:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+.note { border-left:3px solid var(--accent); padding:4px 12px; margin:12px 0; }
+</style>
+</head>
+<body>
+<h1>T3 server WebSocket RPC: a protocol spec for a plain Node client</h1>
+<p class="cite">Scope: Bob coordinator <code>runtime/t3-client.mjs</code> (only <code>ws</code> and JSON, no Effect). Sources: t3code <code>origin/custom-local</code> @ <code>d70371393c</code> (2026-11-14), checked against <code>3f32aeea9b</code>, the custom-local first-parent commit at 2026-11-08 13:32 UTC. That commit matches the deployed <code>0.1.7-gmacko.202611081333</code>, but the tag is not in the local clone, so the match is inferred. Effect RPC source: <code>effect@4.1.3</code> (HEAD) and <code>effect@4.1.2</code> (deployed); <code>RpcMessage.ts</code> is identical in both. Citations use the form <code>path:line</code>, and they refer to HEAD unless marked <em>[deployed]</em>.</p>
+
+<h2>0. Verdict</h2>
+<ul>
+<li><strong>A plain Node client is feasible.</strong> The transport is <code>RpcSerialization.layerJson</code>: one JSON object (or array of objects) per WebSocket text frame. The envelope has six message tags. The one thing a client must not miss is that the server waits for an <code>Ack</code> after every <code>Chunk</code> of a stream before it sends the next one.</li>
+<li><strong>Auth:</strong> send the same <code>Authorization: Bearer &lt;authToken&gt;</code> header on the upgrade request. The WS upgrade falls back to the same credential check the HTTP routes use. You can also mint a one-time <code>wsTicket</code> over HTTP and pass it in the query.</li>
+<li><strong>No HTTP route exists for <code>dispatchCommand</code> or <code>runtime-request.respond</code></strong>, so answering a question requires the socket (or the MCP endpoint, which needs a different credential). Read-only thread and shell snapshots do have HTTP routes.</li>
+</ul>
+
+<h2>1. Endpoint and authentication</h2>
+<h3>1.1 URL</h3>
+<pre><code>GET {baseUrl with http→ws, https→wss}/ws?orchestrationProtocol=2
+Upgrade: websocket
+Authorization: Bearer &lt;authToken&gt;</code></pre>
+<ul>
+<li>The route is <code>HttpRouter.add("GET", "/ws", …)</code>. <cite>apps/server/src/ws.ts:3764-3766 (deployed: 3600-3602)</cite></li>
+<li>The query parameter <code>orchestrationProtocol=2</code> is required. Without it the server returns HTTP <strong>426</strong> with <code>{"code":"orchestration_protocol_incompatible",…}</code> and does not upgrade. <cite>ws.ts:3769-3779, ws.ts:804-809; constants packages/contracts/src/environment.ts:13-16 (<code>ORCHESTRATION_PROTOCOL_VERSION = 2</code>, param <code>orchestrationProtocol</code>)</cite></li>
+<li>Leave out <code>frameParts</code>. With it, the server splits frames larger than 48 KiB into parts prefixed with <code>\u001e</code>. Without it, every frame arrives whole. <cite>ws.ts:3877-3889; packages/shared/src/socketFrameParts.ts:6-17</cite></li>
+<li>Optional telemetry query parameters (<code>clientSurface</code>, <code>clientAppVersion</code>, …) are read only for analytics. <cite>ws.ts:823-865</cite></li>
+</ul>
+
+<h3>1.2 Credential resolution on upgrade</h3>
+<p><code>authenticateWebSocketUpgrade(request, "rpc")</code> <cite>apps/server/src/auth/EnvironmentAuth.ts:1470-1527</cite> checks two things in order:</p>
+<ol>
+<li><strong><code>?wsTicket=&lt;ticket&gt;</code></strong> in the query, if present. This is a one-time token from <code>POST /api/auth/websocket-ticket/rpc</code>. If the session is DPoP-bound, the request also needs a <code>dpop</code> header or query proof. <cite>EnvironmentAuth.ts:1476-1523; contracts/src/environmentHttp.ts:616-629; auth.ts:241-256</cite></li>
+<li>Otherwise <strong><code>authenticateRequest(request)</code></strong>, the same function the HTTP middleware uses <cite>EnvironmentAuth.ts:1525; auth/http.ts:231-240</cite>. It takes, in order, a session cookie, then <code>Authorization: Bearer &lt;token&gt;</code>, then <code>Authorization: DPoP &lt;token&gt;</code>. <cite>EnvironmentAuth.ts:697-741 (<code>parseBearerToken</code>, <code>selectRequestCredential</code>), 839-875</cite>. The Origin check applies only to cookie credentials, so a Node client that sends no <code>Origin</code> header passes. <cite>EnvironmentAuth.ts:753-760, 839-856</cite></li>
+</ol>
+<p>Sessions with the MCP client subject are rejected everywhere except <code>/mcp</code> <cite>EnvironmentAuth.ts:677-684</cite>. A token that is DPoP-bound (has a <code>proofKeyThumbprint</code>) needs DPoP proofs, which a plain client cannot easily produce <cite>EnvironmentAuth.ts:858-875</cite>.</p>
+
+<h3>1.3 Which credential Bob should use</h3>
+<p>Bob's coordinator already sends <code>Authorization: Bearer ${binding.authToken}</code> to the execution routes <cite>bob: packages/bob/coordination/runtime/execution-port.mjs:14</cite>. Those routes use the same <code>EnvironmentAuthenticatedAuth</code> middleware (<code>authenticateHttpRequest → authenticateRequest</code>) <cite>contracts/src/environmentHttp.ts:1146-1176; auth/http.ts:231-260</cite>. So <strong>the same token works for <code>/ws</code> as a Bearer header</strong>. Such a token is a plain bearer session, issued by <code>t3 auth session issue --scopes …</code> <cite>apps/server/src/cli/auth.ts:246-279</cite>, and is not DPoP-bound.</p>
+<p>Per-method scopes are enforced by middleware on the socket <cite>apps/server/src/auth/RpcAuthorization.ts:40-63, 357-381</cite>:</p>
+<table>
+<tr><th>RPC</th><th>Scope</th></tr>
+<tr><td><code>orchestration.subscribeThread</code>, <code>orchestration.subscribeShell</code>, <code>orchestration.getThreadProjection</code>, <code>orchestration.getTurnItem</code></td><td><code>orchestration:read</code></td></tr>
+<tr><td><code>orchestration.dispatchCommand</code></td><td><code>orchestration:operate</code></td></tr>
+</table>
+<p>Bob's token already holds <code>orchestration:operate</code> because <code>submitExecution</code> requires it <cite>apps/server/src/coordination/http.ts:88-110</cite>. If a scope is missing, the request fails with an <code>EnvironmentAuthorizationError</code> inside the Exit (see §2); the socket itself is not refused. <cite>contracts/src/auth.ts:31-32 (scope literals), 435</cite></p>
+<p class="note">Fallback if a reverse proxy strips <code>Authorization</code> on upgrade: <code>POST {baseUrl}/api/auth/websocket-ticket/rpc</code> with the Bearer header returns <code>{"ticket":"…","expiresAt":"…ISO…"}</code>. Then connect to <code>/ws?orchestrationProtocol=2&amp;wsTicket=&lt;ticket&gt;</code>. The ticket is single-use and short-lived; mint a new one for each connection.</p>
+
+<h3>1.4 HTTP alternatives</h3>
+<table>
+<tr><th>Route</th><th>Serves</th><th>Notes</th></tr>
+<tr><td><code>POST /api/v1/coordination/capabilities/query</code>, <code>POST /api/v1/execution/requests</code>, <code>POST /api/v1/execution/requests/query</code></td><td>getCapabilities / submitExecution / findExecution</td><td>Declared at <cite>contracts/src/environmentHttp.ts:1146-1176</cite>; handled in <cite>apps/server/src/coordination/http.ts:23-135</cite> (<code>ExecutionAdmission</code>). Scopes: read / operate / operate.</td></tr>
+<tr><td><code>GET /api/orchestration/threads/:threadId</code></td><td>Full <code>OrchestrationV2ThreadDetailSnapshot</code> (<code>{snapshotSequence, projection,…}</code>)</td><td>Needs header <code>x-t3-orchestration-protocol: 2</code> plus Bearer. <cite>environmentHttp.ts:105-109, 773-780</cite>; handler <cite>apps/server/src/orchestration-v2/http.ts</cite> (scope <code>orchestration:read</code>).</td></tr>
+<tr><td><code>GET /api/orchestration/threads/:threadId/bounded</code>, <code>/transcript</code>, <code>/history?cursor=…</code></td><td>Bounded window / transcript items / older pages</td><td><cite>environmentHttp.ts:781-806</cite></td></tr>
+<tr><td><code>GET /api/orchestration/shell</code></td><td>Shell snapshot (all threads, with <code>pendingRuntimeRequest</code>)</td><td><cite>environmentHttp.ts:765-772</cite></td></tr>
+<tr><td><em>none</em></td><td><code>dispatchCommand</code> / <code>runtime-request.respond</code></td><td>Only the WS handler <cite>ws.ts:2042</cite> and the MCP tool <code>t3_pending_request</code> (action <code>respond</code>) at <code>/mcp</code> <cite>apps/server/src/mcp/toolkits/thread/handlers.ts:230-266</cite>. The MCP route needs an MCP-client session, which is a different credential from Bob's bearer token <cite>EnvironmentAuth.ts:1524-1554</cite>.</td></tr>
+</table>
+<p>A workable split: poll HTTP for read-only views, and open a socket only to answer. A persistent socket for live tails is simpler and avoids polling.</p>
+
+<h2>2. Wire format (Effect RPC over WebSocket, JSON)</h2>
+<h3>2.1 Serialization</h3>
+<ul>
+<li>The server wires up <code>RpcServer.makeProtocolWithHttpEffectWebsocket</code> with <code>RpcSerialization.layerJson</code>. <cite>ws.ts:3798-3837</cite></li>
+<li><code>json</code> serialization: decoding is <code>JSON.parse(frame)</code>, and an array is treated as several messages. Encoding is <code>JSON.stringify(message)</code> with one message per frame. It is not ndjson, msgpack or JSON-RPC. <cite>effect/src/rpc/RpcSerialization.ts:141-152, 635</cite></li>
+<li>Payloads and results are encoded with <code>Schema.toCodecJson</code>. <code>DateTimeUtc</code> becomes an ISO-8601 string, branded IDs become plain strings, and optional keys are omitted. <cite>RpcSerialization.ts:41</cite></li>
+<li>Unions in t3 contracts are discriminated by plain fields: <code>kind</code> (stream items), <code>type</code> (events, commands, turn items). Only RPC envelopes and tagged errors use <code>_tag</code>.</li>
+</ul>
+
+<h3>2.2 Client → server messages</h3>
+<p><cite>effect/src/rpc/RpcMessage.ts:76-185 (RequestEncoded, AckEncoded, InterruptEncoded, Ping, Eof)</cite></p>
+<pre><code>// Request — id: a number or string you choose, unique per socket (Effect uses an incrementing number)
+{"_tag":"Request","id":1,"tag":"orchestration.subscribeThread",
+ "payload":{"threadId":"thr_…","requestCompletionMarker":true,"acceptBoundedSnapshot":true},
+ "headers":[]}
+//   headers is REQUIRED: an array of [name, value] pairs, may be empty.
+//   Optional: "traceId","spanId","sampled" (tracing; server has disableTracing:true, ws.ts:3746-3749).
+
+// Ack — send after EVERY Chunk you receive for a stream request
+{"_tag":"Ack","requestId":1}
+
+// Interrupt — cancel a stream or request
+{"_tag":"Interrupt","requestId":1}
+
+// Ping — keepalive; server replies {"_tag":"Pong"}
+{"_tag":"Ping"}
+
+// Eof — optional graceful end: server finishes in-flight requests, then ends the client
+{"_tag":"Eof"}</code></pre>
+
+<h3>2.3 Server → client messages</h3>
+<p><cite>RpcMessage.ts:265-330 (Chunk, ExitEncoded, ResponseExitEncoded), 364-370 (Defect), 450 (Pong)</cite></p>
+<pre><code>// Stream items (values is a non-empty array; each element is one encoded stream item)
+{"_tag":"Chunk","requestId":1,"values":[{"kind":"snapshot", …}]}
+
+// Completion of a unary call
+{"_tag":"Exit","requestId":2,"exit":{"_tag":"Success","value":{"sequence":4182}}}
+
+// Typed failure (Fail = a declared error, encoded with its _tag)
+{"_tag":"Exit","requestId":2,"exit":{"_tag":"Failure","cause":[
+  {"_tag":"Fail","error":{"_tag":"OrchestrationV2DispatchCommandError","commandId":"…","commandType":"runtime-request.respond","message":"…"}}]}}
+//   other cause entries: {"_tag":"Die","defect":…} (e.g. payload failed schema decode — the defect is
+//   a formatted schema issue string, RpcServer.ts ~1008-1018) and {"_tag":"Interrupt","fiberId":…}
+
+// Stream end: Exit Success (value is void and may be absent or null)
+{"_tag":"Exit","requestId":1,"exit":{"_tag":"Success"}}
+
+// Socket-level defect (ends every pending request on this client)
+{"_tag":"Defect","defect":…}
+
+{"_tag":"Pong"}</code></pre>
+
+<h3>2.4 Flow control (required)</h3>
+<p>The socket protocol reports <code>supportsAck: true</code> <cite>effect/src/rpc/RpcServer.ts:1855-1866</cite>. For each request, <code>streamEffect</code> writes one <code>Chunk</code>, then closes a latch and waits on it. Only an <code>Ack</code> carrying that <code>requestId</code> reopens the latch. <cite>RpcServer.ts:457-511, 219-222</cite></p>
+<ul>
+<li><strong>Deployed:</strong> only terminal streams have an ack window. <code>subscribeThread</code> and <code>subscribeShell</code> stall after the first Chunk until it is Acked. <cite>[deployed] apps/server/src/terminal/OutputProtocol.ts:15-40 (<code>withTerminalOutputWindow</code>)</cite></li>
+<li><strong>HEAD:</strong> <code>withOutputWindow</code> sends up to 8 Chunks for <code>subscribeShell</code>, <code>subscribeThread</code> and <code>subscribeServerConfig</code> before it waits. <cite>OutputProtocol.ts:14-31, 69-136</cite></li>
+<li><strong>Client rule for both versions:</strong> send <code>{"_tag":"Ack","requestId":id}</code> immediately after each <code>Chunk</code>, once per Chunk.</li>
+</ul>
+
+<h3>2.5 Keepalive and lifecycle</h3>
+<ul>
+<li>Effect's client pings every 5 s and treats the connection as dead if no frame arrives within the timeout <cite>effect/src/rpc/RpcClient.ts:1275, 1431-1460</cite>. The server answers <code>Ping</code> with <code>Pong</code> <cite>RpcServer.ts:1023-1025</cite>. Ping every 10–15 s and reconnect after 30 s without any frame.</li>
+<li>Sending to an unknown <code>requestId</code> (an Ack or Interrupt after Exit) is a no-op. An unknown <code>_tag</code> produces a <code>Defect</code>. <cite>RpcServer.ts:208-244</cite></li>
+<li>The server ends the socket when the session is revoked. <cite>ws.ts:3890-3903 (<code>sessions.awaitInvalidation</code>)</cite></li>
+<li>Requests on one socket run concurrently (concurrency is unbounded). You can multiplex one <code>subscribeShell</code>, several <code>subscribeThread</code> streams and unary <code>dispatchCommand</code> calls by <code>id</code>.</li>
+</ul>
+
+<h2>3. Methods</h2>
+<p>Method tags <cite>contracts/src/orchestrationV2.ts:3821-3845</cite>; RPC definitions <cite>contracts/src/rpc.ts:2523-2535</cite>; payload/success schemas <cite>orchestrationV2.ts:4488-4570</cite>. All of them are in <code>WsRpcGroup</code> with <code>RpcScopeAuthorization</code> middleware, which is server-side only and needs nothing on the wire. <cite>rpc.ts:2678-2683, 2973</cite></p>
+
+<h3>3.1 <code>orchestration.subscribeThread</code> (stream)</h3>
+<p>Payload <cite>orchestrationV2.ts:4057-4067 (deployed 3778-3788)</cite>:</p>
+<pre><code>{"threadId":"&lt;ThreadId&gt;",
+ "afterSequence": 4170,            // optional, resume cursor (see §4)
+ "requestCompletionMarker": true,  // optional, emits {"kind":"synchronized"} after snapshot/replay
+ "acceptBoundedSnapshot": true}    // optional, recommended: a recent window instead of the whole thread
+// Do NOT send acceptCompactTurnItems / acceptDedupedBodies / acceptCompactIds / acceptDeferredWork:
+// they switch on compact encodings (ID tables, *Omitted bodies) that need client-side restoration.</code></pre>
+<p>Stream items, as each element of <code>Chunk.values</code> <cite>orchestrationV2.ts:4168-4194 (deployed 3889-3912)</cite>:</p>
+<pre><code>{"kind":"snapshot","snapshotSequence":4170,"projection":{…OrchestrationV2ThreadProjection…},
+ "historyCursor":"…"|null,"hasMoreHistory":true,"latestLocalTurnOrdinal":12}   // last 3 only when bounded
+{"kind":"synchronized"}
+{"kind":"event","sequence":4171,"event":{"id":"…","threadId":"…","runId":"…","occurredAt":"2026-11-15T10:00:00.000Z",
+                                          "type":"turn-item.updated","payload":{…}}}</code></pre>
+<ul>
+<li><code>projection</code> fields: <code>thread, runs, attempts, nodes, subagents, providerSessions, providerThreads, providerTurns, runtimeRequests, messages, plans, turnItems, checkpointScopes, checkpoints, contextHandoffs, contextTransfers, visibleTurnItems, updatedAt</code>. <cite>orchestrationV2.ts:2131-2156</cite></li>
+<li>Event envelope fields: <code>id, threadId, runId?, nodeId?, driver?, providerInstanceId?, rawEventId?, occurredAt, type, payload</code>. <cite>orchestrationV2.ts:1968-1977</cite>. Event types <cite>orchestrationV2.ts:1979-2128</cite> include <code>thread.*</code>, <code>run.created|updated</code>, <code>run-attempt.*</code>, <code>node.updated</code>, <code>subagent.updated</code>, <code>provider-session.*</code>, <code>provider-thread.updated</code>, <code>provider-turn.updated</code>, <code>runtime-request.updated</code>, <code>message.updated</code>, <code>turn-item.updated</code>, <code>plan.updated</code>, <code>checkpoint*</code> and <code>context-*</code>. Ignore unknown <code>type</code>s but still advance the cursor <cite>orchestrationV2.ts:4132-4166</cite>.</li>
+<li>Every <code>*.updated</code> payload is the <strong>whole current entity</strong>. Upsert it by <code>id</code> into the matching projection array; the official reducer does this <cite>packages/client-runtime/src/state/orchestrationV2Projection.ts:412-447</cite>. Text is not sent as deltas: each update repeats the full accumulated <code>text</code>.</li>
+</ul>
+
+<h4>Where readable output lives (for a "last ~40 lines" tail)</h4>
+<table>
+<tr><th>Turn item <code>type</code> (from <code>turn-item.updated</code> or <code>projection.turnItems</code>)</th><th>Text fields</th></tr>
+<tr><td><code>assistant_message</code></td><td><code>text</code>, <code>streaming</code> (true while generating), <code>phase?</code> (HEAD only: <code>commentary|partial_answer|final_answer</code>). <cite>orchestrationV2.ts:1729-1739</cite></td></tr>
+<tr><td><code>reasoning</code></td><td><code>text</code>, <code>streaming</code>. <cite>1739-1745</cite></td></tr>
+<tr><td><code>user_message</code></td><td><code>text</code>. <cite>1710-1728</cite></td></tr>
+<tr><td><code>command_execution</code></td><td><code>input</code> (the command), <code>exitCode?</code>, <code>outputIndicatesFailure?</code>. <strong><code>output</code> is always stripped on the wire</strong>; the item carries <code>outputOmitted:true</code> instead. <cite>apps/server/src/orchestration-v2/WireProjection.ts:166-180, 333-343</cite>. To get the output, call <code>orchestration.getTurnItem</code> with <code>{"threadId","itemId"}</code>, which returns <code>{"item":{…,"output":"…"}}</code> capped at 256 KiB. <cite>orchestrationV2.ts:4391-4400; WireProjection.ts:30, 262-266</cite></td></tr>
+<tr><td><code>todo_list</code>, <code>proposed_plan</code>, <code>file_change</code>, <code>subagent</code>, <code>dynamic_tool</code>, <code>notification</code></td><td><code>steps[].text</code>; <code>markdown</code>; <code>fileName</code>, <code>additions</code>/<code>deletions</code> (diffs stripped); <code>prompt</code>/<code>progress</code>/<code>result</code> (truncated to 32 KiB); <code>title</code>. <cite>orchestrationV2.ts:1752-1758, 1907-1940; WireProjection.ts:158-206</cite></td></tr>
+</table>
+<p>Also useful: <code>message.updated</code> (<code>OrchestrationV2ConversationMessage</code>: <code>role</code>, <code>text</code>, <code>streaming</code>) <cite>orchestrationV2.ts:1386-1418</cite>, and in the shell, <code>thread.latestVisibleMessage.text</code> <cite>orchestrationV2.ts:2185-2191, 2235</cite>. To build a tail, sort turn items by <code>ordinal</code>, render each one (for example <code>$ input</code> for commands and the <code>text</code> for messages), split into lines and keep the last 40.</p>
+
+<h3>3.2 <code>orchestration.subscribeShell</code> (stream)</h3>
+<p>Payload <cite>orchestrationV2.ts:3936-3958 (deployed 3680-3693)</cite>:</p>
+<pre><code>{"requestCompletionMarker":true, "afterSequence": 98231 /* optional */}
+// HEAD-only: "httpSnapshotFallback":true, "knownProjectIdentities":"…". Don't send these to the deployed server.
+// "omitIdleSubagents"/"omitOlderSettled": only for servers that advertise them; omit.</code></pre>
+<p>Items <cite>orchestrationV2.ts:2372-2409 (deployed 2232-2263)</cite>:</p>
+<pre><code>{"kind":"snapshot","snapshot":{"schemaVersion":…,"snapshotSequence":98231,"projects":[…],"threads":[ThreadShell…],"archivedThreads":[…]}}
+{"kind":"snapshot","snapshot":{…,"threads":[],"archivedThreads":[]},"resolvedRepositoryIdentityRoots":["/repo"]}
+   // ^ WITH resolvedRepositoryIdentityRoots = project-enrichment merge only; do NOT replace threads
+   //   (ShellStream.ts:610-663 @deployed; client-runtime/src/state/shell.ts:260)
+{"kind":"synchronized"}
+{"kind":"thread.updated","sequence":98232,"location":"active","thread":{…ThreadShell…}}
+{"kind":"thread.removed","sequence":98233,"location":"active","threadId":"…"}
+{"kind":"project.updated","sequence":…,"project":{…}}  /  {"kind":"project.removed","sequence":…,"projectId":"…"}
+{"kind":"snapshot-required"}   // HEAD only, and only if you sent httpSnapshotFallback</code></pre>
+<p>Useful <code>ThreadShell</code> fields <cite>orchestrationV2.ts:2193-2275</cite>: <code>id, projectId, title, status</code> (<code>idle</code> or a run status), <code>activityRunStatus</code>, <code>pendingRuntimeRequest</code>, <code>latestVisibleMessage</code>, <code>lastError</code>, <code>branch</code>, <code>worktreePath</code>, <code>updatedAt</code>. Unchanged shells are re-sent at most every 5 s. <cite>[deployed] ShellStream.ts:667-690</cite></p>
+
+<h3>3.3 How a pending user_input question appears</h3>
+<ol>
+<li><strong>Shell</strong> (cheap detection): <code>thread.pendingRuntimeRequest</code> <cite>orchestrationV2.ts:2173-2183, 2233</cite>
+<pre><code>"pendingRuntimeRequest":{"id":"&lt;RuntimeRequestId&gt;","kind":"user_input","createdAt":"…ISO…",
+                         "blocking":true /* optional */, "userOnly":true /* HEAD only: secret/link cards — never auto-answer */}</code></pre>
+<code>kind</code> is one of <code>command | file-read | file-change | mcp-elicitation | permission | dynamic_tool_call | user_input | auth_refresh</code>. <cite>orchestrationV2.ts:1280-1284; contracts/src/providerPolicy.ts:49-55</cite></li>
+<li><strong>Thread stream</strong>: <code>runtime-request.updated</code> with payload <code>OrchestrationV2RuntimeRequest</code> <cite>orchestrationV2.ts:1276-1300</cite>
+<pre><code>{"id":"rr_…","nodeId":"…","providerTurnId":"…"|null,"nativeRequestRef":…,"kind":"user_input",
+ "status":"pending"|"resolved"|"expired"|"cancelled",
+ "responseCapability":{"type":"live","providerSessionId":"…"}|{"type":"message"}|{"type":"not_resumable","reason":"…"},
+ "createdAt":"…","resolvedAt":null,"answers":{…}?}</code></pre>
+The request record has no question text.</li>
+<li><strong>The question text</strong> is in a turn item of <code>type:"user_input_request"</code> whose <code>requestId</code> equals the runtime request <code>id</code> <cite>orchestrationV2.ts:1759-1766; questions 1430-1446</cite>:
+<pre><code>{"type":"user_input_request","id":"&lt;TurnItemId&gt;","requestId":"rr_…","status":"…","ordinal":…,
+ "questions":[{"id":"q1","header":"Deploy target","question":"Which stage should I deploy to?",
+               "options":[{"label":"Staging","description":"beta.example","value":"staging"},
+                          {"label":"Production","description":"…"}],
+               "multiSelect":false,"allowCustomAnswer":true,"required":true}],
+ "responseMode":"message"?}</code></pre>
+If the bounded snapshot does not contain the item, fetch the full projection with <code>orchestration.getThreadProjection {"threadId"}</code> or <code>GET /api/orchestration/threads/:id</code>. The MCP <code>t3_pending_request read</code> tool finds the same item. <cite>mcp/toolkits/thread/handlers.ts:230-244</cite></li>
+</ol>
+
+<h3>3.4 <code>orchestration.dispatchCommand</code> → <code>runtime-request.respond</code> (unary)</h3>
+<p>Payload is the <code>OrchestrationV2Command</code> union, discriminated by <code>type</code> <cite>orchestrationV2.ts:3076; respond 3485-3494 (deployed 3279-3288)</cite>. Success is <code>{"sequence":&lt;int&gt;}</code> <cite>orchestrationV2.ts:3925-3927</cite>. Errors are <code>OrchestrationV2DispatchCommandError</code> or <code>EnvironmentAuthorizationError</code> <cite>rpc.ts:2381-2385; orchestrationV2.ts:4194-4203</cite>. The handler is at <cite>ws.ts:2042-2090</cite>.</p>
+<pre><code>{"_tag":"Request","id":7,"tag":"orchestration.dispatchCommand","headers":[],
+ "payload":{"type":"runtime-request.respond",
+            "commandId":"&lt;new UUID, any non-empty string; reuse it on retry to stay idempotent&gt;",
+            "threadId":"&lt;ThreadId&gt;",
+            "requestId":"rr_…",
+            "answers":{"q1":"staging"}}}
+// → {"_tag":"Exit","requestId":7,"exit":{"_tag":"Success","value":{"sequence":4190}}}</code></pre>
+<p><code>answers</code> is <code>Record&lt;questionId, unknown&gt;</code> <cite>providerPolicy.ts:79</cite>. The official clients send exactly these shapes <cite>packages/client-runtime/src/state/pendingUserInput.ts:17, 59-89, 161-178</cite>:</p>
+<ul>
+<li>Single-select: a <strong>string</strong>. Use the option's <code>value</code> if it has one, otherwise its <code>label</code>.</li>
+<li><code>multiSelect: true</code>: an <strong>array of strings</strong> (values or labels).</li>
+<li>Free text (when <code>allowCustomAnswer !== false</code>): the custom answer as a string, which takes precedence over selections.</li>
+<li>Answer every question; the UI does not submit until all are answered.</li>
+</ul>
+<p>Approvals (kinds <code>command</code>, <code>file-change</code>, <code>permission</code>, and others) use <code>"decision":"accept"|"acceptForSession"|"acceptAlways"|"decline"|"cancel"</code> plus an optional <code>"feedback"</code>, in place of <code>answers</code>. <cite>providerPolicy.ts:58-64; client-runtime/src/operations/commands.ts:963-974</cite>. To dismiss a question: <code>{"type":"thread.user-input.dismiss","commandId","threadId","requestId"}</code>. <cite>orchestrationV2.ts:3495-3500</cite></p>
+
+<h2>4. Resume semantics</h2>
+<h3>Thread stream <cite>ws.ts:917-1148 (deployed 825-…)</cite></h3>
+<ul>
+<li><strong>Cursor</strong>: the highest <code>sequence</code> from <code>event</code> items, or <code>snapshotSequence</code> from a <code>snapshot</code> item.</li>
+<li>Without <code>afterSequence</code>, the stream sends <code>snapshot</code>, then <code>synchronized</code> (if requested), then live events after <code>snapshotSequence</code>. <cite>ws.ts:1001-1041</cite></li>
+<li>With <code>afterSequence</code>, the server replays events after the cursor up to the high-water mark, then sends <code>synchronized</code>, then live events. It sends a <strong>full <code>snapshot</code> instead</strong> when any of these hold: the cursor is above the high-water mark, the cursor is in pruned history, the replay is longer than <code>THREAD_RESUME_MAX_REPLAY_EVENTS</code> or too many bytes, the thread was recreated, or <code>decideThreadResume</code> picks snapshot. <cite>ws.ts:1045-1145</cite></li>
+<li>The server subscribes before reading stored events, so the client must <strong>drop events whose <code>sequence</code> ≤ its cursor</strong> to dedupe the overlap. <cite>ws.ts:1044</cite></li>
+<li>A <code>snapshot</code> item always replaces local thread state, even in the middle of a resume.</li>
+<li>Live <code>*.updated</code> events may be coalesced, so only the latest version of an entity is guaranteed. <cite>ws.ts:949-962 (<code>coalesceThreadLiveStream</code>)</cite></li>
+</ul>
+<h3>Shell stream <cite>ws.ts:1150-… (deployed 1062-1340)</cite></h3>
+<ul>
+<li><strong>Cursor</strong>: the highest <code>sequence</code> from <code>thread.*</code> or <code>project.*</code> items, or <code>snapshot.snapshotSequence</code> from an authoritative snapshot (one without <code>resolvedRepositoryIdentityRoots</code>).</li>
+<li>With <code>afterSequence</code>, the server sends a full snapshot if the gap is negative, larger than <code>SHELL_RESUME_MAX_GAP</code>, or pruned. Otherwise it sends enrichment-only snapshot items, then the replayed <code>thread.updated</code>/<code>thread.removed</code> items, then <code>synchronized</code>, then live items.</li>
+<li><code>snapshot-required</code> (HEAD only) is sent only if you asked for <code>httpSnapshotFallback</code>. In that case, load <code>GET /api/orchestration/shell</code> and subscribe again from its <code>snapshotSequence</code>.</li>
+</ul>
+<h3>synchronized</h3>
+<p>Emitted once, only when <code>requestCompletionMarker:true</code>. It marks that the initial snapshot or replay has been delivered and live events follow. <cite>ws.ts:996-999</cite></p>
+
+<h2>5. Minimal client sketch</h2>
+<pre><code>import WebSocket from 'ws';
+export function connectT3({ baseUrl, authToken }) {
+  const url = new URL('/ws', baseUrl); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.searchParams.set('orchestrationProtocol', '2');
+  const ws = new WebSocket(url, { headers: { Authorization: `Bearer ${authToken}` } });
+  let nextId = 1; const pending = new Map(); // id -> { onChunk?, resolve, reject }
+  const send = (m) => ws.send(JSON.stringify(m));
+  ws.on('message', (data) => {
+    const msgs = [].concat(JSON.parse(String(data)));
+    for (const m of msgs) {
+      if (m._tag === 'Chunk') { send({ _tag: 'Ack', requestId: m.requestId }); pending.get(m.requestId)?.onChunk?.(m.values); }
+      else if (m._tag === 'Exit') { const p = pending.get(m.requestId); pending.delete(m.requestId);
+        m.exit._tag === 'Success' ? p?.resolve(m.exit.value) : p?.reject(m.exit.cause); }
+      else if (m._tag === 'Defect') { for (const p of pending.values()) p.reject(m.defect); pending.clear(); }
+    }
+  });
+  const ping = setInterval(() => ws.readyState === 1 &amp;&amp; send({ _tag: 'Ping' }), 10_000);
+  ws.on('close', () => clearInterval(ping));
+  const call = (tag, payload) => new Promise((resolve, reject) => {
+    const id = nextId++; pending.set(id, { resolve, reject }); send({ _tag: 'Request', id, tag, payload, headers: [] }); });
+  const stream = (tag, payload, onChunk) => { const id = nextId++;
+    const done = new Promise((resolve, reject) => pending.set(id, { onChunk, resolve, reject }));
+    send({ _tag: 'Request', id, tag, payload, headers: [] });
+    return { done, cancel: () => send({ _tag: 'Interrupt', requestId: id }) }; };
+  return { ws, call, stream };
+}
+// t3.call('orchestration.dispatchCommand', { type:'runtime-request.respond', commandId, threadId, requestId, answers:{ q1:'staging' } })</code></pre>
+
+<h2>6. Risks and open points</h2>
+<ul>
+<li><strong>Version drift.</strong> HEAD adds windowed acks, <code>snapshot-required</code>, <code>userOnly</code> and <code>phase</code>. These are all additive, and a client that Acks every Chunk and ignores unknown fields works on both versions. Effect's <code>RpcMessage</code> is identical in 4.1.2 and 4.1.3.</li>
+<li><strong>Proxy.</strong> Make sure the hetzner-bob front proxy forwards <code>Upgrade</code> and <code>Authorization</code> on <code>/ws</code>; if not, use the <code>wsTicket</code> flow. This was not tested live.</li>
+<li><strong>Snapshot size.</strong> Without <code>acceptBoundedSnapshot</code>, a long thread's snapshot can be several MB in one frame. That fits within <code>ws</code>'s 100 MiB default <code>maxPayload</code>, but it is slow.</li>
+<li><strong>Who answers.</strong> Do not auto-answer when <code>userOnly</code> is set (HEAD) or when <code>responseCapability.type</code> is <code>not_resumable</code>. The MCP tool also refuses to approve permission requests through the answers path. <cite>mcp/toolkits/thread/tools.ts:131</cite></li>
+</ul>
+</body>
+</html>

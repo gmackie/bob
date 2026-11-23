@@ -50,7 +50,7 @@ describe("AgentRpc group — agent.run + agent.capture (7B-4B Task 1)", () => {
 
   it("agent.run.get is not streaming", () => {
     // Import lazily to avoid pulling in the full RpcSchema at module level
-    const { RpcSchema } = require("effect/unstable/rpc");
+    const { RpcSchema } = require("effect/rpc");
     expect(RpcSchema.isStreamSchema(AgentRunGetRpc.successSchema)).toBe(false);
   });
 

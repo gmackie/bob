@@ -9,11 +9,11 @@
 //
 // Real implementation deferred to Phase 7 (Bob migration). The stub `t` returns
 // the key as the translation so UI can render the key text instead of crashing.
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, Schema, Context } from "effect";
 
 export type Locale = string; // BCP 47 language tag
 
-export class I18nNotImplementedError extends Schema.TaggedErrorClass<I18nNotImplementedError>()(
+export class I18nNotImplementedError extends Schema.TaggedError<I18nNotImplementedError>()(
   "I18nNotImplementedError",
   {
     reason: Schema.String,
@@ -35,7 +35,7 @@ export interface I18nShape {
   ) => Effect.Effect<void, I18nNotImplementedError>;
 }
 
-export const I18n = ServiceMap.Service<I18nShape>("@gmacko/i18n/I18n");
+export const I18n = Context.Service<I18nShape>("@gmacko/i18n/I18n");
 
 const reason = "@gmacko/i18n: deferred to Phase 7 (Bob migration)";
 

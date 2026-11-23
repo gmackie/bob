@@ -19,6 +19,7 @@ import { makeDispatchRpcHandlers } from "../rpc-handlers/dispatch.js";
 import { makeSkillRpcHandlers } from "../rpc-handlers/skill.js";
 import { makeSnapshotRpcHandlers } from "../rpc-handlers/snapshot.js";
 import { makeCheckpointRpcHandlers } from "../rpc-handlers/checkpoint.js";
+import { makeDailyPlanRpcHandlers } from "../rpc-handlers/dailyPlan.js";
 
 export const makePlanningLayer = (ctx: HandlerContext) => {
   const pl = makePlanningRpcHandlers(ctx);
@@ -28,6 +29,7 @@ export const makePlanningLayer = (ctx: HandlerContext) => {
   const sk = makeSkillRpcHandlers(ctx);
   const sn = makeSnapshotRpcHandlers(ctx);
   const cp = makeCheckpointRpcHandlers(ctx);
+  const dp = makeDailyPlanRpcHandlers(ctx);
 
   return PlanningRpc.toLayer({
     // --- Core planning (21) ---
@@ -66,6 +68,11 @@ export const makePlanningLayer = (ctx: HandlerContext) => {
     "planning.session.create": ps["planSession.create"],
     "planning.session.start": ps["planSession.start"],
     "planning.session.get": ps["planSession.get"],
+    "planning.dailyPlan.get": dp["dailyPlan.get"],
+    "planning.dailyPlan.list": dp["dailyPlan.list"],
+    "planning.dailyPlan.generate": dp["dailyPlan.generate"],
+    "planning.dailyPlan.approve": dp["dailyPlan.approve"],
+    "planning.dailyPlan.close": dp["dailyPlan.close"],
     "planning.session.list": ps["planSession.list"],
     "planning.session.listByWorkItem": ps["planSession.listByWorkItem"],
     "planning.session.getActiveForWorkItem":

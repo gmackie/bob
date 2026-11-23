@@ -50,7 +50,7 @@ describe("OpenCodeClient", () => {
           method: "POST",
           // vitest's nested expect.objectContaining always returns `any` per
           // its own type declarations, regardless of generic argument.
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          
           headers: expect.objectContaining({
             "Content-Type": "application/json",
           }),
@@ -83,7 +83,7 @@ describe("OpenCodeClient", () => {
         expect.objectContaining({
           // vitest's nested expect.objectContaining always returns `any` per
           // its own type declarations, regardless of generic argument.
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          
           headers: expect.objectContaining({
             Authorization: "Bearer test-api-key",
           }),

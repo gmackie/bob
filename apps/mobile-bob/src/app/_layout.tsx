@@ -1,44 +1,58 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { Modal, Platform, Pressable, Text, View, useWindowDimensions } from "react-native";
-import { Stack, useLocalSearchParams, usePathname, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  Stack,
+  useLocalSearchParams,
+  usePathname,
+  useRouter,
+} from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { queryClient } from "~/utils/api";
-import { Providers } from "../providers";
-import { TabletSidebar } from "~/components/tablet/TabletSidebar";
-import { AgentThreadView } from "~/components/tablet/AgentThreadView";
-import { WorkItemPane } from "~/components/tablet/WorkItemPane";
-import { PlanningPane } from "~/components/tablet/PlanningPane";
+import type { ProviderKey, TaskLaneKey } from "~/features/tablet/dashboard";
+import type {
+  TabletPlanningDashboardNavigationAction,
+  TabletPlanningSummaryTarget,
+} from "~/features/tablet/planning-dashboard";
+import type {
+  TabletLeftRailTab,
+  TabletShellMode,
+  TabletShellTarget,
+} from "~/features/tablet/shell";
+import type { MobileWorkItemEntryView } from "~/features/tablet/work-item-entry";
 import { InspectorPanel } from "~/components/tablet/InspectorPanel";
-import { TasksDashboard } from "~/components/tablet/TasksDashboard";
+import { PlanningSessionSurface } from "~/components/tablet/PlanningSessionSurface";
+import { SessionWorkstation } from "~/components/tablet/SessionWorkstation";
 import { TabletPlanningDashboard } from "~/components/tablet/TabletPlanningDashboard";
-import { TabletProviderPane } from "~/components/tablet/TabletProviderPane";
 import { TabletProjectPane } from "~/components/tablet/TabletProjectPane";
 import { TabletProjectsDashboardPane } from "~/components/tablet/TabletProjectsDashboardPane";
+import { TabletProviderPane } from "~/components/tablet/TabletProviderPane";
 import { TabletSettingsSplit } from "~/components/tablet/TabletSettingsSplit";
+import { TabletSidebar } from "~/components/tablet/TabletSidebar";
 import { TaskLaneTablePane } from "~/components/tablet/TaskLaneTablePane";
+import { TasksDashboard } from "~/components/tablet/TasksDashboard";
+import { WorkItemPane } from "~/components/tablet/WorkItemPane";
+import { AuthGate } from "~/features/auth/auth-gate";
+import { TabletArcadePane } from "~/features/arcade/ArcadeScreen";
 import { ChatScreenView } from "~/features/chat/chat-screen";
 import {
   OodaConversationProvider,
   useOodaConversationContext,
 } from "~/features/chat/ooda-conversation-context";
-import type {
-  TabletPlanningDashboardNavigationAction,
-  TabletPlanningSummaryTarget,
-} from "~/features/tablet/planning-dashboard";
-import { useGateway } from "~/hooks/use-gateway";
-import { getLiveDashboardSessions } from "~/hooks/gateway-sessions";
-import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
-import { useTabletShortcuts } from "~/hooks/use-keyboard-shortcuts";
-import { extractFileReferences } from "~/lib/file-references";
-import {
-  getTabletShellPadding,
-  getTabletSidebarWidth,
-  shouldCollapseTabletSidebar,
-} from "~/lib/tablet-layout";
-import { AuthGate } from "~/features/auth/auth-gate";
+import { shouldUseSplitPaneLayout } from "~/features/navigation/mobile-nav";
+import { MobileNavSheet } from "~/features/navigation/mobile-nav-sheet";
+import { MobileTabBar } from "~/features/navigation/MobileTabBar";
+import { appendWorkspaceParam } from "~/features/planning/navigation";
+import { RunRecordView } from "~/features/runs/RunRecordView";
 import {
   getMobilePlanningFilterHref,
   getTabletDashboardHref,
@@ -46,31 +60,36 @@ import {
   getTabletProjectHref,
   getTabletProjectsHref,
   getTabletProviderHref,
-  getTabletSettingsHref,
   getTabletSessionHref,
+  getTabletSettingsHref,
   getTabletTaskLaneHref,
   getTabletWorkItemHref,
 } from "~/features/tablet/navigation";
 import {
+  getExecutionSessionShellState,
   getPlanningPaneSession,
   getRecentOutcomeTarget,
-  getExecutionSessionShellState,
   getShellSelectionIntent,
   getShellStateForPath,
+  pathFromAppUrl,
   selectLeftRailTarget,
   switchShellMode,
 } from "~/features/tablet/shell";
-import type {
-  TabletLeftRailTab,
-  TabletShellMode,
-  TabletShellTarget,
-} from "~/features/tablet/shell";
-import type { ProviderKey, TaskLaneKey } from "~/features/tablet/dashboard";
-import type { MobileWorkItemEntryView } from "~/features/tablet/work-item-entry";
-import { MobileNavSheet } from "~/features/navigation/mobile-nav-sheet";
-import { MobileTabBar } from "~/features/navigation/MobileTabBar";
-import { shouldUseSplitPaneLayout } from "~/features/navigation/mobile-nav";
+import { TodayView } from "~/features/today/TodayView";
+import { useDailyPlan } from "~/features/today/use-daily-plan";
+import { getLiveDashboardSessions } from "~/hooks/gateway-sessions";
+import { useGateway } from "~/hooks/use-gateway";
+import { useTabletShortcuts } from "~/hooks/use-keyboard-shortcuts";
+import { useSelectedWorkspace } from "~/hooks/use-selected-workspace";
 import { colors } from "~/lib/colors";
+import { extractFileReferences } from "~/lib/file-references";
+import {
+  getTabletShellPadding,
+  getTabletSidebarWidth,
+  shouldCollapseTabletSidebar,
+} from "~/lib/tablet-layout";
+import { queryClient } from "~/utils/api";
+import { Providers } from "../providers";
 
 import "../styles.css";
 
@@ -82,7 +101,9 @@ const stackScreenOptions = {
   animation: "fade" as const,
 };
 
-function firstRouteParam(value: string | string[] | undefined): string | undefined {
+function firstRouteParam(
+  value: string | string[] | undefined,
+): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
@@ -92,6 +113,11 @@ function firstRouteParam(value: string | string[] | undefined): string | undefin
  */
 const PHONE_SCREEN_TITLES: readonly (readonly [string, string])[] = [
   ["home", "Home"],
+  ["attention", "Attention"],
+  ["arcade", "Arcade"],
+  ["arcade/demo", "Arcade (demo)"],
+  ["attention/browse", "SDLC"],
+  ["attention/[itemId]", "Item"],
   ["tasks", "Tasks"],
   ["tasks/queue", "Priority Queue"],
   ["tasks/outcomes", "Recent Outcomes"],
@@ -103,7 +129,10 @@ const PHONE_SCREEN_TITLES: readonly (readonly [string, string])[] = [
   ["pull-requests", "Pull Requests"],
   ["nodes", "Nodes"],
   ["notifications", "Inbox"],
+  ["today", "Today"],
+  ["sessions/index", "Sessions"],
   ["sessions/[sessionId]", "Session"],
+  ["runs/[runId]", "Run"],
   ["work-items/[workItemId]", "Work Item"],
   ["work-items/[workItemId]/workspace", "Workspace"],
   ["settings/index", "Settings"],
@@ -169,6 +198,39 @@ function OodaChatPane() {
   return <ChatScreenView chat={chat} embedded />;
 }
 
+function TodayPane({
+  onOpenSession,
+  onOpenRun,
+}: {
+  onOpenSession: (sessionId: string) => void;
+  onOpenRun: (href: string) => void;
+}) {
+  const { workspace, selectedWorkspaceId } = useSelectedWorkspace();
+  const plan = useDailyPlan(workspace?.id);
+  const router = useRouter();
+  return (
+    <TodayView
+      testID="tablet-today"
+      embedded
+      view={plan.view}
+      isLoading={plan.isLoading}
+      isMutating={plan.isMutating}
+      error={plan.mutationError ?? plan.error}
+      onRefresh={plan.refetch}
+      onGenerate={plan.generate}
+      onApprove={() => plan.approve()}
+      onClose={plan.close}
+      // Work-item hrefs route through the run opener, which maps any phone
+      // href onto the shell's target the same way.
+      onOpenWorkItem={(href) => onOpenRun(href)}
+      onOpenSession={onOpenSession}
+      onOpenSessions={() =>
+        router.replace(appendWorkspaceParam("/sessions", selectedWorkspaceId))
+      }
+    />
+  );
+}
+
 function getShellModeLabel(mode: TabletShellMode): string {
   switch (mode) {
     case "ooda":
@@ -191,6 +253,8 @@ function MainPane({
   onSelectProject,
   selectedWorkItemView,
   onOpenSession,
+  onOpenRun,
+  onOpenToday,
   onOpenPlanningSession,
   onOpenPlanningSummaryTarget,
   onOpenPlanningNavigationAction,
@@ -207,9 +271,13 @@ function MainPane({
   onSelectProject: (projectId: string) => void;
   selectedWorkItemView: MobileWorkItemEntryView;
   onOpenSession: (sessionId: string) => void;
+  onOpenRun: (href: string) => void;
+  onOpenToday: () => void;
   onOpenPlanningSession: (sessionId: string) => void;
   onOpenPlanningSummaryTarget: (target: TabletPlanningSummaryTarget) => void;
-  onOpenPlanningNavigationAction: (action: TabletPlanningDashboardNavigationAction) => void;
+  onOpenPlanningNavigationAction: (
+    action: TabletPlanningDashboardNavigationAction,
+  ) => void;
   planningComposerOpen: boolean;
   onPlanningComposerOpenChange: (open: boolean) => void;
   onShowArtifact: (content: string) => void;
@@ -220,29 +288,62 @@ function MainPane({
   }
 
   if (target.type === "planning-session") {
-    const planningSession = getPlanningPaneSession(gateway.sessions, target.sessionId);
+    const planningSession = getPlanningPaneSession(
+      gateway.sessions,
+      target.sessionId,
+    );
 
     return (
-      <PlanningPane
+      <PlanningSessionSurface
         sessionId={planningSession.sessionId}
         sessionStatus={planningSession.status}
         sessionType={planningSession.sessionType}
         workItemTitle={planningSession.title}
         events={gateway.selectedSessionEvents}
+        sessions={gateway.sessions}
         onSendInput={gateway.sendInput}
         onStopSession={gateway.stopSession}
         onShowArtifact={onShowArtifact}
+        onWatchRun={(executionSessionId) => {
+          gateway.selectSession(executionSessionId);
+          gateway.reportRunView(executionSessionId);
+        }}
+        onReturnToPlan={() => gateway.openPlanningSession(planningSession.sessionId)}
+        onApprove={gateway.approve}
       />
     );
   }
 
   if (target.type === "execution-session") {
     return (
-      <AgentThreadView
+      <SessionWorkstation
         sessionId={target.sessionId}
+        sessions={gateway.sessions}
         events={gateway.selectedSessionEvents}
         onSendInput={gateway.sendInput}
         onStopSession={gateway.stopSession}
+        onApprove={gateway.approve}
+        onReportRunView={gateway.reportRunView}
+        onOpenWorkItem={(workItemId) => onOpenWorkItem(workItemId, "outcome")}
+        onOpenInspector={onOpenInspector}
+      />
+    );
+  }
+
+  if (target.type === "arcade") {
+    return <TabletArcadePane demo={target.demo} />;
+  }
+
+  if (target.type === "today") {
+    return <TodayPane onOpenSession={onOpenSession} onOpenRun={onOpenRun} />;
+  }
+
+  if (target.type === "run") {
+    return (
+      <RunRecordView
+        runId={target.runId}
+        onOpenSession={onOpenSession}
+        onOpenWorkItem={(workItemId) => onOpenWorkItem(workItemId, "outcome")}
       />
     );
   }
@@ -253,6 +354,7 @@ function MainPane({
         workItemId={target.workItemId}
         entryView={selectedWorkItemView}
         onOpenSession={onOpenSession}
+        onOpenRun={onOpenRun}
         onOpenInspector={onOpenInspector}
       />
     );
@@ -266,16 +368,14 @@ function MainPane({
         onOpenLane={onOpenLane}
         onOpenWorkItem={onOpenWorkItem}
         onOpenSession={onOpenSession}
+        onOpenToday={onOpenToday}
       />
     );
   }
 
   if (target.type === "task-lane") {
     return (
-      <TaskLaneTablePane
-        lane={target.lane}
-        onOpenWorkItem={onOpenWorkItem}
-      />
+      <TaskLaneTablePane lane={target.lane} onOpenWorkItem={onOpenWorkItem} />
     );
   }
 
@@ -356,11 +456,43 @@ function TabletLayout() {
       routeParams.workItemId,
     ],
   );
+  // The tablet shell draws its own panes and does not mount the router Slot,
+  // so a bob-dev:// link never moves usePathname on its own.
+  useEffect(() => {
+    const apply = (url: string | null) => {
+      if (!url) return;
+      const next = pathFromAppUrl(url);
+      if (!next || next === pathname) return;
+      // Expo generates stricter route types locally than in a clean CI checkout.
+      
+      router.replace(next as "/");
+    };
+    const subscription = Linking.addEventListener("url", (event) => {
+      apply(event.url);
+    });
+    return () => subscription.remove();
+  }, [pathname, router]);
+  useEffect(() => {
+    let active = true;
+    void Linking.getInitialURL().then((url) => {
+      if (!active || !url) return;
+      const next = pathFromAppUrl(url);
+      if (!next) return;
+      // Expo generates stricter route types locally than in a clean CI checkout.
+      
+      router.replace(next as "/");
+    });
+    return () => {
+      active = false;
+    };
+  }, [router]);
   const { selectedWorkspaceId } = useSelectedWorkspace();
   const { width } = useWindowDimensions();
   const safeAreaInsets = useSafeAreaInsets();
   const [inspectorVisible, setInspectorVisible] = useState(false);
-  const [inspectorArtifact, setInspectorArtifact] = useState<string | null>(null);
+  const [inspectorArtifact, setInspectorArtifact] = useState<string | null>(
+    null,
+  );
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [selectedWorkItemView, setSelectedWorkItemView] =
     useState<MobileWorkItemEntryView>("planning");
@@ -374,7 +506,8 @@ function TabletLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Render-time state adjustment (not an effect): rotating back to a wide
   // layout closes the drawer so it doesn't pop open on the next rotation.
-  const [prevCollapseSidebar, setPrevCollapseSidebar] = useState(collapseSidebar);
+  const [prevCollapseSidebar, setPrevCollapseSidebar] =
+    useState(collapseSidebar);
   if (prevCollapseSidebar !== collapseSidebar) {
     setPrevCollapseSidebar(collapseSidebar);
     if (!collapseSidebar && drawerOpen) setDrawerOpen(false);
@@ -435,7 +568,9 @@ function TabletLayout() {
     const selection = getShellSelectionIntent(nextShell);
 
     setShell((current) =>
-      JSON.stringify(current) === JSON.stringify(nextShell) ? current : nextShell,
+      JSON.stringify(current) === JSON.stringify(nextShell)
+        ? current
+        : nextShell,
     );
     setSelectedWorkItemView(selection.workItemView);
 
@@ -467,6 +602,15 @@ function TabletLayout() {
     selectWorkItem,
   ]);
 
+  const handleOpenArcade = useCallback(() => {
+    clearDetailState();
+    setShell((prev) => ({
+      ...prev,
+      target: { type: "arcade" },
+    }));
+    router.replace(appendWorkspaceParam("/arcade", selectedWorkspaceId));
+  }, [clearDetailState, router, selectedWorkspaceId]);
+
   const handleOpenSettings = useCallback(() => {
     clearDetailState();
     setShell((prev) => ({
@@ -476,317 +620,432 @@ function TabletLayout() {
     router.replace(getTabletSettingsHref(selectedWorkspaceId));
   }, [clearDetailState, router, selectedWorkspaceId]);
 
-  const handleModeChange = useCallback((mode: TabletShellMode) => {
-    clearDetailState();
-    setShell(switchShellMode(mode));
-    router.replace(getTabletDashboardHref(mode, selectedWorkspaceId));
-  }, [clearDetailState, router, selectedWorkspaceId]);
+  const handleModeChange = useCallback(
+    (mode: TabletShellMode) => {
+      clearDetailState();
+      setShell(switchShellMode(mode));
+      router.replace(getTabletDashboardHref(mode, selectedWorkspaceId));
+    },
+    [clearDetailState, router, selectedWorkspaceId],
+  );
 
-  const handleLeftTabChange = useCallback((leftTab: TabletLeftRailTab) => {
-    clearDetailState();
-    setShell((prev) => ({
-      ...prev,
-      leftTab,
-      target: selectLeftRailTarget(prev.mode, leftTab),
-    }));
-    if (leftTab === "projects") {
-      router.replace(getTabletProjectsHref(selectedWorkspaceId));
-      return;
-    }
-    router.replace(getTabletDashboardHref(shell.mode, selectedWorkspaceId));
-  }, [clearDetailState, router, selectedWorkspaceId, shell.mode]);
+  const handleLeftTabChange = useCallback(
+    (leftTab: TabletLeftRailTab) => {
+      clearDetailState();
+      setShell((prev) => ({
+        ...prev,
+        leftTab,
+        target: selectLeftRailTarget(prev.mode, leftTab),
+      }));
+      if (leftTab === "projects") {
+        router.replace(getTabletProjectsHref(selectedWorkspaceId));
+        return;
+      }
+      router.replace(getTabletDashboardHref(shell.mode, selectedWorkspaceId));
+    },
+    [clearDetailState, router, selectedWorkspaceId, shell.mode],
+  );
 
-  const handleSelectSession = useCallback((sessionId: string) => {
-    const session = gateway.sessions.find((candidate) => candidate.sessionId === sessionId);
-    const outcomeTarget = session ? getRecentOutcomeTarget(session) : null;
-    if (outcomeTarget?.target.type === "work-item") {
-      setShell({
-        mode: "tasks",
-        leftTab: outcomeTarget.leftTab,
-        target: outcomeTarget.target,
-      });
-      setSelectedWorkItemView(outcomeTarget.entryView ?? "outcome");
-      gateway.selectWorkItem(outcomeTarget.target.workItemId);
-      router.replace(
-        getTabletWorkItemHref(
-          outcomeTarget.target.workItemId,
-          outcomeTarget.entryView ?? "outcome",
-          selectedWorkspaceId,
-        ),
+  const handleSelectSession = useCallback(
+    (sessionId: string) => {
+      const session = gateway.sessions.find(
+        (candidate) => candidate.sessionId === sessionId,
       );
-      return;
-    }
+      const outcomeTarget = session ? getRecentOutcomeTarget(session) : null;
+      if (outcomeTarget?.target.type === "work-item") {
+        setShell({
+          mode: "tasks",
+          leftTab: outcomeTarget.leftTab,
+          target: outcomeTarget.target,
+        });
+        setSelectedWorkItemView(outcomeTarget.entryView ?? "outcome");
+        gateway.selectWorkItem(outcomeTarget.target.workItemId);
+        router.replace(
+          getTabletWorkItemHref(
+            outcomeTarget.target.workItemId,
+            outcomeTarget.entryView ?? "outcome",
+            selectedWorkspaceId,
+          ),
+        );
+        return;
+      }
 
-    setShell(getExecutionSessionShellState(sessionId));
-    gateway.selectSession(sessionId);
-    router.replace(getTabletSessionHref(sessionId, selectedWorkspaceId));
-  }, [gateway, router, selectedWorkspaceId]);
+      setShell(getExecutionSessionShellState(sessionId));
+      gateway.selectSession(sessionId);
+      router.replace(getTabletSessionHref(sessionId, selectedWorkspaceId));
+    },
+    [gateway, router, selectedWorkspaceId],
+  );
 
-  const handleOpenSession = useCallback((sessionId: string) => {
-    setShell(getExecutionSessionShellState(sessionId));
-    gateway.selectSession(sessionId);
-    router.replace(getTabletSessionHref(sessionId, selectedWorkspaceId));
-  }, [gateway, router, selectedWorkspaceId]);
+  const handleOpenSession = useCallback(
+    (sessionId: string) => {
+      setShell(getExecutionSessionShellState(sessionId));
+      gateway.selectSession(sessionId);
+      router.replace(getTabletSessionHref(sessionId, selectedWorkspaceId));
+    },
+    [gateway, router, selectedWorkspaceId],
+  );
 
-  const handleOpenPlanningSession = useCallback((sessionId: string) => {
-    gateway.selectWorkItem(null);
-    setShell({
-      mode: "planning",
-      leftTab: "recent-sessions",
-      target: { type: "planning-session", sessionId },
-    });
-    gateway.openPlanningSession(sessionId);
-    router.replace(getTabletPlanningSessionHref(sessionId, selectedWorkspaceId));
-  }, [gateway, router, selectedWorkspaceId]);
+  // A run row without a session: the href is the phone's `/runs/<id>`, and
+  // the shell's path mapping turns it into the run target.
+  const handleOpenRun = useCallback(
+    (href: string) => {
+      clearDetailState();
+      const runId = /^\/runs\/([^?]+)/.exec(href)?.[1];
+      if (runId) {
+        setShell({
+          mode: "tasks",
+          leftTab: "recent-outcomes",
+          target: { type: "run", runId: decodeURIComponent(runId) },
+        });
+      }
+      const workItemId = /^\/work-items\/([^?/]+)/.exec(href)?.[1];
+      if (workItemId) {
+        const view = /view=(outcome|queue|planning)/.exec(href)?.[1] as
+          | MobileWorkItemEntryView
+          | undefined;
+        setShell({
+          mode: "tasks",
+          leftTab: view === "outcome" ? "recent-outcomes" : "priority-queue",
+          target: {
+            type: "work-item",
+            workItemId: decodeURIComponent(workItemId),
+            view: view ?? "queue",
+          },
+        });
+        setSelectedWorkItemView(view ?? "queue");
+        gateway.selectWorkItem(decodeURIComponent(workItemId));
+      }
+      router.replace(href);
+    },
+    [clearDetailState, gateway, router],
+  );
 
-  const handleOpenPlanningSummaryTarget = useCallback((target: TabletPlanningSummaryTarget) => {
-    clearDetailState();
-    if (target.type === "projects-dashboard") {
-      setShell({
-        mode: "planning",
-        leftTab: "projects",
-        target: { type: "projects-dashboard" },
-      });
-      router.replace(getTabletProjectsHref(selectedWorkspaceId, target.filter));
-      return;
-    }
-
-    setShell({
-      mode: "planning",
-      leftTab: "recent-sessions",
-      target: { type: "planning-dashboard" },
-    });
-    router.replace(getMobilePlanningFilterHref(target.filter, selectedWorkspaceId));
-  }, [clearDetailState, router, selectedWorkspaceId]);
-
-  const handleOpenPlanningNavigationAction = useCallback((
-    action: TabletPlanningDashboardNavigationAction,
-  ) => {
-    clearDetailState();
-    if (action.key === "projects") {
-      setShell({
-        mode: "planning",
-        leftTab: "projects",
-        target: { type: "projects-dashboard" },
-      });
-      router.replace(getTabletProjectsHref(selectedWorkspaceId));
-      return;
-    }
-
-    setShell({
-      mode: "planning",
-      leftTab: "recent-sessions",
-      target: { type: "planning-dashboard" },
-    });
-    router.replace(getTabletDashboardHref("planning", selectedWorkspaceId));
-  }, [clearDetailState, router, selectedWorkspaceId]);
-
-  const handleSelectWorkItem = useCallback((
-    workItemId: string,
-    view: MobileWorkItemEntryView = "queue",
-  ) => {
-    setShell({
-      mode: "tasks",
-      leftTab: view === "outcome" ? "recent-outcomes" : "priority-queue",
-      target: { type: "work-item", workItemId, view },
-    });
-    setSelectedWorkItemView(view);
-    gateway.selectWorkItem(workItemId);
-    router.replace(getTabletWorkItemHref(workItemId, view, selectedWorkspaceId));
-  }, [gateway, router, selectedWorkspaceId]);
-
-  const handleSelectProject = useCallback((projectId: string) => {
-    clearDetailState();
-    setShell({
-      mode: "planning",
-      leftTab: "projects",
-      target: { type: "project", projectId },
-    });
-    router.replace(getTabletProjectHref(projectId, selectedWorkspaceId));
-  }, [clearDetailState, router, selectedWorkspaceId]);
-
-  const handleOpenProvider = useCallback((provider: ProviderKey) => {
+  const handleOpenToday = useCallback(() => {
     clearDetailState();
     setShell({
       mode: "tasks",
       leftTab: "recent-outcomes",
-      target: { type: "provider", provider },
+      target: { type: "today" },
     });
-    router.replace(getTabletProviderHref(provider, selectedWorkspaceId));
+    router.replace(appendWorkspaceParam("/today", selectedWorkspaceId));
   }, [clearDetailState, router, selectedWorkspaceId]);
 
-  const handleOpenTaskLane = useCallback((lane: TaskLaneKey) => {
-    clearDetailState();
-    setShell({
-      mode: "tasks",
-      leftTab: "priority-queue",
-      target: { type: "task-lane", lane },
-    });
-    router.replace(getTabletTaskLaneHref(lane, selectedWorkspaceId));
-  }, [clearDetailState, router, selectedWorkspaceId]);
+  const handleOpenPlanningSession = useCallback(
+    (sessionId: string) => {
+      gateway.selectWorkItem(null);
+      setShell({
+        mode: "planning",
+        leftTab: "recent-sessions",
+        target: { type: "planning-session", sessionId },
+      });
+      gateway.openPlanningSession(sessionId);
+      router.replace(
+        getTabletPlanningSessionHref(sessionId, selectedWorkspaceId),
+      );
+    },
+    [gateway, router, selectedWorkspaceId],
+  );
+
+  const handleOpenPlanningSummaryTarget = useCallback(
+    (target: TabletPlanningSummaryTarget) => {
+      clearDetailState();
+      if (target.type === "projects-dashboard") {
+        setShell({
+          mode: "planning",
+          leftTab: "projects",
+          target: { type: "projects-dashboard" },
+        });
+        router.replace(
+          getTabletProjectsHref(selectedWorkspaceId, target.filter),
+        );
+        return;
+      }
+
+      setShell({
+        mode: "planning",
+        leftTab: "recent-sessions",
+        target: { type: "planning-dashboard" },
+      });
+      router.replace(
+        getMobilePlanningFilterHref(target.filter, selectedWorkspaceId),
+      );
+    },
+    [clearDetailState, router, selectedWorkspaceId],
+  );
+
+  const handleOpenPlanningNavigationAction = useCallback(
+    (action: TabletPlanningDashboardNavigationAction) => {
+      clearDetailState();
+      if (action.key === "projects") {
+        setShell({
+          mode: "planning",
+          leftTab: "projects",
+          target: { type: "projects-dashboard" },
+        });
+        router.replace(getTabletProjectsHref(selectedWorkspaceId));
+        return;
+      }
+
+      setShell({
+        mode: "planning",
+        leftTab: "recent-sessions",
+        target: { type: "planning-dashboard" },
+      });
+      router.replace(getTabletDashboardHref("planning", selectedWorkspaceId));
+    },
+    [clearDetailState, router, selectedWorkspaceId],
+  );
+
+  const handleSelectWorkItem = useCallback(
+    (workItemId: string, view: MobileWorkItemEntryView = "queue") => {
+      setShell({
+        mode: "tasks",
+        leftTab: view === "outcome" ? "recent-outcomes" : "priority-queue",
+        target: { type: "work-item", workItemId, view },
+      });
+      setSelectedWorkItemView(view);
+      gateway.selectWorkItem(workItemId);
+      router.replace(
+        getTabletWorkItemHref(workItemId, view, selectedWorkspaceId),
+      );
+    },
+    [gateway, router, selectedWorkspaceId],
+  );
+
+  const handleSelectProject = useCallback(
+    (projectId: string) => {
+      clearDetailState();
+      setShell({
+        mode: "planning",
+        leftTab: "projects",
+        target: { type: "project", projectId },
+      });
+      router.replace(getTabletProjectHref(projectId, selectedWorkspaceId));
+    },
+    [clearDetailState, router, selectedWorkspaceId],
+  );
+
+  const handleOpenProvider = useCallback(
+    (provider: ProviderKey) => {
+      clearDetailState();
+      setShell({
+        mode: "tasks",
+        leftTab: "recent-outcomes",
+        target: { type: "provider", provider },
+      });
+      router.replace(getTabletProviderHref(provider, selectedWorkspaceId));
+    },
+    [clearDetailState, router, selectedWorkspaceId],
+  );
+
+  const handleOpenTaskLane = useCallback(
+    (lane: TaskLaneKey) => {
+      clearDetailState();
+      setShell({
+        mode: "tasks",
+        leftTab: "priority-queue",
+        target: { type: "task-lane", lane },
+      });
+      router.replace(getTabletTaskLaneHref(lane, selectedWorkspaceId));
+    },
+    [clearDetailState, router, selectedWorkspaceId],
+  );
 
   useTabletShortcuts({
-    onFocusSidebar: () => { /* TODO: focus sidebar search when added */ },
-    onFocusMain: () => { /* TODO: focus main pane input */ },
+    onFocusSidebar: () => {
+      /* TODO: focus sidebar search when added */
+    },
+    onFocusMain: () => {
+      /* TODO: focus main pane input */
+    },
     onToggleInspector: () => setInspectorVisible((v) => !v),
   });
 
   return (
     <OodaConversationProvider>
-    <View
-      testID="tablet-shell"
-      className="flex-1"
-      style={{
-        backgroundColor: colors.background,
-        paddingTop: shellPadding.top,
-        paddingRight: shellPadding.right,
-        paddingBottom: shellPadding.bottom,
-        paddingLeft: shellPadding.left,
-      }}
-    >
-      <View className="flex-1 flex-row">
-        {!collapseSidebar ? (
-          <View
-            testID="tablet-sidebar"
-            style={{
-              width: sidebarWidth,
-              borderRightWidth: 1,
-              borderRightColor: colors.border,
-            }}
-          >
-            <TabletSidebar
-              mode={shell.mode}
-              leftTab={shell.leftTab}
-              sessions={gateway.sessions}
-              connectionState={gateway.connectionState}
-              selectedSessionId={gateway.selectedSessionId}
-              selectedWorkItemId={gateway.selectedWorkItemId}
-              onModeChange={handleModeChange}
-              onLeftTabChange={handleLeftTabChange}
-              onSelectSession={handleSelectSession}
-              onSelectWorkItem={handleSelectWorkItem}
-              onOpenPlanningSession={handleOpenPlanningSession}
-              onSelectProject={handleSelectProject}
-              onOpenSession={handleOpenSession}
-              onRefresh={gateway.refresh}
-              onOpenSettings={handleOpenSettings}
-            />
-          </View>
-        ) : null}
-        <View testID="tablet-main" className="flex-1" style={{ minWidth: 0 }}>
-          {collapseSidebar ? (
+      <View
+        testID="tablet-shell"
+        className="flex-1"
+        style={{
+          backgroundColor: colors.background,
+          paddingTop: shellPadding.top,
+          paddingRight: shellPadding.right,
+          paddingBottom: shellPadding.bottom,
+          paddingLeft: shellPadding.left,
+        }}
+      >
+        {/* Keeps the router mounted so a bob-dev:// link can change the path.
+            The shell draws the panes itself. */}
+        <View
+          pointerEvents="none"
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={{
+            position: "absolute",
+            width: 0,
+            height: 0,
+            overflow: "hidden",
+          }}
+        >
+          <Stack screenOptions={{ headerShown: false }} />
+        </View>
+        <View className="flex-1 flex-row">
+          {!collapseSidebar ? (
             <View
-              testID="tablet-compact-bar"
-              className="flex-row items-center justify-between px-3"
+              testID="tablet-sidebar"
               style={{
-                height: 48,
-                borderBottomWidth: 1,
-                borderBottomColor: colors.border,
-                backgroundColor: colors.background,
+                width: sidebarWidth,
+                borderRightWidth: 1,
+                borderRightColor: colors.border,
               }}
             >
-              <Pressable
-                testID="tablet-menu-button"
-                onPress={() => setDrawerOpen(true)}
-                accessibilityRole="button"
-                accessibilityLabel="Open navigation menu"
-                className="flex-row items-center gap-2 rounded-md px-2.5 py-1.5 active:opacity-70"
-                style={{ minHeight: 36, justifyContent: "center" }}
-              >
-                <Text className="text-base font-semibold text-foreground">☰</Text>
-                <Text className="text-sm font-semibold text-foreground">
-                  {getShellModeLabel(shell.mode)}
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={handleOpenSettings}
-                accessibilityRole="button"
-                accessibilityLabel="Open settings"
-                className="rounded-md px-2.5 py-1.5 active:opacity-70"
-                style={{ minHeight: 36, justifyContent: "center" }}
-              >
-                <Text className="text-sm font-medium" style={{ color: colors.muted }}>
-                  Settings
-                </Text>
-              </Pressable>
+              <TabletSidebar
+                mode={shell.mode}
+                leftTab={shell.leftTab}
+                sessions={gateway.sessions}
+                connectionState={gateway.connectionState}
+                selectedSessionId={gateway.selectedSessionId}
+                selectedWorkItemId={gateway.selectedWorkItemId}
+                onModeChange={handleModeChange}
+                onLeftTabChange={handleLeftTabChange}
+                onSelectSession={handleSelectSession}
+                onSelectWorkItem={handleSelectWorkItem}
+                onOpenPlanningSession={handleOpenPlanningSession}
+                onSelectProject={handleSelectProject}
+                onOpenSession={handleOpenSession}
+                onRefresh={gateway.refresh}
+                onOpenSettings={handleOpenSettings}
+                onOpenArcade={handleOpenArcade}
+              />
             </View>
           ) : null}
-          <View className="flex-1" style={{ minWidth: 0 }}>
-            <MainPane
-              gateway={gateway}
-              target={shell.target}
-              onOpenProvider={handleOpenProvider}
-              onOpenLane={handleOpenTaskLane}
-              onOpenWorkItem={handleSelectWorkItem}
-              onSelectProject={handleSelectProject}
-              selectedWorkItemView={selectedWorkItemView}
-              onOpenSession={handleOpenSession}
-              onOpenPlanningSession={handleOpenPlanningSession}
-              onOpenPlanningSummaryTarget={handleOpenPlanningSummaryTarget}
-              onOpenPlanningNavigationAction={handleOpenPlanningNavigationAction}
-              planningComposerOpen={planningComposerOpen}
-              onPlanningComposerOpenChange={setPlanningComposerOpen}
-              onShowArtifact={handleShowArtifact}
-              onOpenInspector={handleOpenInspector}
-            />
-            <InspectorPanel
-              visible={inspectorVisible}
-              onClose={() => setInspectorVisible(false)}
-              artifactContent={inspectorArtifact}
-              fileReferences={fileReferences}
-              selectedFilePath={selectedFilePath}
-              onSelectFile={handleSelectFile}
-              workItemId={gateway.selectedWorkItemId}
-            />
+          <View testID="tablet-main" className="flex-1" style={{ minWidth: 0 }}>
+            {collapseSidebar ? (
+              <View
+                testID="tablet-compact-bar"
+                className="flex-row items-center justify-between px-3"
+                style={{
+                  height: 48,
+                  borderBottomWidth: 1,
+                  borderBottomColor: colors.border,
+                  backgroundColor: colors.background,
+                }}
+              >
+                <Pressable
+                  testID="tablet-menu-button"
+                  onPress={() => setDrawerOpen(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open navigation menu"
+                  className="flex-row items-center gap-2 rounded-md px-2.5 py-1.5 active:opacity-70"
+                  style={{ minHeight: 36, justifyContent: "center" }}
+                >
+                  <Text className="text-foreground text-base font-semibold">
+                    ☰
+                  </Text>
+                  <Text className="text-foreground text-sm font-semibold">
+                    {getShellModeLabel(shell.mode)}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleOpenSettings}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open settings"
+                  className="rounded-md px-2.5 py-1.5 active:opacity-70"
+                  style={{ minHeight: 36, justifyContent: "center" }}
+                >
+                  <Text
+                    className="text-sm font-medium"
+                    style={{ color: colors.muted }}
+                  >
+                    Settings
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+            <View className="flex-1" style={{ minWidth: 0 }}>
+              <MainPane
+                gateway={gateway}
+                target={shell.target}
+                onOpenProvider={handleOpenProvider}
+                onOpenLane={handleOpenTaskLane}
+                onOpenWorkItem={handleSelectWorkItem}
+                onSelectProject={handleSelectProject}
+                selectedWorkItemView={selectedWorkItemView}
+                onOpenSession={handleOpenSession}
+                onOpenRun={handleOpenRun}
+                onOpenToday={handleOpenToday}
+                onOpenPlanningSession={handleOpenPlanningSession}
+                onOpenPlanningSummaryTarget={handleOpenPlanningSummaryTarget}
+                onOpenPlanningNavigationAction={
+                  handleOpenPlanningNavigationAction
+                }
+                planningComposerOpen={planningComposerOpen}
+                onPlanningComposerOpenChange={setPlanningComposerOpen}
+                onShowArtifact={handleShowArtifact}
+                onOpenInspector={handleOpenInspector}
+              />
+              <InspectorPanel
+                visible={inspectorVisible}
+                onClose={() => setInspectorVisible(false)}
+                artifactContent={inspectorArtifact}
+                fileReferences={fileReferences}
+                selectedFilePath={selectedFilePath}
+                onSelectFile={handleSelectFile}
+                workItemId={gateway.selectedWorkItemId}
+              />
+            </View>
           </View>
         </View>
-      </View>
 
-      {collapseSidebar ? (
-        <Modal
-          visible={drawerOpen}
-          animationType="slide"
-          presentationStyle="pageSheet"
-          onRequestClose={() => setDrawerOpen(false)}
-        >
-          <View
-            testID="tablet-sidebar-drawer"
-            className="flex-1"
-            style={{ backgroundColor: colors.background }}
+        {collapseSidebar ? (
+          <Modal
+            visible={drawerOpen}
+            animationType="slide"
+            presentationStyle="pageSheet"
+            onRequestClose={() => setDrawerOpen(false)}
           >
-            <View className="flex-row justify-end px-4 pt-4">
-              <Pressable
-                onPress={() => setDrawerOpen(false)}
-                accessibilityRole="button"
-                accessibilityLabel="Close navigation menu"
-                className="active:opacity-70"
-              >
-                <Text className="text-base" style={{ color: colors.muted }}>
-                  Close
-                </Text>
-              </Pressable>
+            <View
+              testID="tablet-sidebar-drawer"
+              className="flex-1"
+              style={{ backgroundColor: colors.background }}
+            >
+              <View className="flex-row justify-end px-4 pt-4">
+                <Pressable
+                  onPress={() => setDrawerOpen(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close navigation menu"
+                  className="active:opacity-70"
+                >
+                  <Text className="text-base" style={{ color: colors.muted }}>
+                    Close
+                  </Text>
+                </Pressable>
+              </View>
+              <TabletSidebar
+                mode={shell.mode}
+                leftTab={shell.leftTab}
+                sessions={gateway.sessions}
+                connectionState={gateway.connectionState}
+                selectedSessionId={gateway.selectedSessionId}
+                selectedWorkItemId={gateway.selectedWorkItemId}
+                onModeChange={closeDrawerThen(handleModeChange)}
+                onLeftTabChange={closeDrawerThen(handleLeftTabChange)}
+                onSelectSession={closeDrawerThen(handleSelectSession)}
+                onSelectWorkItem={closeDrawerThen(handleSelectWorkItem)}
+                onOpenPlanningSession={closeDrawerThen(
+                  handleOpenPlanningSession,
+                )}
+                onSelectProject={closeDrawerThen(handleSelectProject)}
+                onOpenSession={closeDrawerThen(handleOpenSession)}
+                onRefresh={gateway.refresh}
+                onOpenSettings={closeDrawerThen(handleOpenSettings)}
+                onOpenArcade={closeDrawerThen(handleOpenArcade)}
+              />
             </View>
-            <TabletSidebar
-              mode={shell.mode}
-              leftTab={shell.leftTab}
-              sessions={gateway.sessions}
-              connectionState={gateway.connectionState}
-              selectedSessionId={gateway.selectedSessionId}
-              selectedWorkItemId={gateway.selectedWorkItemId}
-              onModeChange={closeDrawerThen(handleModeChange)}
-              onLeftTabChange={closeDrawerThen(handleLeftTabChange)}
-              onSelectSession={closeDrawerThen(handleSelectSession)}
-              onSelectWorkItem={closeDrawerThen(handleSelectWorkItem)}
-              onOpenPlanningSession={closeDrawerThen(handleOpenPlanningSession)}
-              onSelectProject={closeDrawerThen(handleSelectProject)}
-              onOpenSession={closeDrawerThen(handleOpenSession)}
-              onRefresh={gateway.refresh}
-              onOpenSettings={closeDrawerThen(handleOpenSettings)}
-            />
-          </View>
-        </Modal>
-      ) : null}
-    </View>
+          </Modal>
+        ) : null}
+      </View>
     </OodaConversationProvider>
   );
 }

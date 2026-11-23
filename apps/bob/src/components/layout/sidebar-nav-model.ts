@@ -38,9 +38,9 @@ export interface SidebarTabItem {
 }
 
 export interface SidebarUtilityItem {
-  key: "onboarding" | "discovery" | "pull-requests" | "nodes" | "hermes" | "settings";
-  label: "Onboarding" | "Discovery" | "Pull Requests" | "Nodes" | "Hermes" | "Settings";
-  href: "/onboarding" | "/discovery" | "/pull-requests" | "/nodes" | "/hermes-console" | "/settings";
+  key: "onboarding" | "discovery" | "executions" | "pull-requests" | "sdlc" | "nodes" | "budget" | "hermes" | "settings";
+  label: "Onboarding" | "Discovery" | "Executions" | "Pull Requests" | "SDLC" | "Nodes" | "Budget" | "Hermes" | "Settings";
+  href: "/onboarding" | "/discovery" | "/executions" | "/pull-requests" | "/sdlc" | "/nodes" | "/budget" | "/hermes-console" | "/settings";
 }
 
 export interface SidebarProjectSummary {
@@ -153,8 +153,12 @@ const UTILITY_ITEMS: SidebarUtilityItem[] = [
   { key: "onboarding", label: "Onboarding", href: "/onboarding" },
   // Was reachable only by URL; a page nobody can find is a page nobody uses.
   { key: "discovery", label: "Discovery", href: "/discovery" },
+  { key: "executions", label: "Executions", href: "/executions" },
   { key: "pull-requests", label: "Pull Requests", href: "/pull-requests" },
+  { key: "sdlc", label: "SDLC", href: "/sdlc" },
   { key: "nodes", label: "Nodes", href: "/nodes" },
+  // BOB-76: subscription budget cockpit.
+  { key: "budget", label: "Budget", href: "/budget" },
   { key: "hermes", label: "Hermes", href: "/hermes-console" },
   { key: "settings", label: "Settings", href: "/settings" },
 ];
@@ -229,6 +233,7 @@ const KNOWN_CHILD_ROUTES: readonly string[] = [
   "/projects",
   "/providers",
   "/sessions",
+  "/settings/bizpulse",
   "/work-items",
 ];
 

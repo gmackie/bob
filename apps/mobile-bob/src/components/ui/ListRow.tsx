@@ -7,6 +7,11 @@ interface ListRowProps {
   right?: React.ReactNode;
   onPress?: () => void;
   showDivider?: boolean;
+  /**
+   * Replaces the label iOS builds from the row's texts. Pass this when the
+   * trailing control (for example "Mark read") should not be part of the name.
+   */
+  accessibilityLabel?: string;
 }
 
 export function ListRow({
@@ -15,6 +20,7 @@ export function ListRow({
   right,
   onPress,
   showDivider = true,
+  accessibilityLabel,
 }: ListRowProps) {
   const content = (
     <View
@@ -30,7 +36,13 @@ export function ListRow({
 
   if (onPress) {
     return (
-      <Pressable onPress={onPress} className="active:opacity-80">
+      <Pressable
+        onPress={onPress}
+        className="active:opacity-80"
+        {...(accessibilityLabel
+          ? { accessibilityRole: "button" as const, accessibilityLabel }
+          : {})}
+      >
         {content}
       </Pressable>
     );

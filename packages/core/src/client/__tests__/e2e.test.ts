@@ -42,8 +42,8 @@ import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
 
 import { Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { HttpRouter } from "effect/http";
+import { RpcSerialization, RpcServer } from "effect/rpc";
 
 import { AuthRpc } from "@gmacko/core/contracts/groups/auth";
 import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
@@ -286,8 +286,9 @@ describe("@gmacko/client e2e round-trip against stub server", () => {
     });
 
     expect(response.status).toBe(200);
+    // Effect 4.1 RpcSerialization labels NDJSON as application/x-ndjson.
     expect(response.headers.get("content-type")).toMatch(
-      /application\/ndjson/,
+      /application\/(x-)?ndjson/,
     );
 
     const text = await response.text();

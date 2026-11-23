@@ -4,7 +4,7 @@
 //   - `RealtimeChannelShape<A>` — generic channel interface (publish + scoped
 //     subscribe).
 //   - `makeRealtimeChannelTag<A>(name)` — factory for typed
-//     `ServiceMap.Service` tags.
+//     `Context.Service` tags.
 //   - `layerRealtime(backend, tag)` — backend-agnostic Layer factory.
 //   - `RealtimePublishError`, `RealtimeBackendNotImplementedError` — tagged
 //     errors.

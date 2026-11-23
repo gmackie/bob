@@ -20,7 +20,7 @@ import type { ProviderId } from "./contract.js";
 
 /** PTY output is full of colour codes and cursor moves; strip before matching. */
 export function stripAnsi(text: string): string {
-  // eslint-disable-next-line no-control-regex
+  // oxlint-disable-next-line no-control-regex
   return text.replace(/\[[0-?]*[ -/]*[@-~]/g, "").replace(/\][^]*/g, "");
 }
 

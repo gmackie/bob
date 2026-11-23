@@ -145,7 +145,7 @@ export interface AuthRuntimeBundle {
  *
  * // In tRPC context:
  * const result = await runtime.runPromise(
- *   Effect.flatMap(Sessions.asEffect(), (s) => s.validateRequest(headers))
+ *   Effect.flatMap(Sessions, (s) => s.validateRequest(headers))
  * );
  * ```
  */

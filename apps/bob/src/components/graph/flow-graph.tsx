@@ -145,7 +145,7 @@ export function FlowGraph({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
-        colorMode={"dark" as ColorMode}
+        forceColorMode={"dark" as ColorMode}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.3}

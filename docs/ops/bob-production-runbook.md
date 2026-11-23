@@ -13,6 +13,7 @@ Cloudflare Worker at `bob.blder.bot`.**
 | Runner | tsx checkout on `hetzner-bob` (user `bob`) | `git pull && systemctl restart ooda-runner`. Runs from source via tsx — `supervisor-wrapper.cjs` ships with the source tree. |
 | Web | wrangler deploy (existing CF pipeline) | |
 | Mobile | Preflight local iOS build | Native build needed for push-config changes (not OTA). |
+| Hermes config | `apps/hermes-shepherd/ops/install-hermes-config.sh` on `hetzner-bob` | From a `git archive` of the merge commit. Versioned config + health check. ForgeGraph manual target `hermes-systemd` (watches `apps/hermes-shepherd/` only): record each delivery with `forge evidence push` + a `manual_deploy` receipt; see `apps/hermes-shepherd/README.md`. |
 
 **Migration-first deploy order is mandatory** for schema changes: the
 `agent_run_status` enum gained `blocked` and `host_unknown` — code that

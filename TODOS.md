@@ -176,3 +176,71 @@ proves alerting alone is insufficient — its watchdog correctly flagged the dea
 every hour for 8 days into a void (`RESEND_API_KEY` unset, so every send returned
 false). Detection without a remediation path is what produced this outage; the point
 of this work is the fix button, not the notification.
+
+---
+
+## P0 — `run_artifacts.metadata` is 13 GB and it took production down
+
+Found 2026-09-27 while diagnosing a **~2.5 day outage of bizpulse.cc**. Bob is not
+the victim here, it is the largest single contributor.
+
+### The measurement
+
+`bob` is 16 GB of a 79 GB Postgres volume shared by every database on
+hetzner-master. Almost all of it is one table:
+
+| | |
+|---|---|
+| `run_artifacts` total | **13 GB** |
+| heap | 296 MB |
+| indexes | 34 MB |
+| **TOAST** | **13 GB** |
+| rows | 682,489 |
+| `metadata` json, average | **40,721 bytes** |
+| `metadata` json, max | 72,754 bytes |
+| oldest row | 2026-03-29 |
+| newest row | 2026-09-27 |
+
+So ~40 KB of JSON per artifact row, six months deep, never pruned. That is
+~2.2 GB/month of pure growth with no retention policy behind it.
+
+This is **not bloat** — `VACUUM` will not reclaim it. It is live data.
+
+### Why it is worth questioning
+
+The table already has a `storage_key text NOT NULL`. The artifact itself lives in
+object storage; the row is supposed to be the pointer. A 40 KB `metadata` blob
+sitting next to that pointer is very likely duplicating what the artifact already
+contains, or recording a whole tool transcript where a summary would do.
+
+Worth someone who knows the write path answering two questions:
+
+1. **What is actually in those 40 KB?** If it is the agent's output or a tool
+   transcript, it belongs behind `storage_key`, not in a json column.
+2. **Does anything read `metadata` on rows older than a few weeks?** If not, this
+   wants a retention job. `run_artifacts.run_id` is
+   `ON DELETE CASCADE` from `agent_runs`, so pruning old runs already collects the
+   artifacts — there may simply be no pruning of old runs at all.
+
+Also worth a look: `session_events` is 1.7 GB with **zero** live rows and 5,081 dead
+ones. That one *is* reclaimable and looks like a table nothing writes to any more.
+Note there is also a separate `session_event` (singular, 154 MB, 2,137 live rows),
+so check which one is current before touching either.
+
+### What happened
+
+The volume filled. Postgres could not write, crash-looped, and could not finish
+recovery — every client got `the database system is in recovery mode` while the port
+stayed open, so it looked like a network fault rather than a full disk. bizpulse.cc
+served 503 and every scheduled job failed for about two and a half days.
+
+It was brought back by dropping the ext4 root reserve on the data volume
+(`tune2fs -m 1 /dev/sdc`, freeing 3.2 GiB that the `postgres` user could not touch)
+and by killing a `pg_dump` that had been wedged for 6 days 19 hours holding ~27 GB
+in deleted-but-open files on the root disk.
+
+**The headroom is 3.2 GiB.** At bob's current rate that is weeks, not months, and it
+is shared with every other database on the host. The durable fixes are a retention
+policy here and a larger volume; neither has been done.
+
+Nothing in bob's data was read, modified, or deleted.

@@ -1,4 +1,7 @@
+import { createRequire } from "node:module";
 import { withTraceSpan } from "@gmacko/core/telemetry/deep";
+import type { T3Config } from "./t3-client";
+import { isAutolabTask } from "./t3-bridge";
 import { readDispatchTrace } from "./trace-dispatch";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -24,8 +27,22 @@ import { bobRunReporterFromEnv, type BobRunReporter } from "./bob-run-reporter";
 import { AgentCredentials } from "./agent-credentials.js";
 import { DispatchControl } from "./dispatch-control.js";
 import { resolveProxyRoute } from "@bob/execution/providers";
+import {
+  extractPlanningDrafts,
+  PLANNING_DRAFT_INSTRUCTION,
+} from "@bob/execution/planning/extractPlanDrafts";
 import { ProxyControl } from "./proxy-control";
-import { releaseBranchFromStaleWorktrees } from "./worktree-prepare.js";
+import { UsagePoller } from "./budget/usage-poller";
+import { NativeSessionTracker } from "./budget/native-session";
+import { assertValidWorktreeBranch, INVALID_BRANCH_ERROR, releaseBranchFromStaleWorktrees, worktreeDirectoryName } from "./worktree-prepare.js";
+import {
+  commitTrailer,
+  commitTrailerInstruction,
+  pullRequestBody,
+  pullRequestTitle,
+  rangeReferencesIssue,
+  trackerIdentifierForSession,
+} from "./tracker-naming.js";
 import { EventBuffer } from "./event-buffer";
 import {
   adoptSupervisedRun,
@@ -40,9 +57,54 @@ import {
   type BobRunOutcome,
 } from "./ooda-callback.js";
 
+/** The dispatching system recorded by Bob's public dispatch (metadata.source). */
+export function dispatchSourceSystem(
+  metadata: Record<string, unknown> | undefined,
+): string | undefined {
+  const source = metadata?.source;
+  if (!source || typeof source !== "object") return undefined;
+  const system = (source as Record<string, unknown>).system;
+  return typeof system === "string" ? system : undefined;
+}
+
+/**
+ * Whether a run counts as a failure when its branch ends with no change.
+ * Scoped to GenTrellis research: a hypothesis run exists to produce a code
+ * change for the lab to evaluate, whereas tracker work items and repair/review
+ * sessions can legitimately finish without touching their session branch.
+ */
+export function requiresCodeChange(
+  session: Pick<ServerSessionAvailable, "personaConfig" | "description">,
+): boolean {
+  return isAutolabTask({
+    sourceSystem: dispatchSourceSystem(session.personaConfig?.metadata),
+    prompt: session.description ?? "",
+  });
+}
+
+export const NO_COMMITS_ERROR = "agent finished without committing any changes";
+
 const RECONNECT_DELAY_MS = 5_000;
 const HEARTBEAT_INTERVAL_MS = 25_000;
 const HELLO_TIMEOUT_MS = 15_000;
+
+/**
+ * A runner state directory: the env override, else `~/.bob-runner/<name>`.
+ * Under vitest the override is required, so a test can never read or write the
+ * live runner's journal and get its fixture frames replayed to the gateway
+ * (BOB-64). `src/__tests__/setup.ts` sets both overrides per test file.
+ */
+export function runnerStateDir(
+  envVar: "BOB_RUNNER_BUFFER_DIR" | "BOB_RUNNER_SUPERVISE_DIR",
+  name: string,
+): string {
+  const override = process.env[envVar];
+  if (override) return override;
+  if (process.env.VITEST) {
+    throw new Error(`${envVar} is unset under vitest; refusing to use ~/.bob-runner/${name}`);
+  }
+  return join(homedir(), ".bob-runner", name);
+}
 
 /**
  * Extract a short, human-readable tail from an agent's captured output for use
@@ -84,6 +146,7 @@ export interface BobGatewayConfig {
   workspaceId: string;
   devDir: string;
   maxConcurrent: number;
+  t3?: T3Config;
   /**
    * Phase 5 M2 read-back. Called when an OODA-dispatched run finishes so the
    * runner (which owns the thread workspaces on disk) can write the outcome
@@ -247,6 +310,12 @@ export class BobGatewayConnector {
   private readonly credentials: AgentCredentials;
   private readonly dispatch: DispatchControl;
   private readonly proxyControl: ProxyControl | undefined;
+  /** Token ledger from the proxy usage queue (BOB-76); absent without a route and management key. */
+  private readonly usagePoller: UsagePoller | undefined;
+  /** Finds each run's agent CLI session id so its proxy usage joins to the run (BOB-76). */
+  private readonly nativeSessions = new NativeSessionTracker((runSessionId, nativeSessionId) =>
+    this.usagePoller?.linkSession(nativeSessionId, runSessionId),
+  );
   /**
    * Last few KB of each run's output, kept only until the run ends. Needed
    * because a provider's billing error (the 402 that went undetected for
@@ -291,8 +360,7 @@ export class BobGatewayConnector {
   ) {
     this.adapters = adapters;
     this.buffer = new EventBuffer(
-      process.env.BOB_RUNNER_BUFFER_DIR ??
-        join(homedir(), ".bob-runner", "event-buffer"),
+      runnerStateDir("BOB_RUNNER_BUFFER_DIR", "event-buffer"),
     );
     this.dispatch = new DispatchControl({ send: (msg) => this.send(msg as never) });
     this.credentials = new AgentCredentials({
@@ -315,11 +383,52 @@ export class BobGatewayConnector {
           refreshSnapshot: () => this.credentials.refreshSnapshot(),
         })
       : undefined;
+    const managementKey = process.env.CLIPROXY_MANAGEMENT_KEY?.trim() || undefined;
+    // With BOB_BUDGET_USAGE_SOURCE=remote the proxy host's collector drains the
+    // usage queue (a pop is destructive, so only one process may), and this
+    // runner only ships the run-to-agent-session links it observes.
+    const remoteUsage = process.env.BOB_BUDGET_USAGE_SOURCE?.trim() === "remote";
+    const spoolPath = process.env.BOB_RUNNER_BUDGET_SPOOL ?? join(homedir(), ".bob-runner", "budget", "usage-ledger.json");
+    if (remoteUsage && process.env.BOB_BUDGET_RUN_WEIGHTED_TOKEN_CAP) {
+      console.warn("[bob-gw] BOB_BUDGET_RUN_WEIGHTED_TOKEN_CAP is ignored with BOB_BUDGET_USAGE_SOURCE=remote: this runner no longer sees per-run usage");
+    }
+    this.usagePoller = remoteUsage
+      ? new UsagePoller({
+          baseUrl: proxyRoute?.baseUrl ?? "",
+          bobApiKeys: [],
+          drainQueue: false,
+          spoolPath,
+          send: (msg) => this.send(msg),
+          isConnected: () => this.authenticated && this.ws?.readyState === WebSocket.OPEN,
+          log: (line) => console.log(`[bob-gw] ${JSON.stringify(line)}`),
+        })
+      : proxyRoute && managementKey
+        ? new UsagePoller({
+            baseUrl: proxyRoute.baseUrl,
+            managementKey,
+            // Requests made with this host's proxy keys are Bob's; any other
+            // key on the proxy is interactive use. Extra runner keys (e.g. a
+            // review runner) can be listed in BOB_BUDGET_BOB_API_KEYS.
+            bobApiKeys: [
+              proxyRoute.apiKey,
+              ...(process.env.BOB_BUDGET_BOB_API_KEYS ?? "").split(",").map((key) => key.trim()).filter(Boolean),
+            ],
+            spoolPath,
+            send: (msg) => this.send(msg),
+            isConnected: () => this.authenticated && this.ws?.readyState === WebSocket.OPEN,
+            log: (line) => console.log(`[bob-gw] ${JSON.stringify(line)}`),
+            // Runaway guard: a run whose weighted tokens pass the cap is
+            // stopped. Off unless BOB_BUDGET_RUN_WEIGHTED_TOKEN_CAP is set.
+            runWeightedTokenCap: Number(process.env.BOB_BUDGET_RUN_WEIGHTED_TOKEN_CAP) || undefined,
+            onRunaway: (runSessionId, weighted) => this.stopRunawayRun(runSessionId, weighted),
+          })
+        : undefined;
   }
 
   start(): void {
     this.stopped = false;
     this.connect();
+    this.usagePoller?.start();
     // Re-adopt runs whose detached wrappers outlived the previous runner
     // generation. Status/output frames produced here are journaled by the
     // event buffer and replay after hello_ok, so ordering vs. connection
@@ -332,6 +441,7 @@ export class BobGatewayConnector {
   stop(): void {
     this.stopped = true;
     this.cleanup();
+    this.usagePoller?.stop();
     for (const [sessionId, handle] of this.sessionHandles) {
       if (this.supervisedSessions.has(sessionId)) {
         // Supervised runs survive runner shutdown by design — the detached
@@ -520,6 +630,10 @@ export class BobGatewayConnector {
           pending.clear();
           continue;
         }
+        if (line.includes('"type":"control_resolved"')) {
+          try { pending.delete((JSON.parse(line) as { request_id: string }).request_id); } catch { /* incomplete event */ }
+          continue;
+        }
         if (!line.includes('"type":"control_request"')) continue;
         try {
           const parsed = JSON.parse(line) as {
@@ -578,12 +692,13 @@ export class BobGatewayConnector {
     const session = meta.session as unknown as ServerSessionAvailable;
     let prUrl: string | null = null;
     if (meta.worktree) {
-      prUrl = await this.finalizeWorktreePr(session, meta.worktree).catch((e) => {
+      const finalized = await this.finalizeWorktreePr(session, meta.worktree).catch((e) => {
         console.warn(
           `[bob-gw] PR finalize failed for adopted run: ${e instanceof Error ? e.message : e}`,
         );
-        return null;
+        return { prUrl: null, unchanged: false };
       });
+      prUrl = finalized.prUrl;
       if (prUrl) {
         this.sendEvent(sessionId, "pull_request", "agent", {
           url: prUrl,
@@ -591,6 +706,10 @@ export class BobGatewayConnector {
         });
       }
       await this.removeWorktree(meta.worktree).catch(() => {});
+      if (finalized.unchanged && requiresCodeChange(session)) {
+        this.reportNoCommits(session, meta.worktree.branch);
+        return;
+      }
     }
     this.sendStatus(
       sessionId,
@@ -616,8 +735,7 @@ export class BobGatewayConnector {
    * orphan-marked (that ordering is the false-death fix).
    */
   private async adoptOrphanedRuns(): Promise<void> {
-    const base =
-      process.env.BOB_RUNNER_SUPERVISE_DIR ?? join(homedir(), ".bob-runner", "runs");
+    const base = runnerStateDir("BOB_RUNNER_SUPERVISE_DIR", "runs");
     if (!existsSync(base)) return;
 
     for (const name of readdirSync(base)) {
@@ -680,7 +798,9 @@ export class BobGatewayConnector {
             );
             return true;
           },
-          kill: () => proc.kill("SIGTERM"),
+          kill: () => adoption.meta.runtime === "t3"
+            ? writeStdin(JSON.stringify({ type: "stop" }) + "\n")
+            : void proc.kill("SIGTERM"),
           respondPermission: (requestId, behavior, message) =>
             pump.respond(requestId, behavior, message, writeStdin),
         });
@@ -731,7 +851,17 @@ export class BobGatewayConnector {
   }
 
   /** Bounded append; only the tail matters for classifying a failure. */
+  /** BOB-76: stop a run that spent past the per-run budget cap. */
+  private stopRunawayRun(sessionId: string, weightedTokens: number): void {
+    const handle = this.sessionHandles.get(sessionId);
+    if (!handle) return;
+    console.warn(`[bob-gw] Stopping ${sessionId}: ${Math.round(weightedTokens)} weighted tokens passed the per-run budget cap`);
+    this.sendStatus(sessionId, "failed", { reason: "budget_runaway", retryable: false });
+    handle.kill();
+  }
+
   private captureOutput(sessionId: string, chunk: string): void {
+    this.nativeSessions.feed(sessionId, chunk);
     const next = `${this.runOutputTail.get(sessionId) ?? ""}${chunk}`;
     this.runOutputTail.set(sessionId, next.slice(-8_000));
   }
@@ -740,6 +870,7 @@ export class BobGatewayConnector {
   private finishRunOutcome(sessionId: string, agentType: string, exitCode: number | null): void {
     this.credentials.noteRunOutcome(agentType, exitCode, this.runOutputTail.get(sessionId) ?? "");
     this.runOutputTail.delete(sessionId);
+    this.nativeSessions.forget(sessionId);
   }
 
   private startHeartbeat(): void {
@@ -941,6 +1072,7 @@ export class BobGatewayConnector {
   private readonly agentRunnable = new Map<string, boolean>();
 
   private canRunAgent(agentType: string): boolean {
+    if (this.config.t3) return true;
     const cached = this.agentRunnable.get(agentType);
     if (cached !== undefined) return cached;
 
@@ -1002,6 +1134,9 @@ export class BobGatewayConnector {
   }
 
   private async executeSessionAvailable(session: ServerSessionAvailable): Promise<void> {
+    // Gateway offers retry while a claim is in flight. Reserve below before
+    // awaiting any setup, and never launch a second execution for that ID.
+    if (this.activeSessions.has(session.sessionId)) return;
     if (this.activeSessions.size >= this.config.maxConcurrent) {
       console.log(`[bob-gw] At capacity (${this.config.maxConcurrent}), skipping ${session.sessionId}`);
       return;
@@ -1039,6 +1174,23 @@ export class BobGatewayConnector {
         agentConfig: { sessionId: session.sessionId },
       })
       .catch(() => null);
+
+    if (session.branch !== undefined) {
+      try {
+        await assertValidWorktreeBranch((cwd, args) => this.git(cwd, args), homedir(), session.branch);
+      } catch {
+        const failure = {
+          code: "INVALID_BRANCH", phase: "worktree_admission", modelStarted: false, retryable: false,
+          error: INVALID_BRANCH_ERROR,
+        };
+        console.error(`[bob-gw] branch admission failed for session ${session.sessionId}`);
+        this.sendStatus(session.sessionId, "error", failure);
+        this.sendEvent(session.sessionId, "error", "system", failure);
+        await this.bobReporter.finishRun(bobRunId, "failed", failure).catch(() => {});
+        this.activeSessions.delete(session.sessionId);
+        return;
+      }
+    }
 
     // When the server mapped a repo + branch, run in an isolated git worktree
     // off that repo so the agent never touches the runner's own checkout and so
@@ -1139,7 +1291,9 @@ export class BobGatewayConnector {
     };
     try {
       await withTraceSpan("session.execute", async () => {
-        if (adapter) {
+        if (this.config.t3) {
+          await this.runWithT3(session, workDir, prompt, collect, worktree);
+        } else if (adapter) {
           await this.runWithAdapter(session, adapter, workDir, prompt, collect, worktree);
         } else {
           await this.runWithCli(session, workDir, prompt, collect);
@@ -1151,20 +1305,40 @@ export class BobGatewayConnector {
         return;
       }
 
+      if (session.sessionType === "planning") {
+        const tasks = extractPlanningDrafts(runOutput);
+        if (tasks.length > 0) {
+          this.sendEvent(session.sessionId, "planning_drafts", "agent", { tasks });
+        }
+      }
+
       emitCheckSummary();
 
       // Worktree path: push the branch and open a PR if commits were produced.
       let prUrl: string | null = null;
       if (worktree) {
-        prUrl = await this.finalizeWorktreePr(session, worktree).catch((e) => {
+        const finalized = await this.finalizeWorktreePr(session, worktree).catch((e) => {
           console.warn(`[bob-gw] PR finalize failed: ${e instanceof Error ? e.message : e}`);
-          return null;
+          return { prUrl: null, unchanged: false };
         });
+        prUrl = finalized.prUrl;
         if (prUrl) {
           this.sendEvent(session.sessionId, "pull_request", "agent", {
             url: prUrl,
             branch: worktree.branch,
           });
+        }
+        // A research run that changed nothing did not do its job; reporting it
+        // completed hid a day-long read-only-worktree outage (BOB-49).
+        if (finalized.unchanged && requiresCodeChange(session)) {
+          this.reportNoCommits(session, worktree.branch);
+          await this.bobReporter.pushLog(bobRunId, runOutput).catch(() => {});
+          await this.bobReporter
+            .finishRun(bobRunId, "failed", { code: "NO_COMMITS", error: NO_COMMITS_ERROR })
+            .catch(() => {});
+          void this.reportToBizPulse(session, "failed", Date.now() - startTime);
+          void this.recordSkillfleetRun(session, "failure", Date.now() - startTime);
+          return;
         }
       }
 
@@ -1223,7 +1397,10 @@ export class BobGatewayConnector {
       void this.reportOodaOutcome(session, "failed");
     } finally {
       watchHandle?.stop();
-      if (worktree) await this.removeWorktree(worktree).catch(() => {});
+      // A lost supervisor socket does not mean the remote T3 run has stopped.
+      if (worktree && !this.supervisedRunStillLive(this.superviseDir(session.sessionId))) {
+        await this.removeWorktree(worktree).catch(() => {});
+      }
       this.activeSessions.delete(session.sessionId);
       this.sessionHandles.delete(session.sessionId);
       this.stopRequested.delete(session.sessionId);
@@ -1243,6 +1420,14 @@ export class BobGatewayConnector {
         rmSync(dir, { recursive: true, force: true });
       }
     }
+  }
+
+  /** Terminal error for a run that was expected to change code but did not. */
+  private reportNoCommits(session: ServerSessionAvailable, branch: string): void {
+    console.error(`[bob-gw] Session ${session.sessionId} failed: ${NO_COMMITS_ERROR} on ${branch}`);
+    this.sendStatus(session.sessionId, "error", { code: "NO_COMMITS", error: NO_COMMITS_ERROR, branch });
+    this.sendEvent(session.sessionId, "error", "system", { code: "NO_COMMITS", message: NO_COMMITS_ERROR });
+    void this.reportOodaOutcome(session, "failed", { pullRequestUrl: null, branch });
   }
 
   private async reportInterrupted(
@@ -1289,7 +1474,7 @@ export class BobGatewayConnector {
     baseBranch: string,
   ): Promise<WorktreeContext> {
     const repoName = basename(repoPath);
-    const safeBranch = branch.replace(/[^a-zA-Z0-9._-]+/g, "-");
+    const safeBranch = worktreeDirectoryName(branch);
     const wtPath = join(homedir(), ".bob", "worktrees", repoName, safeBranch);
 
     await this.git(repoPath, ["fetch", "origin", baseBranch]).catch(() => {});
@@ -1322,11 +1507,14 @@ export class BobGatewayConnector {
     return { path: wtPath, repoPath, branch, baseBranch };
   }
 
-  /** Push the worktree branch and open a PR if the agent produced commits. */
+  /**
+   * Push the worktree branch and open a PR if the agent produced commits.
+   * `unchanged` is true when the branch has no commits or no net diff vs base.
+   */
   private async finalizeWorktreePr(
     session: ServerSessionAvailable,
     worktree: WorktreeContext,
-  ): Promise<string | null> {
+  ): Promise<{ prUrl: string | null; unchanged: boolean }> {
     // Internal repair/review sessions must NEVER open a PR from their throwaway
     // session branch: a repair pushes its fix to the TARGET PR's own branch and a
     // review only posts a git-host review — the `bob/repair/*` / `bob/review/*`
@@ -1341,7 +1529,7 @@ export class BobGatewayConnector {
       console.log(
         `[bob-gw] ${worktree.branch} is an internal repair/review session branch; skipping PR (work lands on the target PR's own branch)`,
       );
-      return null;
+      return { prUrl: null, unchanged: false };
     }
 
     const ahead = (
@@ -1353,7 +1541,7 @@ export class BobGatewayConnector {
     ).trim();
     if (!ahead || ahead === "0") {
       console.log(`[bob-gw] No commits on ${worktree.branch}; skipping PR`);
-      return null;
+      return { prUrl: null, unchanged: true };
     }
 
     // Commits ahead ≠ a real change. A repair/review session pushes its actual
@@ -1382,45 +1570,87 @@ export class BobGatewayConnector {
       console.log(
         `[bob-gw] No net diff on ${worktree.branch} vs ${worktree.baseBranch}; skipping PR`,
       );
-      return null;
+      return { prUrl: null, unchanged: true };
     }
+
+    const identifier = trackerIdentifierForSession(session);
+    if (identifier) await this.ensureCommitTrailer(worktree, identifier);
 
     await this.git(worktree.path, ["push", "-u", "origin", worktree.branch, "--force"]);
 
     const remote = (
       await this.git(worktree.repoPath, ["remote", "get-url", "origin"])
     ).trim();
-    return this.createPullRequest(
+    const prUrl = await this.createPullRequest(
       worktree.path,
       remote,
       worktree.branch,
       worktree.baseBranch,
-      session.title ?? worktree.branch,
-      session.description ?? "Automated by Bob agent.",
+      pullRequestTitle(session, worktree.branch),
+      pullRequestBody(session, session.description ?? "Automated by Bob agent."),
+      // The shared Forgejo token may open PRs only for tracker work: it is what
+      // gets an imported issue its PR from an SSH checkout, while internal
+      // items keep their push-only behaviour on those repos unchanged.
+      identifier ? process.env.BOB_FORGEJO_TOKEN : undefined,
     );
+    return { prUrl, unchanged: false };
+  }
+
+  /**
+   * Backstop for the commit trailer the prompt asks for: if no commit in the
+   * pushed range mentions the issue, amend `Refs: GMA-612` onto the head so
+   * Kanbanger can link the push. Only the unpushed head is rewritten, hooks
+   * are skipped (the agent's commit already passed them), and any failure
+   * leaves the branch exactly as the agent made it.
+   */
+  private async ensureCommitTrailer(worktree: WorktreeContext, identifier: string): Promise<void> {
+    try {
+      const log = await this.git(worktree.path, [
+        "log",
+        "--format=%B",
+        `origin/${worktree.baseBranch}..HEAD`,
+      ]);
+      if (rangeReferencesIssue(log, identifier)) return;
+      await this.git(worktree.path, [
+        "commit",
+        "--amend",
+        "--no-edit",
+        "--no-verify",
+        "--trailer",
+        commitTrailer(identifier),
+      ]);
+    } catch (err) {
+      console.warn(
+        `[bob-gw] could not add the ${identifier} trailer on ${worktree.branch}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
   }
 
   /**
    * Open a PR for the pushed branch, host-aware:
    * - github.com → `gh pr create` (the runner host is authenticated)
    * - Forgejo/Gitea over HTTPS with a token in the remote URL → REST API
-   * - otherwise (e.g. SSH gitea without a token) → push-only, PR opened manually
+   * - Forgejo/Gitea without one, when the caller passes `fallbackToken`
+   *   (tracker work only: BOB_FORGEJO_TOKEN) → REST API
+   * - otherwise (e.g. SSH gitea without a token) → push-only, PR opened manually;
+   *   for tracker work the Worker's reconcileTrackerPullRequests opens it later
    */
   private async createPullRequest(
     worktreePath: string,
     remoteUrl: string,
     head: string,
     base: string,
-    title: string,
+    prTitle: string,
     body: string,
+    fallbackToken?: string,
   ): Promise<string | null> {
     const parsed = this.parseRemote(remoteUrl);
     if (!parsed) {
       console.warn(`[bob-gw] could not parse remote for PR`);
       return null;
     }
-    const { host, owner, repo, token } = parsed;
-    const prTitle = `[Bob] ${title}`;
+    const { host, owner, repo } = parsed;
+    const token = parsed.token ?? (host !== "github.com" ? fallbackToken : undefined);
 
     if (host === "github.com") {
       try {
@@ -1506,10 +1736,7 @@ export class BobGatewayConnector {
 
   /** Where a supervised run's wrapper, journal, and meta live. */
   private superviseDir(sessionId: string): string {
-    return join(
-      process.env.BOB_RUNNER_SUPERVISE_DIR ?? join(homedir(), ".bob-runner", "runs"),
-      sessionId,
-    );
+    return join(runnerStateDir("BOB_RUNNER_SUPERVISE_DIR", "runs"), sessionId);
   }
 
   /**
@@ -1591,6 +1818,59 @@ export class BobGatewayConnector {
         toolName: event.permission?.toolName,
       });
     }
+  }
+
+  private runWithT3(
+    session: ServerSessionAvailable,
+    workDir: string,
+    prompt: string,
+    onChunk: (text: string) => void,
+    worktree: WorktreeContext | null,
+  ): Promise<void> {
+    if (session.personaConfig?.allowedTools?.length) {
+      throw new Error("T3 handoff cannot enforce this persona's tool allowlist");
+    }
+    const sessionId = session.sessionId;
+    const proc = spawnSupervised(this.superviseDir(sessionId), {
+      sessionId, session: session as unknown as Record<string, unknown>,
+      worktree, startedAt: new Date().toISOString(), runtime: "t3",
+    }, process.execPath, ["--import", createRequire(import.meta.url).resolve("tsx"), fileURLToPath(new URL("./t3-bridge.ts", import.meta.url))], {
+      cwd: workDir,
+      env: { ...process.env,
+        BOB_T3_CONFIG: JSON.stringify(this.config.t3),
+        BOB_T3_TASK: JSON.stringify({
+          sessionId,
+          providerInstanceId: this.config.t3?.modelInstanceId ?? ({ claude: "claudeAgent", codex: "codex", grok: "grok" } as Record<string,string>)[session.agentType || "claude"],
+          model: session.personaConfig?.model,
+          sourceSystem: dispatchSourceSystem(session.personaConfig?.metadata),
+          title: session.title || session.identifier || "Bob task",
+          repoPath: worktree?.repoPath ?? workDir, worktreePath: workDir,
+          branch: worktree?.branch ?? session.branch,
+          prompt: [this.buildSystemPrompt(session), prompt].filter(Boolean).join("\n\n"),
+          runtimeMode: this.permissionModeFor(session) === "skip" ? "full-access" : "approval-required",
+        }),
+      },
+    });
+    this.supervisedSessions.add(sessionId);
+    const pump = this.makeAdoptionPump(sessionId);
+    const write = (text: string) => void proc.stdin!.write(text);
+    this.sessionHandles.set(sessionId, {
+      write: text => { write(JSON.stringify({ type: "user", message: { content: text } }) + "\n"); return true; },
+      // Keep the bridge alive until T3 acknowledges the interruption.
+      kill: () => write(JSON.stringify({ type: "stop" }) + "\n"),
+      respondPermission: (id, behavior, message) => pump.respond(id, behavior, message, write),
+    });
+    return new Promise((resolve, reject) => {
+      for (const stream of ["stdout", "stderr"] as const) {
+        proc[stream]!.on("data", (data: Buffer) => {
+          const text = data.toString();
+          onChunk(text);
+          pump.feed(text, stream, false);
+        });
+      }
+      proc.on("error", reject);
+      proc.on("close", code => code === 0 ? resolve() : reject(new Error(`T3 bridge exited with code ${code}`)));
+    });
   }
 
   private async runWithAdapter(
@@ -1748,6 +2028,8 @@ export class BobGatewayConnector {
     }
     if (session.description) parts.push(`\nDescription:\n${session.description}`);
     if (session.branch) parts.push(`\nWork on branch: ${session.branch}`);
+    const trailer = commitTrailerInstruction(session);
+    if (trailer) parts.push(trailer);
     parts.push(
       "\nVerification: run ./.bob/bin/bob-check after each meaningful change and before finishing. " +
         "It auto-detects this repo's typecheck/lint/test/e2e/build (package.json scripts, justfile, Makefile, forge-ci.toml) " +
@@ -1772,7 +2054,7 @@ export class BobGatewayConnector {
     }
 
     if (session.sessionType === "planning") {
-      parts.push("\n\nAnalyze the codebase and create a structured plan with draft tasks.");
+      parts.push(`\n\n${PLANNING_DRAFT_INSTRUCTION}`);
     } else {
       parts.push("\n\nImplement this task. Create a commit when done.");
     }

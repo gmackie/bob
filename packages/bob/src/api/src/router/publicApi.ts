@@ -11,6 +11,7 @@ import {
   publicApiCreateRun,
   publicApiCreateTask,
   publicApiCreateWorkItem,
+  dispatchSourceSchema,
   publicApiDispatchExecution,
   publicApiGenerateApiKey,
   publicApiGetRun,
@@ -157,6 +158,8 @@ export const publicApiRouter = {
             message: "ooda requires threadId or threadSlug",
           })
           .optional(),
+        // Provenance from the dispatching system (e.g. GenTrellis research).
+        source: dispatchSourceSchema.optional(),
       }),
     )
     .mutation(({ ctx, input }) =>

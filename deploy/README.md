@@ -27,12 +27,37 @@ cd apps/bob && pnpm predeploy
 # or: DATABASE_URL=$(forge db url --app bob) pnpm -F @bob/db migrate
 
 # 2. Ship the worker
-cd apps/bob && pnpm exec vinext deploy
+cd apps/bob && pnpm exec vinext-cloudflare deploy
 ```
 
 CI (`.forgejo/workflows/ci.yml`) runs step 2 automatically on `master` after
 tests pass. The `predeploy` hook is skipped in CI because it needs Tailscale to
 reach production Postgres.
+
+That CI job is the one production deploy for a merge. It stamps the Worker with
+`FG_COMMIT_HASH`, checks `/api/health`, and reports the deploy to ForgeGraph
+(`scripts/forgegraph-deploy-report.sh`), so `forge deploy history --stage
+production` shows the merged commit as active. Do not follow a merge with
+`forge deploy create production`: it rebuilds the same commit on hetzner-master.
+Use the ForgeGraph target only for schema releases (below) and rollbacks.
+
+The ForgeGraph `production-cf` target performs the guarded migration as the
+final build step on the Tailscale-connected deployment node, before the normal
+Wrangler upload. `python3 ../../scripts/migrate-production.py` obtains Bob's
+production direct URL from the node's scoped agent secret broker and passes it
+only to the migration subprocess. Credentials are never stored in the checkout.
+A broker, database, schema, ledger, or migration failure stops the build and
+therefore prevents worker upload.
+
+The production guard requires database/role `bob`, all 43 historical source
+migration hashes through `0035`, and the reviewed identity schema. Only
+`0034_plan_draft_kanbanger_issue.sql`, `0036_canonical_auth_foreign_keys.sql`, and
+`0037_mcp_oauth.sql` may be newly applied; adding another
+migration requires reviewing the guard's roster. It takes the ordinary migration
+advisory lock, preserves identity rows and foreign-key behavior, and rolls back
+if canonical identity coverage is incomplete. The existing code-only Forgejo
+job does not apply schema migrations; use the guarded ForgeGraph target for
+schema releases.
 
 Required repo secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
 
@@ -47,6 +72,15 @@ when unset.
 ## Configuration
 
 Canonical worker config: `apps/bob/wrangler.jsonc`
+
+Integration configuration is validated when Node starts or a Worker invocation
+receives its bindings. Settings > Integrations and authenticated
+`GET /api/integrations/configuration` read the same credential-free status snapshot.
+Validation is local and does not test provider connectivity. Stripe billing and
+paid-plan enforcement require `BOB_STRIPE_ENABLED=true`, valid API/webhook keys,
+and at least one configured paid-plan price. See `.env.example` for field names
+and disable overrides. This code change needs no database migration or live
+OAuth setup.
 
 - Route: `bob.blder.bot` (custom domain)
 - `FRONTEND_URL`: `https://bob.blder.bot`

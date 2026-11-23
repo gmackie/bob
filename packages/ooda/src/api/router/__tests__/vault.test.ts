@@ -33,7 +33,7 @@ describe("vaultRouter", () => {
   });
 
   it("has expected mutation procedures", () => {
-    const expectedMutations = ["write", "promote", "sync"];
+    const expectedMutations = ["write", "delete", "move", "promote", "sync"];
     for (const name of expectedMutations) {
       expect(vaultRouter).toHaveProperty(name);
       expect((vaultRouter as Record<string, unknown>)[name]).toBeDefined();
@@ -42,10 +42,12 @@ describe("vaultRouter", () => {
 
   it("has exactly the expected procedure count", () => {
     const procedureNames = Object.keys(vaultRouter);
-    expect(procedureNames).toHaveLength(6);
+    expect(procedureNames).toHaveLength(8);
     expect(procedureNames.sort()).toEqual([
+      "delete",
       "health",
       "list",
+      "move",
       "promote",
       "read",
       "sync",

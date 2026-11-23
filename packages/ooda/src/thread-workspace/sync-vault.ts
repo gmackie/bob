@@ -2,7 +2,11 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 
-import simpleGit, { type SimpleGit } from "simple-git";
+import { simpleGit, type SimpleGit } from "simple-git";
+
+import { acquireLock } from "../vault/git";
+import { LocalGitStorage } from "../vault/local-git-storage";
+import type { PublicationRecord } from "../vault/versioned-storage";
 
 // Any git operation that might create a merge commit (a real `git pull`
 // merging divergent history, not just a fast-forward) fails outright with
@@ -42,17 +46,64 @@ export async function initVaultRepo(
   }
 }
 
-export async function pushVault(vaultPath: string): Promise<void> {
-  const git = simpleGit(vaultPath);
+export interface VaultPushResult {
+  /** Publication of the current HEAD to its branch on origin. */
+  head: PublicationRecord;
+  /** Earlier publications that were replayed before HEAD was published. */
+  replayed: PublicationRecord[];
+}
+
+/**
+ * Publish the vault's HEAD to origin under an expected-head precondition.
+ *
+ * Remote failures are never swallowed into silence: the returned record's
+ * `state` is `published`, `pending` (offline, replay later), `conflict`
+ * (remote moved to history we do not contain) or `indeterminate`. Earlier
+ * pending publications from this clone are replayed first so history lands
+ * in order. Local structural failures (not a repository, detached HEAD)
+ * still throw.
+ */
+export async function pushVault(vaultPath: string): Promise<VaultPushResult> {
+  const release = await acquireLock(vaultPath);
   try {
-    await ensureIdentity(git);
-    await git.push("origin");
-  } catch {
-    // Silent failure when offline -- local is authoritative
+    await ensureIdentity(simpleGit(vaultPath));
+    const storage = new LocalGitStorage(vaultPath);
+    const ref = await storage.currentRef();
+    const revision = await storage.resolve({ ref: "HEAD" });
+
+    const replayed = await storage.replayPending();
+    const head = await storage.publish({
+      ref,
+      expectedHead: await storage.lastObservedRemoteHead(ref),
+      revision,
+    });
+    return { head, replayed };
+  } finally {
+    release();
   }
 }
 
+/** Re-attempt publications from this clone that never reached origin. */
+export async function replayVaultPublications(
+  vaultPath: string,
+): Promise<PublicationRecord[]> {
+  const release = await acquireLock(vaultPath);
+  try {
+    return await new LocalGitStorage(vaultPath).replayPending();
+  } finally {
+    release();
+  }
+}
+
+/** Publications from this clone that are not yet durably on origin. */
+export async function listUnpublishedVaultPublications(
+  vaultPath: string,
+): Promise<PublicationRecord[]> {
+  return new LocalGitStorage(vaultPath).listUnpublished();
+}
+
 export interface PullResult {
+  status: "synced" | "conflicted" | "unavailable";
   filesChanged: number;
   conflicts: boolean;
   conflictFiles: string[];
@@ -82,6 +133,7 @@ export async function pullVault(vaultPath: string): Promise<PullResult> {
     }
 
     return {
+      status: conflicts ? "conflicted" : "synced",
       filesChanged: pullSummary.summary.changes,
       conflicts,
       conflictFiles,
@@ -102,9 +154,9 @@ export async function pullVault(vaultPath: string): Promise<PullResult> {
         "utf-8",
       );
 
-      return { filesChanged: 0, conflicts: true, conflictFiles };
+      return { status: "conflicted", filesChanged: 0, conflicts: true, conflictFiles };
     }
-    return { filesChanged: 0, conflicts: false, conflictFiles: [] };
+    return { status: "unavailable", filesChanged: 0, conflicts: false, conflictFiles: [] };
   }
 }
 

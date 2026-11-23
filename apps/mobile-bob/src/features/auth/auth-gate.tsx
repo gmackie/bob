@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
+import { AppState } from "react-native";
+import NetInfo from "@react-native-community/netinfo";
 
+import { setSdlcEdgeAccount } from "~/features/sdlc/use-sdlc-edge";
 import { hasSeenOnboarding } from "~/lib/storage";
 import { authClient } from "~/utils/auth";
 import { shouldSkipOnboardingForDevAuth } from "~/utils/dev-auth-bypass";
@@ -9,6 +12,8 @@ import {
   SessionBootstrapScreen,
   SignInScreen,
 } from "./screens";
+import { getSessionGatePhase, startSessionRecovery } from "./session-recovery";
+import { SessionRecoveryScreen } from "./session-recovery-screen";
 
 /**
  * Session gate for the ROOT layout.
@@ -20,10 +25,48 @@ import {
  * tablet shell). signOut() flips the session to null and lands back here.
  */
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { data: session, isPending } = authClient.useSession();
+  const { data: session, isPending, error, refetch } = authClient.useSession();
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(
     shouldSkipOnboardingForDevAuth() ? false : null,
   );
+  const phase = getSessionGatePhase({
+    sessionPresent: Boolean(session),
+    isPending,
+    onboardingPending: showOnboarding === null,
+    errorPresent: error !== null,
+    errorStatus: error?.status ?? null,
+  });
+
+  // A settled session only: a pending or failed lookup is not a sign-out.
+  const accountId = isPending || error ? undefined : (session?.user.id ?? null);
+  useEffect(() => {
+    if (accountId !== undefined) setSdlcEdgeAccount(accountId);
+  }, [accountId]);
+
+  useEffect(() => {
+    if (phase !== "recovering") return;
+    return startSessionRecovery({
+      retry: refetch,
+      afterDelay: (retry) => {
+        const timer = setTimeout(retry, 5_000);
+        return () => clearTimeout(timer);
+      },
+      onForeground: (retry) => {
+        const subscription = AppState.addEventListener("change", (state) => {
+          if (state === "active") retry();
+        });
+        return () => subscription.remove();
+      },
+      onConnectionRestored: (retry) => {
+        let previousConnection: boolean | null = null;
+        return NetInfo.addEventListener((state) => {
+          const connected = state.isConnected === true;
+          if (previousConnection === false && connected) retry();
+          previousConnection = connected;
+        });
+      },
+    });
+  }, [phase, error, refetch]);
 
   useEffect(() => {
     if (shouldSkipOnboardingForDevAuth()) {
@@ -44,8 +87,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  if (isPending || showOnboarding === null) {
+  if (phase === "loading") {
     return <SessionBootstrapScreen />;
+  }
+
+  if (phase === "recovering") {
+    return <SessionRecoveryScreen onRetry={refetch} />;
   }
 
   if (!session) {

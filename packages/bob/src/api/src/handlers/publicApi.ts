@@ -7,6 +7,7 @@ import { captureTraceCarrier, validateTraceCarrier } from "@gmacko/core/telemetr
  */
 import { createHash, randomBytes } from "node:crypto";
 import { TRPCError } from "@trpc/server";
+import { z } from "zod/v4";
 
 import type { Db } from "@bob/db/client";
 import { and, desc, eq, inArray, sql, registerSessionAgentRun } from "@bob/db";
@@ -707,6 +708,34 @@ export function safeWorkingDirectory(
   return trimmed;
 }
 
+/**
+ * Which external system asked for a dispatch, and what it was working on (e.g.
+ * a GenTrellis research hypothesis). Persisted on the work item as
+ * `sourceMetadata.dispatchSource` so Bob can list and filter executions by
+ * origin, and forwarded to the runner under personaConfig.metadata.source so it
+ * can apply that system's completion policy without parsing the prompt.
+ * Strict and bounded: unknown keys are rejected rather than stored.
+ */
+export const dispatchSourceSchema = z
+  .object({
+    system: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+    kind: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9-]{0,63}$/)
+      .optional(),
+    environment: z.string().min(1).max(200).optional(),
+    suggestionId: z.string().min(1).max(128).optional(),
+    url: z
+      .string()
+      .max(2000)
+      .url()
+      .refine((u) => u.startsWith("https://"), { message: "url must be https" })
+      .optional(),
+  })
+  .strict();
+
+export type DispatchSource = z.infer<typeof dispatchSourceSchema>;
+
 export async function publicApiDispatchExecution(
   ctx: HandlerContext,
   input: {
@@ -724,6 +753,7 @@ export async function publicApiDispatchExecution(
     // personaConfig.model (buildCliCommand in bob-gateway.ts).
     model?: string;
     ooda?: { threadId?: string; threadSlug?: string };
+    source?: DispatchSource;
   },
 ) {
   if (process.env.BOB_OODA_DISPATCH_ENABLED !== "true") {
@@ -779,6 +809,9 @@ export async function publicApiDispatchExecution(
       description: input.description ?? null,
       status: "in_progress",
       sequenceNumber,
+      ...(input.source
+        ? { sourceMetadata: { dispatchSource: input.source } }
+        : {}),
     })
     .returning();
   if (!workItem) {
@@ -808,7 +841,11 @@ export async function publicApiDispatchExecution(
   const personaMetadata: Record<string, unknown> = {
     autonomyLevel: input.autonomyLevel ?? "full",
     ...(input.model ? { model: input.model } : {}),
-    metadata: { ...(input.ooda ? { ooda: input.ooda } : {}), traceCarrier: captureTraceCarrier() },
+    metadata: {
+      ...(input.ooda ? { ooda: input.ooda } : {}),
+      ...(input.source ? { source: input.source } : {}),
+      traceCarrier: captureTraceCarrier(),
+    },
   };
 
   const workingDirectory =

@@ -13,7 +13,7 @@ import type { Href } from "expo-router";
 import type { MobileNavDestination } from "./mobile-nav";
 import { MOBILE_NAV_DESTINATIONS } from "./mobile-nav";
 
-export type MobileTabKey = "home" | "tasks" | "chat" | "nodes" | "more";
+export type MobileTabKey = "home" | "attention" | "tasks" | "chat" | "nodes" | "more";
 
 /**
  * Real tabs carry a routable href (the typed-routes union when generated,
@@ -27,6 +27,10 @@ export type MobileTab =
 
 export const MOBILE_TABS: readonly MobileTab[] = [
   { key: "home", label: "Home", href: "/home" },
+  // SDLC items that need a human (BOB-75 Phase 4). A sixth tab rather than a
+  // swap: Nodes is pinned by the tab-bar flows, and six labels still fit a
+  // phone-width bar at text-xs.
+  { key: "attention", label: "Attention", href: "/attention" },
   { key: "tasks", label: "Tasks", href: "/tasks" },
   { key: "chat", label: "Chat", href: "/chat" },
   { key: "nodes", label: "Nodes", href: "/nodes" },
@@ -46,9 +50,13 @@ export const MORE_DESTINATIONS: readonly MobileNavDestination[] = MOBILE_NAV_DES
  */
 const ROUTE_OWNERS: readonly [prefix: string, tab: MobileTabKey][] = [
   ["/home", "home"],
+  ["/today", "home"],
+  ["/attention", "attention"],
+  ["/arcade", "attention"],
   ["/tasks", "tasks"],
   ["/work-items", "tasks"],
   ["/sessions", "tasks"],
+  ["/runs", "tasks"],
   ["/providers", "tasks"],
   ["/chat", "chat"],
   ["/nodes", "nodes"],

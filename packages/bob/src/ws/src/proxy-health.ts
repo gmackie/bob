@@ -14,6 +14,7 @@
  * cannot disagree about what a cooldown means.
  */
 
+import { parseQuotaMeters, type ManagementQuota } from "./budget-meters";
 import type { ProviderHealthWire, ProxyAccountWire, ProxyUsageWire } from "./protocol";
 
 /** The subset of a management `auth-files` entry that Bob reads. */
@@ -39,6 +40,9 @@ export interface ManagementAuthFile {
     remaining_seconds?: number;
   }> | null;
   recent_requests?: Array<{ time?: string; success?: number; failed?: number }> | null;
+  /** Latest rate-limit headers the proxy captured for this account (BOB-76). */
+  quota?: ManagementQuota | null;
+  model_quotas?: Record<string, ManagementQuota> | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
@@ -125,6 +129,12 @@ function foldOne(entry: ManagementAuthFile, now: Date): ProxyAccountWire | undef
   }
 
   const lastRefresh = toMillis(entry.last_refresh);
+  const meters = parseQuotaMeters(provider, entry.quota);
+  const modelMeters: Record<string, ReturnType<typeof parseQuotaMeters>> = {};
+  for (const [model, quota] of Object.entries(entry.model_quotas ?? {})) {
+    const parsed = parseQuotaMeters(provider, quota);
+    if (parsed.length > 0) modelMeters[model] = parsed;
+  }
   return {
     id,
     provider,
@@ -137,6 +147,8 @@ function foldOne(entry: ManagementAuthFile, now: Date): ProxyAccountWire | undef
     ...(entry.name || entry.auth_index
       ? { ref: { ...(entry.name ? { name: entry.name } : {}), ...(entry.auth_index ? { authIndex: entry.auth_index } : {}) } }
       : {}),
+    ...(meters.length > 0 ? { meters } : {}),
+    ...(Object.keys(modelMeters).length > 0 ? { modelMeters } : {}),
   };
 }
 

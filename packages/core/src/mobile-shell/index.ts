@@ -23,7 +23,7 @@ export interface PushNotificationToken {
   readonly platform: "ios" | "android";
 }
 
-export class MobileShellNotImplementedError extends Schema.TaggedErrorClass<MobileShellNotImplementedError>()(
+export class MobileShellNotImplementedError extends Schema.TaggedError<MobileShellNotImplementedError>()(
   "MobileShellNotImplementedError",
   {
     reason: Schema.String,

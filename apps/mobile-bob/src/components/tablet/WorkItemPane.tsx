@@ -33,6 +33,8 @@ interface WorkItemPaneProps {
   entryView?: MobileWorkItemEntryView;
   onOpenInspector?: () => void;
   onOpenSession?: (sessionId: string) => void;
+  /** A run with no session to open; receives the run's href. */
+  onOpenRun?: (href: string) => void;
 }
 
 export function WorkItemPane({
@@ -40,6 +42,7 @@ export function WorkItemPane({
   entryView = "planning",
   onOpenInspector,
   onOpenSession,
+  onOpenRun,
 }: WorkItemPaneProps) {
   const queryClient = useQueryClient();
   const workItemQuery = useQuery(rpc("workItem.get").queryOptions(
@@ -243,6 +246,7 @@ export function WorkItemPane({
             workItemId={item.id}
             workspaceId={(item as { workspaceId?: string | null }).workspaceId ?? null}
             onOpenSession={onOpenSession}
+            onOpenRun={onOpenRun}
           />
         ) : null}
 

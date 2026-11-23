@@ -1,14 +1,69 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  getIntegrationStatuses,
+  initializeIntegrationConfig,
+  integrations,
+} from "@bob/config/integrations";
+
+import { wrapFetch } from "./lib/otel";
+import {
   applyRuntimeAuthEnv,
+  applyRuntimeIntegrationEnv,
   applyRuntimeServiceEnv,
   getHyperdriveConnectionString,
   getSentryOptions,
 } from "./runtime-env";
-import { wrapFetch } from "./lib/otel";
 
 describe("worker runtime env helpers", () => {
+  it("validates authoritative runtime bindings before consumers and clears stale credentials", () => {
+    const target = {
+      STRIPE_SECRET_KEY: "stale-private-fixture",
+      UNRELATED: "retained",
+    };
+    const bindings = {
+      BOB_STRIPE_ENABLED: "true",
+      STRIPE_SECRET_KEY: "rk_test_fixtureOnly",
+      STRIPE_WEBHOOK_SECRET: "whsec_fixtureOnly",
+      STRIPE_PRICE_PREMIUM: "price_fixturePremium",
+      STRIPE_PRICE_PRO: "price_fixturePro",
+      SENTRY_DSN: "https://fixturePublicKey@sentry.example/1",
+    };
+    try {
+      const statuses = applyRuntimeIntegrationEnv(bindings, target);
+      expect(statuses).toBe(getIntegrationStatuses());
+      expect(integrations.stripe).toBe(true);
+      expect(target.STRIPE_SECRET_KEY).toBe(bindings.STRIPE_SECRET_KEY);
+      expect(getSentryOptions(bindings).enabled).toBe(true);
+
+      const invalid = applyRuntimeIntegrationEnv(
+        {
+          ...bindings,
+          STRIPE_WEBHOOK_SECRET: 42,
+          SENTRY_DSN: "malformed-private-fixture",
+        },
+        target,
+      );
+      expect(invalid.stripe.status).toBe("invalid");
+      expect(invalid.sentry.status).toBe("invalid");
+      expect(integrations.stripe).toBe(false);
+      expect(
+        getSentryOptions({ SENTRY_DSN: "malformed-private-fixture" }).enabled,
+      ).toBe(false);
+      expect(
+        getSentryOptions({
+          SENTRY_DSN: 42,
+          NEXT_PUBLIC_SENTRY_DSN: bindings.SENTRY_DSN,
+        }).enabled,
+      ).toBe(false);
+      const cleared = applyRuntimeIntegrationEnv({}, target);
+      expect(cleared.stripe.enabled).toBe(false);
+      expect(cleared.sentry.status).toBe("not_configured");
+      expect(target).toEqual({ UNRELATED: "retained" });
+    } finally {
+      initializeIntegrationConfig({});
+    }
+  });
   it("copies Cloudflare auth bindings into the Node-compatible environment", () => {
     const target: Record<string, string | undefined> = {};
 
@@ -53,11 +108,13 @@ describe("worker runtime env helpers", () => {
         HERMES_OODA_CONVERSATION_ID: "conversation-1",
         HERMES_OODA_BRANCH_ID: "branch-1",
         HERMES_USAGE_DIGEST_SECRET: "digest-secret",
+        BOB_MCP_ALLOWED_ORIGINS: "https://client.example",
         IGNORED: "not-copied",
       },
       target,
     );
     expect(target).toEqual({
+      BOB_MCP_ALLOWED_ORIGINS: "https://client.example",
       SKILLFLEET_NOTIFICATION_SECRET: "ingress-secret",
       SKILLFLEET_ORIGIN_URL: "https://llm.gmac.io",
       SKILLFLEET_HERMES_READ_SECRET: "skillfleet-read-secret",
@@ -88,11 +145,11 @@ describe("worker runtime env helpers", () => {
     const oldStage = process.env.FG_STAGE;
     try {
       process.env.DATABASE_URL = "postgres://node-hosted";
-      process.env.SENTRY_DSN = "https://sentry.example/1";
+      process.env.SENTRY_DSN = "https://fixturePublicKey@sentry.example/1";
       process.env.FG_STAGE = "hetzner";
 
       expect(getSentryOptions(undefined)).toEqual({
-        dsn: "https://sentry.example/1",
+        dsn: "https://fixturePublicKey@sentry.example/1",
         environment: "hetzner",
         tracesSampleRate: 0.1,
         enabled: true,
@@ -112,20 +169,27 @@ describe("worker runtime env helpers", () => {
   });
 
   it("wrapFetch tolerates a missing Cloudflare env in Node-hosted vinext", async () => {
-    const sent = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({}));
+    const sent = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json({}));
     const pending: Promise<unknown>[] = [];
     try {
       const response = await wrapFetch(async () => new Response("ok"))(
         new Request("http://127.0.0.1/api/health"),
         undefined,
-        { waitUntil(promise) { pending.push(promise); } },
+        {
+          waitUntil(promise) {
+            pending.push(promise);
+          },
+        },
       );
       await Promise.all(pending);
       expect(response.status).toBe(200);
       expect(await response.text()).toBe("ok");
       const payload = JSON.parse(String(sent.mock.calls[0]?.[1]?.body));
       expect(payload.resourceSpans[0].resource.attributes).toContainEqual({
-        key: "service.name", value: { stringValue: "bob" },
+        key: "service.name",
+        value: { stringValue: "bob" },
       });
     } finally {
       sent.mockRestore();

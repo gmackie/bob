@@ -13,7 +13,7 @@
     "start": "node scripts/start-electron.mjs",
     "stage": "node scripts/stage-packaging.mjs",
     "prepackage": "node scripts/stage-packaging.mjs",
-    "package": "pnpm build && electron-builder --config electron-builder.yml",
+    "package": "pnpm build && node scripts/package-desktop.mjs",
     "dist": "pnpm package",
     "build:daemon": "node scripts/build-daemon.mjs",
     "typecheck": "tsc --noEmit",
@@ -21,22 +21,22 @@
     "build:app": "node scripts/build-node-app.mjs"
   },
   "dependencies": {
-    "ws": "catalog:",
+    "ws": "8.23.0",
     "@gmacko/bob-client": "workspace:*"
   },
   "devDependencies": {
     "@bob/server": "workspace:*",
     "@bob/tsconfig": "workspace:*",
-    "@types/node": "catalog:",
-    "@types/ws": "catalog:",
-    "electron-builder": "^26.15.3",
-    "tsdown": "^0.20.3",
-    "typescript": "catalog:",
-    "vitest": "^4.1.11",
-    "electron-builder-squirrel-windows": "26.15.3",
-    "electron": "41.10.3",
-    "yaml": "^2.9.0",
-    "effect": "4.0.0-beta.43",
+    "@types/node": "26.6.6",
+    "@types/ws": "8.18.2",
+    "electron-builder": "26.18.0",
+    "tsdown": "0.23.7",
+    "typescript": "7.0.2",
+    "vitest": "5.1.1",
+    "electron-builder-squirrel-windows": "26.18.0",
+    "electron": "45.3.4",
+    "yaml": "2.9.1",
+    "effect": "4.1.4",
     "@gmacko/core": "workspace:*"
   }
 }

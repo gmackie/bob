@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Badge } from "@gmacko/core/ui/badge";
 
+import { track } from "~/lib/analytics";
 import { useBobRpcClient } from "~/rpc/react";
 import { useBobQueryClient } from "~/rpc/react";
 import {
@@ -84,6 +85,7 @@ export function PriorityQueueTable({ workspaceId }: PriorityQueueTableProps) {
   const dispatchWork = useMutation(
     bobQuery("workItem.dispatch").mutationOptions({
       onSuccess: async () => {
+        track("work_item_dispatched", { source: "queue" });
         await queryClient.invalidateQueries({
           queryKey: bobQuery("workItem.list").queryKey(listInput),
         });

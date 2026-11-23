@@ -112,6 +112,48 @@ console.log(JSON.stringify({ node: process.versions.node, uid: process.getuid() 
 NODE_CHECK
 ```
 
+## Worktree volume write access
+
+`/home/bob/dev` and `/home/bob/.bob/worktrees` are symlinks onto the Hetzner
+volume `/mnt/HC_Volume_106611335`. Services with `ProtectSystem=strict` see that
+volume read-only unless it is listed in `ReadWritePaths`; following the symlink
+does not grant write access. `ooda-runner.service` received its
+`30-worktree-volume.conf` drop-in on 2026-08-21 after every `git worktree add`
+failed with EROFS.
+
+`t3code-bob.service` needs the same drop-in, because T3 runs the agent that
+edits and commits in the runner-prepared worktree:
+
+```ini
+# /etc/systemd/system/t3code-bob.service.d/30-worktree-volume.conf
+[Service]
+ReadWritePaths=/mnt/HC_Volume_106611335
+```
+
+Without it, T3-run agents get EROFS on worktree files and git metadata
+(`.git/worktrees/*`, refs, objects), finish without commits, and the runner
+skips the PR. From 2026-10-10 17:00 to 2026-10-11 21:08 this silently failed
+nearly every GenTrellis research run; Bob reported them completed until BOB-49
+made a research run without commits report `error` (`NO_COMMITS`). The drop-in
+was installed by hand on 2026-10-11; the repository does not install systemd
+drop-ins for this host.
+
+Apply with `systemctl daemon-reload`, then restart `t3code-bob` only after
+checking it has no active runs. Verify that the running T3 process sees the
+volume writable (expect `rw` in the mount options column):
+
+```bash
+ssh root@hetzner-bob \
+  'pid=$(systemctl show -p MainPID --value t3code-bob.service); grep HC_Volume_106611335 /proc/$pid/mountinfo'
+
+ssh root@hetzner-bob \
+  'pid=$(systemctl show -p MainPID --value ooda-runner.service); grep HC_Volume_106611335 /proc/$pid/mountinfo'
+```
+
+An `ro` entry for either service means its drop-in is missing or systemd was
+not reloaded before the restart. `systemctl cat t3code-bob.service` lists the
+installed drop-ins.
+
 ## Standalone artifact provenance
 
 `apps/bob-execution/daemon-runtime-package-lock.json` is the checked-in,
@@ -227,3 +269,6 @@ ssh root@hetzner-bob 'find /home/bob/.t3-bob/worktrees/bob-nextjs -mindepth 1 -m
   server and need to be treated separately from service boot.
 - `ENOSPC` in `t3code-bob.service` points to host disk pressure, usually stale
   worktree artifacts under `/home/bob/.t3-bob`.
+- `EROFS` / "Read-only file system" from a T3-run agent, or a burst of
+  `NO_COMMITS` session errors, means the worktree volume is not writable inside
+  `t3code-bob.service`; see "Worktree volume write access".
