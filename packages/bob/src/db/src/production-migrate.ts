@@ -26,6 +26,7 @@ const approvedMigrations = new Set([
   "0042_sdlc_notification_types.sql",
   // Remote MCP planning review: one new table; no existing table is touched.
   "0043_mcp_dispatch_approvals.sql",
+  "0044_bizpulse_mcp.sql",
 ]);
 interface MigrationHash {
   filename: string;
@@ -37,7 +38,10 @@ export function validateProductionMigrationLedger(
   ledger: MigrationHash[],
 ): void {
   const applied = new Map(ledger.map((entry) => [entry.filename, entry.hash]));
-  if (files.length !== 52 || files.at(-1)?.filename !== "0043_mcp_dispatch_approvals.sql") {
+  if (
+    files.length !== 53 ||
+    files.at(-1)?.filename !== "0044_bizpulse_mcp.sql"
+  ) {
     throw new Error(
       "Production migration roster changed; review the deployment migration guard",
     );

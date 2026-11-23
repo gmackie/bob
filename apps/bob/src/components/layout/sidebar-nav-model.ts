@@ -233,6 +233,7 @@ const KNOWN_CHILD_ROUTES: readonly string[] = [
   "/projects",
   "/providers",
   "/sessions",
+  "/settings/bizpulse",
   "/work-items",
 ];
 

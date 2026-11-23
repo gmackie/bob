@@ -96,7 +96,7 @@ export function makeMcpTransport(
       case "ping":
         return result(id, {});
       case "tools/list":
-        return result(id, { tools: tools.list(grant) });
+        return result(id, { tools: await tools.list(grant) });
       // MCP Apps views: static HTML whose data comes back through tools/call.
       case "resources/list":
         if (!apps) return error(id, -32601, "Method not found");

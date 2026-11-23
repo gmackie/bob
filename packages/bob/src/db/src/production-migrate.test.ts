@@ -26,6 +26,7 @@ const historical = files.filter(
       "0041_budget_notification_types.sql",
       "0042_sdlc_notification_types.sql",
       "0043_mcp_dispatch_approvals.sql",
+      "0044_bizpulse_mcp.sql",
     ].includes(entry.filename),
 );
 

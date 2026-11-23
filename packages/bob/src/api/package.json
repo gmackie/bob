@@ -103,6 +103,10 @@
       "types": "./dist/api/src/services/forgegraph/eventReporter.d.ts",
       "default": "./src/services/forgegraph/eventReporter.ts"
     },
+    "./services/crypto/tokenVault": {
+      "types": "./dist/api/src/services/crypto/tokenVault.d.ts",
+      "default": "./src/services/crypto/tokenVault.ts"
+    },
     "./services/crypto/cookieVault": {
       "types": "./dist/api/src/services/crypto/cookieVault.d.ts",
       "default": "./src/services/crypto/cookieVault.ts"
