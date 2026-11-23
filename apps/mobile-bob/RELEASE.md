@@ -14,18 +14,18 @@ production-wired against the live backend; this is the build/prove flow.
 
 ## Status: Preflight-ready
 `preflight prove-app --app-dir . --platform ios --local-readiness` → **`ready`**.
-All checks pass (expo app/dev-client, scheme, bundle id, eas project/profile,
-simulator profile, Maestro flow). The fix that unblocked it: the `development`
-EAS profile is now a simulator profile (`ios.simulator: true`) — Preflight's
-simulator lane resolves the `development` profile, matching the other repos'
-convention. Device builds live under the `development:device` profile.
+All checks pass (expo app/dev-client, scheme, bundle id, simulator profile,
+Maestro flow).
 
-## EAS profiles (consumed by Preflight, built locally)
-- `development` — dev-client, **simulator**, Debug, `localhost:3000` API
-- `development:device` — same but on-device (`ios.simulator: false`)
-- `beta` — staging (`${STAGING_API_URL}`), adhoc, channel `beta`
-- `beta:production-api` — staging build pointed at prod `bob.blder.bot`
-- `production` — `${PRODUCTION_API_URL}` (falls back to `bob.blder.bot`), channel `production`
+## Build profiles (Preflight-owned)
+There is no `eas.json` (BOB-113). The simulator and development lanes derive
+their settings from the profile name: `development` builds a Debug dev client
+(`APP_VARIANT=development`), and a `preview` profile on the simulator lane
+builds a packaged app. The store lanes (`internal`, `beta`, `store`) take their
+environment, scheme and configuration from Preflight's build profiles for
+`pfapp_bob` (`GET /api/preflight/v1/apps/pfapp_bob/build-profiles`). Service
+URLs come from `API_URL`, `AUTH_URL`, `OODA_API_URL` and `GATEWAY_PUBLIC_URL`,
+with the hosted defaults in `app.config.js`.
 
 ## Build flow
 From `apps/mobile-bob`:
@@ -49,8 +49,8 @@ and reports back to the control plane. A persistent runner can be deployed (see 
 `preflight-runner` forge app) so jobs are claimed automatically.
 
 ## Credentials & providers (Preflight-owned)
-Apple/Google/OAuth credentials are managed by Preflight, not wired into eas.json
-secrets by hand:
+Apple/Google/OAuth credentials are managed by Preflight, not wired into
+build configuration by hand:
 
 ```bash
 preflight providers        # list/manage Apple + Google provider accounts
@@ -88,8 +88,8 @@ upgrade (`--app-source ios/BobDev --bridge-dir ios/DebugBridge` from this app).
   confirming auth against `bob.blder.bot`.
 - Confirm data loads (tasks/planning/runs) and live sessions connect to
   `wss://ws.blder.bot`.
-- OTA after JS-only changes still uses EAS Update channels (`beta`/`production`),
-  wired in `app.config.js`.
+- OTA after JS-only changes goes through Preflight's update server
+  (`development`/`preview`/`production`); see `docs/ota-updates.md`.
 
 Source compiles clean (`pnpm typecheck`) and tests pass (`pnpm test`, 234).
 
@@ -110,7 +110,10 @@ another cold launch. That evidence must not be attributed to this candidate.
 
 ### Hosted simulator evidence
 
-Use Preflight with `--lane simulator --build-profile development-hosted-simulator`
-for simulator evidence against the hosted Bob, auth, OODA and gateway services.
-This profile retains development client and simulator settings. The `development`
-profile targets local services; its EAS environment overrides shell API URLs.
+For simulator evidence against the hosted Bob, auth, OODA and gateway
+services, use `--lane simulator --build-profile preview`. Preflight derives
+simulator-lane settings from the profile name alone: `preview` builds a packaged
+`com.gmacko.bob.preview` app with `APP_VARIANT=preview`, which `app.config.js`
+points at the hosted services. A `development` build uses a local OODA API and
+no gateway. (The old `development-hosted-simulator` profile lived in `eas.json`,
+which Preflight had already stopped reading.)

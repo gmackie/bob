@@ -24,30 +24,55 @@ afterEach(() => {
   delete require.cache[configPath];
 });
 
-// EVERY profile — development included — resolves EAS Updates against its own
-// channel. That reverses the older "dev never touches EAS Updates" rule on
-// purpose: docs/ota-updates.md defines the release path as publish and verify
-// on `development` first, then beta, then republish the verified bundle to
-// production. Dev builds are dev-clients (Debug, developmentClient: true) and
-// still boot from the Expo dev server; the channel is what makes an update
-// publishable to them for verification.
-const EXPECTED_UPDATES = {
+// Updates come from Preflight (BOB-113). Every variant resolves them against
+// its own Preflight channel, development included: docs/ota-updates.md
+// publishes and verifies on development first, then preview, then production.
+const PREFLIGHT_OTA = {
   checkAutomatically: "ON_LOAD",
   fallbackToCacheTimeout: 0,
-  url: "https://u.expo.dev/e1dd0ab0-4dc1-40f8-b066-7cb91fde1759",
+  url: "https://preflight.forgegraf.com/api/preflight/v1/ota/bob",
+  codeSigningCertificate: "./certs/ota-code-signing.pem",
+  codeSigningMetadata: { keyid: "main", alg: "rsa-v1_5-sha256" },
 };
 
-describe("Expo app config", () => {
-  it("resolves EAS Updates for development builds so updates can be verified there first", () => {
-    const config = loadConfig({ APP_ENV: "development" });
+function expectedUpdates(channel: string) {
+  return {
+    ...PREFLIGHT_OTA,
+    requestHeaders: { "expo-channel-name": channel },
+  };
+}
 
-    expect(config.updates).toEqual(EXPECTED_UPDATES);
+describe("Expo app config", () => {
+  it("resolves Preflight updates on the development channel for development builds", () => {
+    const config = loadConfig({ APP_ENV: "development", APP_VARIANT: undefined });
+
+    expect(config.updates).toEqual(expectedUpdates("development"));
   });
 
-  it("keeps EAS Updates enabled for hosted staging builds", () => {
-    const config = loadConfig({ APP_ENV: "staging" });
+  it("sends hosted staging and preview builds to the preview channel", () => {
+    expect(
+      loadConfig({ APP_ENV: "staging", APP_VARIANT: undefined }).updates,
+    ).toEqual(expectedUpdates("preview"));
+    expect(
+      loadConfig({ APP_VARIANT: "preview", APP_ENV: "staging" }).updates,
+    ).toEqual(expectedUpdates("preview"));
+  });
 
-    expect(config.updates).toEqual(EXPECTED_UPDATES);
+  it("sends production builds to the production channel", () => {
+    const config = loadConfig({ APP_VARIANT: "production" });
+
+    expect(config.updates).toEqual(expectedUpdates("production"));
+    expect(config.runtimeVersion).toBe("0.1.1");
+  });
+
+  it("ships the certificate the Preflight vault signs with", () => {
+    const pem = readFileSync(
+      resolve(__dirname, "../../certs/ota-code-signing.pem"),
+      "utf8",
+    );
+
+    expect(pem).toContain("BEGIN CERTIFICATE");
+    expect(pem).not.toContain("PRIVATE KEY");
   });
 
   it("routes preview builds to the hosted OODA API", () => {
@@ -59,51 +84,34 @@ describe("Expo app config", () => {
   });
 });
 
-describe("EAS build profiles", () => {
-  it("gives every profile its own update channel while keeping development a debug dev-client", () => {
-    const easConfig = JSON.parse(
-      readFileSync(resolve(__dirname, "../../eas.json"), "utf8"),
-    ) as {
-      build: Record<
-        string,
-        {
-          android?: { gradleCommand?: string };
-          channel?: string;
-          ios?: { buildConfiguration?: string };
-        }
-      >;
-    };
-
-    // Per docs/ota-updates.md: development publishes to its own channel and is
-    // the first stop in the release path — but stays a Debug dev-client build,
-    // so it still runs off the dev server rather than an OTA bundle.
-    expect(easConfig.build.development?.channel).toBe("development");
-    expect(easConfig.build.development?.ios?.buildConfiguration).toBe("Debug");
-    expect(easConfig.build.development?.android?.gradleCommand).toBe(
-      ":app:assembleDebug",
+describe("native updates configuration", () => {
+  // The store build uses the committed ios/ and android/ projects as they are
+  // (no prebuild), so they must carry the same updates settings.
+  it("points the committed iOS and Android projects at Preflight with the same certificate", () => {
+    const pem = readFileSync(
+      resolve(__dirname, "../../certs/ota-code-signing.pem"),
+      "utf8",
+    ).trim();
+    const expoPlist = readFileSync(
+      resolve(__dirname, "../../ios/BobDev/Supporting/Expo.plist"),
+      "utf8",
     );
-    expect(easConfig.build.beta?.channel).toBe("beta");
-    expect(easConfig.build.production?.channel).toBe("production");
-  });
+    const manifest = readFileSync(
+      resolve(__dirname, "../../android/app/src/main/AndroidManifest.xml"),
+      "utf8",
+    );
 
-  it("gives the physical development build device-reachable service endpoints", () => {
-    const easConfig = JSON.parse(
-      readFileSync(resolve(__dirname, "../../eas.json"), "utf8"),
-    ) as {
-      build: Record<string, { env?: Record<string, string> }>;
-    };
-
-    expect(easConfig.build["development:device"]?.env).toMatchObject({
-      API_URL: "https://bob.blder.bot",
-      AUTH_URL: "https://bob.blder.bot",
-      GATEWAY_PUBLIC_URL: "wss://ws.blder.bot",
-      OODA_API_URL: "https://ooda.blder.bot",
-    });
+    expect(expoPlist).toContain(PREFLIGHT_OTA.url);
+    expect(expoPlist).toContain(pem);
+    expect(expoPlist).not.toContain("u.expo.dev");
+    expect(manifest).toContain(PREFLIGHT_OTA.url);
+    expect(manifest).toContain(pem.replaceAll("\n", "&#10;"));
+    expect(manifest).not.toContain("u.expo.dev");
   });
 });
 
 describe("iPad tablet configuration", () => {
-  it("keeps EAS iPad builds tablet-enabled with explicit landscape support", () => {
+  it("keeps iPad builds tablet-enabled with explicit landscape support", () => {
     const config = loadConfig({ APP_ENV: "production" }) as {
       ios?: {
         infoPlist?: Record<string, unknown>;

@@ -14,7 +14,7 @@ import { canonical, fail, releaseStatusValidator } from './coordinator.mjs';
  * where it is with a note that needs a person. The driver only touches the PR it
  * recorded for the attempt, merges only at the exact head it saw green, and records
  * production evidence only for a ForgeGraph production deployment of a commit that
- * contains the merge, with app health not critical. */
+ * contains the merge, with healthy app health and a recorded artifact. */
 
 const SHA = /^[a-f0-9]{40}$/;
 export const releaseTimings = Object.freeze({
@@ -189,7 +189,7 @@ function project(coordinator, snapshot, data, opState, commandId) {
   const state = itemStateFor(data.stage, data.completionTarget, snapshot.state, data.rolledBack === true);
   // Milestones are cumulative: a merge also certifies review-ready, production also merged.
   const implied = impliedMilestones[data.stage] ?? [];
-  const achievedMilestones = milestoneOrder.filter(m => snapshot.achievedMilestones.includes(m) || implied.includes(m));
+  const achievedMilestones = milestoneOrder.filter(m => (snapshot.achievedMilestones.includes(m) || implied.includes(m)) && !(data.rolledBack && m === 'production-verified'));
   const next = { ...snapshot, resourceVersion: snapshot.resourceVersion + 1, state, achievedMilestones, release: statusOf(data) };
   let operation = null;
   if (commandId) {
@@ -325,8 +325,14 @@ export async function step(data, forge, { now, policy = {}, timings = releaseTim
       const live = deployments.find(d => d.status === 'active');
       if (live && await containsMerge(live)) {
         const health = await forge.health(data.appSlug, 'production');
-        if (health === 'critical') return waiting(`Production health is critical on deployment ${live.id}`, live.id);
-        return { ...moved('production-verified', { deploymentId: live.id, deployedSha: live.commitSha, artifactRef: live.storePath ?? live.versionId ?? null, health, verifiedAt: at, note: null }), effect: 'production-verified' };
+        if (health !== 'healthy') return waiting(`Production health is ${health ?? 'unknown'} on deployment ${live.id}`, live.id);
+        const artifactRef = [live.storePath, live.versionId].find(value => typeof value === 'string' && value.trim().length > 0);
+        if (!artifactRef) return waiting(`Production deployment ${live.id} has no artifact evidence`, live.id);
+        // Health is read separately from deployment state. Fence a rollback during that read.
+        const confirmed = (await forge.deployments(data.appSlug, 'production')).filter(d => d.status === 'active');
+        if (confirmed.length !== 1 || confirmed[0].id !== live.id || confirmed[0].commitSha !== live.commitSha
+          || (confirmed[0].storePath !== live.storePath || confirmed[0].versionId !== live.versionId)) return waiting('Production deployment changed during health verification');
+        return { ...moved('production-verified', { deploymentId: live.id, deployedSha: live.commitSha, artifactRef, health, verifiedAt: at, note: null }), effect: 'production-verified' };
       }
       // Not live yet: is a deployment of the merge on its way, or did one fail?
       const newer = deployments.filter(d => !live || Date.parse(d.createdAt) > Date.parse(live.createdAt));
@@ -367,9 +373,9 @@ function apply(coordinator, row, token, result, { now, timings }) {
       resourceVersion = next.resourceVersion;
       if (result.effect) {
         coordinator.db.prepare('INSERT OR IGNORE INTO coordination_issue_effect (tenant,id,owner,attempt_id,fact,payload,status,delivery_attempts,next_attempt_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
-          .run(coordinator.tenant, `${data.attemptId}:${result.effect}`, coordinator.owner, data.attemptId, result.effect, canonical({ fact: result.effect, issue: data.issue, planId: data.planId, itemId: data.itemId, attemptId: data.attemptId, pullRequest: data.pullRequest ?? null, headSha: data.headSha ?? null, mergeSha: data.mergeSha ?? null, appSlug: data.appSlug ?? null, deploymentId: data.deploymentId ?? null, note: data.note ?? null }), 'pending', 0, 0, new Date(now).toISOString());
+          .run(coordinator.tenant, `${data.attemptId}:${result.effect}`, coordinator.owner, data.attemptId, result.effect, canonical({ fact: result.effect, issue: data.issue, planId: data.planId, itemId: data.itemId, attemptId: data.attemptId, pullRequest: data.pullRequest ?? null, headSha: data.headSha ?? null, mergeSha: data.mergeSha ?? null, appSlug: data.appSlug ?? null, deploymentId: data.deploymentId ?? null, deployedSha: data.deployedSha ?? null, artifactRef: data.artifactRef ?? null, health: data.health ?? null, verifiedAt: data.verifiedAt ?? null, note: data.note ?? null }), 'pending', 0, 0, new Date(now).toISOString());
       }
-      if (['review-ready', 'merged', 'production-verified'].includes(data.stage)) coordinator.readyDependents(data.planId);
+      if (data.rolledBack || ['review-ready', 'merged', 'production-verified'].includes(data.stage)) coordinator.readyDependents(data.planId);
     }
     if (result.settle?.command) settleCommand(coordinator, result.settle.command, data.itemId, result.settle.outcome, result.settle.error, resourceVersion);
     return data.stage;
