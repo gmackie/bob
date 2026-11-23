@@ -26,7 +26,9 @@ env:
   APP_ID: pfapp_bob
   APP_PACKAGE_PATH: apps/mobile-bob
   APP_PACKAGE_NAME: "@bob/mobile"
-  APP_EAS_PROFILE: development-hosted-simulator
+  # Preflight derives simulator-lane settings from the name alone; this one
+  # builds a Debug dev client (APP_VARIANT=development).
+  APP_BUILD_PROFILE: development
   # ------------------------------------------------------------------------
   PLATFORM: ${{ github.event.inputs.platform || 'ios' }}
 
@@ -73,7 +75,7 @@ jobs:
             --arg packageName "${APP_PACKAGE_NAME}" \
             --arg packagePath "${APP_PACKAGE_PATH}" \
             --arg workspaceRoot "${WORKSPACE_ROOT}" \
-            --arg profile "${APP_EAS_PROFILE}" \
+            --arg profile "${APP_BUILD_PROFILE}" \
             --arg platform "${PLATFORM}" \
             --arg sha "${GITHUB_SHA}" \
             '{workspaceId: $workspaceId, sourceBinding: {

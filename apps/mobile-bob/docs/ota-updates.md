@@ -1,22 +1,43 @@
 # OTA updates
 
-Bob uses EAS Update for JavaScript and asset-only releases. OODA is part of Bob
-and ships through the same mobile binary and update channels.
+Bob ships JavaScript and asset-only releases through Preflight's update server
+(BOB-113). EAS Update is no longer used. OODA is part of Bob and ships through
+the same binary and update channels.
 
-The app uses Expo's `fingerprint` runtime policy. Native dependencies, config
-plugins, permissions, entitlements, bundle identifiers, or other native inputs
-require a new binary before publishing an update.
+- Manifest URL: `https://preflight.forgegraf.com/api/preflight/v1/ota/bob`
+- Channels: `development`, `preview`, `production`. A build picks its channel
+  from `APP_VARIANT` (`app.config.js`); the committed native projects send
+  `production`, because store builds use them as they are.
+- Signing: Preflight signs every manifest with Bob's `ota_code_signing_key` in
+  its vault. `certs/ota-code-signing.pem` is the public certificate, and the
+  committed `ios/BobDev/Supporting/Expo.plist` and `AndroidManifest.xml` carry
+  the same one. A binary only accepts updates signed by the certificate it was
+  built with, so rotating the key needs a new binary first.
+- Runtime version: the literal `runtimeVersion` in `app.config.js` (currently
+  `0.1.1`). An update reaches only binaries built with the same value. Native
+  dependencies, config plugins, permissions, entitlements, bundle identifiers
+  and other native inputs need a new binary and a new runtime version.
 
-| Build profile                        | Channel           | EAS environment |
-| ------------------------------------ | ----------------- | --------------- |
-| `development` / `development:device` | `development`     | `development`   |
-| `beta`                               | `beta`            | `preview`       |
-| `beta:production-api`                | `beta-production` | `preview`       |
-| `production`                         | `production`      | `production`    |
+## Publish
 
-Publish and verify development first, then beta. Promote the exact verified
-bundle to production with `eas update:republish`; if a fresh production export
-is necessary, begin with `pnpm update:production:rollout -- --message "..."`.
+```bash
+pnpm update:development -- --workspace-root <clean checkout of the commit>
+pnpm update:preview     -- --workspace-root <clean checkout of the commit>
+pnpm update:production  -- --workspace-root <clean checkout of the commit>
+```
 
-Do not publish from a dirty working tree. Existing binaries using the previous
-static `1.0.0` runtime need replacement before receiving fingerprinted updates.
+Each queues `ota.export` and `ota.publish` on a Preflight runner, which exports
+the checkout at `--workspace-root` as it is. Point it at a clean checkout of the
+commit you mean to ship, on a host with a runner (for example labtop's
+`/Volumes/dev-ssd/preflight-ci/bob-store`). The token comes from
+`preflight login`.
+
+Publish and verify on `development` first, then `preview`. Move the verified
+update to production with Preflight's promote or republish API
+(`POST /api/preflight/v1/ota/promote`, optional `rolloutPercent`), or roll back
+with `POST /api/preflight/v1/apps/pfapp_bob/ota/rollback`.
+
+Do not publish from a dirty working tree.
+
+Binaries built before BOB-113 (TestFlight build 39 and earlier) still point at
+EAS Update and never see Preflight updates.
