@@ -2,6 +2,11 @@
   "extends": "../../tooling/typescript/tsconfig.base.json",
   "include": ["src/**/*"],
   "compilerOptions": {
+    // Consumers import ./src/*.ts directly (package.json exports) and nothing
+    // emits .d.ts, so skip the declaration-portability check. better-auth
+    // 1.7's inferred client types reference unexported internals (TS2883).
+    "declaration": false,
+    "declarationMap": false,
     "types": ["node", "vitest/globals", "@testing-library/jest-dom"]
   }
 }

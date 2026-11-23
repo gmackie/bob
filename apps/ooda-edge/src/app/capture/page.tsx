@@ -169,7 +169,7 @@ export default function CapturePage() {
           <div className="mt-3 flex flex-wrap gap-2">
             {images.map((img, i) => (
               <div key={i} className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {/* oxlint-disable-next-line nextjs/no-img-element */}
                 <img
                   src={img.preview}
                   alt="screenshot"

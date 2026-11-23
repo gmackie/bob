@@ -27,10 +27,8 @@
 //
 // NOTE: not exported from the package barrel yet — Task 17 owns src/index.ts.
 import { createAuthClient as createVanillaClient } from "better-auth/client";
-import {
-  apiKeyClient,
-  deviceAuthorizationClient,
-} from "better-auth/client/plugins";
+import { apiKeyClient } from "@better-auth/api-key/client";
+import { deviceAuthorizationClient } from "better-auth/client/plugins";
 import { createAuthClient as createReactClient } from "better-auth/react";
 
 export interface CreateGmackoAuthClientOptions {
@@ -53,6 +51,8 @@ export function createGmackoAuthClient(opts: CreateGmackoAuthClientOptions) {
 export interface ExpoAuthStorage {
   readonly setItem: (key: string, value: string) => unknown;
   readonly getItem: (key: string) => string | null;
+  readonly setItemAsync: (key: string, value: string) => Promise<void>;
+  readonly getItemAsync: (key: string) => Promise<string | null>;
 }
 
 export interface CreateGmackoExpoAuthClientOptions {

@@ -7,6 +7,8 @@
     "declarationMap": true,
     "emitDeclarationOnly": true,
     "noEmit": false,
-    "outDir": "${configDir}/dist"
+    "outDir": "${configDir}/dist",
+    /** TS 7 requires an explicit rootDir when emitting; packages that span more set their own. */
+    "rootDir": "${configDir}/src"
   }
 }

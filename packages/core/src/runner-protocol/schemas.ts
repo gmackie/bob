@@ -13,7 +13,7 @@
 //   - `Schema.Date` — decodes to JS `Date` (Schema.d.ts:5218). Preferred over
 //     `Schema.DateTimeUtcFromString` which decodes to `DateTime.Utc` and
 //     forces consumers onto the Effect DateTime API (6F drift Task 4 hit).
-//   - `Schema.TaggedErrorClass<Self>()(id, fields)` — mirrors the existing
+//   - `Schema.TaggedError<Self>()(id, fields)` — mirrors the existing
 //     `@gmacko/contracts` error definitions.
 
 import { Schema } from "effect";
@@ -87,17 +87,17 @@ export type TaskRunEventWire = typeof TaskRunEventSchema.Type;
 
 // --- Tagged errors ----------------------------------------------------------
 
-export class RunnerNotRegisteredError extends Schema.TaggedErrorClass<RunnerNotRegisteredError>()(
+export class RunnerNotRegisteredError extends Schema.TaggedError<RunnerNotRegisteredError>()(
   "RunnerNotRegisteredError",
   { deviceId: Schema.String },
 ) {}
 
-export class InvalidApiKeyForRunnerError extends Schema.TaggedErrorClass<InvalidApiKeyForRunnerError>()(
+export class InvalidApiKeyForRunnerError extends Schema.TaggedError<InvalidApiKeyForRunnerError>()(
   "InvalidApiKeyForRunnerError",
   { message: Schema.String },
 ) {}
 
-export class TaskRunNotClaimableError extends Schema.TaggedErrorClass<TaskRunNotClaimableError>()(
+export class TaskRunNotClaimableError extends Schema.TaggedError<TaskRunNotClaimableError>()(
   "TaskRunNotClaimableError",
   { runId: Schema.String, reason: Schema.String },
 ) {}

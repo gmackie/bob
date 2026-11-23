@@ -66,7 +66,7 @@ describe("@gmacko/auth BetterAuth service", () => {
     const auth = initAuth(baseOpts());
 
     const program = Effect.gen(function* () {
-      return yield* BetterAuth.asEffect();
+      return yield* BetterAuth;
     });
 
     const result = await Effect.runPromise(

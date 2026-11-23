@@ -70,7 +70,7 @@ afterEach(async () => {
 describe("@gmacko/auth DeviceCodes service", () => {
   it.effect("start() returns a UUID deviceCode, well-formed userCode, and 600s TTL", () =>
     Effect.gen(function* () {
-      const svc = yield* DeviceCodes.asEffect();
+      const svc = yield* DeviceCodes;
       const started = yield* svc.start();
       expect(started.deviceCode).toMatch(UUID_REGEX);
       expect(started.userCode).toMatch(USER_CODE_REGEX);
@@ -80,7 +80,7 @@ describe("@gmacko/auth DeviceCodes service", () => {
 
   it.effect("start + approve + poll mints a gmk_ key, second poll returns consumed", () =>
     Effect.gen(function* () {
-      const svc = yield* DeviceCodes.asEffect();
+      const svc = yield* DeviceCodes;
       const started = yield* svc.start();
 
       yield* svc.approve({
@@ -104,7 +104,7 @@ describe("@gmacko/auth DeviceCodes service", () => {
 
   it.effect("approve with unknown userCode fails with InvalidUserCodeError", () =>
     Effect.gen(function* () {
-      const svc = yield* DeviceCodes.asEffect();
+      const svc = yield* DeviceCodes;
       const caught = yield* svc
         .approve({
           userCode: "ZZZZ-ZZZZ",
@@ -122,7 +122,7 @@ describe("@gmacko/auth DeviceCodes service", () => {
 
   it.effect("approve twice returns AlreadyApprovedError on the second call", () =>
     Effect.gen(function* () {
-      const svc = yield* DeviceCodes.asEffect();
+      const svc = yield* DeviceCodes;
       const started = yield* svc.start();
       yield* svc.approve({
         userCode: started.userCode,
@@ -146,7 +146,7 @@ describe("@gmacko/auth DeviceCodes service", () => {
 
   it.effect("poll with unknown deviceCode fails with InvalidDeviceCodeError", () =>
     Effect.gen(function* () {
-      const svc = yield* DeviceCodes.asEffect();
+      const svc = yield* DeviceCodes;
       const caught = yield* svc
         .poll("00000000-0000-0000-0000-000000000000")
         .pipe(
@@ -172,7 +172,7 @@ describe("@gmacko/auth DeviceCodes service", () => {
       );
       const row = inserted[0]!;
 
-      const svc = yield* DeviceCodes.asEffect();
+      const svc = yield* DeviceCodes;
       const first = yield* svc.poll(row.deviceCode);
       expect(first.status).toBe("expired");
 
@@ -194,7 +194,7 @@ describe("@gmacko/auth DeviceCodes service", () => {
 
   it.effect("concurrent polls after approval: exactly one 'approved', one 'consumed', one unrevoked key", () =>
     Effect.gen(function* () {
-      const svc = yield* DeviceCodes.asEffect();
+      const svc = yield* DeviceCodes;
       const started = yield* svc.start();
       yield* svc.approve({
         userCode: started.userCode,

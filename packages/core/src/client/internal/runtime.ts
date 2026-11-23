@@ -14,7 +14,7 @@
 //   - Header injection uses `layerProtocolHttp`'s `transformClient` option,
 //     which composes before serialization and is the documented place to
 //     inject per-request metadata. We also honor a custom `fetch` via the
-//     `FetchHttpClient.Fetch` ServiceMap reference, since `layerProtocolHttp`
+//     `FetchHttpClient.Fetch` Context reference, since `layerProtocolHttp`
 //     itself doesn't take a `fetch` argument.
 //
 // Effect 4 drift notes for 6F Task 8:
@@ -23,7 +23,7 @@
 //     `effect@4.0.0-beta.43/dist/unstable/rpc/RpcClient.d.ts:156`.
 //   - `Stream.toAsyncIterable(stream)` exists in beta.43 at
 //     `effect/dist/Stream.d.ts:13911`. No manual push/pull loop needed.
-//   - `FetchHttpClient.Fetch` is a `ServiceMap.Reference<typeof fetch>` — we
+//   - `FetchHttpClient.Fetch` is a `Context.Reference<typeof fetch>` — we
 //     override it via `Layer.succeed(Fetch, opts.fetch)` when provided.
 //
 // Phase 6H Task 8 — serialization:
@@ -38,7 +38,7 @@
 //     `layerJson` can opt back via `{ serialization: "json" }`.
 //   - `RpcSerialization.layerJson` and `layerNdjson` are interchangeable
 //     `Layer.Layer<RpcSerialization>` values per
-//     `effect/unstable/rpc/RpcSerialization.d.ts:60,70` — pure layer-level
+//     `effect/rpc/RpcSerialization.d.ts:60,70` — pure layer-level
 //     swap, no API shape change anywhere else in this file.
 //   - The browser-facing consumer SDK still buffers stream output via
 //     `Stream.runCollect` in `runStream` below (a deliberate scope
@@ -53,8 +53,8 @@ import {
   FetchHttpClient,
   HttpClient,
   HttpClientRequest,
-} from "effect/unstable/http";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+} from "effect/http";
+import { RpcClient, RpcSerialization } from "effect/rpc";
 
 /**
  * Wire-format selection for RPC serialization. Both options are

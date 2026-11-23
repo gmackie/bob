@@ -57,8 +57,12 @@ export function App({ session, host, now = Date.now, tickMs = 1000, columns, row
     }
   });
 
-  const cols = columns ?? (stdout?.columns || MIN_COLUMNS);
-  const height = rows ?? (stdout?.rows || 24);
+  // Ink 8 types stdout as a plain NodeJS.WritableStream; TTY size lives on
+  // the tty.WriteStream it usually is.
+  const ttyColumns = stdout && "columns" in stdout && typeof stdout.columns === "number" ? stdout.columns : 0;
+  const ttyRows = stdout && "rows" in stdout && typeof stdout.rows === "number" ? stdout.rows : 0;
+  const cols = columns ?? (ttyColumns || MIN_COLUMNS);
+  const height = rows ?? (ttyRows || 24);
   const { view, commands } = state;
   const { nodes, node, index } = cursorNode(view, ui);
   const focus = focusOf(view, ui.path, node);

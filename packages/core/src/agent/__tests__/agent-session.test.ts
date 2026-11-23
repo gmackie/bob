@@ -55,7 +55,7 @@ describe("@gmacko/agent AgentSession.create", () => {
     "inserts a chat_conversations row with status='pending' + adapterId + tenantId + userId",
     () =>
       Effect.gen(function* () {
-        const svc = yield* AgentSession.asEffect();
+        const svc = yield* AgentSession;
         const result = yield* svc.create({
           tenantId: TENANT_ID,
           userId: USER_ID,
@@ -81,7 +81,7 @@ describe("@gmacko/agent AgentSession.create", () => {
     "returns a conversationId that is a valid UUID and matches the inserted row",
     () =>
       Effect.gen(function* () {
-        const svc = yield* AgentSession.asEffect();
+        const svc = yield* AgentSession;
         const result = yield* svc.create({
           tenantId: TENANT_ID,
           userId: USER_ID,
@@ -105,7 +105,7 @@ describe("@gmacko/agent AgentSession.create", () => {
     "stores systemPrompt / allowedTools / cwd in metadata jsonb",
     () =>
       Effect.gen(function* () {
-        const svc = yield* AgentSession.asEffect();
+        const svc = yield* AgentSession;
         const result = yield* svc.create({
           tenantId: TENANT_ID,
           userId: USER_ID,

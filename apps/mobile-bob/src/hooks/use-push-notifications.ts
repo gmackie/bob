@@ -34,9 +34,7 @@ try {
   // Metro/Babel transpiles it to the same require() call anyway, so
   // switching loses the crash guard this code exists for without buying any
   // real ESM behavior.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- see above.
   const loadedNotifications = require("expo-notifications") as typeof ExpoNotifications;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- see above.
   const loadedDevice = require("expo-device") as typeof ExpoDevice;
   Notifications = loadedNotifications;
   Device = loadedDevice;

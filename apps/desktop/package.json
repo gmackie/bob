@@ -10,14 +10,14 @@
     "start": "electron ."
   },
   "dependencies": {
-    "electron-updater": "^6.0.0"
+    "electron-updater": "6.8.11"
   },
   "devDependencies": {
     "@gmacko/tsconfig": "workspace:*",
-    "electron": "41.10.3",
-    "electron-builder": "^26.15.3",
-    "typescript": "^5.9.0",
-    "vite": "^8.2.2",
-    "electron-builder-squirrel-windows": "26.15.3"
+    "electron": "45.3.4",
+    "electron-builder": "26.18.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.8",
+    "electron-builder-squirrel-windows": "26.18.0"
   }
 }

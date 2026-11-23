@@ -41,8 +41,8 @@ describe.skipIf(!databaseUrl)("durable session secret usage", () => {
     // fixture tables. Projection excludes unrelated conversation/secret columns.
     service = new SessionSecretService({
       query: {
-        chatConversations: { findFirst: (args: object) => db.query.chatConversations.findFirst({ ...args, columns: { id: true, userId: true } }) },
-        sessionSecrets: { findFirst: (args: object) => db.query.sessionSecrets.findFirst({ ...args, columns: { id: true, userId: true, sessionId: true } }) },
+        chatConversations: { findFirst: (args: Parameters<typeof db.query.chatConversations.findFirst>[0]) => db.query.chatConversations.findFirst({ ...args, columns: { id: true, userId: true } }) },
+        sessionSecrets: { findFirst: (args: Parameters<typeof db.query.sessionSecrets.findFirst>[0]) => db.query.sessionSecrets.findFirst({ ...args, columns: { id: true, userId: true, sessionId: true } }) },
         sessionSecretUsages: db.query.sessionSecretUsages,
       },
       insert: db.insert.bind(db),

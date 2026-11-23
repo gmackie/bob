@@ -45,6 +45,10 @@ const makeMemoryStorage = () => {
   return {
     setItem: (k: string, v: string) => store.set(k, v),
     getItem: (k: string) => store.get(k) ?? null,
+    setItemAsync: async (k: string, v: string) => {
+      store.set(k, v);
+    },
+    getItemAsync: async (k: string) => store.get(k) ?? null,
   };
 };
 

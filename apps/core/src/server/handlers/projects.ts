@@ -19,8 +19,8 @@ import type { ProjectId } from "@gmacko/core/validators";
 export const projectsHandlerMap = ProjectsRpc.middleware(AuthMiddleware).of({
   "projects.create": ({ slug, name }) =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const projects = yield* Projects.asEffect();
+      const user = yield* CurrentUser;
+      const projects = yield* Projects;
       const project = yield* projects.createProject({
         tenantId: user.tenantId,
         slug,
@@ -38,8 +38,8 @@ export const projectsHandlerMap = ProjectsRpc.middleware(AuthMiddleware).of({
 
   "projects.list": () =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const projects = yield* Projects.asEffect();
+      const user = yield* CurrentUser;
+      const projects = yield* Projects;
       const list = yield* projects.listForTenant(user.tenantId);
       return list.map((project) => ({
         id: project.id as string,
@@ -53,8 +53,8 @@ export const projectsHandlerMap = ProjectsRpc.middleware(AuthMiddleware).of({
 
   "projects.getBySlug": ({ slug }) =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const projects = yield* Projects.asEffect();
+      const user = yield* CurrentUser;
+      const projects = yield* Projects;
       const project = yield* projects.getBySlug({
         tenantId: user.tenantId,
         slug,
@@ -71,8 +71,8 @@ export const projectsHandlerMap = ProjectsRpc.middleware(AuthMiddleware).of({
 
   "projects.delete": ({ projectId }) =>
     Effect.gen(function* () {
-      const user = yield* CurrentUser.asEffect();
-      const projects = yield* Projects.asEffect();
+      const user = yield* CurrentUser;
+      const projects = yield* Projects;
       yield* projects.deleteProject({
         projectId: projectId as ProjectId,
         tenantId: user.tenantId,

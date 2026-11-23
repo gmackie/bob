@@ -2,7 +2,7 @@
 // 7B-4C Task 1: 6 core + comment procedures.
 // 7B-4C Task 2: 12 artifact/activity/notification/taskRun procedures (18 total).
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 import {
   BobNotFoundError,

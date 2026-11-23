@@ -1,8 +1,8 @@
 import "server-only";
 import type { Layer as LayerType } from "effect";
 import { Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { HttpRouter } from "effect/http";
+import { RpcSerialization, RpcServer } from "effect/rpc";
 
 import { getServerLayers } from "@/server/layers";
 import { GmackoServerGroup, allHandlers } from "@/server/handlers";

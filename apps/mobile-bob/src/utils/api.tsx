@@ -3,7 +3,7 @@ import { createBobRpcClient } from "@gmacko/bob-client";
 import { createBobQueryClient } from "@gmacko/bob-client/query";
 import { QueryClient } from "@tanstack/react-query";
 
-import { authClient } from "./auth";
+import { getSessionCookie } from "./auth";
 import { getMobileAuthHeaders } from "./auth-headers";
 import { getBaseUrl } from "./base-url";
 import { isDevAuthBypassEnabled } from "./dev-auth-bypass";
@@ -23,7 +23,7 @@ export function createMobileBobRpcClient() {
     fetch: expoFetch,
     headers: () => ({
       "x-rpc-source": "expo-react",
-      ...getMobileAuthHeaders(authClient.getCookie(), isDevAuthBypassEnabled()),
+      ...getMobileAuthHeaders(getSessionCookie(), isDevAuthBypassEnabled()),
     }),
   });
 }
@@ -34,6 +34,6 @@ export const rpc = createBobQueryClient({
   fetch: expoFetch,
   headers: () => ({
     "x-rpc-source": "expo-react",
-    ...getMobileAuthHeaders(authClient.getCookie(), isDevAuthBypassEnabled()),
+    ...getMobileAuthHeaders(getSessionCookie(), isDevAuthBypassEnabled()),
   }),
 });

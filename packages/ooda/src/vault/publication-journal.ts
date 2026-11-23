@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-import simpleGit from "simple-git";
+import { simpleGit } from "simple-git";
 
 import type { PublicationRecord } from "./versioned-storage";
 

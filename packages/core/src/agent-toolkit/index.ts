@@ -12,7 +12,7 @@
 //
 // Real implementation deferred to Phase 7 (Bob migration). Each service gets
 // a per-driver impl as Bob's tool surface materializes.
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, Schema, Context } from "effect";
 
 export interface MemoryEntry {
   readonly id: string;
@@ -33,7 +33,7 @@ export interface CodeIndexResult {
   readonly snippet: string;
 }
 
-export class AgentToolkitNotImplementedError extends Schema.TaggedErrorClass<AgentToolkitNotImplementedError>()(
+export class AgentToolkitNotImplementedError extends Schema.TaggedError<AgentToolkitNotImplementedError>()(
   "AgentToolkitNotImplementedError",
   {
     reason: Schema.String,
@@ -72,13 +72,13 @@ export interface CodeIndexShape {
   ) => Effect.Effect<string, AgentToolkitNotImplementedError>;
 }
 
-export const Memory = ServiceMap.Service<MemoryShape>(
+export const Memory = Context.Service<MemoryShape>(
   "@gmacko/agent-toolkit/Memory",
 );
-export const WebSearch = ServiceMap.Service<WebSearchShape>(
+export const WebSearch = Context.Service<WebSearchShape>(
   "@gmacko/agent-toolkit/WebSearch",
 );
-export const CodeIndex = ServiceMap.Service<CodeIndexShape>(
+export const CodeIndex = Context.Service<CodeIndexShape>(
   "@gmacko/agent-toolkit/CodeIndex",
 );
 

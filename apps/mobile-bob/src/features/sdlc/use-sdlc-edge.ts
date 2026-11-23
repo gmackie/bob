@@ -10,7 +10,7 @@ import * as Crypto from "expo-crypto";
 import type { CommandInput, Confirmation, EdgeView, LiveActivityContent } from "@bob/sdlc-view";
 
 import { getBaseUrl } from "~/utils/base-url";
-import { authClient } from "~/utils/auth";
+import { getSessionCookie } from "~/utils/auth";
 import { BobLiveActivity } from "../../../modules/bob-live-activity";
 import { createEdgeLifecycle } from "./edge-lifecycle";
 import { createLiveActivityController } from "./live-activity";
@@ -32,7 +32,7 @@ const lifecycle = createEdgeLifecycle({
     }
     const apiBase = getBaseUrl();
     const session = createSession({
-      open: rnWebSocketOpener(edgeSocketUrl(apiBase), () => edgeSocketHeaders(apiBase, authClient.getCookie())),
+      open: rnWebSocketOpener(edgeSocketUrl(apiBase), () => edgeSocketHeaders(apiBase, getSessionCookie())),
       newId: () => Crypto.randomUUID(),
     });
     // Followed items' Live Activities track the app's view while it is fresher than the last push.

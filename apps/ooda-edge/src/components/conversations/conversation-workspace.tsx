@@ -282,7 +282,7 @@ export function ConversationWorkspace() {
     return () => controller.abort();
     // Start a new stream when the selected conversation changes; it resumes
     // from the snapshot loaded by openConversation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react/exhaustive-deps
   }, [client, refreshActivity, selectedId]);
 
   useEffect(() => {

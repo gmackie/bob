@@ -10,8 +10,8 @@ import {
 import { AddressInfo } from "node:net";
 
 import { Effect, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
-import { RpcGroup, RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { HttpRouter } from "effect/http";
+import { RpcGroup, RpcSerialization, RpcServer } from "effect/rpc";
 
 import {
   ProjectListRpc,

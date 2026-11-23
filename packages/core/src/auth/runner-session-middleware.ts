@@ -11,7 +11,7 @@
 //     `reason` tag surfacing the failure mode).
 //
 // Config shape note (verified against
-// `effect/unstable/rpc/RpcMiddleware.d.ts:176`):
+// `effect/rpc/RpcMiddleware.d.ts:176`):
 //   - Config keys are `requires` / `provides` / `clientError`.
 //   - Error schema goes on the SECOND options object as `error: ...`, NOT
 //     inside Config. Mirrors the `AuthMiddleware` wrapper in
@@ -20,8 +20,8 @@
 //     closure reads it per-request; its data is only bound after the
 //     transport injects it, so the Layer itself doesn't consume it.
 import { Effect, Layer, Schema } from "effect";
-import { RpcMiddleware } from "effect/unstable/rpc";
-import { HttpServerRequest } from "effect/unstable/http";
+import { RpcMiddleware } from "effect/rpc";
+import { HttpServerRequest } from "effect/http";
 
 import { RunnerSession } from "@gmacko/core/rpc/context";
 import { UnauthorizedError } from "@gmacko/core/rpc/errors";
@@ -54,7 +54,7 @@ export const layerRunnerSessionMiddleware: Layer.Layer<
   RunnerSessions
 > = Layer.effect(RunnerSessionMiddleware)(
   Effect.gen(function* () {
-    const sessions = yield* RunnerSessions.asEffect();
+    const sessions = yield* RunnerSessions;
 
     return (effect) =>
       Effect.gen(function* () {

@@ -144,7 +144,7 @@ export function FloatingCapture() {
                     className="size-10 rounded-md border border-border bg-muted/30 overflow-hidden"
                     title={cap.filename}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {/* oxlint-disable-next-line nextjs/no-img-element */}
                     <img
                       src={cap.url}
                       alt={cap.filename}

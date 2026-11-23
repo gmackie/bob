@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
-import { RpcGroup, RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { HttpRouter } from "effect/http";
+import { RpcGroup, RpcSerialization, RpcServer } from "effect/rpc";
 import { ProjectsWorkspaceListRpc } from "@gmacko/core/contracts/groups/projects";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";

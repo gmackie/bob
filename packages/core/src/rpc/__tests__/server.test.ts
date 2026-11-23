@@ -1,8 +1,8 @@
 import { describe } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, Layer, Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
-import { HttpRouter } from "effect/unstable/http";
+import { Rpc, RpcGroup } from "effect/rpc";
+import { HttpRouter } from "effect/http";
 import { makeRpcServerLayer, serializationLayer } from "../server.js";
 
 const Echo = Rpc.make("Echo", {

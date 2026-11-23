@@ -1,5 +1,5 @@
 import { NativeRpc } from "@gmacko/bob/contracts";
-import type { Rpc } from "effect/unstable/rpc";
+import type { Rpc } from "effect/rpc";
 import type { ProjectsWorkspaceListRpc } from "@gmacko/core/contracts/groups/projects";
 import { ProjectsRpc } from "@gmacko/core/contracts/groups/projects";
 

@@ -29,14 +29,14 @@ async function main() {
   writeFileSync(outFile, `${JSON.stringify(spec, null, 2)}\n`);
 
   const pathCount = Object.keys(spec.paths ?? {}).length;
-  // eslint-disable-next-line no-console
+  
   console.log(
     `Wrote ${pathCount} Bob paths → packages/bob-client/openapi/bob.json`,
   );
 }
 
 main().catch((err) => {
-  // eslint-disable-next-line no-console
+  
   console.error(err);
   process.exit(1);
 });

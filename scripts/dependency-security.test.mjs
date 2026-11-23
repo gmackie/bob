@@ -1,42 +1,21 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { mkdtemp, readFile, readlink, rm, symlink, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 
-const require = createRequire(import.meta.url);
 // Resolve through actual owners, so tests exercise the installed patched graph.
-const expoRequire = createRequire(require.resolve('expo/package.json', { paths: [resolve('apps/mobile-bob')] }));
-const expoMetroRequire = createRequire(expoRequire.resolve('@expo/metro/package.json'));
-const metroRequire = createRequire(expoMetroRequire.resolve('metro/package.json'));
-const imageModule = metroRequire.resolve('image-size');
 const emulateRequire = createRequire(import.meta.resolve('@gmacko/emulate'));
 const redisRequire = createRequire(emulateRequire.resolve('redis-memory-server'));
 const extract = redisRequire('extract-zip');
 
-function imageProbe(buffer) {
-  return execFileSync(process.execPath, ['-e', `
-    const size = require(${JSON.stringify(imageModule)});
-    try { size(Buffer.from(process.argv[1], 'hex')); process.exit(2); }
-    catch (error) { if (!(error instanceof TypeError)) throw error; }
-  `, buffer.toString('hex')], { timeout: 2000 });
-}
-
-test('image-size rejects nonadvancing ICNS, HEIF and JXL boxes without blocking the event loop', () => {
-  const icns = Buffer.alloc(16); icns.write('icns'); icns.writeUInt32BE(16, 4); icns.write('ic07', 8);
-  imageProbe(icns);
-  const heif = Buffer.alloc(24); heif.write('ftyp', 4); heif.write('heic', 8);
-  imageProbe(heif);
-  const jxl = Buffer.alloc(32); jxl.writeUInt32BE(12); jxl.write('JXL ', 4); jxl.write('ftyp', 16); jxl.write('jxl ', 20);
-  imageProbe(jxl);
-});
-
-test('image-size still reads a valid PNG', () => {
-  const imageSize = require(imageModule);
-  const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489', 'hex');
-  assert.deepEqual(imageSize(png), { width: 1, height: 1, type: 'png' });
+// image-size@1.2.1 (via metro) hung on nonadvancing ICNS/HEIF/JXL boxes and was
+// patched here. Metro 0.87 dropped the dependency, so the patch and its probes
+// were removed. If image-size returns, restore the patch and probes first.
+test('image-size is not in the installed dependency graph', async () => {
+  const lockfile = await readFile(resolve('pnpm-lock.yaml'), 'utf8');
+  assert.deepEqual(lockfile.match(/^  '?image-size@[^:]+/gm) ?? [], []);
 });
 
 // Minimal stored ZIP writer avoids shell tools and external fixture downloads.

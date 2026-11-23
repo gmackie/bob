@@ -9,7 +9,7 @@
 // NOTE: not exported from the package barrel yet — Task 17 handles the
 // public surface.
 import { and, eq } from "drizzle-orm";
-import { Effect, Layer, ServiceMap } from "effect";
+import { Effect, Layer, Context } from "effect";
 
 import { GmackoDb } from "@gmacko/core/db";
 import { tenantMembers } from "@gmacko/core/db/schema/tenancy";
@@ -54,7 +54,7 @@ export interface TenancyShape {
   ) => Effect.Effect<Membership, NotAMemberError | TenantNotSelectedError>;
 }
 
-export class Tenancy extends ServiceMap.Service<Tenancy, TenancyShape>()(
+export class Tenancy extends Context.Service<Tenancy, TenancyShape>()(
   "@gmacko/auth/Tenancy",
 ) {}
 

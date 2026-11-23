@@ -8,7 +8,7 @@
 //
 // Real implementation deferred to Phase 7 (Bob migration). Consumers can wire
 // the type-safe service contract today; the runtime swap is per-method later.
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, Schema, Context } from "effect";
 
 export type NotificationChannel = "email" | "push" | "toast" | "sms";
 
@@ -20,7 +20,7 @@ export interface NotificationPayload {
   readonly metadata?: Record<string, unknown>;
 }
 
-export class NotificationsNotImplementedError extends Schema.TaggedErrorClass<NotificationsNotImplementedError>()(
+export class NotificationsNotImplementedError extends Schema.TaggedError<NotificationsNotImplementedError>()(
   "NotificationsNotImplementedError",
   {
     reason: Schema.String,
@@ -34,7 +34,7 @@ export interface NotificationsShape {
   ) => Effect.Effect<void, NotificationsNotImplementedError>;
 }
 
-export const Notifications = ServiceMap.Service<NotificationsShape>(
+export const Notifications = Context.Service<NotificationsShape>(
   "@gmacko/notifications/Notifications",
 );
 

@@ -1,4 +1,4 @@
-import { Effect, Layer, PubSub, type ServiceMap, Stream } from "effect";
+import { Effect, Layer, PubSub, type Context, Stream } from "effect";
 
 import type { RealtimeChannelShape } from "../channel.js";
 
@@ -35,7 +35,7 @@ import type { RealtimeChannelShape } from "../channel.js";
  * subscribe return type, never produced here.
  */
 export const layerMemory = <A>(
-  tag: ServiceMap.Service<RealtimeChannelShape<A>, RealtimeChannelShape<A>>,
+  tag: Context.Service<RealtimeChannelShape<A>, RealtimeChannelShape<A>>,
 ): Layer.Layer<RealtimeChannelShape<A>> =>
   Layer.effect(tag)(
     Effect.gen(function* () {

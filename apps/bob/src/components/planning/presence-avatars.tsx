@@ -68,7 +68,7 @@ export function PresenceAvatars({
             style={{ backgroundColor: colorForUser(p.userId) }}
           >
             {p.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
+              // oxlint-disable-next-line nextjs/no-img-element
               <img
                 src={p.imageUrl}
                 alt={p.displayName}

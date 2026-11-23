@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Effect, Layer, Schema } from "effect";
-import { Rpc, RpcGroup, RpcSerialization, RpcServer } from "effect/unstable/rpc";
-import { HttpRouter } from "effect/unstable/http";
+import { Rpc, RpcGroup, RpcSerialization, RpcServer } from "effect/rpc";
+import { HttpRouter } from "effect/http";
 
 import { makeRestBridge, restPathToTag } from "../rest-bridge.js";
 

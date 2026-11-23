@@ -53,10 +53,10 @@ describe("@gmacko/runner-base retry helper", () => {
         ).toBe("function");
 
         // Sanity check the building blocks exist + compose without throwing.
-        const composed = Schedule.both(
+        const composed = Schedule.max([
           Schedule.exponential(Duration.millis(10), 2).pipe(Schedule.jittered),
           Schedule.recurs(3),
-        );
+        ]);
         expect(typeof (composed as unknown as { pipe: unknown }).pipe).toBe(
           "function");
         // Touch `yield*` so this stays a real Effect generator function.

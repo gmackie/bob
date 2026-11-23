@@ -6,7 +6,7 @@
 //   3. `auth.getSecretMessage` stub returns the expected string.
 import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
-import { RpcTest } from "effect/unstable/rpc";
+import { RpcTest } from "effect/rpc";
 
 import { AuthRpc } from "../groups/auth.js";
 import { stubAuthHandlers } from "../stubs/auth.js";

@@ -51,7 +51,7 @@ describe("@gmacko/projects Projects service", () => {
   it.effect("createProject round-trips id, tenantId, slug, name, and Date timestamps", () =>
     Effect.gen(function* () {
       yield* Effect.promise(() => seedTenant(ctx, TENANT_A, "tenant-a"));
-      const svc = yield* Projects.asEffect();
+      const svc = yield* Projects;
       const project = yield* svc.createProject({
         tenantId: TENANT_A,
         slug: "acme",
@@ -69,7 +69,7 @@ describe("@gmacko/projects Projects service", () => {
   it.effect("createProject with duplicate (tenantId, slug) fails with ProjectSlugConflictError", () =>
     Effect.gen(function* () {
       yield* Effect.promise(() => seedTenant(ctx, TENANT_A, "tenant-a"));
-      const svc = yield* Projects.asEffect();
+      const svc = yield* Projects;
       yield* svc.createProject({
         tenantId: TENANT_A,
         slug: "acme",
@@ -96,7 +96,7 @@ describe("@gmacko/projects Projects service", () => {
     Effect.gen(function* () {
       yield* Effect.promise(() => seedTenant(ctx, TENANT_A, "tenant-a"));
       yield* Effect.promise(() => seedTenant(ctx, TENANT_B, "tenant-b"));
-      const svc = yield* Projects.asEffect();
+      const svc = yield* Projects;
       const a = yield* svc.createProject({
         tenantId: TENANT_A,
         slug: "shared",
@@ -123,7 +123,7 @@ describe("@gmacko/projects Projects service", () => {
     Effect.gen(function* () {
       yield* Effect.promise(() => seedTenant(ctx, TENANT_A, "tenant-a"));
       yield* Effect.promise(() => seedTenant(ctx, TENANT_B, "tenant-b"));
-      const svc = yield* Projects.asEffect();
+      const svc = yield* Projects;
       const p = yield* svc.createProject({
         tenantId: TENANT_A,
         slug: "alpha",
@@ -168,7 +168,7 @@ describe("@gmacko/projects Projects service", () => {
     Effect.gen(function* () {
       yield* Effect.promise(() => seedTenant(ctx, TENANT_A, "tenant-a"));
       yield* Effect.promise(() => seedTenant(ctx, TENANT_B, "tenant-b"));
-      const svc = yield* Projects.asEffect();
+      const svc = yield* Projects;
       const p = yield* svc.createProject({
         tenantId: TENANT_A,
         slug: "alpha",
@@ -195,7 +195,7 @@ describe("@gmacko/projects Projects service", () => {
   it.effect("deleteProject cascades to project_deploy_secret_bindings", () =>
     Effect.gen(function* () {
       yield* Effect.promise(() => seedTenant(ctx, TENANT_A, "tenant-a"));
-      const svc = yield* Projects.asEffect();
+      const svc = yield* Projects;
       const project = yield* svc.createProject({
         tenantId: TENANT_A,
         slug: "deploy-target",

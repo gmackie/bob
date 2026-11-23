@@ -8,13 +8,13 @@
 //
 // Real implementation deferred to Phase 7 (Bob migration). Real impl will be
 // DB-backed (drizzle on a `user_settings` / `tenant_settings` table).
-import { Effect, Layer, Schema, ServiceMap } from "effect";
+import { Effect, Layer, Schema, Context } from "effect";
 
 import type { TenantId, UserId } from "@gmacko/core/validators";
 
 export type SettingsScope = "user" | "tenant";
 
-export class SettingsNotImplementedError extends Schema.TaggedErrorClass<SettingsNotImplementedError>()(
+export class SettingsNotImplementedError extends Schema.TaggedError<SettingsNotImplementedError>()(
   "SettingsNotImplementedError",
   {
     reason: Schema.String,
@@ -44,7 +44,7 @@ export interface SettingsShape {
   ) => Effect.Effect<void, SettingsNotImplementedError>;
 }
 
-export const Settings = ServiceMap.Service<SettingsShape>(
+export const Settings = Context.Service<SettingsShape>(
   "@gmacko/settings/Settings",
 );
 

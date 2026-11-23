@@ -9,7 +9,7 @@
  * shim outside its tsconfig.
  *
  * Splitting `ci` into parallel per-app jobs is not an option here: that job's
- * own comments record concurrent tsc getting OOM-killed and concurrent eslint
+ * own comments record concurrent tsc getting OOM-killed and concurrent oxlint
  * driving the shared runner's load average to 150. So rather than running
  * checks more times, this reads what the single serialized run already
  * recorded.

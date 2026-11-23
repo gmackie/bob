@@ -41,7 +41,15 @@ test("packaged host preserves response, remote parent and flushes on SIGTERM", {
         await new Promise(done=>server.listen(port,host,done)); return {server,port};
       }`);
     await copyFile(join(root, "scripts/otel/start-host.mjs"), join(dir, "start-host.mjs"));
-    await esbuild.build({ entryPoints: [join(root, "packages/core/src/telemetry/node.ts")], bundle: true, platform: "node", format: "cjs", outfile: join(dir, "telemetry-node.cjs") });
+    await esbuild.build({
+      entryPoints: [join(root, "packages/core/src/telemetry/node.ts")],
+      bundle: true,
+      platform: "node",
+      format: "cjs",
+      inject: [join(root, "scripts/otel/import-meta-url-shim.js")],
+      define: { "import.meta.url": "importMetaUrl" },
+      outfile: join(dir, "telemetry-node.cjs"),
+    });
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("OTEL_") && key !== "SIGNOZ_ENDPOINT"));
     child = spawn(process.execPath, [join(dir, "start-host.mjs"), join(dir, "runtime"), String(port), "127.0.0.1"], {
       env: { ...env, BOB_HOST_APP_CWD: dir, OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${collector.address().port}`, OTEL_SERVICE_NAME: "bob-host-smoke" },

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { existsSync, readFileSync } from "node:fs";
 
-import simpleGit from "simple-git";
+import { simpleGit } from "simple-git";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
 import { VaultService } from "../vault-service.js";

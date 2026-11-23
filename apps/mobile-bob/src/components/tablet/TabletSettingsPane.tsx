@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, type ScrollViewInstance, Text, View } from "react-native";
 import { router, useLocalSearchParams, usePathname } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -28,7 +28,7 @@ export function TabletSettingsPane({
   const queryClient = useQueryClient();
   const pathname = usePathname();
   const searchParams = useLocalSearchParams();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const sectionOffsets = useRef<Record<MobileSettingsSectionKey, number>>({
     workspace: 0,
     account: 0,
