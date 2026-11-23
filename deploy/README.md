@@ -27,7 +27,7 @@ cd apps/bob && pnpm predeploy
 # or: DATABASE_URL=$(forge db url --app bob) pnpm -F @bob/db migrate
 
 # 2. Ship the worker
-cd apps/bob && pnpm exec vinext deploy
+cd apps/bob && pnpm exec vinext-cloudflare deploy
 ```
 
 CI (`.forgejo/workflows/ci.yml`) runs step 2 automatically on `master` after
