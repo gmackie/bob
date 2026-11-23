@@ -3,8 +3,8 @@
 # On push (and on demand) it enqueues a Preflight build of the *exact pushed
 # commit*. The build runs on the Preflight build farm (the macOS runner), NOT
 # in CI: CI only POSTs a source binding. The runner clones/fetches the commit
-# into a dedicated clean checkout `/Volumes/T9-APFS/apps/.preflight-ci/bob`, so it
-# never touches a developer's working tree.
+# into a dedicated clean checkout `/Users/mackieg/preflight-ci/bob` on the Mini's
+# internal SSD, so it never touches a developer's working tree.
 #
 # GMA-724: configure separate scoped PREFLIGHT_CI_IOS_TOKEN /
 # PREFLIGHT_CI_ANDROID_TOKEN after Preflight policy review and rollout.
@@ -26,7 +26,9 @@ env:
   APP_ID: pfapp_bob
   APP_PACKAGE_PATH: apps/mobile-bob
   APP_PACKAGE_NAME: "@bob/mobile"
-  APP_EAS_PROFILE: development-hosted-simulator
+  # Preflight derives simulator-lane settings from the name alone; this one
+  # builds a Debug dev client (APP_VARIANT=development).
+  APP_BUILD_PROFILE: development
   # ------------------------------------------------------------------------
   PLATFORM: ${{ github.event.inputs.platform || 'ios' }}
 
@@ -63,15 +65,17 @@ jobs:
             pfci_*) ;;
             *) echo "::error::Configure the platform's dedicated scoped CI credential"; exit 1 ;;
           esac
-          # Exact policy root under the Mini runner's external-volume root.
-          WORKSPACE_ROOT="/Volumes/T9-APFS/apps/.preflight-ci/bob"
+          # Must sit under the Mini runner's --workspace-root ($HOME/preflight-ci).
+          # The old T9-APFS sparsebundle root is gone: it no longer mounts after
+          # the macOS 27.2.1 upgrade, and installs there outran pod's 30m limit.
+          WORKSPACE_ROOT="/Users/mackieg/preflight-ci/bob"
           BODY=$(jq -n \
             --arg workspaceId "${WORKSPACE_ID}" \
             --arg appId "${APP_ID}" \
             --arg packageName "${APP_PACKAGE_NAME}" \
             --arg packagePath "${APP_PACKAGE_PATH}" \
             --arg workspaceRoot "${WORKSPACE_ROOT}" \
-            --arg profile "${APP_EAS_PROFILE}" \
+            --arg profile "${APP_BUILD_PROFILE}" \
             --arg platform "${PLATFORM}" \
             --arg sha "${GITHUB_SHA}" \
             '{workspaceId: $workspaceId, sourceBinding: {

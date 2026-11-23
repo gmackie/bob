@@ -24,7 +24,9 @@ const approvedMigrations = new Set([
   "0041_budget_notification_types.sql",
   // BOB-81: additive ADD VALUE on work_item_notification_type only.
   "0042_sdlc_notification_types.sql",
-  "0043_bizpulse_mcp.sql",
+  // Remote MCP planning review: one new table; no existing table is touched.
+  "0043_mcp_dispatch_approvals.sql",
+  "0044_bizpulse_mcp.sql",
 ]);
 interface MigrationHash {
   filename: string;
@@ -37,8 +39,8 @@ export function validateProductionMigrationLedger(
 ): void {
   const applied = new Map(ledger.map((entry) => [entry.filename, entry.hash]));
   if (
-    files.length !== 52 ||
-    files.at(-1)?.filename !== "0043_bizpulse_mcp.sql"
+    files.length !== 53 ||
+    files.at(-1)?.filename !== "0044_bizpulse_mcp.sql"
   ) {
     throw new Error(
       "Production migration roster changed; review the deployment migration guard",

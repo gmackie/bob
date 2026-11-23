@@ -1,5 +1,5 @@
 // The SDLC confirmation and answer sheets. Plain RN Modals, like the chat inspectors:
-// no new native modules (this ships as an EAS update).
+// no new native modules (this ships as an OTA update).
 import { useState } from "react";
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import * as Haptics from "expo-haptics";

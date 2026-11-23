@@ -1,6 +1,8 @@
 import type { makeOAuth } from "./oauth";
 import { json, readBody, OAuthError } from "./oauth";
 import type { McpToolService } from "./tools";
+import type { makeApps } from "./apps";
+import { McpToolError } from "./errors";
 
 const VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"];
 const result = (id: string | number, value: unknown) =>
@@ -11,6 +13,7 @@ export function makeMcpTransport(
   oauth: ReturnType<typeof makeOAuth>,
   tools: McpToolService,
   allowedOrigins: string[] = [],
+  apps?: ReturnType<typeof makeApps>,
 ) {
   return async (request: Request): Promise<Response> => {
     const origin = request.headers.get("origin");
@@ -85,7 +88,7 @@ export function makeMcpTransport(
           protocolVersion: VERSIONS.includes(params.protocolVersion)
             ? params.protocolVersion
             : VERSIONS[0],
-          capabilities: { tools: {} },
+          capabilities: apps ? { tools: {}, resources: {} } : { tools: {} },
           serverInfo: { name: "bob", version: "1.0.0" },
           instructions:
             "Tools are restricted to the workspace selected during OAuth consent. Use bob_list_projects to discover projects.",
@@ -94,6 +97,20 @@ export function makeMcpTransport(
         return result(id, {});
       case "tools/list":
         return result(id, { tools: await tools.list(grant) });
+      // MCP Apps views: static HTML whose data comes back through tools/call.
+      case "resources/list":
+        if (!apps) return error(id, -32601, "Method not found");
+        return result(id, { resources: apps.list() });
+      case "resources/templates/list":
+        if (!apps) return error(id, -32601, "Method not found");
+        return result(id, { resourceTemplates: [] });
+      case "resources/read": {
+        if (!apps) return error(id, -32601, "Method not found");
+        const contents =
+          typeof params.uri === "string" ? apps.read(params.uri) : undefined;
+        if (!contents) return error(id, -32602, "Unknown resource");
+        return result(id, { contents: [contents] });
+      }
       case "tools/call": {
         if (
           typeof params.name !== "string" ||
@@ -117,13 +134,16 @@ export function makeMcpTransport(
                 : { result: value },
             isError: false,
           });
-        } catch {
+        } catch (e) {
           // Never return driver errors, stack traces, tokens or internal paths.
           return result(id, {
             content: [
               {
                 type: "text",
-                text: "Tool call failed. Check the tool arguments, granted scopes, and workspace access.",
+                text:
+                  e instanceof McpToolError
+                    ? e.message
+                    : "Tool call failed. Check the tool arguments, granted scopes, and workspace access.",
               },
             ],
             isError: true,

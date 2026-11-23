@@ -34,8 +34,18 @@ export interface CommandsState {
 export const MAX_KEPT = 30;
 export const emptyCommands = (): CommandsState => ({ entries: {}, order: [] });
 
-export const resourceIdOf = (command: CommandInput): string =>
-  command.operation === "ControlPlan" ? command.input.planId : command.input.itemId;
+export const resourceIdOf = (command: CommandInput): string => {
+  switch (command.operation) {
+    case "ControlPlan":
+      return command.input.planId;
+    // Issue commands (BOB-99) act on a Kanbanger issue, not a coordinator item.
+    case "SetIssueState":
+    case "DispatchIssue":
+      return command.input.issueId;
+    default:
+      return command.input.itemId;
+  }
+};
 
 export const isInFlight = (entry: CommandEntry) => entry.status === "pending" || entry.status === "accepted";
 /**

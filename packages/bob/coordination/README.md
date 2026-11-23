@@ -220,7 +220,7 @@ ForgeGraph through `runtime/forge-port.mjs`):
 | `checks-running` | validating | Forgejo's combined status for the exact head is `success` with at least one status (→ `review-ready`, milestone `review-ready`), or `failure`/`error` (→ `checks-failed`, item `failed`; RetryItem starts a new attempt). 30 min with no status blocks. |
 | `review-ready` | review | the plan's `autoMerge` (else the policy's `release.autoMergeDefault`) is on, or a RequestRelease `merge` names the current head: approve at the head (a refused self-approval is noted, not fatal), then merge with `head_commit_id` (milestone `merged`). A moved head goes back to `checks-running`. A PR merged by hand is followed. |
 | `merged` | completed (target merged) or deploying | the repository's `.forgegraph.yaml` names an app; without one the release blocks. |
-| `deploying` | deploying | a ForgeGraph production deployment that is `active` contains the merge commit (equal, or among the head's 200 newest ancestors) and app health is not `critical` (→ `production-verified`, item completed, milestone `production-verified`). A failed deployment, or none after 3 h, blocks. |
+| `deploying` | deploying | a ForgeGraph production deployment that is `active` contains the merge commit (equal, or among the head's 200 newest ancestors) has a nonempty artifact reference, remains active across the health read, and app health is `healthy` (→ `production-verified`, item completed, milestone `production-verified`). A failed deployment, or none after 3 h, blocks. |
 
 autoMerge only merges the head the environment published (or the first head
 found on the branch); a head pushed by anyone else needs an explicit
@@ -231,8 +231,9 @@ replaced by a rollback never does.
 Safety assumption: "green" is Forgejo's combined status, which is only as
 complete as the statuses posted so far. Repositories run with autoMerge should
 make their CI checks required in branch protection, so a fast early status
-cannot stand in for the full run. Milestones already achieved stay true when a
-head later moves (as for cancelled items).
+cannot stand in for the full run. Review and merge milestones stay true when a head later moves. An explicit
+rollback revokes the production milestone and returns unadmitted dependents
+from ready to pending. Previously admitted execution is not interrupted.
 
 `blocked` keeps the item's state with a `note`. `RequestRelease open-pr`
 retries publishing, or resumes a blocked release at the stage it blocked in; `RequestDeployment rollback` (tier 3 on the edge) rolls the
@@ -431,3 +432,31 @@ install an expiring app-scoped key, then enable the worker option. Verify a scra
 plan's admission and receipt event IDs and counts in Flightdeck, plus worker
 health and unchanged issue lifecycle. Retain the existing worker configuration
 for rollback; removing `--flightdeck` disables analytics without altering work.
+
+## BOB-41 acceptance boundary
+
+Production verification requires an active deployment containing the merge,
+a nonempty store path or version ID, and healthy production health. A second
+deployment read checks that deployment identity, revision and artifact did not
+change during the health read. The durable issue effect retains the deployed
+revision, artifact, health and verification time alongside attempt/PR/deployment
+links. This is an observation across APIs, not an atomic ForgeGraph health receipt.
+A queued closure is skipped if its attempt or verified deployment is no longer
+current. Explicit rollback removes production readiness and queues reopening.
+Issue effects serialize by integration/workspace/issue identity while a delivery
+lease is live. A closure invalidated during delivery queues durable compensation,
+including when its lease was reclaimed. Delivered rollback effects recheck the
+external issue every minute until a newer attempt or completed delivery supersedes
+them. This repairs late writes after a worker crash or lease expiry; comments keep
+their idempotency marker. Reopening failures retry with backoff. This is eventual
+reconciliation: the remote API does not offer an atomic fence against local state.
+
+This increment does not establish full BOB-41 acceptance. External rollback and
+post-verification health monitoring,
+repeat verification effects after rollback/repair, cross-host attempt handoff,
+TriggerPlan scheduling, and ForgeC runtime adapter
+parity remain outstanding. Generated schemas and SQL are not proof that runtime
+ownership migrated through ForgeC. Production rollout and a two-environment
+CLIAPIProxy/Pistache recovery pilot must record exact revisions, artifacts,
+deployments and health before closure. Keep existing UI/dispatch paths and OODA
+jobs until replacement acceptance is recorded.

@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bob Arcade slice 3: Live Motion</title>
+<style>
+  :root {
+    --bg: #0b0906; --panel: #15110c; --ink: #eadfc8; --muted: #9c8a6a; --line: #3a2f22;
+    --gold: #ffd27a; --amber: #d4850a; --good: #7dffb0; --info: #6fb4ff; --warn: #ffd27a; --bad: #ff6b6b; --pink: #ff8ad8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: var(--ink); font: 15px/1.6 "Avenir Next", "Helvetica Neue", sans-serif;
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px),
+      radial-gradient(ellipse at top, #241a0e 0%, var(--bg) 60%);
+    background-color: var(--bg);
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 0 20px 80px; }
+  .hero {
+    padding: 56px 20px 40px; text-align: center; border-bottom: 2px solid var(--line);
+    background: repeating-linear-gradient(90deg, #6a5638 0 10px, transparent 10px 22px) bottom / 100% 4px no-repeat;
+  }
+  h1 { font: 900 clamp(28px, 6vw, 52px)/1.05 Menlo, monospace; letter-spacing: .04em; margin: 0 0 14px; color: var(--gold);
+       text-shadow: 0 0 18px rgba(255,210,122,.45), 3px 3px 0 #7a3d00; }
+  .badge { display: inline-block; font: 700 11px/1 Menlo, monospace; letter-spacing: .12em; padding: 5px 9px; border-radius: 999px; vertical-align: middle;
+           border: 1px solid currentColor; text-transform: uppercase; text-shadow: none; }
+  .b-review { color: var(--info); } .b-done { color: var(--good); } .b-todo { color: var(--muted); } .b-next { color: var(--gold); }
+  .meta { font: 12px Menlo, monospace; color: var(--muted); letter-spacing: .05em; }
+  .glyphs { font-size: 28px; letter-spacing: 12px; margin: 18px 0 0; }
+  h2 { font: 800 20px Menlo, monospace; color: var(--gold); letter-spacing: .08em; text-transform: uppercase; margin: 48px 0 12px;
+       border-left: 4px solid var(--amber); padding-left: 10px; }
+  h3 { font: 700 15px Menlo, monospace; color: var(--ink); margin: 24px 0 8px; }
+  p, li { max-width: 75ch; }
+  code { font: 13px Menlo, monospace; color: var(--gold); background: #1f1810; padding: 1px 5px; border-radius: 4px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 28px 0; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; text-align: center; }
+  .tile b { display: block; font: 900 30px Menlo, monospace; color: var(--good); }
+  .tile span { font: 11px Menlo, monospace; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+  .progress { display: flex; gap: 4px; margin: 10px 0 4px; }
+  .progress i { flex: 1; height: 10px; border-radius: 3px; background: var(--line); }
+  .progress i.on { background: var(--good); box-shadow: 0 0 8px rgba(125,255,176,.5); }
+  .progress i.half { background: linear-gradient(90deg, var(--info) 50%, var(--line) 50%); }
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 18px 0; font: 12px Menlo, monospace; }
+  .flow span { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+  .flow em { color: var(--amber); font-style: normal; }
+  .flow .hot { border-color: var(--gold); color: var(--gold); }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 18px; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font: 700 11px Menlo, monospace; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+  td code { font-size: 12px; }
+  .grammar td:first-child { font: 700 12px Menlo, monospace; white-space: nowrap; }
+  .t-good { color: var(--good); } .t-info { color: var(--info); } .t-warn { color: var(--warn); } .t-bad { color: var(--bad); }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px 18px 12px; }
+  .callout { background: #1d160d; border: 1px dashed var(--amber); border-radius: 10px; padding: 12px 16px; margin: 16px 0; }
+  .timeline { border-left: 2px dashed var(--line); margin: 12px 0 0 8px; padding-left: 20px; }
+  .timeline .step { position: relative; margin-bottom: 18px; }
+  .timeline .step::before { content: ""; position: absolute; left: -27px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: var(--line); }
+  .timeline .step.done::before { background: var(--good); box-shadow: 0 0 8px var(--good); }
+  .timeline .step.next::before { background: var(--gold); box-shadow: 0 0 8px var(--gold); }
+  details { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; margin: 10px 0; }
+  summary { cursor: pointer; font: 700 13px Menlo, monospace; color: var(--gold); }
+  .risk-h { color: var(--bad); } .risk-m { color: var(--warn); } .risk-l { color: var(--good); }
+</style>
+</head>
+<body>
+<header class="hero">
+  <h1>ARCADE · LIVE MOTION <span class="badge b-review">In review</span></h1>
+  <div class="meta">2026-11-21 · gmackie/bob @ BOB-91-arcade-live-motion · BOB-91 phase 1, slice 3</div>
+  <div class="glyphs" aria-hidden="true">🤖 ⚙️ 🔍 🚀 ⭐</div>
+</header>
+<main>
+
+<section>
+  <h2>Overview</h2>
+  <p>Slices 1 and 2 made the Floor move only when the coordinator moved: a parcel slides when an item changes state, and outcomes (merged, shipped, failed) pop a label. Between transitions, the edge already streams <code>tail</code> and <code>ci</code> messages for up to six watched items (BOB-94), but only the desk text used them, so the Floor sat still while agents worked for minutes.</p>
+  <p>This slice turns that same websocket stream into motion. A pure lens in <code>@bob/arcade</code> diffs successive tail frames and CI messages into beats. Web and native draw the same beats. The rule from BOB-91 still holds: <strong>nothing moves that isn't a real event</strong>. Live activity gets ambient motion, and outcomes get labels, confetti and haptics.</p>
+  <div class="tiles">
+    <div class="tile"><b>4</b><span>new beat kinds</span></div>
+    <div class="tile"><b>49</b><span>arcade tests</span></div>
+    <div class="tile"><b>0</b><span>protocol changes</span></div>
+    <div class="tile"><b>0</b><span>native deps</span></div>
+  </div>
+  <div class="progress" aria-label="4 of 5 phases done"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="half"></i></div>
+  <div class="meta">Core · Web · Mobile · Verify done; Ship in review</div>
+</section>
+
+<section>
+  <h2>Data flow</h2>
+  <div class="flow">
+    <span>SdlcEdge DO</span><em>→ ws →</em>
+    <span>tail · ci (watched ≤ 6)</span><em>→</em>
+    <span class="hot">tailBeats · ciBeats</span><em>→</em>
+    <span>BeatLog (dedupe)</span><em>→</em>
+    <span class="hot">effectFor</span><em>→</em>
+    <span>sparks · typing · meters · stamps · confetti · haptics</span>
+  </div>
+  <p>The coordinator path (<code>sdlcBeats</code>) is unchanged. Both paths share one beat log per screen, so the ticker, effects and haptics see one ordered, deduplicated stream.</p>
+</section>
+
+<section>
+  <h2>Goals &amp; non-goals</h2>
+  <div class="cols">
+    <div class="card"><h3>Goals</h3><ul>
+      <li>Beats from tail frames: activity, plus named commands (test, typecheck, lint, build, install, commit, push) with exit codes</li>
+      <li>Beats from CI: per-phase status changes and one <code>ci.green</code> per run</li>
+      <li>A motion grammar for them, shared by web and native</li>
+      <li>Scope chips per project and repo; floor height and parcel density scale with load</li>
+      <li>Custom station graphics that move only while their station holds items</li>
+    </ul></div>
+    <div class="card"><h3>Non-goals</h3><ul>
+      <li>Edge or protocol changes: the stream already exists</li>
+      <li>Watching more than six items: desks still pick the watch set</li>
+      <li>Sound, XP or replay (phase 5)</li>
+      <li>Native dependencies (no <code>react-native-svg</code>): the change ships over the air</li>
+    </ul></div>
+  </div>
+</section>
+
+<section>
+  <h2>Motion grammar</h2>
+  <table class="grammar">
+    <tr><th>Beat</th><th>Effect</th><th>Haptic</th><th>Why</th></tr>
+    <tr><td>agent.activity</td><td>sparks, parcel wobble, typing dots (no text)</td><td>none</td><td>Activity is shown but never celebrated</td></tr>
+    <tr><td class="t-info">test/types/lint/build running</td><td>spark with label (TESTING…)</td><td>none</td><td>Work in progress</td></tr>
+    <tr><td class="t-good">check passed</td><td>pulse TESTS ✓</td><td>none</td><td>Small win</td></tr>
+    <tr><td class="t-warn">check failed (agent)</td><td>pulse TESTS ✗</td><td>none</td><td>An agent's own red tests are part of working, not a failure</td></tr>
+    <tr><td class="t-good">commit / push</td><td>stamp COMMIT / PUSHED</td><td>light on push</td><td>Work left the agent's desk</td></tr>
+    <tr><td class="t-warn">other command exit ≠ 0</td><td>spark OOPS</td><td>none</td><td>Whimsy, but true</td></tr>
+    <tr><td class="t-info">ci.phase → running</td><td>spark ▶ PHASE</td><td>none</td><td></td></tr>
+    <tr><td class="t-good">ci.phase → passed</td><td>pulse ✓ PHASE</td><td>none</td><td></td></tr>
+    <tr><td class="t-bad">ci.phase → failed</td><td>stamp ✗ PHASE, web spectacle failure burst</td><td>error</td><td>Real failure</td></tr>
+    <tr><td class="t-good">ci.green</td><td>confetti + GREEN, web spectacle burst</td><td>success</td><td>Outcome</td></tr>
+  </table>
+  <div class="callout">A first frame, a new attempt or a new CI sha is a <em>baseline</em>, never an event, just as a first snapshot or a new epoch is for <code>sdlcBeats</code>. Opening the screen celebrates nothing. Beat ids are stable, so a replayed frame is dropped by the log.</div>
+</section>
+
+<section>
+  <h2>Phase 1 · Core lens <span class="badge b-done">Done</span></h2>
+  <table>
+    <tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+    <tr><td>Beat kinds + attempt beats (tail diff, line classifier, CI diff, meter)</td><td><code>arcade/src/beat.ts</code>, <code>attempt-beats.ts</code></td><td>vitest: baselines, sliding window, finished-in-place, dedupe, green once</td><td><span class="badge b-done">Done</span></td></tr>
+    <tr><td>Motion grammar for new beats + ticker lines</td><td><code>arcade/src/effects.ts</code></td><td>vitest</td><td><span class="badge b-done">Done</span></td></tr>
+    <tr><td>Scope chips + live scope</td><td><code>arcade/src/scopes.ts</code></td><td>vitest</td><td><span class="badge b-done">Done</span></td></tr>
+    <tr><td>Auto density (compact parcels before overflow)</td><td><code>arcade/src/floor.ts</code></td><td>vitest</td><td><span class="badge b-done">Done</span></td></tr>
+    <tr><td>Fix: desk hue keyed like the parcel (<code>repoKey</code>)</td><td><code>arcade/src/desks.ts</code></td><td>tests unchanged</td><td><span class="badge b-done">Done</span></td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>Phase 2 · Web cockpit <span class="badge b-done">Done</span></h2>
+  <table>
+    <tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+    <tr><td>Attempt beats into the floor; typing parcels, CI meters, sparks, stamps, confetti; 3-line ticker; load-scaled height and belt speed</td><td><code>cockpit/floor-panel.tsx</code>, <code>floor-model.ts</code></td><td>tsc, cockpit + sdlc vitest</td><td><span class="badge b-done">Done</span></td></tr>
+    <tr><td>SVG station sprites (robot, gear, rocket, flag, star…)</td><td><code>cockpit/station-sprites.tsx</code></td><td>tsc</td><td><span class="badge b-done">Done</span></td></tr>
+    <tr><td>Floor outcomes cue the full-screen spectacle layer</td><td><code>app/cockpit/page.tsx</code></td><td>tsc</td><td><span class="badge b-done">Done</span></td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>Phase 3 · iPhone &amp; iPad <span class="badge b-done">Done</span></h2>
+  <table>
+    <tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+    <tr><td><code>stepBeats</code> / <code>stepAttempts</code>: one path for effects + the single haptic</td><td><code>arcade/arcade-model.ts</code></td><td>vitest</td><td><span class="badge b-done">Done</span></td></tr>
+    <tr><td>Glyph stations, typing dots, wobble, CI meter, sparks, compact labels</td><td><code>arcade/FloorView.tsx</code></td><td>tsc, eslint</td><td><span class="badge b-done">Done</span></td></tr>
+    <tr><td>Scope chips; desks follow the scope</td><td><code>ScopeChips.tsx</code>, <code>use-desk-ids.ts</code></td><td>tsc, eslint</td><td><span class="badge b-done">Done</span></td></tr>
+    <tr><td>Demo feed emits shell commands and per-run CI shas</td><td><code>demo-feed.ts</code></td><td>vitest</td><td><span class="badge b-done">Done</span></td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>Phase 4 · Ship <span class="badge b-review">In review</span></h2>
+  <div class="timeline">
+    <div class="step done"><b>PR open</b>: branch pushed, checks running</div>
+    <div class="step next"><b>Eyes on motion</b>: <code>/arcade/demo</code> on an iPhone and an iPad simulator, plus <code>/cockpit</code> against a live edge with a running agent</div>
+    <div class="step"><b>Merge → web deploy</b> (CI deploy job), then <code>/api/health</code> check</div>
+    <div class="step"><b>EAS update</b>: 10% first, then ramp (client code only, no runtime bump)</div>
+  </div>
+</section>
+
+<section>
+  <h2>Risks &amp; mitigations</h2>
+  <table>
+    <tr><th>Risk</th><th>Level</th><th>Mitigation</th></tr>
+    <tr><td>Noise: tail frames arrive every ~2 s per watched item</td><td class="risk-m">Medium</td><td>Activity never shows text, never gets a ticker line and never triggers a haptic. The effect cap is 24 on native and 32 on web. Effects for items scoped off the floor are dropped.</td></tr>
+    <tr><td>Misclassified commands (a commit message mentioning "lint")</td><td class="risk-l">Low</td><td>Git rules match first; a miss only changes a label, never state</td></tr>
+    <tr><td>Window shifts with no overlap flood beats</td><td class="risk-l">Low</td><td>Capped to the newest 8 lines</td></tr>
+    <tr><td>Motion for people who asked for less</td><td class="risk-l">Low</td><td>Web: the cockpit's <code>minimal</code> level stops all animation. Native: reduced motion removes travel, sparks and glyph motion.</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>Verification</h2>
+  <ul>
+    <li><code>@bob/arcade</code>: vitest 49/49, <code>tsc</code> clean</li>
+    <li><code>@bob/blder</code> (web): <code>tsc</code> 0 errors; cockpit + sdlc vitest 74/74</li>
+    <li><code>@bob/mobile</code>: <code>tsc</code> clean, eslint clean on <code>features/arcade</code>, vitest green</li>
+    <li>Product boundary check 4/4</li>
+    <li><strong>Not yet</strong>: on-device visual check (simulator) and a live-edge run on <code>/cockpit</code></li>
+  </ul>
+</section>
+
+<section>
+  <h2>Open questions</h2>
+  <ul>
+    <li>Should the phone's light haptic on every push be opt-in? A busy floor might buzz often.</li>
+    <li>Should desks also get spark/typing motion, or stay calm as the readable surface?</li>
+    <li>Sound cues for <code>ci.green</code> on the web wall, alongside the spectacle burst?</li>
+  </ul>
+</section>
+
+</main>
+</body>
+</html>

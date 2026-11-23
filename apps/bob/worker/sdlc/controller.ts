@@ -13,6 +13,8 @@ import {
   type ShippedEntry,
   type Tier,
   type TopologyRepo,
+  type IssueBatch,
+  type IssueBatchResult,
 } from "@bob/sdlc-view";
 import { describeAlert, type SdlcAlertDelivery } from "./alerts";
 import { CommandOutbox, commandHash } from "./outbox";
@@ -169,6 +171,19 @@ export class EdgeController {
   }
 
   /**
+   * BOB-99: a mirrored Kanbanger issue batch from the coordinator. Stored in one transaction,
+   * then broadcast as a delta (it takes the next seq, like any other change). The mirror runs
+   * in the coordinator worker, so a batch also counts as hearing from the coordinator.
+   */
+  ingestIssues(batch: IssueBatch): IssueBatchResult {
+    const now = this.now();
+    this.coordinatorSeenAt = Math.max(this.coordinatorSeenAt ?? now, now);
+    const { message, stored, removed } = this.store.applyIssues(batch, this.coordinatorSeenAt);
+    if (message) this.publish(message);
+    return { accepted: true, stored, removed };
+  }
+
+  /**
    * After the state committed: plans per-user deliveries within the push limit and hands
    * them off. A failure here is logged and never fails the ingest (the state is stored).
    */
@@ -269,6 +284,8 @@ export class EdgeController {
   /** What a tier-3 command must type: the plan id, or the item's repository. Undefined (never satisfied) when unknown. */
   expectedConfirmation(command: CommandInput): string | undefined {
     if (command.operation === "ControlPlan") return command.input.planId;
+    // Issue commands (BOB-99) are tier 1 or 2: nothing to type.
+    if (command.operation === "SetIssueState" || command.operation === "DispatchIssue") return undefined;
     const item = this.store.item(command.input.itemId);
     if (!item) return undefined;
     const fromExecution = item.execution?.target.repository.repositoryId;

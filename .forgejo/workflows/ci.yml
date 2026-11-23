@@ -127,7 +127,7 @@ jobs:
         run: node --test scripts/bob-build-graph.test.mjs
 
       - name: Validate native mobile OAuth URL handlers
-        run: node --test scripts/verify-mobile-native-url-schemes.test.mjs scripts/verify-hosted-simulator-profile.test.mjs
+        run: node --test scripts/verify-mobile-native-url-schemes.test.mjs
 
       - name: Validate Bob/OODA product boundary
         run: node --test scripts/verify-product-boundary.test.mjs
@@ -137,6 +137,11 @@ jobs:
 
       - name: Validate the deploy report waits for this commit's Worker version
         run: node --test scripts/forgegraph-deploy-report.test.mjs
+
+      - name: Validate Hermes shepherd ops and versioned config
+        run: |
+          node --test apps/hermes-shepherd/test/ops-contract.test.mjs
+          python3 -m unittest discover -s apps/hermes-shepherd/test -v
 
       # Drives the real reaper against real dirs and real processes. The bug it
       # guards was entirely in what the script did to the OS, so this must run
