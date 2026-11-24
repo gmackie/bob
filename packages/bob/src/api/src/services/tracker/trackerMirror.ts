@@ -197,6 +197,19 @@ export async function mirrorWorkItemEvent(
       .where(eq(workItems.id, item.id));
   }
 
+  return mirrorAppliedWorkItemEvent(db, item, event, next);
+}
+
+/** Mirror a transition after its local database update has succeeded. */
+export async function mirrorAppliedWorkItemEvent(
+  db: Db,
+  item: Pick<
+    typeof workItems.$inferSelect,
+    "id" | "status" | "externalProvider" | "externalId" | "workspaceId" | "sourceMetadata"
+  >,
+  event: MirrorEvent,
+  next: string | null,
+): Promise<MirrorResult> {
   if (item.externalProvider !== "linear" || !item.externalId || !item.workspaceId) {
     return { mirrored: false, bobStatus: next, reason: "not an imported tracker item" };
   }
