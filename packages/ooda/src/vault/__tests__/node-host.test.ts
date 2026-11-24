@@ -1,9 +1,12 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createNodeVaultHostLoader, loadNodeVaultHost, type ConfiguredNodeVault } from "../node-host";
 import { PersistentVaultGate } from "../persistent-vault-gate";
+
+// Each fixture opens a real SQLite gate and writes to disk.
+vi.setConfig({ testTimeout: 20_000 });
 
 const dirs: string[] = [], hosts: ConfiguredNodeVault[] = [];
 afterEach(async () => {
