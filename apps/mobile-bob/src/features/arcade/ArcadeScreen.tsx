@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
-import { beatLine, beatTone, ciMeter, createBeatLog, desks as deskCards, floorScene, floorSummary, hud, liveCiPhases, projectBoard, shippedToday, WIDE_MIN_WIDTH } from "@bob/arcade";
+import { beatLine, beatTone, boardCounters, ciMeter, createBeatLog, desks as deskCards, floorScene, floorSummary, hud, liveCiPhases, projectBoard, shippedToday, WIDE_MIN_WIDTH } from "@bob/arcade";
 import type { AttemptDetailLike, BoardRow, Desk } from "@bob/arcade";
 import { coordinatedIssueIds, issueAttention, issueCommands, rows, RELEASE_STAGE_PRESENTATION, STATE_PRESENTATION } from "@bob/sdlc-view";
 import type { CommandOption, Confirmation, EdgeView, Scope, TrackedIssue } from "@bob/sdlc-view";
@@ -38,9 +38,9 @@ const SIDE_PANEL_MIN_WIDTH = 300 + WIDE_MIN_WIDTH;
 type Attempts = Readonly<Record<string, AttemptDetailLike | undefined>>;
 const NO_ATTEMPTS: Attempts = {};
 
-function HudStrip({ view, scope, demo, today, clock }: { view: EdgeView; scope: Scope; demo: boolean; today: number | null; clock: number }) {
+function HudStrip({ view, scope, demo, today, clock, projectRows }: { projectRows?: readonly BoardRow[]; view: EdgeView; scope: Scope; demo: boolean; today: number | null; clock: number }) {
   const h = hud(view, scope, clock);
-  const cells: [string, number | string, string, boolean][] = [
+  const cells: [string, number | string, string, boolean][] = projectRows ? boardCounters(projectRows).map(({ label, value, color }): [string, number, string, boolean] => [label, value, color, value > 0]) : [
     ["AGENTS", h.agents, "#6fb4ff", h.agents > 0],
     ["IN FLIGHT", h.inFlight, "#ffd27a", h.inFlight > 0],
     ["CI", h.ci, "#7fd3e8", h.ci > 0],
@@ -429,7 +429,7 @@ function ArcadeView({
           <OfflineBanner banner={banner} now={now} onRetry={onRetry} />
         </View>
       ) : null}
-      <HudStrip view={view} scope={scope} demo={demo} today={today} clock={clock} />
+      <HudStrip {...(board ? { projectRows: project ? board.rows.filter((r) => r.projectId === project.projectId) : board.rows } : {})} view={view} scope={scope} demo={demo} today={today} clock={clock} />
       {showBoard ? null : <ScopeChips view={view} scope={scope} onScope={onScope} />}
       <View style={{ flex: 1, flexDirection: side ? "row" : "column" }}>
         <View style={{ flex: 1 }}>

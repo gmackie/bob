@@ -21,6 +21,7 @@ import { useSdlcEdge } from "~/components/sdlc/use-sdlc-edge";
 import { DesksRow } from "./desks-row";
 import { IssuePanel, ProjectBoard } from "./project-board";
 import {
+  boardCounters,
   beatLine,
   beatTone,
   busiestStation,
@@ -536,6 +537,9 @@ export function FloorPanel({ onCue }: { onCue?: (kind: BurstKind) => void } = {}
             BOB ARCADE
           </span>
         </span>
+        {board ? boardCounters(project ? board.rows.filter((r) => r.projectId === project.projectId) : board.rows).map(({ label, value, color }) => (
+          <HudTile key={label} label={label} value={value} color={color} lit={value > 0} />
+        )) : <>
         <HudTile label="AGENTS" value={counts.agents} color="#6fb4ff" lit={counts.agents > 0} />
         <HudTile label="IN FLIGHT" value={counts.inFlight} color="#ffd27a" lit={counts.inFlight > 0} />
         <HudTile label="CI" value={counts.ci} color="#7fd3e8" lit={counts.ci > 0} />
@@ -550,6 +554,7 @@ export function FloorPanel({ onCue }: { onCue?: (kind: BurstKind) => void } = {}
         <HudTile label="SHIPPED" value={counts.shipped} color="#7dffb0" lit={counts.shipped > 0} />
         <HudTile label="FAILED" value={counts.failed} color={counts.failed ? "#ff6b6b" : "#8a7758"} lit={counts.failed > 0} />
         <HudTile label="TODAY" value={today ?? "–"} color="#7dffb0" lit={Boolean(today)} title="Reached production since local midnight" />
+        </>}
         {/* Dot-matrix live telemetry ticker */}
         <span
           className="ml-auto flex min-w-0 max-w-[40%] flex-col items-end gap-[1px] rounded border border-[#292016] bg-[#0b0907]/90 px-2 py-1 normal-case tracking-normal"

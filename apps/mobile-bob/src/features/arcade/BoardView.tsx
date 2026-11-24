@@ -75,7 +75,7 @@ function Row({ row, max, onPress }: { row: BoardRow; max: number; onPress: (row:
           ))}
         </View>
       </View>
-      <Text style={{ width: 28, textAlign: "right", fontFamily: MONO, fontSize: 11, fontWeight: "800", color: row.stale ? STALE_COLOR : STAGE.label }}>{row.stale}</Text>
+      <Text style={{ minWidth: 48, textAlign: "right", fontFamily: MONO, fontSize: 11, fontWeight: "800", color: row.stale ? STALE_COLOR : STAGE.label }}>{row.stale} stale</Text>
     </Pressable>
   );
 }
@@ -84,7 +84,7 @@ export function BoardView({ board, onOpenProject }: { board: Board; onOpenProjec
   const max = Math.max(1, ...board.rows.map((r) => r.lanes.queue + r.active));
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 16 }} testID="arcade-board">
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", flexWrap: "wrap", gap: 6, alignItems: "center", paddingVertical: 8 }}>
         <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: "700", letterSpacing: 1.2, color: STAGE.label }}>
           CONNECTED PROJECTS · <Text style={{ color: STAGE.labelLit, fontWeight: "900" }}>{board.started}</Text> STARTED
           {board.failed ? <Text style={{ color: PARCEL_TONE.failed.fill }}>{`  ·  ${board.failed} RED`}</Text> : null}

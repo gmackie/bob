@@ -104,6 +104,27 @@ export function projectBoard(view: EdgeView, now: number): Board {
   };
 }
 
+/** Summary for the same joined project rows that the board displays. */
+export function boardCounters(rows: readonly BoardRow[]) {
+  const totals = { started: 0, ci: 0, review: 0, deploy: 0, stale: 0, failed: 0 };
+  for (const row of rows) {
+    totals.started += row.active;
+    totals.ci += row.lanes.ci;
+    totals.review += row.lanes.review;
+    totals.deploy += row.lanes.deploy;
+    totals.stale += row.stale;
+    totals.failed += row.failed;
+  }
+  return [
+    { label: "IN FLIGHT", value: totals.started, color: "#ffd27a" },
+    { label: "CI", value: totals.ci, color: "#7fd3e8" },
+    { label: "REVIEW", value: totals.review, color: "#ffc874" },
+    { label: "DEPLOY LANE", value: totals.deploy, color: "#c09cff" },
+    { label: "STALE", value: totals.stale, color: "#ff9f43" },
+    { label: "FAILED", value: totals.failed, color: "#ff6b6b" },
+  ];
+}
+
 /** The row as one sentence for screen readers. */
 export function boardRowSummary(row: BoardRow): string {
   const parts = [`${row.lanes.queue} to do`, `${row.lanes.working} in progress`, `${row.lanes.ci} in CI`, `${row.lanes.review} in review`, `${row.lanes.deploy} deploying`];
