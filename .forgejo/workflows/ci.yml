@@ -353,7 +353,7 @@ jobs:
     name: Publish CI report
     needs: [ci, research-backend]
     if: always()
-    runs-on: forgegraph-ci
+    runs-on: light
     timeout-minutes: 5
     env:
       CI_CHECK_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
