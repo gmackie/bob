@@ -48,7 +48,8 @@ function makeStorageRoot(): string {
   return root;
 }
 
-describe("ooda outline", () => {
+// Each test initializes a real vault and commits its workspace and outline with Git.
+describe("ooda outline", { timeout: 15_000 }, () => {
   it("reads capture files off disk and writes a bundle into the vault", async () => {
     const storageRoot = makeStorageRoot();
     const capture = join(storageRoot, "capture.md");

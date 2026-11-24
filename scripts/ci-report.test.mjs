@@ -93,6 +93,34 @@ test("transient failure retries the exact preserved payload and accepts the ackn
   assert.deepEqual(JSON.parse(bodies[0]), report);
 });
 
+test("accepts ForgeGraph's terminal receipt for the preserved failed run", async t => {
+  const report = buildReport({ ...env, CI_TEST: "failure" }, summary);
+  const receipt = { ok: true, skipped: "build_already_terminal", buildId: "7de8db4b-b994-4de8-9bb4-4f8f57f51017" };
+  const endpoint = await server(t, async (req, res) => {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    assert.deepEqual(JSON.parse(body), report);
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(receipt));
+  });
+  const response = await sendReport(report, { token: "test-token", endpoint });
+  assert.deepEqual(response, receipt);
+  assert.equal(report.status, "failure");
+});
+
+test("rejects incomplete, unrelated, or contradictory terminal receipts", async t => {
+  const report = buildReport({ ...env, CI_TEST: "failure" });
+  const receipt = { ok: true, skipped: "build_already_terminal", buildId: "7de8db4b-b994-4de8-9bb4-4f8f57f51017" };
+  let reply;
+  const endpoint = await server(t, (_, res) => res.end(JSON.stringify(reply)));
+  for (const change of [{ ok: false }, { buildId: " " }, { skipped: "other" }, { status: "passed" }]) {
+    reply = { ...receipt, ...change };
+    await assert.rejects(sendReport(report, { token: "test-token", endpoint }), /acknowledgement/);
+  }
+  reply = receipt;
+  await assert.rejects(sendReport({ ...report, runId: undefined }, { token: "test-token", endpoint }), /acknowledgement/);
+});
+
 test("permanent auth failure is visible, not retried, and response secrets are not logged", async t => {
   let calls = 0;
   const endpoint = await server(t, (_, res) => { calls++; res.writeHead(401); res.end("sensitive-server-response"); });

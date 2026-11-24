@@ -89,6 +89,8 @@ interface Env {
   // one instance, the exporter's bearer token (a secret), and the viewer allow-list.
   SDLC_EDGE?: DurableObjectNamespace;
   SDLC_EDGE_WORKSPACE_ID?: string;
+  /** Bob workspace whose grants can access this coordinator. Defaults to the edge ID. */
+  SDLC_BOB_WORKSPACE_ID?: string;
   SDLC_EDGE_INGEST_TOKEN?: string;
   SDLC_VIEWER_USER_IDS?: string;
   // Orphaned-claim reconciler gate (handlers/orphanReconcileSweep).
