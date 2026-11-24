@@ -56,7 +56,8 @@ function fixture() {
   };
 }
 
-describe("coordinator exporter → SDLC edge", () => {
+// The coordinator and exporter commit to two real SQLite files through the full sync cycle.
+describe("coordinator exporter → SDLC edge", { timeout: 15_000 }, () => {
   it("carries a snapshot, then changes, then an eviction, then a forced resync to a connected client", async () => {
     const f = fixture();
     f.edge.hello(f.client, { cursor: null, epoch: null });
