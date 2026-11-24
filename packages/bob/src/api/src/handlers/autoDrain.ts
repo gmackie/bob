@@ -20,7 +20,7 @@ import {
 } from "@bob/db/schema";
 import { trackerIdentifierOf } from "@bob/work-items/branch-name";
 
-import { formatWorkItemIdentifier } from "./workItems";
+import { BIZPULSE_CREDENTIAL_SETUP, formatWorkItemIdentifier } from "./workItems";
 import { pickAcrossProjects } from "./autoDrain-pick";
 import { mirrorWorkItemEvent } from "../services/tracker/trackerMirror.js";
 import {
@@ -236,6 +236,7 @@ export async function autoDrainBacklog(
     where: and(
       inArray(workItems.status, DISPATCHABLE_STATUSES),
       eq(workItems.kind, "task"),
+      sql`${workItems.externalProvider} is distinct from ${BIZPULSE_CREDENTIAL_SETUP}`,
       sql`${workItems.title} <> ${PINNED_TITLE}`,
       sql`coalesce(${workItems.description}, '') not like ${`%${REPORT_MARKER}%`}`,
     ),
@@ -313,6 +314,7 @@ export async function autoDrainBacklog(
           and(
             eq(workItems.id, wi.id),
             inArray(workItems.status, DISPATCHABLE_STATUSES),
+            sql`${workItems.externalProvider} is distinct from ${BIZPULSE_CREDENTIAL_SETUP}`,
           ),
         )
         .returning({ id: workItems.id });

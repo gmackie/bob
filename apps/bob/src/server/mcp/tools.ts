@@ -20,6 +20,12 @@ import { READ_SCOPE, WRITE_SCOPE } from "./oauth";
 import { VIEW_URIS } from "./apps";
 import { makePlanning } from "./planning";
 import { issueSdlcTicket } from "./sdlc-ticket";
+import { bizpulseConfig } from "../bizpulse/client";
+import {
+  credentialSetupRequest,
+  credentialSetupStatus,
+  makeCredentialSetup,
+} from "../bizpulse/credential-setup";
 
 const uuid = z.string().uuid();
 const page = {
@@ -182,14 +188,36 @@ function itemView(p: typeof workItems.$inferSelect) {
 export function makeTools(
   db: Db,
   identity: OAuthIdentity,
-  options: { store: Pick<OAuthStore, "addCredential">; origin: string },
+  options: { store: Pick<OAuthStore, "addCredential"> & Partial<Pick<OAuthStore, "client">>; origin: string },
 ): McpToolService {
   const planning = makePlanning(db);
+  const credentialSetup = makeCredentialSetup(db);
+  const setupTools = {
+    bob_credential_setup_request: {
+      description: "Create or retrieve a draft for an approved BizPulse credential plan. Requires Bob workspace owner consent and a startup-scoped BizPulse link. Never dispatches.",
+      schema: credentialSetupRequest,
+      write: true,
+    },
+    bob_credential_setup_status: {
+      description: "Read a BizPulse credential draft and its dispatch approval.",
+      schema: credentialSetupStatus,
+      write: false,
+    },
+  };
+  async function canUseSetup(grant: OAuthGrant, write: boolean) {
+    if (!grant.scopes.includes(write ? WRITE_SCOPE : READ_SCOPE)) return false;
+    const config = bizpulseConfig();
+    const client = config && await options.store.client?.(grant.clientId);
+    return Boolean(
+      config && client && client.redirectUris.length === 1 &&
+      client.redirectUris[0] === config.origin + "/api/credentials/bob/callback",
+    );
+  }
   const edge = new URL("/api/sdlc/ws", options.origin);
   edge.protocol = edge.protocol === "https:" ? "wss:" : "ws:";
   return {
-    list: (grant) =>
-      Object.entries(definitions)
+    async list(grant) {
+      const base = Object.entries(definitions)
         .filter(([, d]) =>
           grant.scopes.includes(d.write ? WRITE_SCOPE : READ_SCOPE),
         )
@@ -208,8 +236,36 @@ export function makeTools(
             openWorldHint: false,
           },
           _meta: "meta" in d ? d.meta : callableBy("model"),
-        })),
+        }));
+      const setup = [];
+      for (const [name, definition] of Object.entries(setupTools)) {
+        if (await canUseSetup(grant, definition.write))
+          setup.push({
+            name,
+            description: definition.description,
+            inputSchema: z.toJSONSchema(definition.schema),
+            annotations: {
+              readOnlyHint: !definition.write,
+              destructiveHint: false,
+              idempotentHint: true,
+              openWorldHint: true,
+            },
+            _meta: callableBy("model"),
+          });
+      }
+      return [...base, ...setup];
+    },
     async call(grant, name, args) {
+      if (name === "bob_credential_setup_request" || name === "bob_credential_setup_status") {
+        const write = setupTools[name].write;
+        if (!(await canUseSetup(grant, write)) ||
+            !(await identity.access(grant.userId, grant.workspaceId, write)))
+          throw new Error("Tool access denied");
+        if (name === "bob_credential_setup_request")
+          return credentialSetup.request(grant, credentialSetupRequest.parse(args));
+        const input = credentialSetupStatus.parse(args);
+        return credentialSetup.status(grant, input.workItemId, input.operationKey);
+      }
       if (!(name in definitions) || !Object.hasOwn(definitions, name))
         throw new Error("Unknown tool");
       const definition = definitions[name as keyof typeof definitions];
