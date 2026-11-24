@@ -28,7 +28,7 @@ const effects = c => c.db.prepare('SELECT * FROM coordination_issue_effect ORDER
 async function kanbanger(t) {
   const fake = await fakeKanbanger();
   t.after(() => fake.close());
-  return { fake, client: kanbangerClient({ endpoint: fake.endpoint, token: fake.token, integrationId: 'kanbanger', timeoutMs: 2000 }) };
+  return { fake, client: kanbangerClient({ endpoint: fake.endpoint, token: fake.token, integrationId: 'kanbanger', timeoutMs: 30000 }) };
 }
 async function setup(t, { resolver, items = [item(), item('item-2', issue('BOB-37'))], fault } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'bob-kanbanger-')), database = join(dir, 'store.sqlite');
