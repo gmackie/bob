@@ -171,6 +171,12 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@linear/sdk':
+      specifier: 87.0.0
+      version: 87.0.0
+
 overrides:
   '@electric-sql/pglite': 0.5.16
   '@types/pg': 8.23.1
@@ -1484,8 +1490,8 @@ importers:
         specifier: workspace:*
         version: link:../../../core
       '@linear/sdk':
-        specifier: 103.0.0
-        version: 103.0.0(graphql@17.1.0)
+        specifier: 'catalog:'
+        version: 87.0.0(graphql@17.1.0)
       '@trpc/server':
         specifier: 11.29.5
         version: 11.29.5(@types/ws@8.18.2)(next@16.4.6(@babel/core@7.29.6(supports-color@10.2.2))(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(typescript@7.0.2)
@@ -4380,9 +4386,9 @@ packages:
       react-native:
         optional: true
 
-  '@linear/sdk@103.0.0':
-    resolution: {integrity: sha512-JLkRB9f16DVVy+PLCIr9o4C4RiXQNIBgLAPk4OJpTxxoO8uxcFfgmTGadO0VNFAbA3BKAHQ96CAeQ2FE1ogviw==}
-    engines: {node: ^20.19.0 || >=22.12.0}
+  '@linear/sdk@87.0.0':
+    resolution: {integrity: sha512-hYJhmhDIuhu7tyca1T9xZ5y0sf6EiCnFYbdGX3I5kylkGGMrrVszasoIfrkopwBCuJjolFnnVVwqqzCbURVftA==}
+    engines: {node: '>=18.x'}
 
   '@livekit/mutex@1.1.1':
     resolution: {integrity: sha512-EsshAucklmpuUAfkABPxJNhzj9v2sG7JuzFDL4ML1oJQSV14sqrpTYnsaOudMAw9yOaW53NU3QQTlUQoRs4czw==}
@@ -15823,7 +15829,7 @@ snapshots:
       react-dom: 19.3.1(react@19.3.1)
       react-native: 0.88.1(@babel/core@7.29.6(supports-color@10.2.2))(@react-native/metro-config@0.88.1(@babel/core@7.29.6(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.3.0)(react@19.3.1)(supports-color@10.2.2)
 
-  '@linear/sdk@103.0.0(graphql@17.1.0)':
+  '@linear/sdk@87.0.0(graphql@17.1.0)':
     dependencies:
       '@graphql-typed-document-node/core': 3.2.0(graphql@17.1.0)
     transitivePeerDependencies:
