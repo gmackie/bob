@@ -14,6 +14,13 @@ const oodaWrangler = readFileSync(
   "utf8",
 );
 
+// The install skips Electron's binary download either as a direct
+// `ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile`, or as the
+// fleet CI kit's fleet/setup step (which runs `pnpm install --frozen-lockfile`)
+// with `ELECTRON_SKIP_BINARY_DOWNLOAD: "1"` in its env.
+const SKIPS_ELECTRON_INSTALL =
+  /ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile|ci-actions\/fleet\/setup@[0-9a-f]+\n(?:(?!\n      - )[^\n]*\n)*?\s+ELECTRON_SKIP_BINARY_DOWNLOAD: "1"/;
+
 function jobSection(start, end) {
   const startIndex = workflow.indexOf(start);
   const endIndex = end
@@ -33,7 +40,7 @@ test("deploy jobs skip unrelated Electron binary downloads", () => {
   for (const deployJob of [bobDeploy, oodaDeploy]) {
     assert.match(
       deployJob,
-      /ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile/,
+      SKIPS_ELECTRON_INSTALL,
       "deploy jobs must not fetch unrelated desktop binaries",
     );
   }
@@ -44,7 +51,7 @@ test("the primary CI install skips the Electron runtime download", () => {
 
   assert.match(
     ciJob,
-    /ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile/,
+    SKIPS_ELECTRON_INSTALL,
     "CI compiles and tests desktop source without launching Electron",
   );
 });

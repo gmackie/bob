@@ -4,6 +4,8 @@ on:
   push:
     branches: [master]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -16,7 +18,9 @@ env:
 jobs:
   research-backend:
     name: Research backend
-    runs-on: ubuntu-latest
+    # Python tooling stays on its hash-pinned pip install (no uv or Python
+    # downloads from GitHub), so fleet/setup is not used here.
+    runs-on: apps
     env:
       # Use Python from our Forgejo runner image; never fetch it from GitHub.
       UV_PYTHON_DOWNLOADS: never
@@ -98,7 +102,9 @@ jobs:
     # a live Postgres at postgres://postgres:postgres@localhost:5432/test --
     # see those packages' test files for the hardcoded connection string, and
     # test/emulate-setup.ts / emulate.config.yaml for how it's now served.
-    runs-on: ubuntu-latest
+    # `apps`: the fleet's app-CI label (container runners with the
+    # /pnpm-store and other fleet cache mounts).
+    runs-on: apps
     # Run 1166 spent 20 minutes on passing serial checks and lost reporting.
     # Keep concurrency bounded, but budget 45 minutes: run 1215 (2026-10-01) ran
     # the full 30 on a loaded runner and timed out after all packages had passed.
@@ -108,12 +114,13 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - uses: https://github.com/pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
+      # Node and pnpm (packageManager) only; the install runs further down,
+      # after the private registry is configured.
+      - name: Set up Node and pnpm
+        uses: https://git.forgegraf.com/gmackie/ci-actions/fleet/setup@ddd693744c0254b1cb078eec0e4d5a1bc38f57eb
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          install: "false"
 
       - name: Validate deploy install scope
         run: node --test scripts/verify-ci-deploy-install-scope.test.mjs
@@ -158,7 +165,18 @@ jobs:
           printf '%s\n' '//npm.forgegraf.com/:_authToken=${FG_REGISTRY_TOKEN}' > "$RUNNER_TEMP/forgegraph.npmrc"
           echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/forgegraph.npmrc" >> "$GITHUB_ENV"
 
-      - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
+      # The runner's /pnpm-store mount (npm.forgegraf.com mirror when the host
+      # has none), `pnpm install --frozen-lockfile` with retries, Turbo
+      # remote-cache env when TURBO_TOKEN exists.
+      - name: Install dependencies
+        uses: https://git.forgegraf.com/gmackie/ci-actions/fleet/setup@ddd693744c0254b1cb078eec0e4d5a1bc38f57eb
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-token: ${{ secrets.FG_REGISTRY_TOKEN }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ci
 
       # apps/bob/worker/sdlc/exporter.e2e.test.ts runs the real coordinator runtime,
       # a standalone npm package (own lockfile) outside the pnpm workspace.
@@ -430,11 +448,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: https://github.com/pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - name: Set up Node and pnpm
+        uses: https://git.forgegraf.com/gmackie/ci-actions/fleet/setup@ddd693744c0254b1cb078eec0e4d5a1bc38f57eb
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          install: "false"
       # The web build currently consumes root-hoisted workspace dependencies,
       # so retain the full install while suppressing unrelated desktop binaries.
       - name: Configure private registry
@@ -442,7 +460,13 @@ jobs:
           printf '%s\n' '//npm.forgegraf.com/:_authToken=${FG_REGISTRY_TOKEN}' > "$RUNNER_TEMP/forgegraph.npmrc"
           echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/forgegraph.npmrc" >> "$GITHUB_ENV"
 
-      - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
+      - name: Install dependencies
+        uses: https://git.forgegraf.com/gmackie/ci-actions/fleet/setup@ddd693744c0254b1cb078eec0e4d5a1bc38f57eb
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-token: ${{ secrets.FG_REGISTRY_TOKEN }}
       - name: Build CF Worker
         working-directory: apps/bob
         run: pnpm exec vinext build
@@ -503,17 +527,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: https://github.com/pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - name: Set up Node and pnpm
+        uses: https://git.forgegraf.com/gmackie/ci-actions/fleet/setup@ddd693744c0254b1cb078eec0e4d5a1bc38f57eb
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          install: "false"
       - name: Configure private registry
         run: |
           printf '%s\n' '//npm.forgegraf.com/:_authToken=${FG_REGISTRY_TOKEN}' > "$RUNNER_TEMP/forgegraph.npmrc"
           echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/forgegraph.npmrc" >> "$GITHUB_ENV"
 
-      - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
+      - name: Install dependencies
+        uses: https://git.forgegraf.com/gmackie/ci-actions/fleet/setup@ddd693744c0254b1cb078eec0e4d5a1bc38f57eb
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-token: ${{ secrets.FG_REGISTRY_TOKEN }}
       - name: Build and conditionally deploy OODA edge
         working-directory: apps/ooda-edge
         env:
