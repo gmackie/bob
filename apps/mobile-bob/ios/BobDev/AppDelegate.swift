@@ -7,7 +7,7 @@ import DebugBridgeUI
 #endif
 
 @main
-class AppDelegate: ExpoAppDelegate {
+class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {
   var window: UIWindow?
 
   var reactNativeDelegate: ExpoReactNativeFactoryDelegate?
@@ -24,13 +24,18 @@ class AppDelegate: ExpoAppDelegate {
     reactNativeDelegate = delegate
     reactNativeFactory = factory
 
-#if os(iOS) || os(tvOS)
-    window = UIWindow(frame: UIScreen.main.bounds)
-    factory.startReactNative(
-      withModuleName: "main",
-      in: window,
-      launchOptions: launchOptions)
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+}
+
+class SceneDelegate: ExpoAppSceneDelegate {
 #if DEBUG
+  override func scene(
+    _ scene: UIScene,
+    willConnectTo session: UISceneSession,
+    options connectionOptions: UIScene.ConnectionOptions
+  ) {
+    super.scene(scene, willConnectTo: session, options: connectionOptions)
     // Loopback gstack harness for Preflight device QA. React Native owns the
     // UI, so there is no snapshotable Swift model to register.
     DebugBridgeUIWiring.installAll()
@@ -38,30 +43,8 @@ class AppDelegate: ExpoAppDelegate {
     DebugOverlayWindow.shared.install(
       recording: ProcessInfo.processInfo.arguments.contains("--gstack-recording")
     )
+  }
 #endif
-#endif
-
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
-  }
-
-  // Linking API
-  public override func application(
-    _ app: UIApplication,
-    open url: URL,
-    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
-  ) -> Bool {
-    return super.application(app, open: url, options: options) || RCTLinkingManager.application(app, open: url, options: options)
-  }
-
-  // Universal Links
-  public override func application(
-    _ application: UIApplication,
-    continue userActivity: NSUserActivity,
-    restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
-  ) -> Bool {
-    let result = RCTLinkingManager.application(application, continue: userActivity, restorationHandler: restorationHandler)
-    return super.application(application, continue: userActivity, restorationHandler: restorationHandler) || result
-  }
 }
 
 class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {

@@ -9,7 +9,7 @@
     <key>EXUpdatesLaunchWaitMs</key>
     <integer>0</integer>
     <key>EXUpdatesRuntimeVersion</key>
-    <string>0.1.1</string>
+    <string>0.1.1-sdk58</string>
     <key>EXUpdatesURL</key>
     <string>https://preflight.forgegraf.com/api/preflight/v1/ota/bob</string>
     <key>EXUpdatesRequestHeaders</key>
