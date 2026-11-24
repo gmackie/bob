@@ -107,7 +107,12 @@ export async function sendReport(report, options = {}) {
       try { result = JSON.parse(Buffer.concat(chunks).toString("utf8")); }
       catch { throw new PermanentFailure("Invalid CI report acknowledgement"); }
       const expected = { success: "passed", failure: "failed", cancelled: "cancelled" }[report.status];
-      if (result?.ok !== true || typeof result.buildId !== "string" || !result.buildId || result.status !== expected) {
+      // ForgeGraph looks up this repository's native runId before returning this
+      // receipt. It merged the evidence and kept the webhook's terminal status.
+      const terminalReceipt = /^\d+$/.test(report.runId) &&
+        result?.skipped === "build_already_terminal" && result.status === undefined;
+      if (result?.ok !== true || typeof result.buildId !== "string" || !result.buildId.trim() ||
+          (result.status !== expected && !terminalReceipt)) {
         throw new PermanentFailure("Invalid CI report acknowledgement");
       }
       return result;
@@ -138,7 +143,11 @@ async function main() {
   } else {
     const report = settledReport(await loadReportOrFailure(path, process.env), process.env.CI_SOURCE_RESULT, process.env.CI_RESEARCH_RESULT);
     const result = await sendReport(report, { token: process.env.FG_CI_TOKEN });
-    console.log(`ForgeGraph CI report accepted: ${result.buildId} (${result.status})`);
+    if (result.status === undefined) {
+      console.log(`ForgeGraph CI report accepted for already-terminal build ${result.buildId}`);
+    } else {
+      console.log(`ForgeGraph CI report accepted: ${result.buildId} (${result.status})`);
+    }
   }
 }
 
