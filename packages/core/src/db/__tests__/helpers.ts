@@ -8,21 +8,38 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Each fixture gets a fresh in-memory database and applies the real migrations
-// by default. The reopen test in migrate.test.ts owns its on-disk database.
-export async function createTestDb(opts?: { applyMigrations?: boolean }) {
-  const pglite = new PGlite();
-  const db = drizzle(pglite, { schema });
+// Capture only initdb's output. Each fixture restores its own filesystem and
+// runs migrations independently. Vitest's module isolation bounds the cache.
+let emptyCluster: Promise<Blob> | undefined;
 
-  if (opts?.applyMigrations ?? true) {
-    await applyTestMigrations(pglite);
+async function snapshotEmptyCluster() {
+  const seed = await PGlite.create();
+  try {
+    return await seed.dumpDataDir("none");
+  } finally {
+    await seed.close();
   }
+}
 
-  return {
-    db,
-    pglite,
-    teardown: () => pglite.close(),
-  };
+export async function createTestDb(opts?: { applyMigrations?: boolean }) {
+  emptyCluster ??= snapshotEmptyCluster().catch((error) => {
+    emptyCluster = undefined;
+    throw error;
+  });
+  const pglite = await PGlite.create({ loadDataDir: await emptyCluster });
+  try {
+    if (opts?.applyMigrations ?? true) {
+      await applyTestMigrations(pglite);
+    }
+    return {
+      db: drizzle(pglite, { schema }),
+      pglite,
+      teardown: () => pglite.close(),
+    };
+  } catch (error) {
+    await pglite.close();
+    throw error;
+  }
 }
 
 // Sort drizzle migration filenames by their leading numeric prefix.
