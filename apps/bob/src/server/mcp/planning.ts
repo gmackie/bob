@@ -6,10 +6,7 @@ import type { Db } from "@bob/db/client";
 import { and, eq, isNull } from "@bob/db";
 import { mcpDispatchApprovals, workItems } from "@bob/db/schema";
 import { wrapHandler } from "@bob/api/handlers/bridge";
-import {
-  publicApiListRuns,
-  publicApiListRunsByWorkItem,
-} from "@bob/api/handlers/publicApi";
+import { workspaceRunSummaries } from "@bob/api/handlers/publicApi";
 import {
   BIZPULSE_CREDENTIAL_SETUP,
   workItemsDispatch,
@@ -24,15 +21,20 @@ import {
 import type { PlanningData, WorkspaceData } from "./views/render";
 import type { RunSummary } from "./views/types";
 import type { OAuthGrant } from "./types";
+import { WRITE_SCOPE } from "./oauth";
 import { McpToolError } from "./errors";
 
-export const POLL_SECONDS = 60;
+export function workspacePollSeconds(raw = process.env.BOB_POLL_SECONDS) {
+  const value = Number(raw);
+  if (!raw?.trim() || !Number.isFinite(value)) return 60;
+  return Math.max(15, Math.min(3600, Math.round(value)));
+}
 
 type WorkItemRow = typeof workItems.$inferSelect;
 interface RunRow {
   id: string;
   workItemId: string | null;
-  sessionId: string | null;
+  threadId: string | null;
   agentType: string | null;
   status: string;
   summary: Record<string, unknown> | null;
@@ -79,19 +81,14 @@ export function makePlanning(db: Db) {
     return item;
   }
 
-  const itemRuns = async (grant: OAuthGrant, workItemId: string) =>
-    runs(
-      await Effect.runPromise(
-        wrapHandler(publicApiListRunsByWorkItem, ctx(grant), {
-          workItemId,
-          limit: 20,
-        }),
-      ),
-    );
+  const listRuns = async (grant: OAuthGrant, filters: { workItemId?: string; projectId?: string; threadId?: string } = {}) =>
+    runs(await Effect.runPromise(wrapHandler(workspaceRunSummaries, ctx(grant), {
+      ...filters, workspaceId: grant.workspaceId, limit: filters.workItemId ? 20 : 50,
+    })));
 
-  async function approval(workItemId: string) {
+  async function approval(workspaceId: string, workItemId: string) {
     const row = await db.query.mcpDispatchApprovals.findFirst({
-      where: eq(mcpDispatchApprovals.workItemId, workItemId),
+      where: and(eq(mcpDispatchApprovals.workspaceId, workspaceId), eq(mcpDispatchApprovals.workItemId, workItemId)),
     });
     return {
       approved: row !== undefined,
@@ -99,11 +96,11 @@ export function makePlanning(db: Db) {
     };
   }
 
-  async function review(grant: OAuthGrant, workItemId: string) {
+  async function review(grant: OAuthGrant, workItemId: string, mayWrite = grant.scopes.includes(WRITE_SCOPE)) {
     const row = await requireItem(grant, workItemId);
     const [itemRunList, state] = await Promise.all([
-      itemRuns(grant, workItemId),
-      approval(workItemId),
+      listRuns(grant, { workItemId }),
+      approval(grant.workspaceId, workItemId),
     ]);
     const item = workItem(row);
     const data: PlanningData = {
@@ -114,7 +111,7 @@ export function makePlanning(db: Db) {
     const blocker = row.externalProvider === BIZPULSE_CREDENTIAL_SETUP
       ? "Open the work item in Bob for owner approval and dispatch."
       : planningDispatchBlocker(item, itemRunList, state);
-    if (row.externalProvider === BIZPULSE_CREDENTIAL_SETUP)
+    if (row.externalProvider === BIZPULSE_CREDENTIAL_SETUP || !mayWrite)
       data.workflow = { ...data.workflow, actions: [] };
     return { data, state, blocker };
   }
@@ -122,53 +119,39 @@ export function makePlanning(db: Db) {
   return {
     async workspace(
       grant: OAuthGrant,
-      input: { projectId?: string; query?: string },
+      input: { projectId?: string; query?: string; threadId?: string },
     ): Promise<WorkspaceData> {
       const [rows, runList] = await Promise.all([
         Effect.runPromise(
           wrapHandler(workItemsList, ctx(grant), {
             workspaceId: grant.workspaceId,
-            ...(input.projectId ? { projectId: input.projectId } : {}),
+            projectId: input.projectId, query: input.query,
             limit: 100,
           }),
         ),
-        Effect.runPromise(
-          wrapHandler(publicApiListRuns, ctx(grant), {
-            workspaceId: grant.workspaceId,
-            limit: 50,
-          }),
-        ).then(
-          (rows) => ({ runs: runs(rows) }),
+        listRuns(grant, { projectId: input.projectId, threadId: input.threadId }).then(
+          (runs) => ({ runs }),
           () => ({ runs: [], runsError: "Bob runs are unavailable" }),
         ),
       ]);
-      const query = input.query?.toLowerCase();
       return {
         workspaceId: grant.workspaceId,
-        workItems: rows
-          .filter((row) => !query || row.title.toLowerCase().includes(query))
-          .map(workItem),
+        ...(input.threadId ? { threadId: input.threadId } : {}),
+        workItems: rows.map(workItem),
         ...runList,
-        pollSeconds: POLL_SECONDS,
+        pollSeconds: workspacePollSeconds(),
         refreshedAt: new Date().toISOString(),
       };
     },
 
-    review: async (grant: OAuthGrant, workItemId: string) =>
-      (await review(grant, workItemId)).data,
+    review: async (grant: OAuthGrant, workItemId: string, mayWrite: boolean) =>
+      (await review(grant, workItemId, mayWrite)).data,
 
-    runs: async (grant: OAuthGrant, workItemId?: string) => {
-      if (!workItemId)
-        return runs(
-          await Effect.runPromise(
-            wrapHandler(publicApiListRuns, ctx(grant), {
-              workspaceId: grant.workspaceId,
-              limit: 50,
-            }),
-          ),
-        );
-      await requireItem(grant, workItemId);
-      return itemRuns(grant, workItemId);
+    item: async (grant: OAuthGrant, id: string) => ({ item: workItem(await requireItem(grant, id)) }),
+
+    runs: async (grant: OAuthGrant, filters: { workItemId?: string; threadId?: string }) => {
+      if (filters.workItemId) await requireItem(grant, filters.workItemId);
+      return listRuns(grant, filters);
     },
 
     async approve(grant: OAuthGrant, workItemId: string) {
@@ -183,8 +166,8 @@ export function makePlanning(db: Db) {
         })
         .onConflictDoUpdate({
           target: mcpDispatchApprovals.workItemId,
-          set: { approvedBy: grant.userId, approvedAt: new Date() },
           setWhere: isNull(mcpDispatchApprovals.dispatchedAt),
+          set: { workspaceId: grant.workspaceId, approvedBy: grant.userId, approvedAt: new Date() },
         });
     },
 
@@ -207,6 +190,7 @@ export function makePlanning(db: Db) {
         .set({ dispatchedAt: new Date() })
         .where(
           and(
+            eq(mcpDispatchApprovals.workspaceId, grant.workspaceId),
             eq(mcpDispatchApprovals.workItemId, input.workItemId),
             isNull(mcpDispatchApprovals.dispatchedAt),
           ),
@@ -214,18 +198,26 @@ export function makePlanning(db: Db) {
         .returning({ workItemId: mcpDispatchApprovals.workItemId });
       if (claimed.length === 0)
         throw new McpToolError("Bob dispatch was already requested; refresh the existing run evidence");
+      let session;
       try {
-        const session = await Effect.runPromise(
+        session = await Effect.runPromise(
           wrapHandler(workItemsDispatch, ctx(grant), input),
         );
-        return { ...(await review(grant, input.workItemId)).data, dispatched: session };
       } catch (error) {
         await db
           .update(mcpDispatchApprovals)
           .set({ dispatchedAt: null })
-          .where(eq(mcpDispatchApprovals.workItemId, input.workItemId));
+          .where(and(eq(mcpDispatchApprovals.workspaceId, grant.workspaceId), eq(mcpDispatchApprovals.workItemId, input.workItemId)));
         throw error;
       }
+      // A failed refresh after successful dispatch must never re-arm the approval.
+      return {
+        ...(await review(grant, input.workItemId)).data,
+        dispatched: {
+          ...session, sessionStatus: session.status,
+          ...normalizeBobRun({ id: session.sessionId, workItemId: input.workItemId, status: session.status }),
+        },
+      };
     },
   };
 }

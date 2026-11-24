@@ -5,8 +5,6 @@ import { and, eq } from "@bob/db";
 import {
   projects,
   workItems,
-  workspaceMembers,
-  workspaces,
 } from "@bob/db/schema";
 import { wrapHandler } from "@bob/api/handlers/bridge";
 import {
@@ -19,6 +17,9 @@ import type { OAuthGrant, OAuthIdentity, OAuthStore } from "./types";
 import { READ_SCOPE, WRITE_SCOPE } from "./oauth";
 import { VIEW_URIS } from "./apps";
 import { makePlanning } from "./planning";
+import { McpToolError } from "./errors";
+import { linkSchema, readLinkSchema, linearLinks } from "./linear-links";
+import { authorizedEdge, readSdlc, type McpSdlcEnv } from "./sdlc";
 import { issueSdlcTicket } from "./sdlc-ticket";
 import { bizpulseConfig } from "../bizpulse/client";
 import {
@@ -36,9 +37,11 @@ type Visibility = ("model" | "app")[];
 /** MCP Apps metadata: who may call a tool, and the view it renders. */
 const callableBy = (...visibility: Visibility) => ({ ui: { visibility } });
 const opensView = (resourceUri: string) => ({
+  "ui/resourceUri": resourceUri,
   ui: { resourceUri, visibility: ["model", "app"] as Visibility },
 });
 const workItemId = uuid.describe("Bob work item id");
+const threadId = z.string().min(1).max(200).describe("T3 thread id");
 const definitions = {
   bob_list_projects: {
     description:
@@ -91,16 +94,20 @@ const definitions = {
     write: true,
   },
   bob_workspace: {
+    title: "Bob workspace",
     description:
       "List work items and recent runs in the authorized workspace, optionally filtered by project or title. Renders the Bob workspace view.",
     schema: z.strictObject({
+      workspaceId: uuid.optional().describe("Must match the workspace selected during OAuth consent"),
       projectId: uuid.optional(),
+      threadId: threadId.optional().describe("Only runs for this T3 thread"),
       query: z.string().max(200).optional().describe("Case-insensitive title filter"),
     }),
     write: false,
     meta: opensView(VIEW_URIS.workspace),
   },
   bob_planning_review: {
+    title: "Bob planning review",
     description:
       "Show the planning review for a work item: stages, latest run evidence and the next action. A person approves dispatch from the rendered view.",
     schema: z.strictObject({ workItemId }),
@@ -108,6 +115,7 @@ const definitions = {
     meta: opensView(VIEW_URIS.planning),
   },
   bob_planning_approve: {
+    title: "Approve Bob dispatch",
     description: "Record a person's approval to dispatch a work item.",
     schema: z.strictObject({ workItemId }),
     write: true,
@@ -115,6 +123,7 @@ const definitions = {
     meta: callableBy("app"),
   },
   bob_planning_dispatch: {
+    title: "Dispatch Bob work item",
     description:
       "Dispatch an approved work item to an agent. Fails unless a person approved it in the planning review. Requires bob:write.",
     schema: z.strictObject({
@@ -129,25 +138,38 @@ const definitions = {
     write: true,
     meta: opensView(VIEW_URIS.planning),
   },
+  bob_work_item_get: {
+    title: "Get Bob work item",
+    description: "Get the plugin's work-item detail in the authorized workspace.",
+    schema: z.strictObject({ workItemId }),
+    write: false,
+  },
+  bob_linear_links: {
+    title: "Bob ↔ Linear links",
+    description: "List or get manual Bob ↔ Linear-compatible issue links. Upsert and remove require bob:write.",
+    schema: linkSchema,
+    write: false,
+  },
   bob_runs_list: {
+    title: "List Bob runs",
     description:
       "List recent runs, newest first, for the authorized workspace or one work item.",
-    schema: z.strictObject({ workItemId: workItemId.optional() }),
+    schema: z.strictObject({ workItemId: workItemId.optional(), threadId: threadId.optional() }),
     write: false,
   },
   bob_sdlc: {
+    title: "Bob SDLC",
     description:
-      "Open the Bob SDLC view. With threadId: the plan, state, milestones, pending questions, live tail and CI of the SDLC item running that T3 thread. Without: the fleet. The view reads Bob's SDLC edge live; this tool returns no SDLC state itself.",
-    schema: z.strictObject({
-      threadId: z
-        .string()
-        .min(1)
-        .max(200)
-        .optional()
-        .describe("T3 thread id; omit for the fleet"),
-    }),
+      "Read the SDLC fleet or the item running a T3 thread, including plan progress, questions, current tail and CI.",
+    schema: z.strictObject({ threadId: threadId.optional() }),
     write: false,
     meta: opensView(VIEW_URIS.sdlc),
+  },
+  bob_sdlc_item_for_thread: {
+    title: "Bob SDLC item for a thread",
+    description: "Get the coordinator item and plan for a T3 thread in the authorized workspace, or null.",
+    schema: z.strictObject({ threadId }),
+    write: false,
   },
   bob_sdlc_connect: {
     description: "A single-use URL for the SDLC view's edge socket.",
@@ -188,7 +210,7 @@ function itemView(p: typeof workItems.$inferSelect) {
 export function makeTools(
   db: Db,
   identity: OAuthIdentity,
-  options: { store: Pick<OAuthStore, "addCredential"> & Partial<Pick<OAuthStore, "client">>; origin: string },
+  options: { store: Pick<OAuthStore, "addCredential"> & Partial<Pick<OAuthStore, "client">>; origin: string; sdlcEnv: () => McpSdlcEnv },
 ): McpToolService {
   const planning = makePlanning(db);
   const credentialSetup = makeCredentialSetup(db);
@@ -213,21 +235,22 @@ export function makeTools(
       client.redirectUris[0] === config.origin + "/api/credentials/bob/callback",
     );
   }
+  const canWrite = (grant: OAuthGrant) => grant.scopes.includes(WRITE_SCOPE) && identity.access(grant.userId, grant.workspaceId, true);
   const edge = new URL("/api/sdlc/ws", options.origin);
   edge.protocol = edge.protocol === "https:" ? "wss:" : "ws:";
   return {
     async list(grant) {
+      const mayWrite = await canWrite(grant);
       const base = Object.entries(definitions)
-        .filter(([, d]) =>
-          grant.scopes.includes(d.write ? WRITE_SCOPE : READ_SCOPE),
-        )
+        .filter(([, d]) => d.write ? mayWrite : grant.scopes.includes(READ_SCOPE))
         .map(([name, d]) => ({
           name,
+          ...("title" in d ? { title: d.title } : {}),
           description: d.description,
-          inputSchema: z.toJSONSchema(d.schema),
+          inputSchema: z.toJSONSchema(name === "bob_linear_links" && !mayWrite ? readLinkSchema : d.schema, { io: "input" }),
           annotations: {
-            readOnlyHint: !d.write,
-            destructiveHint: false,
+            readOnlyHint: !d.write && !(name === "bob_linear_links" && mayWrite),
+            destructiveHint: name === "bob_linear_links" && mayWrite,
             idempotentHint: ![
               "bob_add_comment",
               "bob_planning_dispatch",
@@ -239,7 +262,7 @@ export function makeTools(
         }));
       const setup = [];
       for (const [name, definition] of Object.entries(setupTools)) {
-        if (await canUseSetup(grant, definition.write))
+        if ((!definition.write || mayWrite) && await canUseSetup(grant, definition.write))
           setup.push({
             name,
             description: definition.description,
@@ -269,15 +292,11 @@ export function makeTools(
       if (!(name in definitions) || !Object.hasOwn(definitions, name))
         throw new Error("Unknown tool");
       const definition = definitions[name as keyof typeof definitions];
-      if (
-        !grant.scopes.includes(definition.write ? WRITE_SCOPE : READ_SCOPE) ||
-        !(await identity.access(
-          grant.userId,
-          grant.workspaceId,
-          definition.write,
-        ))
-      )
+      const link = name === "bob_linear_links" ? linkSchema.parse(args) : undefined;
+      const write = definition.write || link?.action === "upsert" || link?.action === "remove";
+      if (!grant.scopes.includes(write ? WRITE_SCOPE : READ_SCOPE) || !(await identity.access(grant.userId, grant.workspaceId, write)))
         throw new Error("Tool access denied");
+      if (link) return linearLinks(db, grant.workspaceId, link);
       const ctx = { db, userId: grant.userId };
       const requireItem = async (id: string) => {
         const item = await db.query.workItems.findFirst({
@@ -369,16 +388,19 @@ export function makeTools(
             createdAt: comment.createdAt,
           };
         }
-        case "bob_workspace":
-          return planning.workspace(
-            grant,
-            definitions.bob_workspace.schema.parse(args),
-          );
-        case "bob_planning_review":
-          return planning.review(
-            grant,
-            definitions.bob_planning_review.schema.parse(args).workItemId,
-          );
+        case "bob_workspace": {
+          const input = definitions.bob_workspace.schema.parse(args);
+          if (input.workspaceId && input.workspaceId !== grant.workspaceId)
+            throw new McpToolError("workspaceId must match the workspace selected during OAuth consent.");
+          return planning.workspace(grant, input);
+        }
+        case "bob_work_item_get":
+          return planning.item(grant, definitions.bob_work_item_get.schema.parse(args).workItemId);
+        case "bob_planning_review": {
+          const { workItemId } = definitions.bob_planning_review.schema.parse(args);
+          const mayWrite = await canWrite(grant);
+          return planning.review(grant, workItemId, mayWrite);
+        }
         case "bob_planning_approve": {
           const input = definitions.bob_planning_approve.schema.parse(args);
           await planning.approve(grant, input.workItemId);
@@ -393,17 +415,20 @@ export function makeTools(
           return {
             runs: await planning.runs(
               grant,
-              definitions.bob_runs_list.schema.parse(args).workItemId,
+              definitions.bob_runs_list.schema.parse(args),
             ),
           };
         case "bob_sdlc": {
           const input = definitions.bob_sdlc.schema.parse(args);
-          return input.threadId
-            ? { scope: "thread", threadId: input.threadId }
-            : { scope: "fleet" };
+          return readSdlc(grant, options.sdlcEnv(), input.threadId);
+        }
+        case "bob_sdlc_item_for_thread": {
+          const input = definitions.bob_sdlc_item_for_thread.schema.parse(args);
+          return readSdlc(grant, options.sdlcEnv(), input.threadId, true);
         }
         case "bob_sdlc_connect": {
           definitions.bob_sdlc_connect.schema.parse(args);
+          authorizedEdge(grant, options.sdlcEnv());
           const url = new URL(edge);
           url.searchParams.set(
             "ticket",
@@ -414,41 +439,6 @@ export function makeTools(
         default:
           throw new Error("Unknown tool");
       }
-    },
-  };
-}
-export function makeWorkspaceIdentity(
-  db: Db,
-  session: OAuthIdentity["session"],
-): OAuthIdentity {
-  return {
-    session,
-    async workspaces(userId) {
-      // Only explicit membership is offered: work-item handlers require it.
-      const rows = await db
-        .select({
-          id: workspaces.id,
-          name: workspaces.name,
-          role: workspaceMembers.role,
-        })
-        .from(workspaceMembers)
-        .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
-        .where(eq(workspaceMembers.userId, userId));
-      return rows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        canWrite: r.role !== "viewer",
-      }));
-    },
-    async access(userId, workspaceId, write) {
-      const row = await db.query.workspaceMembers.findFirst({
-        where: and(
-          eq(workspaceMembers.userId, userId),
-          eq(workspaceMembers.workspaceId, workspaceId),
-        ),
-        columns: { role: true },
-      });
-      return Boolean(row && (!write || row.role !== "viewer"));
     },
   };
 }

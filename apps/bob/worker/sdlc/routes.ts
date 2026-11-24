@@ -1,4 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
+import { isViewer } from "../../src/lib/sdlc-viewers";
+export { isViewer, viewerList } from "../../src/lib/sdlc-viewers";
 import { MAX_INGEST_BYTES } from "./store";
 import { MAX_TAIL_BYTES } from "./tail";
 
@@ -25,11 +27,6 @@ export function bearerMatches(header: string | null, token: string | undefined):
   return diff === 0;
 }
 
-/** The user ids on a comma-separated allow-list (SDLC_VIEWER_USER_IDS), deduplicated. */
-export const viewerList = (csv: string | undefined) =>
-  [...new Set((csv ?? "").split(",").map((s) => s.trim()).filter(Boolean))];
-/** Whether userId is on a comma-separated allow-list (SDLC_VIEWER_USER_IDS). Empty: nobody. */
-export const isViewer = (userId: string, csv: string | undefined) => viewerList(csv).includes(userId);
 const listed = isViewer;
 
 /**
@@ -73,7 +70,7 @@ export type VerifyApiKey = (key: string) => Promise<VerifiedApiKey | null>;
  * refused. Device-login keys are minted with ["read", "write"] (api/v1/device/approve).
  */
 /** Resolves a single-use socket ticket (bob_sdlc_connect, src/server/mcp/sdlc-ticket.ts) to its user; null when unknown, used or expired. */
-export type ConsumeTicket = (ticket: string) => Promise<string | null>;
+export type ConsumeTicket = (ticket: string, workspaceId: string) => Promise<string | null>;
 
 export const keyMayConnect = (permissions: readonly string[]) => permissions.includes("write") || permissions.includes("admin");
 
@@ -153,7 +150,7 @@ export async function handleSdlcRoute(
     const ticket = new URL(request.url).searchParams.get("ticket");
     let userId: string | null;
     if (ticket !== null) {
-      userId = await consumeTicket(ticket);
+      userId = await consumeTicket(ticket, env.SDLC_EDGE_WORKSPACE_ID);
     } else if (origin === null && authorization?.startsWith("Bearer ")) {
       const key = authorization.slice(7).trim();
       const verified = key ? await verifyApiKey(key) : null;

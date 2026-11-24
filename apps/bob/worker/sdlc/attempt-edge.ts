@@ -105,6 +105,13 @@ export class AttemptEdge {
     return watched.length > 0;
   }
 
+  /** A single read of the same live evidence a socket receives when it starts watching. */
+  async detail(item: ItemSnapshot) {
+    const tail = this.tail.get(item.itemId)?.frame;
+    const marker = this.tail.unavailable(item.itemId, item.state, this.now());
+    return { tail, tailUnavailable: marker?.reason, ci: await this.ciFor(item) };
+  }
+
   private ciFor(item: ItemSnapshot) {
     return this.options.ci.message(item, this.options.plan(item.planId), this.options.topology());
   }

@@ -5,7 +5,9 @@ import { auth } from "~/auth/server";
 import { withBizPulseTools } from "~/server/bizpulse/tools";
 import { makeOAuthStore } from "./store";
 import { json, makeOAuth } from "./oauth";
-import { makeTools, makeWorkspaceIdentity } from "./tools";
+import { makeTools } from "./tools";
+import { makeWorkspaceIdentity } from "./identity";
+import { mcpSdlcEnv } from "./sdlc";
 import { makeApps } from "./apps";
 import { makeMcpTransport } from "./transport";
 
@@ -32,9 +34,12 @@ const store = makeOAuthStore(db);
 const oauth = makeOAuth({ origin, store, identity });
 const transport = makeMcpTransport(
   oauth,
-  withBizPulseTools(makeTools(db, identity, { store, origin })),
+  withBizPulseTools(makeTools(db, identity, {
+    store, origin,
+    sdlcEnv: () => mcpSdlcEnv.getStore() ?? {},
+  })),
   allowedOrigins,
-  makeApps(origin),
+  makeApps(),
 );
 export async function mcpRoute(request: Request): Promise<Response> {
   const path = new URL(request.url).pathname;

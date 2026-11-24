@@ -7,6 +7,7 @@ import { attachUser, greet, greetedSockets, handleCommand, ingestResponse, issue
 import { CI_POLL_MS, fgCiSourceFromEnv, type FgEnv } from "./fg";
 import { SDLC_USER_HEADER, viewerList } from "./routes";
 import { liveActivitySender, type ApnsEnv } from "./apns";
+import { mcpSdlcResponse } from "./mcp";
 import { LiveActivityEdge, parseLiveActivityRegistration } from "./live-activity";
 import { parseShippedRequest, ShippedEdge } from "./shipped";
 import { durableObjectSql } from "./sql";
@@ -77,6 +78,9 @@ export class SdlcEdge extends DurableObject<SdlcEdgeEnv> {
 
   async fetch(request: Request): Promise<Response> {
     const { pathname } = new URL(request.url);
+    // Internal binding only; public /api/sdlc routes never forward this path.
+    if (pathname === "/mcp" && request.method === "GET")
+      return mcpSdlcResponse(new URL(request.url), this.controller.store, this.attempt);
     if (pathname === "/ingest" && request.method === "POST") {
       // routes.ts has already capped the body at MAX_INGEST_BYTES.
       return ingestResponse(this.controller, await request.text());

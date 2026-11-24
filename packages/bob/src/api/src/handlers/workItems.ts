@@ -178,6 +178,7 @@ export async function workItemsList(
   input: {
     workspaceId: string;
     projectId?: string;
+    query?: string;
     parentId?: string | null;
     kind?: WorkItemKind;
     status?: string;
@@ -192,6 +193,7 @@ export async function workItemsList(
     where: and(
       eq(workItems.workspaceId, input.workspaceId),
       input.projectId ? eq(workItems.projectId, input.projectId) : undefined,
+      input.query ? sql`strpos(lower(${workItems.title}), lower(${input.query})) > 0` : undefined,
       input.parentId === null
         ? isNull(workItems.parentId)
         : input.parentId
