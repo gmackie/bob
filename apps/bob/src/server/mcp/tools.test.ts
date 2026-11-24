@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
+vi.mock("../bizpulse/link", () => ({ bizPulseAccess: vi.fn() }));
 vi.mock("@bob/api/handlers/workItems", () => ({
+  BIZPULSE_CREDENTIAL_SETUP: "bizpulse-credential",
   workItemsList: vi.fn(async () => []),
   workItemsGet: vi.fn(),
   workItemsUpdate: vi.fn(),
@@ -47,18 +49,18 @@ function fixture() {
   };
 }
 describe("MCP tool boundaries", () => {
-  it("lists only tools permitted by the grant", () => {
+  it("lists only tools permitted by the grant", async () => {
     const { tools } = fixture();
-    expect(tools.list(grant)).toHaveLength(8);
+    expect(await tools.list(grant)).toHaveLength(8);
     expect(
-      tools.list({ ...grant, scopes: ["bob:read", "bob:write"] }),
+      await tools.list({ ...grant, scopes: ["bob:read", "bob:write"] }),
     ).toHaveLength(13);
   });
   it("names each view's opening tool and keeps approval and the edge socket app-only", async () => {
     const { tools, store } = fixture();
     const write = { ...grant, scopes: ["bob:read", "bob:write"] };
     const meta = Object.fromEntries(
-      (tools.list(write) as { name: string; _meta: unknown }[]).map((t) => [t.name, t._meta]),
+      (await tools.list(write) as { name: string; _meta: unknown }[]).map((t) => [t.name, t._meta]),
     );
     expect(meta.bob_workspace).toEqual({ ui: { resourceUri: "ui://bob/workspace.html", visibility: ["model", "app"] } });
     expect(meta.bob_planning_dispatch).toEqual({ ui: { resourceUri: "ui://bob/planning-review.html", visibility: ["model", "app"] } });
@@ -69,8 +71,9 @@ describe("MCP tool boundaries", () => {
     const { url } = (await tools.call(write, "bob_sdlc_connect", {})) as { url: string };
     const ticket = new URL(url).searchParams.get("ticket");
     expect(url.startsWith("wss://bob.example/api/sdlc/ws?ticket=")).toBe(true);
-    expect(vi.mocked(store.addCredential).mock.calls[0]![0]).toMatchObject({ kind: "sdlc_ticket", grantId: grant.id });
-    expect(vi.mocked(store.addCredential).mock.calls[0]![0].hash).not.toBe(ticket);
+    const issued = vi.mocked(store.addCredential).mock.calls[0]?.[0];
+    expect(issued).toMatchObject({ kind: "sdlc_ticket", grantId: grant.id });
+    expect(issued?.hash).not.toBe(ticket);
     await expect(tools.call(grant, "bob_sdlc_connect", {})).rejects.toThrow("access denied");
   });
   it("rejects scope escalation even when a write tool name is known", async () => {

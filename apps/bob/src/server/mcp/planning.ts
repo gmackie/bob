@@ -11,6 +11,7 @@ import {
   publicApiListRunsByWorkItem,
 } from "@bob/api/handlers/publicApi";
 import {
+  BIZPULSE_CREDENTIAL_SETUP,
   workItemsDispatch,
   workItemsList,
 } from "@bob/api/handlers/workItems";
@@ -110,7 +111,12 @@ export function makePlanning(db: Db) {
       runs: itemRunList,
       workflow: buildPlanningWorkflow(item, itemRunList, state),
     };
-    return { data, state, blocker: planningDispatchBlocker(item, itemRunList, state) };
+    const blocker = row.externalProvider === BIZPULSE_CREDENTIAL_SETUP
+      ? "Open the work item in Bob for owner approval and dispatch."
+      : planningDispatchBlocker(item, itemRunList, state);
+    if (row.externalProvider === BIZPULSE_CREDENTIAL_SETUP)
+      data.workflow = { ...data.workflow, actions: [] };
+    return { data, state, blocker };
   }
 
   return {

@@ -37,6 +37,8 @@ import type { HandlerContext } from "./context.js";
 import { createExecutionBranch } from "../services/dispatch/executionBranch";
 import { createTrackedExecution } from "../services/dispatch/trackedExecution";
 
+export const BIZPULSE_CREDENTIAL_SETUP = "bizpulse-credential";
+
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
@@ -491,6 +493,11 @@ export async function workItemsUpdate(
   },
 ) {
   const existing = await loadAccessibleWorkItem(ctx.db, ctx.userId, input.id);
+  if (existing.externalProvider === BIZPULSE_CREDENTIAL_SETUP)
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Credential setup details come from the approved BizPulse plan.",
+    });
 
   // `priority` is intentionally omitted: `workItems` has no `priority`
   // column, so persisting it here would either throw (strict driver) or be
@@ -1097,12 +1104,19 @@ export async function workItemsTaskRunExecute(
 export async function workItemsDispatch(
   ctx: HandlerContext,
   input: { workItemId: string; agentType?: string; personaId?: string },
+  approved?: { credentialSetupDescription: string },
 ) {
   const workItem = await loadAccessibleWorkItem(
     ctx.db,
     ctx.userId,
     input.workItemId,
   );
+  const credentialSetup = workItem.externalProvider === BIZPULSE_CREDENTIAL_SETUP;
+  if (credentialSetup && !approved)
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Approve this credential setup from the owner review in Bob.",
+    });
 
   const { assertWithinQuotaOrThrow } =
     await import("../services/quotas/index.js");
@@ -1240,7 +1254,9 @@ export async function workItemsDispatch(
           agentType,
           title: session.title,
           sessionType: "execution",
-          description: workItem.description ?? undefined,
+          description: credentialSetup
+            ? approved?.credentialSetupDescription
+            : workItem.description ?? undefined,
           identifier,
           // The runner makes a worktree when `branch` is set (only when a repo
           // is mapped). workingDirectory carries the repo path; baseBranch is
