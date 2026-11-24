@@ -140,7 +140,7 @@
     "@elevenlabs/client": "1.37.1",
     "@gmacko/bob": "workspace:*",
     "@gmacko/core": "workspace:*",
-    "@linear/sdk": "103.0.0",
+    "@linear/sdk": "catalog:",
     "@trpc/server": "11.29.5",
     "effect": "4.1.4",
     "js-yaml": "5.5.0",
