@@ -3,18 +3,15 @@ import { drizzle } from "drizzle-orm/pglite";
 import * as schema from "../schema/index.js";
 import fs from "node:fs/promises";
 import path from "node:path";
-import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Create an in-memory PGlite + Drizzle client for tests.
-// Returns a disposable db + a teardown fn.
-// By default, applies all generated migrations in packages/core/drizzle/.
+// Each fixture gets a fresh in-memory database and applies the real migrations
+// by default. The reopen test in migrate.test.ts owns its on-disk database.
 export async function createTestDb(opts?: { applyMigrations?: boolean }) {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "gmacko-db-test-"));
-  const pglite = new PGlite(tmpDir);
+  const pglite = new PGlite();
   const db = drizzle(pglite, { schema });
 
   if (opts?.applyMigrations ?? true) {
@@ -24,10 +21,7 @@ export async function createTestDb(opts?: { applyMigrations?: boolean }) {
   return {
     db,
     pglite,
-    teardown: async () => {
-      await pglite.close();
-      await fs.rm(tmpDir, { recursive: true, force: true });
-    },
+    teardown: () => pglite.close(),
   };
 }
 
