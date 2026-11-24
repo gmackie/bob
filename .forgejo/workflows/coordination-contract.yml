@@ -1,6 +1,7 @@
 name: Coordination contract
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [master]
 concurrency:
@@ -8,19 +9,22 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   coordination-contract:
-    runs-on: ubuntu-latest
+    runs-on: apps
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '26.13.1'
       - uses: https://github.com/dtolnay/rust-toolchain@stable
+      # Node 26.13.1, the runner's /npm-cache mount, and the same npm ci
+      # against registry.npmjs.org, with retries.
       - name: Install standalone contract dependencies
-        working-directory: packages/bob/coordination
-        run: npm ci --ignore-scripts --registry=https://registry.npmjs.org
+        uses: https://git.forgegraf.com/gmackie/ci-actions/fleet/setup@ddd693744c0254b1cb078eec0e4d5a1bc38f57eb
+        with:
+          working-directory: packages/bob/coordination
+          node-version: '26.13.1'
+          registry: default
+          npm-install-command: npm ci --ignore-scripts --registry=https://registry.npmjs.org
       - name: Reproduce contracts and validate wire fixtures
         working-directory: packages/bob/coordination
         run: npm run verify
