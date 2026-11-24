@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research backlog triage — 3,783 tasks that never landed</title>
+<style>
+  :root {
+    --ink: #0f1115;
+    --paper: #f4f1ea;
+    --rule: #d9d2c4;
+    --accent: #b23a2e;
+    --accent2: #1f6f5c;
+    --dim: #6b6559;
+    --warn: #a86a12;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.62 "Iowan Old Style", Palatino, Georgia, serif;
+  }
+  .wrap { max-width: 74ch; margin: 0 auto; padding: 0 24px 96px; }
+
+  header.hero {
+    background:
+      repeating-linear-gradient(-45deg, rgba(178,58,46,.07) 0 2px, transparent 2px 9px),
+      linear-gradient(160deg, #16181d 0%, #23262d 60%, #2d2a25 100%);
+    color: #f4f1ea;
+    padding: 56px 24px 44px;
+    border-bottom: 4px solid var(--accent);
+  }
+  header.hero .inner { max-width: 74ch; margin: 0 auto; }
+  h1 { font-size: 2.2rem; line-height: 1.15; margin: 0 0 12px; letter-spacing: -.01em; }
+  .badge {
+    display: inline-block; vertical-align: middle; margin-left: 10px;
+    font: 600 .62rem/1 ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: .14em; text-transform: uppercase;
+    padding: 6px 10px; border-radius: 3px;
+    background: var(--warn); color: #16181d;
+  }
+  .meta { font: .82rem/1.5 ui-monospace, Menlo, monospace; color: #b8b2a6; margin: 0; }
+  .lede { font-size: 1.06rem; color: #ded8cc; margin: 18px 0 0; }
+
+  .tiles { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0 8px; }
+  .tile {
+    flex: 1 1 150px; background: #fff; border: 1px solid var(--rule);
+    border-left: 4px solid var(--accent); padding: 12px 14px; border-radius: 3px;
+  }
+  .tile .n { font-size: 1.7rem; font-weight: 700; line-height: 1.1; }
+  .tile .l { font: .72rem/1.35 ui-sans-serif, system-ui, sans-serif; color: var(--dim);
+             text-transform: uppercase; letter-spacing: .07em; margin-top: 3px; }
+  .tile.good { border-left-color: var(--accent2); }
+
+  h2 {
+    font-size: 1.32rem; margin: 46px 0 6px; padding-bottom: 6px;
+    border-bottom: 2px solid var(--ink);
+  }
+  h3 { font-size: 1.03rem; margin: 26px 0 4px; }
+  p { margin: 12px 0; }
+  code { font: .88em ui-monospace, Menlo, monospace; background: #e8e3d8; padding: 1px 4px; border-radius: 2px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: .9rem; }
+  th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font: 600 .7rem/1.3 ui-sans-serif, system-ui, sans-serif; text-transform: uppercase;
+       letter-spacing: .07em; color: var(--dim); border-bottom: 2px solid var(--ink); }
+  td.num { font-family: ui-monospace, Menlo, monospace; text-align: right; white-space: nowrap; }
+  .scroll { overflow-x: auto; }
+
+  .pill { display: inline-block; font: 600 .64rem/1 ui-sans-serif, system-ui, sans-serif;
+          letter-spacing: .08em; text-transform: uppercase; padding: 4px 7px; border-radius: 3px; }
+  .p-todo { background: #e4ded1; color: #4a463d; }
+  .p-now  { background: var(--accent); color: #fff; }
+  .p-ask  { background: var(--warn); color: #16181d; }
+
+  blockquote.callout {
+    margin: 20px 0; padding: 14px 16px; background: #fff;
+    border: 1px solid var(--rule); border-left: 4px solid var(--warn); border-radius: 3px;
+  }
+  blockquote.callout.stop { border-left-color: var(--accent); }
+  blockquote.callout p { margin: 6px 0; }
+  blockquote.callout strong { display: block; font: 700 .74rem/1.4 ui-sans-serif, system-ui, sans-serif;
+    text-transform: uppercase; letter-spacing: .09em; color: var(--dim); margin-bottom: 4px; }
+
+  .timeline { list-style: none; padding: 0; margin: 18px 0; border-left: 2px solid var(--rule); }
+  .timeline li { position: relative; padding: 0 0 18px 22px; }
+  .timeline li::before { content: ""; position: absolute; left: -7px; top: 7px; width: 11px; height: 11px;
+    background: var(--accent); border-radius: 50%; border: 2px solid var(--paper); }
+  .timeline b { display: block; font-size: .95rem; }
+  .timeline span { font-size: .86rem; color: var(--dim); }
+
+  details { margin: 12px 0; background: #fff; border: 1px solid var(--rule); border-radius: 3px; padding: 10px 14px; }
+  summary { cursor: pointer; font-weight: 600; font-size: .93rem; }
+  footer { margin-top: 54px; padding-top: 14px; border-top: 1px solid var(--rule);
+           font-size: .82rem; color: var(--dim); }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="inner">
+    <h1>Research backlog triage<span class="badge">Draft</span></h1>
+    <p class="meta">2026-09-23 · bob @ master · workspace hetzner-bob · author: Claude Opus 5</p>
+    <p class="lede">3,783 generated research tasks are sitting in the workspace. None of them are running,
+    almost none produced anything, and 3,116 of them are asking you to review work that does not exist.
+    This is what happened and what to do about it.</p>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="tiles">
+  <div class="tile"><div class="n">3,783</div><div class="l">generated tasks</div></div>
+  <div class="tile"><div class="n">3,116</div><div class="l">in review, 0 artifacts</div></div>
+  <div class="tile"><div class="n">454</div><div class="l">in progress, 0 running</div></div>
+  <div class="tile good"><div class="n">641</div><div class="l">real project items, healthy</div></div>
+</div>
+
+<h2>Overview</h2>
+
+<p>The <code>hetzner-bob</code> workspace holds 4,424 work items. 3,783 of them — 85% — have no project
+attached, were all created between 2 and 22 September, and carry titles averaging 236 characters. They are
+machine-generated research hypotheses about Gaussian splatting, defect detection and synthetic data
+generation.</p>
+
+<p>The remaining 641 items belong to real projects (BOB, BizPulse, HabitPlay, LevelForge, ForgeGraph and
+others). Those are in good shape: 23 of BOB's 78 items are done, 20 of BizPulse's 52, and almost none are
+stuck. <strong>The problem is entirely in the generated cohort.</strong></p>
+
+<h2>What the numbers say</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Status</th><th class="num">Items</th><th class="num">Touched in 24h</th><th>What it actually means</th></tr></thead>
+  <tbody>
+    <tr><td>in_review</td><td class="num">3,116</td><td class="num">0</td><td>Has a run. Zero artifacts, zero comments. Nothing to review.</td></tr>
+    <tr><td>in_progress</td><td class="num">454</td><td class="num">38</td><td>Zero live runs. 275 never had a run at all.</td></tr>
+    <tr><td>todo</td><td class="num">199</td><td class="num">0</td><td>Never picked up.</td></tr>
+    <tr><td>backlog</td><td class="num">14</td><td class="num">0</td><td>Older, unrelated shape (20-char titles).</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Across this cohort there have been 6,641 agent runs:</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Run outcome</th><th class="num">Runs</th><th class="num">Produced an artifact</th></tr></thead>
+  <tbody>
+    <tr><td>failed (claude)</td><td class="num">3,458</td><td class="num">11</td></tr>
+    <tr><td>completed (claude)</td><td class="num">3,171</td><td class="num">120</td></tr>
+    <tr><td>everything else</td><td class="num">12</td><td class="num">1</td></tr>
+  </tbody>
+</table>
+</div>
+
+<blockquote class="callout stop">
+  <strong>The core defect</strong>
+  <p>More than half of all runs failed outright. Of the 3,171 that completed, 3,051 finished
+  <em>without attaching any artifact</em> — and the work item was still advanced to <code>in_review</code>.
+  So "Review ready" is being asserted on the basis of a run terminating, not on the basis of a run
+  producing something reviewable.</p>
+</blockquote>
+
+<h2>Why they are not completing</h2>
+
+<p>Three independent failures stack up, and each one alone would be enough to stall the pipeline.</p>
+
+<h3>1. Runs fail more often than they succeed</h3>
+<p>3,458 failures against 3,171 completions. Nothing downstream can work while the majority of attempts
+die. The one item carrying a diagnostic says it plainly:
+<code>3 runs died without finishing; last: session d606258b (claude) reaped as stuck</code>.</p>
+
+<h3>2. Completion does not mean output</h3>
+<p>96% of completed runs attached nothing. Whatever the agent did, it left no artifact, no comment and no
+diff reference on the item. From Bob's point of view the run succeeded and the item became reviewable,
+which is how 3,116 empty reviews accumulated.</p>
+
+<h3>3. Status is never reconciled</h3>
+<p>454 items say in progress while zero runs are live; 275 of those never had a run at all. Nothing moves an
+item back when its run dies or never starts. The status is a claim made at dispatch that is never retracted.</p>
+
+<h3>Compounding: duplicates and unreadable titles</h3>
+<p>288 titles appear more than once, covering 578 items — the pipeline regenerates the same hypothesis. And
+because the title field carries the whole hypothesis paragraph (236 characters, with markdown backticks),
+every list and detail screen is unreadable. That is a display bug, but it is why the backlog <em>feels</em>
+worse than it is.</p>
+
+<h2>Are they needed?</h2>
+
+<p>Mostly no, in their current form. The evidence:</p>
+
+<ul>
+  <li><strong>No provenance.</strong> 3,299 have empty <code>source_metadata</code>; the rest carry only
+      <code>{"attempts": n}</code>. Nothing records which experiment or run produced them.</li>
+  <li><strong>No project.</strong> They are not attached to any project, so they do not roll up anywhere and
+      cannot be prioritised against real work.</li>
+  <li><strong>No output.</strong> 3,116 of them have produced literally nothing across 6,641 runs.</li>
+  <li><strong>Regenerable.</strong> They are derived hypotheses. If the generator still has its inputs, the
+      useful ones can be recreated with provenance attached.</li>
+</ul>
+
+<p>The ~131 runs that <em>did</em> produce artifacts are the exception worth preserving before any bulk
+action.</p>
+
+<blockquote class="callout">
+  <strong>On KanBanger</strong>
+  <p>There is no KanBanger linkage on any of these. <code>external_provider</code> across the whole
+  workspace is only <code>linear</code> (586 items, the healthy real projects) and <code>ooda</code> (1).
+  The generated cohort has no external provider at all. So there are no related KanBanger tasks to
+  reconcile — the integration simply is not involved here.</p>
+</blockquote>
+
+<h2>Phase 1 — Stop the bleeding <span class="pill p-now">Do first</span></h2>
+
+<p>Nothing else is worth doing while the generator can refill the backlog. Creation was bursty and recent
+(338 items on 15 Sep, 112 on 21 Sep, 75 on 22 Sep) and has paused, but the cause is unidentified.</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Task</th><th>Where</th><th>Verification</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Identify what creates these items. No API key was used, so it runs as your user over RPC — most likely the research pipeline.</td><td>research repo; <code>publicApiCreateRun</code> callers</td><td>Named process, with the code path that posts work items</td><td><span class="pill p-todo">Todo</span></td></tr>
+    <tr><td>Pause it, or gate it behind a project id and provenance stamp</td><td>generator config</td><td>No new project-less items for 24h</td><td><span class="pill p-todo">Todo</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Phase 2 — Preserve what has value</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Task</th><th>Where</th><th>Verification</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Export the 131 runs that produced artifacts, with their items</td><td><code>run_artifacts</code> ⋈ <code>agent_runs</code></td><td>A file listing item id, run id, artifact ids</td><td><span class="pill p-todo">Todo</span></td></tr>
+    <tr><td>Keep those items out of any bulk transition</td><td>triage query</td><td>Exclusion list checked into the cleanup script</td><td><span class="pill p-todo">Todo</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Phase 3 — Land the backlog</h2>
+
+<p>Three options. They are not mutually exclusive: the recommendation is C for the empty reviews and B for
+the stalled in-progress items.</p>
+
+<h3>A. Re-run them</h3>
+<p>Dispatch the 3,116 empty reviews again. <strong>Not recommended.</strong> At the observed 52% failure rate
+and 4% artifact rate this burns roughly 6,000 agent runs to produce perhaps 120 artifacts, and the underlying
+"completed but empty" defect is unfixed, so most would land back in the same state.</p>
+
+<h3>B. Reconcile status honestly <span class="pill p-now">Recommended for in_progress</span></h3>
+<p>Move the 454 in-progress items to a status that matches reality: <code>todo</code> where no run exists
+(275 items), <code>failed</code> where the last run failed. This is what a reaper should have done. It makes
+the board truthful without discarding anything.</p>
+
+<h3>C. Close the empty reviews <span class="pill p-now">Recommended for in_review</span></h3>
+<p>Cancel the 3,116 in-review items that have no artifact, no comment and no successful-with-output run.
+They are asking for a review that cannot be performed. Keep the ~120 with artifacts open for actual review.
+This is reversible: status change only, nothing deleted.</p>
+
+<blockquote class="callout stop">
+  <strong>Approval required</strong>
+  <p>Phase 3 rewrites thousands of production rows. I will not run any of it without an explicit go, and I
+  would do it in a transaction with a recorded before/after count, in batches, starting with a dry run that
+  reports exactly which ids would change.</p>
+</blockquote>
+
+<h2>Phase 4 — Make the recurrence impossible</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Task</th><th>Where</th><th>Verification</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Do not advance an item to in_review unless the run attached an artifact or comment</td><td>runner completion path</td><td>Test: completed run with no artifact leaves the item in progress</td><td><span class="pill p-todo">Todo</span></td></tr>
+    <tr><td>Reconcile stale claims: an item in progress with no live run returns to todo after a timeout</td><td>reaper</td><td>Test over a seeded stale item</td><td><span class="pill p-todo">Todo</span></td></tr>
+    <tr><td>Require a project id and provenance on created work items</td><td>create path</td><td>Rejected without them</td><td><span class="pill p-todo">Todo</span></td></tr>
+    <tr><td>Deduplicate on title within a workspace before creating</td><td>create path</td><td>Second identical title is a no-op</td><td><span class="pill p-todo">Todo</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Phase 5 — Make the board readable <span class="pill p-now">Cheap, do anytime</span></h2>
+
+<p>Independent of the data, the phone renders these badly and that is fixable today.</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Task</th><th>Where</th><th>Verification</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Clamp list row titles to 2 lines and detail titles to a sane maximum</td><td><code>apps/mobile-bob</code> home + work item</td><td>Screenshot: a 236-char title no longer fills the screen</td><td><span class="pill p-todo">Todo</span></td></tr>
+    <tr><td>Say so when an item under review has nothing attached, rather than showing empty sections</td><td>work item detail</td><td>Test over an item with 0 artifacts and 0 comments</td><td><span class="pill p-todo">Todo</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>How this happened, in order</h2>
+
+<ul class="timeline">
+  <li><b>2 Sep</b><span>First generated task appears. No project, no provenance.</span></li>
+  <li><b>14–15 Sep</b><span>515 items created in two days. Runs begin failing at scale.</span></li>
+  <li><b>through 22 Sep</b><span>3,783 items total. 6,641 runs. 131 artifacts. Items advance to in_review regardless.</span></li>
+  <li><b>23 Sep</b><span>Board shows "5 of 6 need you" over tasks with nothing to review. Investigated here.</span></li>
+</ul>
+
+<h2>Risks</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+  <tbody>
+    <tr><td>Bulk transition hides genuinely useful hypotheses</td><td>Phase 2 exports the 131 with artifacts first; cancellation is reversible</td></tr>
+    <tr><td>The generator restarts and refills the backlog</td><td>Phase 1 precedes any cleanup</td></tr>
+    <tr><td>A status rewrite races a live run</td><td>No runs are live; re-check immediately before executing</td></tr>
+    <tr><td>Closing reviews loses audit trail</td><td>Cancel rather than delete; record before/after counts</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Verification</h2>
+
+<p>The cleanup is done when, for the <code>hetzner-bob</code> workspace:</p>
+<ul>
+  <li>No item is in progress without a live run.</li>
+  <li>No item is in review without an artifact or comment.</li>
+  <li>Creating a duplicate title is a no-op, and creating without a project is rejected.</li>
+  <li>The phone's Needs-you count reflects work a person can actually act on.</li>
+</ul>
+
+<h2>Open questions</h2>
+
+<ul>
+  <li><strong>What generates these?</strong> Not answered yet. No API key was used, so it authenticates as
+      your user. This blocks Phase 1.</li>
+  <li><strong>Do you want the hypotheses back later,</strong> regenerated with provenance and a project? That
+      decides whether Phase 3C is a cancel or an archive.</li>
+  <li><strong>Why do completed Claude runs attach nothing?</strong> Worth one run's logs before Phase 4,
+      since the fix differs if the agent is erroring late versus never being asked for an artifact.</li>
+</ul>
+
+<details>
+  <summary>Queries behind every number here</summary>
+  <p>All figures come from the production database on hetzner-master, scoped to
+  <code>workspace_id = 5503dac2-b147-446c-9b02-95894095fcd5</code>. Status and age from
+  <code>work_items</code> grouped by status; provenance from <code>external_provider</code> and
+  <code>source_metadata</code>; run outcomes by joining <code>agent_runs</code> on
+  <code>work_item_id::text</code>; artifact presence from <code>work_item_artifacts</code> and
+  <code>run_artifacts</code>; duplicates by grouping on title having count &gt; 1.</p>
+</details>
+
+<footer>
+  Read-only investigation. Nothing in the database was modified to produce this document.
+</footer>
+
+</div>
+</body>
+</html>

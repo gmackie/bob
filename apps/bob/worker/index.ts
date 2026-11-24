@@ -90,6 +90,10 @@ interface Env {
   SDLC_EDGE_WORKSPACE_ID?: string;
   SDLC_EDGE_INGEST_TOKEN?: string;
   SDLC_VIEWER_USER_IDS?: string;
+  // Orphaned-claim reconciler gate (handlers/orphanReconcileSweep).
+  BOB_ORPHAN_RECONCILE_MODE?: string;
+  BOB_ORPHAN_RECONCILE_IDLE_MS?: string;
+  BOB_ORPHAN_RECONCILE_LIMIT?: string;
   [key: string]: unknown;
 }
 
@@ -337,6 +341,29 @@ export default Sentry.withSentry(
             } catch (err) {
               console.error("[session-reap] failed:", err);
             }
+          }
+
+          // The session reaper reaches a work item through its session, so it
+          // cannot see an item claimed but never dispatched, or one whose runs
+          // all ended without moving it. 454 production items sat "In Progress"
+          // that way with zero live runs, the oldest for a month.
+          //
+          // OFF unless BOB_ORPHAN_RECONCILE_MODE is "dry-run" (log what it would
+          // release, write nothing) or "on" (move them back to todo, where the
+          // autoDrain call below runs them). Off by default because enabling it
+          // requeues every stale claim at once. Best-effort, like the reaper.
+          try {
+            const { runOrphanReconcileSweep } = await import(
+              "@bob/api/handlers/orphanReconcileSweep"
+            );
+            await runOrphanReconcileSweep(runtimeEnv, async () => {
+              const { reconcileOrphanedClaims } = await import(
+                "@bob/api/handlers/reconcileOrphanedClaims"
+              );
+              return reconcileOrphanedClaims;
+            });
+          } catch (err) {
+            console.error("[orphan-reconcile] sweep failed:", err);
           }
 
           const { autoDrainBacklog } = await import(

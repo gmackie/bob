@@ -10,6 +10,7 @@ import {
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { describeReviewReadiness } from "~/features/work-items/review-readiness";
 import type { MobileWorkItemEntryValidationState } from "~/features/tablet/work-item-entry";
 import { LinkedExecutionRunsCard } from "~/components/tablet/LinkedExecutionRunsCard";
 import { OutcomeReadableOutputCard } from "~/components/tablet/OutcomeReadableOutputCard";
@@ -247,6 +248,12 @@ export default function WorkItemDetailScreen() {
   const artifacts = Array.isArray(currentArtifacts)
     ? (currentArtifacts as MobileArtifact[])
     : [];
+  const reviewNotice = describeReviewReadiness({
+    status: workItem.status,
+    artifactCount: artifacts.length,
+    commentCount: comments.length,
+    childCount,
+  });
   const entryItem = buildMobileWorkItemEntryItem(workItem);
   const entryContext = buildMobileWorkItemEntryContext({
     view: entryView,
@@ -292,7 +299,17 @@ export default function WorkItemDetailScreen() {
             <Text className="text-muted text-sm tracking-[0.18em] uppercase">
               {workItem.identifier}
             </Text>
-            <Text className="text-foreground mt-1 text-3xl font-semibold tracking-tight">
+            {/* A 236-character generated title at text-3xl consumed the whole
+                screen and broke mid-word, pushing every actionable control
+                below the fold. Long titles step down a size and clamp; short
+                ones are unaffected. The full text is in Description. */}
+            <Text
+              className={`text-foreground mt-1 font-semibold tracking-tight ${
+                workItem.title.length > 80 ? "text-xl" : "text-3xl"
+              }`}
+              numberOfLines={4}
+              ellipsizeMode="tail"
+            >
               {workItem.title}
             </Text>
           </View>
@@ -317,6 +334,20 @@ export default function WorkItemDetailScreen() {
             ) : null}
           </View>
         </View>
+
+        {/* An item can reach "Review ready" because a run ended, not because it
+            produced anything. Saying so beats rendering three empty sections
+            and leaving the reader to infer it. */}
+        {reviewNotice ? (
+          <Card className="mb-5">
+            <Text className="text-warning text-sm font-semibold">
+              {reviewNotice.title}
+            </Text>
+            <Text className="text-muted mt-1 text-sm leading-6">
+              {reviewNotice.detail}
+            </Text>
+          </Card>
+        ) : null}
 
         <Card className="mb-5">
           <Text className="text-muted text-xs font-semibold tracking-[0.16em] uppercase">

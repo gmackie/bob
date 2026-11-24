@@ -83,6 +83,14 @@
     // with checklist items exists. Flip to "false" to disable — no redeploy of
     // logic needed, same lever as the other drivers.
     "BOB_ADVANCE_CHECKLIST_ENABLED": "true",
+    // Orphaned-claim reconciler (handlers/reconcileOrphanedClaims): moves
+    // "in_progress" items with no live session or run, idle past
+    // BOB_ORPHAN_RECONCILE_IDLE_MS (default 12h), back to todo, where autoDrain
+    // runs them again. "off" (the default when unset), "dry-run" (log what it
+    // would release each tick, write nothing) or "on". Keep it off until a
+    // human has read a dry-run: there were ~454 stale claims when it was added.
+    // BOB_ORPHAN_RECONCILE_LIMIT caps items per sweep (default 200).
+    "BOB_ORPHAN_RECONCILE_MODE": "off",
     "BOB_AUTO_MERGE_MAX_PER_RUN": "5",
     "BOB_AUTO_MERGE_MODEL": "claude-sonnet-5",
     "BOB_AUTO_MERGE_INSTANCE_HINT": "gitea @ git.forgegraf.com",
