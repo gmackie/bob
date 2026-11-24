@@ -9,6 +9,8 @@ export interface SdlcRouteEnv {
   SDLC_EDGE?: DurableObjectNamespace;
   /** The coordinator's workspaceId; names the one SdlcEdge instance. Empty: the routes answer 503. */
   SDLC_EDGE_WORKSPACE_ID?: string;
+  /** Bob workspace whose grants can access this coordinator. Defaults to the edge ID. */
+  SDLC_BOB_WORKSPACE_ID?: string;
   /** The coordinator exporter's bearer token, at least 32 characters. */
   SDLC_EDGE_INGEST_TOKEN?: string;
   /** Comma-separated user ids allowed to watch. Empty: nobody. */
@@ -99,8 +101,9 @@ export async function handleSdlcRoute(
 ): Promise<Response> {
   const { pathname } = new URL(request.url);
   const namespace = env.SDLC_EDGE;
-  if (!env.SDLC_EDGE_WORKSPACE_ID || !namespace) return error(503, "sdlc edge not configured");
-  const stub = () => namespace.get(namespace.idFromName(env.SDLC_EDGE_WORKSPACE_ID!));
+  const coordinatorWorkspaceId = env.SDLC_EDGE_WORKSPACE_ID;
+  if (!coordinatorWorkspaceId || !namespace) return error(503, "sdlc edge not configured");
+  const stub = () => namespace.get(namespace.idFromName(coordinatorWorkspaceId));
 
   if (pathname === "/api/sdlc/ingest") {
     if (!bearerMatches(request.headers.get("authorization"), env.SDLC_EDGE_INGEST_TOKEN)) return error(401, "unauthorized");
@@ -150,7 +153,7 @@ export async function handleSdlcRoute(
     const ticket = new URL(request.url).searchParams.get("ticket");
     let userId: string | null;
     if (ticket !== null) {
-      userId = await consumeTicket(ticket, env.SDLC_EDGE_WORKSPACE_ID);
+      userId = await consumeTicket(ticket, env.SDLC_BOB_WORKSPACE_ID ?? coordinatorWorkspaceId);
     } else if (origin === null && authorization?.startsWith("Bearer ")) {
       const key = authorization.slice(7).trim();
       const verified = key ? await verifyApiKey(key) : null;
