@@ -4,6 +4,16 @@ packages:
 - packages/bob/src/*
 - tooling/*
 catalog:
+  # DELIBERATE HOLDBACK (BOB-119): @linear/sdk stays at 87.0.0, below the fleet's 103.0.0.
+  # bob points the SDK at Kanbanger (tasks.gmac.io). Newer SDKs select fields Kanbanger's
+  # GraphQL schema lacks, so linear-sync and setup queries fail validation:
+  #   88.0.0+ Team.ledInitiativeCount (teams(), team())
+  #   88.2.0+ Organization.defaultHomeView (organization())
+  #   89.0.0+ Project.resourceCount (projects(), used by syncLinearProjects)
+  # 87.0.0 is the newest release whose documents for every operation bob uses validate
+  # against Kanbanger's live schema (checked 2026-11-23). Unpin once Kanbanger adds these
+  # fields (KANBAN-82), then re-run that check before bumping.
+  '@linear/sdk': 87.0.0
   '@better-auth/cli': 1.4.21
   '@better-auth/expo': 1.7.26
   '@tailwindcss/postcss': 4.3.5
