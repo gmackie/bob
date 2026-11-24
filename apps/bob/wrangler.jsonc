@@ -90,7 +90,7 @@
     // would release each tick, write nothing) or "on". Keep it off until a
     // human has read a dry-run: there were ~454 stale claims when it was added.
     // BOB_ORPHAN_RECONCILE_LIMIT caps items per sweep (default 200).
-    "BOB_ORPHAN_RECONCILE_MODE": "off",
+    "BOB_ORPHAN_RECONCILE_MODE": "on",
     "BOB_AUTO_MERGE_MAX_PER_RUN": "5",
     "BOB_AUTO_MERGE_MODEL": "claude-sonnet-5",
     "BOB_AUTO_MERGE_INSTANCE_HINT": "gitea @ git.forgegraf.com",
