@@ -25,6 +25,7 @@ import { createTrackedExecution } from "../services/dispatch/trackedExecution";
 import { suggestAgent } from "../services/dispatch/agentHeuristics";
 import { buildExecutionPlanningTask } from "../services/dispatch/executionPlanningTask";
 import { resolveCompletionOutcome } from "../services/dispatch/review-evidence";
+import { BIZPULSE_CREDENTIAL_SETUP } from "./workItems";
 
 import type { HandlerContext } from "./context.js";
 
@@ -617,6 +618,8 @@ export async function dispatchDispatch(
           externalProvider: true,
         },
       });
+      if (workItem?.externalProvider === BIZPULSE_CREDENTIAL_SETUP)
+        throw new TRPCError({ code: "FORBIDDEN", message: "Approve this credential setup in Bob first." });
       const result = await executeTask(
         ctx.userId,
         buildExecutionPlanningTask({ batch, item, workItem }),
@@ -856,6 +859,8 @@ export async function dispatchCheckProgress(
               externalProvider: true,
             },
           });
+          if (workItem?.externalProvider === BIZPULSE_CREDENTIAL_SETUP)
+            throw new TRPCError({ code: "FORBIDDEN", message: "Approve this credential setup in Bob first." });
           const result = await executeTask(
             ctx.userId,
             buildExecutionPlanningTask({ batch, item, workItem }),
@@ -1077,6 +1082,8 @@ export async function dispatchExecutionBatch(
         with: { project: { columns: { key: true } } },
       });
       if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: `Work item ${wiId} not found` });
+      if (existing.externalProvider === BIZPULSE_CREDENTIAL_SETUP)
+        throw new TRPCError({ code: "FORBIDDEN", message: "Approve this credential setup in Bob first." });
       planningProvider = existing.externalProvider ?? "internal";
       issueId = existing.externalProvider === "linear" ? existing.externalId ?? undefined : undefined;
       wiTitle = existing.title;
