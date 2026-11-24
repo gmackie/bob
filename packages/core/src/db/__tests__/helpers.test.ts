@@ -1,9 +1,26 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, onTestFinished } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { applyTestMigrations, sortMigrationFiles } from "./helpers";
+import { applyTestMigrations, createTestDb, sortMigrationFiles } from "./helpers";
+
+describe("createTestDb", () => {
+  it("keeps migrations and writes local to each fixture", async () => {
+    const migrated = await createTestDb();
+    onTestFinished(migrated.teardown);
+    await migrated.pglite.exec("INSERT INTO tenants (name, slug) VALUES ('First', 'first')");
+
+    const empty = await createTestDb({ applyMigrations: false });
+    onTestFinished(empty.teardown);
+    const tables = await empty.pglite.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public'");
+    expect(tables.rows).toEqual([]);
+
+    await applyTestMigrations(empty.pglite);
+    expect((await empty.pglite.query("SELECT slug FROM tenants")).rows).toEqual([]);
+    expect((await migrated.pglite.query("SELECT slug FROM tenants")).rows).toEqual([{ slug: "first" }]);
+  });
+});
 
 describe("applyTestMigrations empty-dir guard", () => {
   it("throws when the migrations directory contains no .sql files", async () => {
