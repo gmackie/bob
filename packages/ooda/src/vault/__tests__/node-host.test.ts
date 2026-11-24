@@ -37,7 +37,7 @@ it("shares one configured host and authorizes before file access", async () => {
   expect(await readFile(join(config.vaultPath, "note.md"), "utf8")).toContain("body");
   await host.routeHost.closeAndDrain();
   await expect(host.routeHost.execute("alice", "personal", service => service.write("late.md", "bad"))).rejects.toMatchObject({ code: "NotReady" });
-});
+}, 20_000); // Allow for SQLite transactions and journal writes on shared CI runners.
 
 it("disables only for absent configuration and pins initialization failures", async () => {
   expect(await createNodeVaultHostLoader({})()).toBeUndefined();
