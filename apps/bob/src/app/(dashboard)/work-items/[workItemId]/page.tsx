@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 
 import { Breadcrumbs } from "~/components/layout/breadcrumbs";
+import { getSession } from "~/auth/server";
+import { db } from "@bob/db/client";
+import { BIZPULSE_CREDENTIAL_SETUP } from "@bob/api/handlers/workItems";
+import { makeCredentialSetup } from "~/server/bizpulse/credential-setup";
 import { WorkflowPageClient } from "./workflow-page-client";
 import { createPlanningClient } from "~/lib/planning/server";
 import {
@@ -11,7 +15,7 @@ import {
 
 interface WorkItemPageProps {
   params: Promise<{ workItemId: string }>;
-  searchParams?: Promise<{ view?: string }>;
+  searchParams?: Promise<{ view?: string; credentialDispatch?: string }>;
 }
 
 export const dynamic = "force-dynamic";
@@ -37,6 +41,42 @@ export default async function WorkItemPage({
 
   // Use the resolved UUID for all downstream queries (workItemId from URL may be a short identifier like "BOB-9")
   const resolvedId = detail.workItem.id;
+  if (detail.workItem.externalProvider === BIZPULSE_CREDENTIAL_SETUP) {
+    const session = await getSession();
+    if (!session?.session || session.session.expiresAt <= new Date()) notFound();
+    const setup = await makeCredentialSetup(db).review({
+      userId: session.user.id,
+      workspaceId: detail.workItem.workspaceId,
+    }, resolvedId).catch(() => null);
+    return (
+      <main className="mx-auto max-w-2xl space-y-4 p-6">
+        <h1 className="text-2xl font-semibold">Credential setup review</h1>
+        {query?.credentialDispatch === "check" && (
+          <p role="alert">Check the current BizPulse approval and any existing Bob run before retrying.</p>
+        )}
+        {setup ? (
+          <>
+            <p>BizPulse plan <code>{setup.request.planId}</code></p>
+            <p>Environment <strong>{setup.request.environment}</strong></p>
+            <ul className="list-disc pl-6">
+              {setup.request.destinations.map(({ app, stage, key }, index) => (
+                <li key={index}><code>{app}/{stage}/{key}</code></li>
+              ))}
+            </ul>
+            {setup.canDispatch ? (
+              <form method="post" action={`/api/bizpulse/credential-setup/${resolvedId}/dispatch`}>
+                <button className="rounded border px-3 py-1" type="submit">Approve and start setup</button>
+              </form>
+            ) : (
+              <p role="status">{setup.dispatched ? "Dispatch requested. Refresh the setup status in BizPulse." : "The BizPulse plan needs current approval."}</p>
+            )}
+          </>
+        ) : (
+          <p role="status">This setup requires the workspace owner's linked BizPulse account and access to the current plan.</p>
+        )}
+      </main>
+    );
+  }
 
   const [
     comments,

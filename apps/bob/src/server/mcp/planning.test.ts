@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@bob/api/handlers/workItems", () => ({
+  BIZPULSE_CREDENTIAL_SETUP: "bizpulse-credential",
   workItemsList: vi.fn(async () => []),
   workItemsDispatch: vi.fn(async () => ({ sessionId: "s1", identifier: "B-1", status: "pending" })),
 }));
@@ -64,7 +65,7 @@ describe("planning review dispatch", () => {
 
     const won = fixture({ dispatchedAt: null }, [{ workItemId }]);
     await expect(won.planning.dispatch(grant, { workItemId, agentType: "codex" })).resolves.toMatchObject({ dispatched: { sessionId: "s1" } });
-    expect(vi.mocked(workItemsDispatch).mock.calls[0]![1]).toEqual({ workItemId, agentType: "codex" });
+    expect(vi.mocked(workItemsDispatch).mock.calls[0]?.[1]).toEqual({ workItemId, agentType: "codex" });
   });
 
   it("gives the approval back when Bob refuses the dispatch", async () => {
