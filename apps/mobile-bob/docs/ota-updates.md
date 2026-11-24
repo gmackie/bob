@@ -14,7 +14,7 @@ the same binary and update channels.
   the same one. A binary only accepts updates signed by the certificate it was
   built with, so rotating the key needs a new binary first.
 - Runtime version: the literal `runtimeVersion` in `app.config.js` (currently
-  `0.1.1`). An update reaches only binaries built with the same value. Native
+  `0.1.1-sdk58` for Expo SDK 58). An update reaches only binaries built with the same value. Native
   dependencies, config plugins, permissions, entitlements, bundle identifiers
   and other native inputs need a new binary and a new runtime version.
 

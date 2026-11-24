@@ -62,7 +62,7 @@ describe("Expo app config", () => {
     const config = loadConfig({ APP_VARIANT: "production" });
 
     expect(config.updates).toEqual(expectedUpdates("production"));
-    expect(config.runtimeVersion).toBe("0.1.1");
+    expect(config.runtimeVersion).toBe("0.1.1-sdk58");
   });
 
   it("ships the certificate the Preflight vault signs with", () => {
@@ -85,6 +85,23 @@ describe("Expo app config", () => {
 });
 
 describe("native updates configuration", () => {
+  it("keeps the embedded iOS and Android runtimes in sync with the OTA publisher", () => {
+    const { runtimeVersion } = loadConfig({ APP_VARIANT: "production" });
+    const ios = readFileSync(
+      resolve(__dirname, "../../ios/BobDev/Supporting/Expo.plist"),
+      "utf8",
+    );
+    const android = readFileSync(
+      resolve(__dirname, "../../android/app/src/main/res/values/strings.xml"),
+      "utf8",
+    );
+
+    const iosRuntime = /<key>EXUpdatesRuntimeVersion<\/key>\s*<string>([^<]+)<\/string>/;
+    const androidRuntime = /<string name="expo_runtime_version">([^<]+)<\/string>/;
+    expect(ios.match(iosRuntime)?.[1]).toBe(runtimeVersion);
+    expect(android.match(androidRuntime)?.[1]).toBe(runtimeVersion);
+  });
+
   // The store build uses the committed ios/ and android/ projects as they are
   // (no prebuild), so they must carry the same updates settings.
   it("points the committed iOS and Android projects at Preflight with the same certificate", () => {

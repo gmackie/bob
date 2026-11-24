@@ -109,6 +109,7 @@ overrides:
   '@esbuild-kit/core-utils>esbuild': 0.25.12
 patchedDependencies:
   extract-zip@2.0.1: patches/extract-zip@2.0.1.patch
+  react-native-css@3.0.7: patches/react-native-css@3.0.7.patch
 packageExtensions:
   drizzle-kit@0.31.11:
     dependencies:
