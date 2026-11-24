@@ -12,6 +12,7 @@ export {
   lt,
   lte,
   ne,
+  notInArray,
   notLike,
   or,
   sql,
