@@ -90,6 +90,10 @@ interface Env {
   SDLC_EDGE_WORKSPACE_ID?: string;
   SDLC_EDGE_INGEST_TOKEN?: string;
   SDLC_VIEWER_USER_IDS?: string;
+  // Orphaned-claim reconciler gate (handlers/orphanReconcileSweep).
+  BOB_ORPHAN_RECONCILE_MODE?: string;
+  BOB_ORPHAN_RECONCILE_IDLE_MS?: string;
+  BOB_ORPHAN_RECONCILE_LIMIT?: string;
   [key: string]: unknown;
 }
 
