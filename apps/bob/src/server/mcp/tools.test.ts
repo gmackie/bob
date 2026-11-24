@@ -141,6 +141,18 @@ describe("MCP tool boundaries", () => {
     expect(identity.access).toHaveBeenLastCalledWith("alice", id, false);
     expect(sdlcEnv.SDLC_EDGE.idFromName).toHaveBeenCalledWith(grant.workspaceId);
   });
+  it("binds the Bob grant to the coordinator's distinct edge ID", async () => {
+    const { tools, sdlcEnv, store } = fixture();
+    const coordinator = "bbbbaaaa-1111-4000-8000-000000000002";
+    Object.assign(sdlcEnv, { SDLC_BOB_WORKSPACE_ID: id, SDLC_EDGE_WORKSPACE_ID: coordinator });
+    const wrongWorkspace = { ...grant, workspaceId: coordinator };
+    await expect(tools.call(wrongWorkspace, "bob_sdlc", {})).rejects.toThrow("SDLC access");
+    await expect(tools.call({ ...wrongWorkspace, scopes: ["bob:read", "bob:write"] }, "bob_sdlc_connect", {})).rejects.toThrow("SDLC access");
+    expect(store.addCredential).not.toHaveBeenCalled();
+    expect(sdlcEnv.SDLC_EDGE.get).not.toHaveBeenCalled();
+    await expect(tools.call(grant, "bob_sdlc", {})).resolves.toMatchObject({ scope: "fleet" });
+    expect(sdlcEnv.SDLC_EDGE.idFromName).toHaveBeenCalledWith(coordinator);
+  });
   it("treats viewer membership as read-only", async () => {
     const { db } = fixture();
     const identity = makeWorkspaceIdentity(db, async () => null);

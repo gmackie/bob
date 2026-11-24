@@ -123,6 +123,8 @@
     // the workspace id is the kill switch: /api/sdlc/* then answers 503. The
     // exporter's token is the secret SDLC_EDGE_INGEST_TOKEN, NOT a var here.
     "SDLC_EDGE_WORKSPACE_ID": "e3d5ca9f-afaa-4276-8b8b-494eeaa80457",
+    // The Bob workspace whose GMA tracker feeds this coordinator.
+    "SDLC_BOB_WORKSPACE_ID": "5503dac2-b147-446c-9b02-95894095fcd5",
     "SDLC_VIEWER_USER_IDS": "tkE66fMc4mevdYYjtq78ALErJ7QnhAge",
     // iOS Live Activity updates from the SDLC edge (BOB-96), sent straight to
     // APNs (Expo does not carry them). The key is the secrets APNS_TEAM_ID,

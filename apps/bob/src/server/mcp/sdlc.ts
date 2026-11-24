@@ -7,6 +7,8 @@ import type { OAuthGrant } from "./types";
 export interface McpSdlcEnv {
   SDLC_EDGE?: DurableObjectNamespace;
   SDLC_EDGE_WORKSPACE_ID?: string;
+  /** Bob workspace whose grants can access this coordinator. Defaults to the edge ID. */
+  SDLC_BOB_WORKSPACE_ID?: string;
   SDLC_VIEWER_USER_IDS?: string;
 }
 
@@ -17,11 +19,11 @@ export function authorizedEdge(grant: OAuthGrant, env: McpSdlcEnv) {
   if (!env.SDLC_EDGE || !env.SDLC_EDGE_WORKSPACE_ID)
     throw new McpToolError("Bob’s SDLC edge is unavailable.");
   if (
-    env.SDLC_EDGE_WORKSPACE_ID !== grant.workspaceId ||
+    (env.SDLC_BOB_WORKSPACE_ID ?? env.SDLC_EDGE_WORKSPACE_ID) !== grant.workspaceId ||
     !isViewer(grant.userId, env.SDLC_VIEWER_USER_IDS)
   )
     throw new McpToolError("SDLC access is unavailable for this workspace and user.");
-  return env.SDLC_EDGE.get(env.SDLC_EDGE.idFromName(grant.workspaceId));
+  return env.SDLC_EDGE.get(env.SDLC_EDGE.idFromName(env.SDLC_EDGE_WORKSPACE_ID));
 }
 
 export async function readSdlc(grant: OAuthGrant, env: McpSdlcEnv, threadId?: string, raw = false) {

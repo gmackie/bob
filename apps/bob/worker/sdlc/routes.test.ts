@@ -335,6 +335,13 @@ describe("handleSdlcRoute: MCP Apps views (single-use ticket)", () => {
     expect((await call(ticketed("t1"), e, consume, session)).status).toBe(401);
     expect(session).not.toHaveBeenCalled();
   });
+  it("redeems a ticket against its Bob workspace and forwards it to the coordinator", async () => {
+    const e = env({ SDLC_BOB_WORKSPACE_ID: "bob-workspace" });
+    const consume = tickets({ t1: "u3" });
+    expect((await call(ticketed("t1"), e, consume)).status).toBe(200);
+    expect(consume).toHaveBeenCalledWith("t1", "bob-workspace");
+    expect(e.SDLC_EDGE.names).toEqual(["gmacko"]);
+  });
   it("answers 401 to an unknown ticket and 403 to a ticket whose user is not on SDLC_VIEWER_USER_IDS", async () => {
     const e = env();
     expect((await call(ticketed("nope"), e, tickets({}))).status).toBe(401);
