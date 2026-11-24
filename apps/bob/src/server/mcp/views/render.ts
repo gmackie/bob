@@ -5,6 +5,7 @@ import type { RunSummary, WorkItem } from "./types";
 
 export type WorkspaceData = {
   workspaceId: string;
+  threadId?: string;
   workItems: readonly WorkItem[];
   runs: readonly RunSummary[];
   runsError?: string;

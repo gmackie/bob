@@ -122,6 +122,7 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS plans (id TEXT PRIMARY KEY, rv INTEGER NOT NULL, json TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, plan_id TEXT NOT NULL, rv INTEGER NOT NULL, json TEXT NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS items_thread ON items(json_extract(json, '$.execution.thread.threadId'))",
   "CREATE INDEX IF NOT EXISTS items_by_plan ON items (plan_id)",
   "CREATE TABLE IF NOT EXISTS tombstones (plan_id TEXT PRIMARY KEY, rv INTEGER NOT NULL)",
   // BOB-99: mirrored Kanbanger issues, newest version per issue.
@@ -332,11 +333,22 @@ export class EdgeStore {
     return row ? (JSON.parse(row.json) as ItemSnapshot) : undefined;
   }
 
+  plans(): PlanSnapshot[] {
+    return this.sql.exec<{ json: string }>("SELECT json FROM plans ORDER BY id").map((r) => JSON.parse(r.json) as PlanSnapshot);
+  }
+
+  items(threadId?: string): ItemSnapshot[] {
+    const rows = threadId === undefined
+      ? this.sql.exec<{ json: string }>("SELECT json FROM items ORDER BY id")
+      : this.sql.exec<{ json: string }>("SELECT json FROM items WHERE json_extract(json, '$.execution.thread.threadId') = ? ORDER BY id", threadId);
+    return rows.map((r) => JSON.parse(r.json) as ItemSnapshot);
+  }
+
   /** The full state, as sent to a client that cannot resume from its cursor. */
   snapshot(coordinatorSeenAt: number | null): Snapshot {
     const { epoch, seq, topology } = this.meta();
-    const plans = this.sql.exec<{ json: string }>("SELECT json FROM plans ORDER BY id").map((r) => JSON.parse(r.json) as PlanSnapshot);
-    const items = this.sql.exec<{ json: string }>("SELECT json FROM items ORDER BY id").map((r) => JSON.parse(r.json) as ItemSnapshot);
+    const plans = this.plans();
+    const items = this.items();
     const issues = this.sql.exec<{ json: string }>("SELECT json FROM issues ORDER BY id").map((r) => JSON.parse(r.json) as TrackedIssue);
     return { type: "snapshot", epoch, seq, plans, items, topology, coordinatorSeenAt, issues };
   }

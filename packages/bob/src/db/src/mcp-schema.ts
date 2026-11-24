@@ -1,5 +1,5 @@
 import { users } from "@gmacko/core/db/schema/auth";
-import { index, pgTable } from "drizzle-orm/pg-core";
+import { index, pgTable, primaryKey } from "drizzle-orm/pg-core";
 
 import { workspaces } from "@bob/schema/tenancy";
 import { workItems } from "@bob/schema/work-items";
@@ -112,3 +112,12 @@ export const mcpDispatchApprovals = pgTable("mcp_dispatch_approvals", (t) => ({
   approvedAt: t.timestamp({ withTimezone: true }).defaultNow().notNull(),
   dispatchedAt: t.timestamp({ withTimezone: true }),
 }));
+
+/** Manual MCP links are independent of a work item's synced tracker identity. */
+export const mcpLinearLinks = pgTable("mcp_linear_links", (t) => ({
+  workspaceId: t.uuid().notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  workItemId: t.uuid().notNull().references(() => workItems.id, { onDelete: "cascade" }),
+  linearIssueId: t.text().notNull(),
+  linearProjectId: t.text(),
+  updatedAt: t.timestamp({ withTimezone: true }).defaultNow().notNull(),
+}), (t) => [primaryKey({ columns: [t.workspaceId, t.workItemId] })]);

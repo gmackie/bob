@@ -14,6 +14,7 @@ import {
 } from "vinext/server/image-optimization";
 import type { ImageConfig } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { mcpSdlcEnv } from "../src/server/mcp/sdlc";
 import { runWithDb } from "../src/lib/db-client-lazy";
 import {
   isAllowedHermesServiceRequest,
@@ -782,16 +783,17 @@ export default Sentry.withSentry(
               );
               return apiKeyAuth ? { userId: apiKeyAuth.userId, permissions: apiKeyAuth.permissions } : null;
             },
-            async (ticket) => {
+            async (ticket, workspaceId) => {
               const { connectionString, isHyperdrive } =
                 getHyperdriveConnectionString(runtimeEnv);
               return runWithDb(connectionString, isHyperdrive, async () => {
-                const [{ db }, { makeOAuthStore }, { consumeSdlcTicket }] = await Promise.all([
+                const [{ db }, { makeOAuthStore }, { consumeSdlcTicket }, { hasWorkspaceAccess }] = await Promise.all([
                   import("@bob/db/client"),
                   import("../src/server/mcp/store"),
                   import("../src/server/mcp/sdlc-ticket"),
+                  import("../src/server/mcp/identity"),
                 ]);
-                return consumeSdlcTicket(makeOAuthStore(db), ticket);
+                return consumeSdlcTicket(makeOAuthStore(db), ticket, workspaceId, (userId, workspace) => hasWorkspaceAccess(db, userId, workspace, true));
               });
             },
           );
@@ -981,8 +983,9 @@ export default Sentry.withSentry(
         // Run vinext with a request-scoped DB client.
         const { connectionString, isHyperdrive } =
           getHyperdriveConnectionString(runtimeEnv);
+        const serve = () => handler.fetch(request, runtimeEnv, ctx);
         return runWithDb(connectionString, isHyperdrive, () =>
-          handler.fetch(request, runtimeEnv, ctx),
+          url.pathname === "/mcp" ? mcpSdlcEnv.run(runtimeEnv, serve) : serve(),
         );
       },
       { serviceName: "bob" },

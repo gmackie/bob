@@ -5,12 +5,12 @@ vi.mock("@bob/api/handlers/workItems", () => ({
   workItemsDispatch: vi.fn(async () => ({ sessionId: "s1", identifier: "B-1", status: "pending" })),
 }));
 vi.mock("@bob/api/handlers/publicApi", () => ({
-  publicApiListRuns: vi.fn(async () => []),
-  publicApiListRunsByWorkItem: vi.fn(async () => []),
+  workspaceRunSummaries: vi.fn(async () => []),
 }));
+import { workspaceRunSummaries } from "@bob/api/handlers/publicApi";
 import { workItemsDispatch } from "@bob/api/handlers/workItems";
 import type { Db } from "@bob/db/client";
-import { makePlanning } from "./planning";
+import { makePlanning, workspacePollSeconds } from "./planning";
 import type { OAuthGrant } from "./types";
 
 const workItemId = "aaaabbbb-1111-4000-8000-000000000002";
@@ -68,6 +68,14 @@ describe("planning review dispatch", () => {
     expect(vi.mocked(workItemsDispatch).mock.calls[0]?.[1]).toEqual({ workItemId, agentType: "codex" });
   });
 
+  it("keeps a spent approval when the review refresh fails after dispatch", async () => {
+    vi.mocked(workspaceRunSummaries).mockResolvedValueOnce([]).mockRejectedValueOnce(new Error("refresh failed"));
+    const { planning, sets } = fixture({ dispatchedAt: null }, [{ workItemId }]);
+    await expect(planning.dispatch(grant, { workItemId })).rejects.toThrow("refresh failed");
+    expect(workItemsDispatch).toHaveBeenCalledOnce();
+    expect(sets).toEqual([{ dispatchedAt: expect.any(Date) }]);
+  });
+
   it("gives the approval back when Bob refuses the dispatch", async () => {
     vi.mocked(workItemsDispatch).mockRejectedValueOnce(new Error("quota"));
     const { planning, sets } = fixture({ dispatchedAt: null }, [{ workItemId }]);
@@ -81,4 +89,8 @@ describe("planning review dispatch", () => {
     await expect(planning.dispatch(grant, { workItemId })).rejects.toThrow("disabled");
     expect(sets).toEqual([]);
   });
+});
+
+it("applies the plugin polling bounds on the service", () => {
+  expect(["", "x", "0", "30.7", "10000"].map(workspacePollSeconds)).toEqual([60, 60, 15, 31, 3600]);
 });

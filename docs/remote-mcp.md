@@ -1,7 +1,7 @@
 # Remote MCP connections
 
 Bob exposes a stateless MCP Streamable HTTP endpoint at
-`https://bob.blder.bot/mcp` after this feature is deployed. In a remote MCP
+`https://bob.blder.bot/mcp`. Bob is an optional connection in T3 Code. In a remote MCP
 client, add that URL and select OAuth authentication. Sign in with GitHub,
 review the requested permissions, select one workspace, and allow the
 connection. A separate connection is needed for each workspace.
@@ -32,32 +32,34 @@ return at most 100 recent entries, with optional `projectId` and `status` filter
 | `bob_add_comment` | `bob:write` |
 | `bob_workspace` | `bob:read` |
 | `bob_planning_review` | `bob:read` |
-| `bob_runs_list` | `bob:read` |
-| `bob_sdlc` | `bob:read` |
+| `bob_runs_list`, `bob_work_item_get` | `bob:read` |
+| `bob_linear_links` (`get`, `list`) | `bob:read` |
+| `bob_linear_links` (`upsert`, `remove`) | `bob:write` |
+| `bob_sdlc`, `bob_sdlc_item_for_thread` | `bob:read` |
 | `bob_planning_approve` (view only) | `bob:write` |
 | `bob_planning_dispatch` | `bob:write` |
 | `bob_sdlc_connect` (view only) | `bob:write` |
 
 ## Views (MCP Apps)
 
-Hosts that render MCP Apps get three `ui://` views, listed by `resources/list`:
-`ui://bob/workspace.html` (from `bob_workspace`), `ui://bob/planning-review.html`
-(from `bob_planning_review` and `bob_planning_dispatch`) and `ui://bob/sdlc.html`
-(from `bob_sdlc`). The T3 Code Bob plugin opens them as panels. They are bundled
-into `src/server/mcp/views/generated.ts`; after changing a view, run
-`pnpm --filter @bob/blder exec tsx scripts/build-mcp-views.ts`.
+The four panel contributions from `com.t3code.bob` v0.2.2 use these IDs and commands. Installations can request just `bob:read` for all four. T3 supplies its active thread through `hostContext.t3.threadId`.
 
-Dispatch from the planning review needs a person's approval first:
-`bob_planning_approve` records it in `mcp_dispatch_approvals`, and
-`bob_planning_dispatch` spends it once. Tools marked view only declare
-`_meta.ui.visibility: ["app"]`; a host that ignores visibility can still hand
-them to a model. Dispatch is off unless `BOB_OODA_DISPATCH_ENABLED=true`, the
-same switch as REST dispatch.
+| Panel ID | Title | Scope | Resource URI | Command ID |
+| --- | --- | --- | --- | --- |
+| `bob-workspace` | Bob planning | project | `ui://bob/workspace.html` | `bob-open-planning` |
+| `bob-runs` | Bob runs | thread | `ui://bob/workspace.html` | `bob-open-runs` |
+| `bob-sdlc` | Bob SDLC | thread | `ui://bob/sdlc.html` | `bob-open-sdlc` |
+| `bob-sdlc-fleet` | Bob SDLC fleet | project | `ui://bob/sdlc.html` | `bob-open-sdlc-fleet` |
 
-The SDLC view opens `/api/sdlc/ws` itself. Its sandboxed frame has no session
-cookie, so `bob_sdlc_connect` mints a 60-second single-use ticket for the socket
-URL; the user must still be on `SDLC_VIEWER_USER_IDS`. The view's resource
-declares the edge origin in `_meta.ui.csp.connectDomains`.
+`bob_workspace` opens the workspace or thread-runs document. Pass optional Bob `projectId` and title `query` to filter work items, and optional `threadId` to filter runs. Use Bob’s `bob_list_projects` for project UUIDs. T3 project identifiers belong to the host. A supplied `workspaceId` must equal the OAuth grant. `bob_runs_list` accepts optional `workItemId` and `threadId`. Filters run before the result limit. Bob correlates session-backed T3 runs using the runner's stable thread ID. `bob_work_item_get({ workItemId })` returns the plugin's normalized `{ item }` shape alongside the existing `bob_get_work_item({ id })` API.
+
+`bob_planning_review` and `bob_planning_dispatch` open the third resource, `ui://bob/planning-review.html`. Read-only connections see planning evidence. An authorized editor can approve from the view using `bob_planning_approve`, then dispatch once using `bob_planning_dispatch` when `BOB_OODA_DISPATCH_ENABLED=true`. Postgres stores approvals by work item and workspace. The dispatch result includes the normalized run (`id`, `providerId`, `status`) and Bob's `sessionId`, `identifier` and `sessionStatus`. MCP Apps hosts enforce the approval tool's `visibility: ["app"]`; direct OAuth clients with write access are trusted to honor this interaction.
+
+`bob_sdlc({ threadId })` reads the matched item, pending questions, current attempt tail and CI. With no arguments it reads fleet counts, attention items and plan progress. `bob_sdlc_item_for_thread({ threadId })` returns the coordinator item and plan, with nulls for an unmatched thread. The service reads the workspace Durable Object only when the OAuth workspace matches `SDLC_EDGE_WORKSPACE_ID` and the user is on `SDLC_VIEWER_USER_IDS`. A reachable edge reports coordinator freshness with `offline`. Visible workspaces poll every 60 seconds by default. The service setting `BOB_POLL_SECONDS` accepts 15–3600 seconds. SDLC threads poll every 5 seconds and the fleet every 15. The three HTML resources use the host's MCP bridge and can run in a network-isolated frame. The older `bob_sdlc_connect` socket tool remains app-only and requires write access because its socket also accepts commands.
+
+`bob_linear_links` stores manual Linear-compatible issue associations in Postgres. `get`, `remove` and `upsert` take `bobWorkItemId`. `upsert` also takes `linearIssueId` and optional `linearProjectId`. `list` returns `{ links, nextOffset }`, with a default page of 100. These associations are independent of tracker sync. New connections use server state. Existing local SQLite links can be carried over explicitly with `upsert`; historical local approvals require fresh review in Bob.
+
+`resources/list` and `resources/read` serve `text/html;profile=mcp-app`. View-opening tools advertise both `_meta.ui.resourceUri` and `_meta["ui/resourceUri"]`. Regenerate the committed HTML after editing a view with `pnpm --filter @bob/blder exec tsx scripts/build-mcp-views.ts`.
 
 MCP protocol versions: `2025-11-25`, `2025-06-18`, and `2025-03-26`.
 POST requests require `Accept: application/json, text/event-stream`. Responses
@@ -72,8 +74,8 @@ tools will need additional support.
 
 ## Operations
 
-Apply `packages/bob/src/db/drizzle/0037_mcp_oauth.sql` and
-`0043_mcp_dispatch_approvals.sql` through the existing Bob
+Apply `packages/bob/src/db/drizzle/0037_mcp_oauth.sql`,
+`0043_mcp_dispatch_approvals.sql` and `0045_mcp_linear_links.sql` through the existing Bob
 guarded production migration runner (`pnpm --filter @bob/blder predeploy`) before deploying the Worker. The schema is additive. Set
 `FRONTEND_URL` to the canonical public origin; discovery and token audiences
 never trust request Host headers. Existing Bob session auth and Postgres are
@@ -113,7 +115,7 @@ consent, the token exchange, and workspace access end to end.
 Local verification:
 
 ```sh
-pnpm --filter @bob/blder exec vitest run src/server/mcp/
+pnpm --filter @bob/blder exec vitest run src/server/mcp/ worker/sdlc/mcp.test.ts worker/sdlc/routes.test.ts
 pnpm --filter @bob/blder typecheck
 pnpm --filter @bob/blder build
 ```
