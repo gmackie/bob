@@ -57,6 +57,7 @@ appId: com.gmacko.bob.dev
     commands:
       - assertVisible: "Use work items to move from intake into execution"
       - assertVisible: "Keep planning, comments, and artifacts in one place"
+      - takeScreenshot: screenshots/01-onboarding-bullets
       - tapOn: "Skip"
 - extendedWaitUntil:
     visible: "Continue with GitHub"
