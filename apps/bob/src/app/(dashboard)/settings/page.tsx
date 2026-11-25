@@ -52,7 +52,10 @@ export default function SettingsPage() {
         </CollapsibleSection>
         <CollapsibleSection title="Integrations" sectionId="integrations" defaultOpen forceOpen={openSection === "integrations"}>
           <IntegrationsSection />
-          <Link href="/settings/bizpulse" className="underline">Connect BizPulse</Link>
+          <div className="flex flex-wrap gap-4">
+            <Link href="/settings/bizpulse" className="underline">Connect BizPulse</Link>
+            <Link href="/settings/llavero" className="underline">Connect Llavero</Link>
+          </div>
         </CollapsibleSection>
         <CollapsibleSection title="Git Providers" sectionId="git-providers" defaultOpen>
           <GitProvidersSection />

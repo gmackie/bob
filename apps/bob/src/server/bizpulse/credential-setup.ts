@@ -158,7 +158,7 @@ export function makeCredentialSetup(db: Db) {
     const run = approved?.dispatchedAt
       ? await db.query.taskRuns.findFirst({
           where: and(eq(taskRuns.workItemId, workItemId), eq(taskRuns.userId, actor.userId)),
-          columns: { id: true, status: true },
+          columns: { id: true, sessionId: true, status: true },
           orderBy: (row, { desc }) => [desc(row.createdAt)],
         })
       : undefined;
@@ -174,7 +174,14 @@ export function makeCredentialSetup(db: Db) {
         approved?.dispatchedAt ? "waiting" :
         !isApproved(plan) ? "approve_credentials" : "approve_dispatch",
     };
-    return run ? { ...result, runId: run.id } : result;
+    return run
+      ? {
+          ...result,
+          runId: run.id,
+          runStatus: run.status,
+          ...(run.sessionId ? { sessionId: run.sessionId } : {}),
+        }
+      : result;
   }
 
   return {

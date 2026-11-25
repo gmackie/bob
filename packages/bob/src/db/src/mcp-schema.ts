@@ -95,6 +95,23 @@ export const bizpulseMcpConsent = pgTable(
   (t) => [index("bizpulse_mcp_consent_expiry_idx").on(t.expiresAt)],
 );
 
+export const llaveroMcpLink = pgTable(
+  "llavero_mcp_link",
+  (t) => ({
+    id: t.text().primaryKey(),
+    userId: t.text().notNull().references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: t.uuid().notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    origin: t.text().notNull(),
+    clientId: t.text().notNull(),
+    stateHash: t.text().unique(),
+    verifier: t.jsonb().$type<{ ciphertext: string; iv: string; tag: string }>(),
+    consentExpiresAt: t.timestamp({ withTimezone: true }),
+    tokens: t.jsonb().$type<{ ciphertext: string; iv: string; tag: string }>(),
+    expiresAt: t.timestamp({ withTimezone: true }),
+  }),
+  (t) => [index("llavero_mcp_link_owner_idx").on(t.userId, t.workspaceId)],
+);
+
 /** A person's approval to dispatch a work item from the MCP planning review. */
 export const mcpDispatchApprovals = pgTable("mcp_dispatch_approvals", (t) => ({
   workItemId: t

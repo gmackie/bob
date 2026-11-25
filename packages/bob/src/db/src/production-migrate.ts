@@ -28,6 +28,7 @@ const approvedMigrations = new Set([
   "0043_mcp_dispatch_approvals.sql",
   "0044_bizpulse_mcp.sql",
   "0045_mcp_linear_links.sql",
+  "0046_llavero_mcp_link.sql",
 ]);
 interface MigrationHash {
   filename: string;
@@ -40,8 +41,8 @@ export function validateProductionMigrationLedger(
 ): void {
   const applied = new Map(ledger.map((entry) => [entry.filename, entry.hash]));
   if (
-    files.length !== 54 ||
-    files.at(-1)?.filename !== "0045_mcp_linear_links.sql"
+    files.length !== 55 ||
+    files.at(-1)?.filename !== "0046_llavero_mcp_link.sql"
   ) {
     throw new Error(
       "Production migration roster changed; review the deployment migration guard",
