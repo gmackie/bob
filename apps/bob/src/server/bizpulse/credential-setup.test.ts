@@ -20,6 +20,8 @@ vi.mock("@bob/api/handlers/workItems", () => ({
 const actor = { workspaceId: "5247aa66-11c8-44cf-adc5-85105e1a556c", userId: "owner" };
 const workspaceId = "9eb6e97a-49e9-4aa1-98d0-0c07224ad94b";
 const workItemId = "fca59397-f7e6-44db-9b9b-1b2226bd5efa";
+const runId = "fca59397-f7e6-44db-9b9b-1b2226bd5efb";
+const sessionId = "fca59397-f7e6-44db-9b9b-1b2226bd5efc";
 const planId = "cc5848a8-9059-4088-97f8-91914721983a";
 const startupId = "3efc9953-f59d-4b97-aaa0-3dbcc1a07061";
 const digest = "0".repeat(64);
@@ -74,7 +76,7 @@ function fixture() {
       workItems: { findFirst: async () => item },
       mcpDispatchApprovals: { findFirst: async () => approval },
       taskRuns: {
-        findFirst: async () => ({ id: "run-fixture", status: "running" }),
+        findFirst: async () => ({ id: runId, sessionId, status: "running" }),
       },
     },
   } as unknown as Db;
@@ -117,7 +119,9 @@ describe("BizPulse credential setup handoff", () => {
     await expect(setup.status(actor, workItemId, input.operationKey)).resolves.toMatchObject({
       dispatchApproval: "dispatched",
       credentialApproval: "required",
-      runId: "run-fixture",
+      runId,
+      sessionId,
+      runStatus: "running",
     });
   });
 });

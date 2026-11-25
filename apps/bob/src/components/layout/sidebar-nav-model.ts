@@ -234,6 +234,7 @@ const KNOWN_CHILD_ROUTES: readonly string[] = [
   "/providers",
   "/sessions",
   "/settings/bizpulse",
+  "/settings/llavero",
   "/work-items",
 ];
 

@@ -154,7 +154,7 @@ export async function revoke(config: BizPulseConfig, token: string) {
 }
 
 export async function useClient<T>(
-  config: BizPulseConfig,
+  config: Pick<BizPulseConfig, "resource">,
   accessToken: string,
   run: (client: Client) => Promise<T>,
 ) {
