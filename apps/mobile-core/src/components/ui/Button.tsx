@@ -7,6 +7,7 @@ interface ButtonProps {
   variant?: "primary" | "secondary" | "ghost";
   size?: "default" | "sm";
   icon?: React.ReactNode;
+  accessibilityLabel?: string;
   disabled?: boolean;
   className?: string;
 }
@@ -18,11 +19,18 @@ const textColors = {
 } as const;
 
 export function Button({
-  children, onPress, variant = "primary", size = "default",
-  icon, disabled = false, className = "",
+  children,
+  onPress,
+  variant = "primary",
+  size = "default",
+  icon,
+  disabled = false,
+  className = "",
+  accessibilityLabel,
 }: ButtonProps) {
   const baseClasses = "flex-row items-center justify-center rounded-xl";
-  const sizeClasses = size === "sm" ? "h-10 px-3" : "h-12 px-4";
+  const sizeClasses =
+    size === "sm" ? "min-h-11 px-3 py-2" : "min-h-12 px-4 py-2";
   const variantClasses = {
     primary: "bg-primary",
     secondary: "bg-card-elevated border border-border",
@@ -37,11 +45,20 @@ export function Button({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={
+        accessibilityLabel ??
+        (typeof children === "string" ? children : undefined)
+      }
+      accessibilityState={{ disabled }}
       disabled={disabled}
       className={`${baseClasses} ${sizeClasses} ${variantClasses[variant]} ${className} ${disabled ? "opacity-50" : "active:opacity-90"}`}
     >
       {icon && <View className="mr-2">{icon}</View>}
-      <Text className={textWeights[variant]} style={{ color: textColors[variant] }}>
+      <Text
+        className={textWeights[variant]}
+        style={{ color: textColors[variant] }}
+      >
         {children}
       </Text>
     </Pressable>
