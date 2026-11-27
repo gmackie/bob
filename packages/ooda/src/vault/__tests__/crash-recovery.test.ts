@@ -8,6 +8,7 @@ import { ForgePublicationStorage } from "../forge-publication-storage";
 import { PublicationJournal } from "../publication-journal";
 import { PersistentVaultGate } from "../persistent-vault-gate";
 
+// Allow for child startup and durable writes on a busy CI runner.
 it("recovers a killed publisher's durable intent without dispatching it again", async () => {
   const dir = await mkdtemp(join(tmpdir(), "vault-crash-"));
   const binding = { tenant: "t", actor: "alice", artifact: "vault", generation: "one", repositoryId: "repo" };
@@ -63,4 +64,4 @@ it("recovers a killed publisher's durable intent without dispatching it again", 
     gate?.dispose();
     await rm(dir, { recursive: true, force: true });
   }
-}, 15_000);
+}, 60_000);

@@ -1,4 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
+import { isViewer } from "../../src/lib/sdlc-viewers";
+export { isViewer, viewerList } from "../../src/lib/sdlc-viewers";
 import { MAX_INGEST_BYTES } from "./store";
 import { MAX_TAIL_BYTES } from "./tail";
 
@@ -7,6 +9,8 @@ export interface SdlcRouteEnv {
   SDLC_EDGE?: DurableObjectNamespace;
   /** The coordinator's workspaceId; names the one SdlcEdge instance. Empty: the routes answer 503. */
   SDLC_EDGE_WORKSPACE_ID?: string;
+  /** Bob workspace whose grants can access this coordinator. Defaults to the edge ID. */
+  SDLC_BOB_WORKSPACE_ID?: string;
   /** The coordinator exporter's bearer token, at least 32 characters. */
   SDLC_EDGE_INGEST_TOKEN?: string;
   /** Comma-separated user ids allowed to watch. Empty: nobody. */
@@ -25,11 +29,6 @@ export function bearerMatches(header: string | null, token: string | undefined):
   return diff === 0;
 }
 
-/** The user ids on a comma-separated allow-list (SDLC_VIEWER_USER_IDS), deduplicated. */
-export const viewerList = (csv: string | undefined) =>
-  [...new Set((csv ?? "").split(",").map((s) => s.trim()).filter(Boolean))];
-/** Whether userId is on a comma-separated allow-list (SDLC_VIEWER_USER_IDS). Empty: nobody. */
-export const isViewer = (userId: string, csv: string | undefined) => viewerList(csv).includes(userId);
 const listed = isViewer;
 
 /**
@@ -73,7 +72,7 @@ export type VerifyApiKey = (key: string) => Promise<VerifiedApiKey | null>;
  * refused. Device-login keys are minted with ["read", "write"] (api/v1/device/approve).
  */
 /** Resolves a single-use socket ticket (bob_sdlc_connect, src/server/mcp/sdlc-ticket.ts) to its user; null when unknown, used or expired. */
-export type ConsumeTicket = (ticket: string) => Promise<string | null>;
+export type ConsumeTicket = (ticket: string, workspaceId: string) => Promise<string | null>;
 
 export const keyMayConnect = (permissions: readonly string[]) => permissions.includes("write") || permissions.includes("admin");
 
@@ -102,8 +101,9 @@ export async function handleSdlcRoute(
 ): Promise<Response> {
   const { pathname } = new URL(request.url);
   const namespace = env.SDLC_EDGE;
-  if (!env.SDLC_EDGE_WORKSPACE_ID || !namespace) return error(503, "sdlc edge not configured");
-  const stub = () => namespace.get(namespace.idFromName(env.SDLC_EDGE_WORKSPACE_ID!));
+  const coordinatorWorkspaceId = env.SDLC_EDGE_WORKSPACE_ID;
+  if (!coordinatorWorkspaceId || !namespace) return error(503, "sdlc edge not configured");
+  const stub = () => namespace.get(namespace.idFromName(coordinatorWorkspaceId));
 
   if (pathname === "/api/sdlc/ingest") {
     if (!bearerMatches(request.headers.get("authorization"), env.SDLC_EDGE_INGEST_TOKEN)) return error(401, "unauthorized");
@@ -153,7 +153,7 @@ export async function handleSdlcRoute(
     const ticket = new URL(request.url).searchParams.get("ticket");
     let userId: string | null;
     if (ticket !== null) {
-      userId = await consumeTicket(ticket);
+      userId = await consumeTicket(ticket, env.SDLC_BOB_WORKSPACE_ID ?? coordinatorWorkspaceId);
     } else if (origin === null && authorization?.startsWith("Bearer ")) {
       const key = authorization.slice(7).trim();
       const verified = key ? await verifyApiKey(key) : null;

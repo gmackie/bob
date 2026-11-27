@@ -15,11 +15,12 @@
 // run are active AND it has been quiet past a generous threshold, so a live
 // item is never yanked out from under a runner.
 
+import { asc, exists, not, notInArray } from "drizzle-orm";
 import { and, eq, inArray, sql } from "@bob/db";
-import { db } from "@bob/db/client";
+import { db as defaultDb } from "@bob/db/client";
 import { agentRuns, chatConversations, workItems } from "@bob/db/schema";
 import { resolveOrphanedClaim } from "../services/dispatch/orphaned-claims.js";
-import { mirrorWorkItemEvent } from "../services/tracker/trackerMirror.js";
+import { mirrorAppliedWorkItemEvent } from "../services/tracker/trackerMirror.js";
 
 /** Session statuses that still hold a work item. */
 const ACTIVE_SESSION_STATUSES = [
@@ -33,7 +34,8 @@ const ACTIVE_SESSION_STATUSES = [
 ];
 
 /** Run statuses that mean the run is over. */
-const TERMINAL_RUN_STATUSES = ["completed", "failed", "interrupted", "cancelled"];
+const TERMINAL_RUN_STATUSES = ["completed", "failed", "interrupted"] satisfies
+  (typeof agentRuns.$inferSelect)["status"][];
 
 export interface ReconcileOrphanedClaimsOptions {
   /** How long an item may sit untouched before it counts as abandoned. */
@@ -51,56 +53,56 @@ export interface ReconcileOrphanedClaimsResult {
 
 export async function reconcileOrphanedClaims(
   opts: ReconcileOrphanedClaimsOptions = {},
+  db = defaultDb,
 ): Promise<ReconcileOrphanedClaimsResult> {
   const idleMs = opts.idleMs ?? 12 * 60 * 60 * 1000;
   const limit = opts.limit ?? 200;
   const idleSecs = Math.floor(idleMs / 1000);
 
+  const lastTouched = sql<string>`coalesce(${workItems.updatedAt}, ${workItems.createdAt})`;
+  const oldClaim = and(
+    eq(workItems.status, "in_progress"),
+    sql`${lastTouched} < now() - make_interval(secs => ${idleSecs})`,
+  );
+  const itemRuns = eq(agentRuns.workItemId, sql`${workItems.id}::text`);
+  const hasAnyRun = exists(
+    db.select({ id: agentRuns.id }).from(agentRuns).where(itemRuns),
+  );
+  const hasActiveRun = exists(
+    db.select({ id: agentRuns.id }).from(agentRuns)
+      .where(and(itemRuns, notInArray(agentRuns.status, TERMINAL_RUN_STATUSES))),
+  );
+  const hasActiveSession = exists(
+    db.select({ id: chatConversations.id }).from(chatConversations)
+      .where(and(
+        eq(chatConversations.workItemId, workItems.id),
+        inArray(chatConversations.status, ACTIVE_SESSION_STATUSES),
+      )),
+  );
+  const hasLiveWork = sql`(${hasActiveSession} or ${hasActiveRun})`;
   const candidates = await db
     .select({
       id: workItems.id,
       status: workItems.status,
-      updatedAt: workItems.updatedAt,
-      sourceMetadata: workItems.sourceMetadata,
+      lastTouched,
+      hasActiveRun: sql<boolean>`${hasActiveRun}`,
+      hasActiveSession: sql<boolean>`${hasActiveSession}`,
+      hasAnyRun: sql<boolean>`${hasAnyRun}`,
     })
     .from(workItems)
-    .where(
-      and(
-        eq(workItems.status, "in_progress"),
-        sql`coalesce(${workItems.updatedAt}, ${workItems.createdAt})
-            < now() - make_interval(secs => ${idleSecs})`,
-      ),
-    )
+    .where(oldClaim)
+    .orderBy(asc(hasLiveWork), asc(lastTouched), asc(workItems.id))
     .limit(limit);
 
   const released: { id: string; reason: string }[] = [];
 
   for (const item of candidates) {
-    const [sessions, runs] = await Promise.all([
-      db
-        .select({ n: sql<number>`count(*)::int` })
-        .from(chatConversations)
-        .where(
-          and(
-            eq(chatConversations.workItemId, item.id),
-            inArray(chatConversations.status, ACTIVE_SESSION_STATUSES),
-          ),
-        ),
-      db
-        .select({
-          total: sql<number>`count(*)::int`,
-          live: sql<number>`count(*) filter (where ${agentRuns.status} not in ${TERMINAL_RUN_STATUSES})::int`,
-        })
-        .from(agentRuns)
-        .where(eq(agentRuns.workItemId, item.id)),
-    ]);
-
     const outcome = resolveOrphanedClaim({
       status: item.status,
-      hasActiveSession: (sessions[0]?.n ?? 0) > 0,
-      hasActiveRun: (runs[0]?.live ?? 0) > 0,
-      hasAnyRun: (runs[0]?.total ?? 0) > 0,
-      idleMs: Date.now() - new Date(item.updatedAt ?? Date.now()).getTime(),
+      hasActiveSession: item.hasActiveSession,
+      hasActiveRun: item.hasActiveRun,
+      hasAnyRun: item.hasAnyRun,
+      idleMs: Date.now() - new Date(item.lastTouched).getTime(),
       thresholdMs: idleMs,
     });
 
@@ -111,18 +113,28 @@ export async function reconcileOrphanedClaims(
       continue;
     }
     try {
-      // Carry the existing attempt count through: mirrorWorkItemEvent writes
-      // whatever it is given, and resetting it would erase the history that
-      // decides when an item is given up on as blocked.
-      const attempts = Number(
-        (item.sourceMetadata as Record<string, unknown> | null)?.attempts ?? 0,
+      // An overlapping tick or a newly active run may have changed this claim.
+      const [changed] = await db
+        .update(workItems)
+        .set({ status: outcome.to })
+        .where(and(eq(workItems.id, item.id), oldClaim, not(hasLiveWork)))
+        .returning({
+          id: workItems.id,
+          status: workItems.status,
+          sourceMetadata: workItems.sourceMetadata,
+          externalProvider: workItems.externalProvider,
+          externalId: workItems.externalId,
+          workspaceId: workItems.workspaceId,
+        });
+      if (!changed) continue;
+      const attempts = Number(changed.sourceMetadata.attempts ?? 0);
+      released.push({ id: changed.id, reason: outcome.reason });
+      await mirrorAppliedWorkItemEvent(
+        db,
+        changed,
+        { kind: "requeued", reason: outcome.reason, attempt: Number.isFinite(attempts) ? attempts : 0 },
+        outcome.to,
       );
-      await mirrorWorkItemEvent(db, item.id, {
-        kind: "requeued",
-        reason: outcome.reason,
-        attempt: Number.isFinite(attempts) ? attempts : 0,
-      });
-      released.push({ id: item.id, reason: outcome.reason });
     } catch (err) {
       console.error(
         `[orphan-reconcile] release of work item ${item.id} failed:`,

@@ -1603,22 +1603,53 @@ export async function publicApiGetRun(
   return run;
 }
 
-export async function publicApiListRuns(
-  ctx: HandlerContext,
-  input: { workspaceId: string; limit: number },
-) {
+async function runWorkspaceTenant(ctx: HandlerContext, workspaceId: string) {
   const workspace = await ctx.db.query.workspaces.findFirst({
-    where: eq(workspaces.id, input.workspaceId),
+    where: eq(workspaces.id, workspaceId),
   });
   if (!workspace?.tenantId) {
     throw new TRPCError({ code: "NOT_FOUND" });
   }
   await assertTenantAccess(ctx.db, ctx.userId, workspace.tenantId);
 
+  return workspace.tenantId;
+}
+
+/** Narrow run projection for the MCP panels, with every filter applied before the limit. */
+export async function workspaceRunSummaries(
+  ctx: HandlerContext,
+  input: { workspaceId: string; projectId?: string; workItemId?: string; threadId?: string; limit: number },
+) {
+  const tenantId = await runWorkspaceTenant(ctx, input.workspaceId);
+  const session = sql`coalesce(${agentRuns.sessionId}::text, ${agentRuns.agentConfig} ->> 'sessionId')`;
+  const recordedThread = sql<string | null>`nullif(${agentRuns.agentConfig} ->> 'threadId', '')`;
+  // The T3 runner derives its thread id from the Bob session UUID (t3-bridge.ts).
+  // Older run rows kept the session id only in agent_config. A workspace-wide
+  // listing reports only recorded thread ids: a local run may also have a session.
+  const runnerThread = sql`'bob-' || left(encode(sha256(convert_to(${session}, 'UTF8')), 'hex'), 32)`;
+  const thread = sql`coalesce(${recordedThread}, ${runnerThread})`;
+  return ctx.db.select({
+    id: agentRuns.id, status: agentRuns.status, workItemId: agentRuns.workItemId,
+    agentType: agentRuns.agentType, summary: agentRuns.summary, createdAt: agentRuns.createdAt,
+    threadId: input.threadId ? sql<string>`${input.threadId}::text` : recordedThread,
+  }).from(agentRuns).where(and(
+    eq(agentRuns.workspaceId, input.workspaceId), eq(agentRuns.tenantId, tenantId),
+    input.workItemId ? eq(agentRuns.workItemId, input.workItemId) : undefined,
+    input.threadId ? eq(thread, input.threadId) : undefined,
+    input.projectId ? inArray(agentRuns.workItemId, ctx.db.select({ id: sql<string>`${workItems.id}::text` })
+      .from(workItems).where(and(eq(workItems.workspaceId, input.workspaceId), eq(workItems.projectId, input.projectId)))) : undefined,
+  )).orderBy(desc(agentRuns.createdAt), desc(agentRuns.id)).limit(input.limit);
+}
+
+export async function publicApiListRuns(
+  ctx: HandlerContext,
+  input: { workspaceId: string; limit: number },
+) {
+  const tenantId = await runWorkspaceTenant(ctx, input.workspaceId);
   return ctx.db.query.agentRuns.findMany({
     where: and(
       eq(agentRuns.workspaceId, input.workspaceId),
-      eq(agentRuns.tenantId, workspace.tenantId),
+      eq(agentRuns.tenantId, tenantId),
     ),
     with: { artifacts: true },
     orderBy: [desc(agentRuns.createdAt)],

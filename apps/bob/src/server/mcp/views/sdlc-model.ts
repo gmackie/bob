@@ -1,5 +1,5 @@
 // Pure view models for ui://bob/sdlc.html: a T3 thread's SDLC item, or the fleet.
-// The view folds the edge socket itself; these turn its EdgeView into what it draws.
+// The edge projects its durable coordinator state into the data the panel renders.
 import type { EdgeConnection } from "~/components/sdlc/edge-client";
 import {
   ITEM_STATES,

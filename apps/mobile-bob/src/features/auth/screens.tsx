@@ -53,7 +53,7 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
           {slide?.title}
         </Text>
 
-        <View className="space-y-3">
+        <View style={{ alignSelf: "stretch" }} className="gap-3">
           {slide?.bullets.map((bullet) => (
             <View key={bullet} className="flex-row items-start">
               <View className="bg-primary mt-2 mr-3 h-1.5 w-1.5 rounded-full" />

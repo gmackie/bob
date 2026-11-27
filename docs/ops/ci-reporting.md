@@ -16,6 +16,9 @@ The publisher verifies repository, source SHA, native run ID, visible run
 number, and attempt against its context before sending. A failed, cancelled,
 skipped, or unknown prerequisite cannot produce a successful workflow report.
 Transport retries preserve the exact request body and never follow redirects.
+When a webhook has already closed the same native run, ForgeGraph merges the
+report evidence and returns its build ID with `skipped: build_already_terminal`.
+The publisher records that receipt without assigning a new build status.
 
 ## Replay a preserved result
 

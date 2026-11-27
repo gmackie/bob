@@ -9,10 +9,11 @@ vi.mock("@bob/api/handlers/workItems", () => ({
   workItemsDispatch: vi.fn(),
 }));
 vi.mock("@bob/api/handlers/publicApi", () => ({
-  publicApiListRuns: vi.fn(async () => []),
-  publicApiListRunsByWorkItem: vi.fn(async () => []),
+  workspaceRunSummaries: vi.fn(async () => []),
 }));
-import { makeTools, makeWorkspaceIdentity } from "./tools";
+import { makeTools } from "./tools";
+import { makeWorkspaceIdentity } from "./identity";
+import type { McpSdlcEnv } from "./sdlc";
 import { workItemsUpdate } from "@bob/api/handlers/workItems";
 import type { Db } from "@bob/db/client";
 import type { Credential, OAuthGrant, OAuthIdentity } from "./types";
@@ -40,31 +41,49 @@ function fixture() {
     access: vi.fn(async () => true),
   } as unknown as OAuthIdentity;
   const store = { addCredential: vi.fn(async (_credential: Credential) => {}) };
+  const sdlcEnv = {
+    SDLC_EDGE_WORKSPACE_ID: id, SDLC_VIEWER_USER_IDS: "alice",
+    SDLC_EDGE: { idFromName: vi.fn((id: string) => id), get: vi.fn(() => ({ fetch: async () => Response.json({ scope: "fleet" }) })) },
+  };
   return {
+    sdlcEnv,
     db,
     identity,
     itemLookup,
     store,
-    tools: makeTools(db, identity, { store, origin: "https://bob.example" }),
+    tools: makeTools(db, identity, { store, origin: "https://bob.example", sdlcEnv: () => sdlcEnv as unknown as McpSdlcEnv }),
   };
 }
 describe("MCP tool boundaries", () => {
   it("lists only tools permitted by the grant", async () => {
     const { tools } = fixture();
-    expect(await tools.list(grant)).toHaveLength(8);
+    expect(await tools.list(grant)).toHaveLength(11);
     expect(
       await tools.list({ ...grant, scopes: ["bob:read", "bob:write"] }),
-    ).toHaveLength(13);
+    ).toHaveLength(16);
   });
-  it("names each view's opening tool and keeps approval and the edge socket app-only", async () => {
+  it("publishes all nine former plugin tools and advertises only authorized link actions", async () => {
+    const { tools } = fixture();
+    const writes = { ...grant, scopes: ["bob:read", "bob:write"] };
+    const expected = ["bob_workspace", "bob_planning_review", "bob_sdlc", "bob_sdlc_item_for_thread", "bob_planning_approve", "bob_planning_dispatch", "bob_work_item_get", "bob_runs_list", "bob_linear_links"];
+    const all = await tools.list(writes) as { name: string }[];
+    expect(all.map((t) => t.name)).toEqual(expect.arrayContaining(expected));
+    for (const [g, actions] of [[grant, ["get", "list"]], [writes, ["get", "list", "upsert", "remove"]]] as const) {
+      expect(await tools.list(g)).toEqual(expect.arrayContaining([expect.objectContaining({
+        name: "bob_linear_links", inputSchema: expect.objectContaining({ type: "object", required: ["action"], properties: expect.objectContaining({ action: { type: "string", enum: actions } }) }),
+        annotations: expect.objectContaining({ readOnlyHint: g === grant }),
+      })]));
+    }
+  });
+  it("names each view's opening tool and keeps approval and the legacy edge socket app-only", async () => {
     const { tools, store } = fixture();
     const write = { ...grant, scopes: ["bob:read", "bob:write"] };
     const meta = Object.fromEntries(
       (await tools.list(write) as { name: string; _meta: unknown }[]).map((t) => [t.name, t._meta]),
     );
-    expect(meta.bob_workspace).toEqual({ ui: { resourceUri: "ui://bob/workspace.html", visibility: ["model", "app"] } });
-    expect(meta.bob_planning_dispatch).toEqual({ ui: { resourceUri: "ui://bob/planning-review.html", visibility: ["model", "app"] } });
-    expect(meta.bob_sdlc).toEqual({ ui: { resourceUri: "ui://bob/sdlc.html", visibility: ["model", "app"] } });
+    expect(meta.bob_workspace).toEqual({ "ui/resourceUri": "ui://bob/workspace.html", ui: { resourceUri: "ui://bob/workspace.html", visibility: ["model", "app"] } });
+    expect(meta.bob_planning_dispatch).toEqual({ "ui/resourceUri": "ui://bob/planning-review.html", ui: { resourceUri: "ui://bob/planning-review.html", visibility: ["model", "app"] } });
+    expect(meta.bob_sdlc).toEqual({ "ui/resourceUri": "ui://bob/sdlc.html", ui: { resourceUri: "ui://bob/sdlc.html", visibility: ["model", "app"] } });
     expect(meta.bob_planning_approve).toEqual({ ui: { visibility: ["app"] } });
     expect(meta.bob_sdlc_connect).toEqual({ ui: { visibility: ["app"] } });
     expect(meta.bob_list_projects).toEqual({ ui: { visibility: ["model"] } });
@@ -108,6 +127,31 @@ describe("MCP tool boundaries", () => {
     await expect(f.tools.call(grant, "bob_list_projects", {})).rejects.toThrow(
       "access denied",
     );
+  });
+  it("only addresses the configured SDLC workspace for a current viewer", async () => {
+    const { tools, sdlcEnv, store, identity } = fixture();
+    for (const denied of [{ ...grant, workspaceId: "elsewhere" }, { ...grant, userId: "other" }]) {
+      await expect(tools.call(denied, "bob_sdlc", {})).rejects.toThrow("SDLC access");
+      await expect(tools.call(denied, "bob_sdlc_item_for_thread", { threadId: "thread" })).rejects.toThrow("SDLC access");
+      await expect(tools.call({ ...denied, scopes: ["bob:read", "bob:write"] }, "bob_sdlc_connect", {})).rejects.toThrow("SDLC access");
+    }
+    expect(sdlcEnv.SDLC_EDGE.get).not.toHaveBeenCalled();
+    expect(store.addCredential).not.toHaveBeenCalled();
+    await expect(tools.call(grant, "bob_sdlc", {})).resolves.toMatchObject({ scope: "fleet" });
+    expect(identity.access).toHaveBeenLastCalledWith("alice", id, false);
+    expect(sdlcEnv.SDLC_EDGE.idFromName).toHaveBeenCalledWith(grant.workspaceId);
+  });
+  it("binds the Bob grant to the coordinator's distinct edge ID", async () => {
+    const { tools, sdlcEnv, store } = fixture();
+    const coordinator = "bbbbaaaa-1111-4000-8000-000000000002";
+    Object.assign(sdlcEnv, { SDLC_BOB_WORKSPACE_ID: id, SDLC_EDGE_WORKSPACE_ID: coordinator });
+    const wrongWorkspace = { ...grant, workspaceId: coordinator };
+    await expect(tools.call(wrongWorkspace, "bob_sdlc", {})).rejects.toThrow("SDLC access");
+    await expect(tools.call({ ...wrongWorkspace, scopes: ["bob:read", "bob:write"] }, "bob_sdlc_connect", {})).rejects.toThrow("SDLC access");
+    expect(store.addCredential).not.toHaveBeenCalled();
+    expect(sdlcEnv.SDLC_EDGE.get).not.toHaveBeenCalled();
+    await expect(tools.call(grant, "bob_sdlc", {})).resolves.toMatchObject({ scope: "fleet" });
+    expect(sdlcEnv.SDLC_EDGE.idFromName).toHaveBeenCalledWith(coordinator);
   });
   it("treats viewer membership as read-only", async () => {
     const { db } = fixture();

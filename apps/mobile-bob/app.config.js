@@ -163,8 +163,8 @@ module.exports = ({ config }) => {
     // CURRENT_PROJECT_VERSION), so the runtime version calculated locally never
     // matched the one calculated during the build. A literal is identical on
     // both sides, and it is what Preflight OTA publishes against.
-    // Keep this in step with `version` above when the app version changes.
-    runtimeVersion: "0.1.1",
+    // Build 40 uses Expo SDK 55 and receives OTA updates for runtime 0.1.1.
+    runtimeVersion: "0.1.1-sdk58",
     newArchEnabled: true,
     assetBundlePatterns: ["**/*"],
     ios: {

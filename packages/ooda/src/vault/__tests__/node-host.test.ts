@@ -1,9 +1,12 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createNodeVaultHostLoader, loadNodeVaultHost, type ConfiguredNodeVault } from "../node-host";
 import { PersistentVaultGate } from "../persistent-vault-gate";
+
+// Each fixture opens a real SQLite gate and writes to disk.
+vi.setConfig({ testTimeout: 20_000 });
 
 const dirs: string[] = [], hosts: ConfiguredNodeVault[] = [];
 afterEach(async () => {
@@ -37,7 +40,7 @@ it("shares one configured host and authorizes before file access", async () => {
   expect(await readFile(join(config.vaultPath, "note.md"), "utf8")).toContain("body");
   await host.routeHost.closeAndDrain();
   await expect(host.routeHost.execute("alice", "personal", service => service.write("late.md", "bad"))).rejects.toMatchObject({ code: "NotReady" });
-});
+}, 20_000); // Allow for SQLite transactions and journal writes on shared CI runners.
 
 it("disables only for absent configuration and pins initialization failures", async () => {
   expect(await createNodeVaultHostLoader({})()).toBeUndefined();

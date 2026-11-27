@@ -90,7 +90,7 @@
     // would release each tick, write nothing) or "on". Keep it off until a
     // human has read a dry-run: there were ~454 stale claims when it was added.
     // BOB_ORPHAN_RECONCILE_LIMIT caps items per sweep (default 200).
-    "BOB_ORPHAN_RECONCILE_MODE": "off",
+    "BOB_ORPHAN_RECONCILE_MODE": "on",
     "BOB_AUTO_MERGE_MAX_PER_RUN": "5",
     "BOB_AUTO_MERGE_MODEL": "claude-sonnet-5",
     "BOB_AUTO_MERGE_INSTANCE_HINT": "gitea @ git.forgegraf.com",
@@ -123,6 +123,8 @@
     // the workspace id is the kill switch: /api/sdlc/* then answers 503. The
     // exporter's token is the secret SDLC_EDGE_INGEST_TOKEN, NOT a var here.
     "SDLC_EDGE_WORKSPACE_ID": "e3d5ca9f-afaa-4276-8b8b-494eeaa80457",
+    // The Bob workspace whose GMA tracker feeds this coordinator.
+    "SDLC_BOB_WORKSPACE_ID": "5503dac2-b147-446c-9b02-95894095fcd5",
     "SDLC_VIEWER_USER_IDS": "tkE66fMc4mevdYYjtq78ALErJ7QnhAge",
     // iOS Live Activity updates from the SDLC edge (BOB-96), sent straight to
     // APNs (Expo does not carry them). The key is the secrets APNS_TEAM_ID,

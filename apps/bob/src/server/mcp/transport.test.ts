@@ -153,8 +153,8 @@ describe("stateless Streamable HTTP MCP", () => {
       result: { isError: true, content: [{ text: "Approve it first" }] },
     });
   });
-  it("serves the MCP Apps views, and the SDLC view declares the edge socket's origin", async () => {
-    const f = fixture(true, makeApps("https://bob.example"));
+  it("serves the MCP Apps views as self-contained HTML", async () => {
+    const f = fixture(true, makeApps());
     const initialized = await (
       await f.request(
         message("initialize", {
@@ -182,7 +182,7 @@ describe("stateless Streamable HTTP MCP", () => {
     };
     expect(read.result.contents[0]).toMatchObject({
       mimeType: "text/html;profile=mcp-app",
-      _meta: { ui: { csp: { connectDomains: ["wss://bob.example"] } } },
+      _meta: { ui: { prefersBorder: true } },
     });
     expect(read.result.contents[0]!.text).toContain("<title>Bob SDLC</title>");
     expect(
