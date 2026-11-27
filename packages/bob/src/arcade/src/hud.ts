@@ -1,6 +1,8 @@
 import { inScope, rows } from "@bob/sdlc-view";
 import type { EdgeView, Scope } from "@bob/sdlc-view";
 
+import { projectBoard } from "./board";
+
 /** The HUD strip over the floor. Every number is a count of live items; none is a score. */
 export interface Hud {
   /** Items with an agent attempt running right now. */
@@ -35,6 +37,16 @@ export function hud(view: EdgeView, scope: Scope = {}, now?: number): Hud {
     if (s === "failed") out.failed++;
     if (row.attention === "needs_human") out.needsYou++;
     if (row.attention === "stalled") out.stalled++;
+  }
+  // The project board joins tracked issues to coordinator work and removes duplicates.
+  // Repo and startup filters can only be applied to coordinator rows.
+  if (now !== undefined && !scope.repoKey && !scope.startupId && Object.keys(view.issues ?? {}).length > 0) {
+    const board = projectBoard(view, now);
+    out.inFlight = board.started;
+    out.ci = board.rows.reduce((sum, row) => sum + row.lanes.ci, 0);
+    out.deploying = board.rows.reduce((sum, row) => sum + row.lanes.deploy, 0);
+    out.failed = board.failed;
+    out.stalled = board.stale;
   }
   return out;
 }

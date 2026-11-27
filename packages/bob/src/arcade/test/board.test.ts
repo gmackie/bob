@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { EdgeView, TrackedIssue } from "@bob/sdlc-view";
 
-import { boardRowSummary, projectBoard } from "../src/board";
+import { hud } from "../src/hud";
+import { boardProjectView, boardRowSummary, projectBoard } from "../src/board";
 import { floorScene, floorSummary } from "../src/floor";
 import { snapshot, viewOf } from "./fixtures";
 
@@ -46,6 +47,12 @@ describe("projectBoard (BOB-99)", () => {
     expect(row.lanes).toEqual({ queue: 1, working: 1, ci: 2, review: 2, deploy: 1 });
     expect(row).toMatchObject({ stale: 2, failed: 1, backlog: 1, active: 6, kanbanger: true });
     expect(boardRowSummary(row)).toBe("ForgeGraph: 1 to do, 1 in progress, 2 in CI, 2 in review, 1 deploying; 2 stale, 1 failed, 1 in backlog");
+  });
+
+  it("shows tracked work in the HUD with no coordinator plans", () => {
+    expect(hud(view, {}, NOW)).toMatchObject({ inFlight: 8, ci: 2, deploying: 1, stalled: 2, failed: 1, agents: 0 });
+    const project = board.rows.find(row => row.name === "EducateOS")!;
+    expect(hud(boardProjectView(view, project), {}, NOW)).toMatchObject({ inFlight: 2, ci: 0, failed: 0 });
   });
 
   it("sorts stale first, then active work, then name; totals the header", () => {
