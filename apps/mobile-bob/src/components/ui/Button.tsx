@@ -28,7 +28,7 @@ export function Button({
   className = "",
 }: ButtonProps) {
   const baseClasses = "flex-row items-center justify-center rounded-xl";
-  const sizeClasses = size === "sm" ? "h-10 px-3" : "h-12 px-4";
+  const sizeClasses = size === "sm" ? "min-h-11 px-3 py-2" : "min-h-12 px-4 py-2";
 
   const variantClasses = {
     primary: "bg-primary",
@@ -39,6 +39,9 @@ export function Button({
   return (
     <Pressable
       testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={typeof children === "string" ? children : undefined}
+      accessibilityState={{ disabled }}
       onPress={onPress}
       disabled={disabled}
       className={`${baseClasses} ${sizeClasses} ${variantClasses[variant]} ${className} ${disabled ? "opacity-50" : "active:opacity-90"}`}

@@ -10,6 +10,7 @@ import {
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { TaskBuilderFlow } from "~/features/planning/TaskBuilderFlow";
 import { describeReviewReadiness } from "~/features/work-items/review-readiness";
 import type { MobileWorkItemEntryValidationState } from "~/features/tablet/work-item-entry";
 import { LinkedExecutionRunsCard } from "~/components/tablet/LinkedExecutionRunsCard";
@@ -31,7 +32,6 @@ import { getMobileDetailBackAction } from "~/features/tablet/navigation";
 import {
   buildMobileWorkItemEntryContext,
   buildMobileWorkItemEntryItem,
-  getMobileWorkItemDispatchSuccessHref,
   getMobileWorkItemEntryAction,
   getMobileWorkItemEntryValidationState,
   normalizeMobileWorkItemEntryView,
@@ -142,18 +142,11 @@ export default function WorkItemDetailScreen() {
   );
   const dispatchTaskMutation = useMutation(
     rpc("workItem.dispatch").mutationOptions({
-      onSuccess: async (result) => {
+      onSuccess: async () => {
         await queryClient.invalidateQueries({
           queryKey: rpc("workItem.get").queryKey({ id: workItemId }),
         });
-        const workspaceId = workItemQuery.data?.workItem.workspaceId ?? null;
-        router.push(
-          getMobileWorkItemDispatchSuccessHref({
-            workItemId,
-            workspaceId,
-            result,
-          }),
-        );
+        router.setParams({ pane: "builder" });
       },
     }),
   );
@@ -291,9 +284,8 @@ export default function WorkItemDetailScreen() {
     childDispatchAgentType,
   );
 
-  return (
-    <Screen className="pt-6">
-      <ScrollView showsVerticalScrollIndicator={false}>
+  const brief = (
+      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View className="mb-5 flex-row items-start justify-between gap-4">
           <View className="min-w-0 flex-1">
             <Text className="text-muted text-sm tracking-[0.18em] uppercase">
@@ -334,6 +326,17 @@ export default function WorkItemDetailScreen() {
             ) : null}
           </View>
         </View>
+
+        {workItem.description ? (
+          <Card className="mb-5">
+            <Text className="text-foreground text-base font-semibold">
+              Description
+            </Text>
+            <Text className="text-muted mt-3 text-sm leading-6">
+              {workItem.description}
+            </Text>
+          </Card>
+        ) : null}
 
         {/* An item can reach "Review ready" because a run ended, not because it
             produced anything. Saying so beats rendering three empty sections
@@ -409,7 +412,7 @@ export default function WorkItemDetailScreen() {
           ) : entryAction.kind === "live-session" ? (
             <Button
               className="mt-4"
-              onPress={() => router.push(entryAction.href)}
+              onPress={() => router.setParams({ pane: "builder" })}
             >
               {entryAction.label}
             </Button>
@@ -439,7 +442,7 @@ export default function WorkItemDetailScreen() {
           ]}
         />
 
-        {entryView === "outcome" ? (
+        {workItem.kind !== "task" && entryView === "outcome" ? (
           <OutcomeReadableOutputCard
             workItemId={workItem.id}
             onOpenSession={(sessionId) =>
@@ -448,7 +451,7 @@ export default function WorkItemDetailScreen() {
           />
         ) : null}
 
-        {entryView === "queue" ? (
+        {workItem.kind !== "task" && entryView === "queue" ? (
           <LinkedExecutionRunsCard
             workItemId={workItem.id}
             workspaceId={workItem.workspaceId ?? null}
@@ -497,16 +500,7 @@ export default function WorkItemDetailScreen() {
           </Card>
         ) : null}
 
-        {workItem.description ? (
-          <Card className="mb-5">
-            <Text className="text-foreground text-base font-semibold">
-              Description
-            </Text>
-            <Text className="text-muted mt-3 text-sm leading-6">
-              {workItem.description}
-            </Text>
-          </Card>
-        ) : null}
+
 
         {/* Child tasks (for epics/issues) */}
         {childItems.length > 0 ? (
@@ -597,7 +591,7 @@ export default function WorkItemDetailScreen() {
             variant={workItem.kind === "task" ? "primary" : "secondary"}
             onPress={() => {
               if (workItem.kind === "task") {
-                router.push(detailPresentation.executionHref);
+                router.setParams({ pane: "builder" });
                 return;
               }
 
@@ -658,6 +652,7 @@ export default function WorkItemDetailScreen() {
             Add comment
           </Text>
           <TextInput
+            accessibilityLabel="Work item comment"
             value={commentDraft}
             onChangeText={setCommentDraft}
             multiline
@@ -679,6 +674,21 @@ export default function WorkItemDetailScreen() {
           </Button>
         </Card>
       </ScrollView>
+  );
+  return (
+    <Screen className="pt-2">
+      {workItem.kind === "task" ? (
+        <TaskBuilderFlow
+          key={workItem.id}
+          workItemId={workItem.id}
+          outcome={entryView === "outcome"}
+          sessionId={dispatchTaskMutation.variables?.workItemId === workItem.id
+            ? dispatchTaskMutation.data?.sessionId ?? entryItem.agentStatus?.sessionId
+            : entryItem.agentStatus?.sessionId}
+          onOpenSession={(id) => router.push(getSessionHref(id, workItem.workspaceId))}
+          onOpenRun={(href) => router.push(href)}
+        >{brief}</TaskBuilderFlow>
+      ) : brief}
     </Screen>
   );
 }

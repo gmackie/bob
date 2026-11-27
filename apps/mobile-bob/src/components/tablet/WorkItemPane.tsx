@@ -1,6 +1,8 @@
 import { Text, View, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { router } from "expo-router";
+import { TaskBuilderFlow } from "~/features/planning/TaskBuilderFlow";
 import { rpc } from "~/utils/api";
 import { colors } from "~/lib/colors";
 import { LinkedExecutionRunsCard } from "./LinkedExecutionRunsCard";
@@ -32,9 +34,9 @@ interface WorkItemPaneProps {
   workItemId: string;
   entryView?: MobileWorkItemEntryView;
   onOpenInspector?: () => void;
-  onOpenSession?: (sessionId: string) => void;
+  onOpenSession: (sessionId: string) => void;
   /** A run with no session to open; receives the run's href. */
-  onOpenRun?: (href: string) => void;
+  onOpenRun: (href: string) => void;
 }
 
 export function WorkItemPane({
@@ -51,13 +53,11 @@ export function WorkItemPane({
   ));
   const dispatchMutation = useMutation(
     rpc("workItem.dispatch").mutationOptions({
-      onSuccess: async (result) => {
+      onSuccess: async () => {
         await queryClient.invalidateQueries({
           queryKey: rpc("workItem.get").queryKey({ id: workItemId }),
         });
-        if (typeof result.sessionId === "string") {
-          onOpenSession?.(result.sessionId);
-        }
+        router.setParams({ pane: "builder" });
       },
     }),
   );
@@ -90,7 +90,7 @@ export function WorkItemPane({
       section.key === "artifacts-validation" || section.key === "validation-review",
   );
 
-  return (
+  const brief = (
     <View className="flex-1" style={{ backgroundColor: colors.background }}>
       {/* Header */}
       <View
@@ -98,7 +98,7 @@ export function WorkItemPane({
         style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
       >
         <View className="flex-1 mr-3">
-          <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
+          <Text className="text-base font-semibold text-foreground" >
             {item.title}
           </Text>
           <View className="mt-1 flex-row items-center">
@@ -120,6 +120,8 @@ export function WorkItemPane({
         </View>
         {onOpenInspector && (
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Inspect work item"
             onPress={onOpenInspector}
             className="rounded-md px-3 py-1.5 active:opacity-70"
             style={{ backgroundColor: colors.secondary, minHeight: 44, justifyContent: "center" }}
@@ -133,6 +135,17 @@ export function WorkItemPane({
 
       {/* Content */}
       <ScrollView className="flex-1 px-4 pt-4">
+        {/* Description */}
+        {item.description ? (
+          <View className="mb-6">
+            <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+              Description
+            </Text>
+            <Text className="text-sm leading-5 text-foreground">
+              {item.description}
+            </Text>
+          </View>
+        ) : null}
         <View
           className="mb-4 rounded-lg border p-3"
           style={{ borderColor: colors.border, backgroundColor: colors.card }}
@@ -218,7 +231,7 @@ export function WorkItemPane({
             </Pressable>
           ) : entryAction.kind === "live-session" ? (
             <Pressable
-              onPress={() => onOpenSession?.(entryAction.sessionId)}
+              onPress={() => router.setParams({ pane: "builder" })}
               accessibilityRole="button"
               accessibilityLabel={`Open live session for ${item.identifier}`}
               className="mt-3 rounded-md px-3 py-2 active:opacity-70"
@@ -234,32 +247,20 @@ export function WorkItemPane({
           ) : null}
         </View>
 
-        {entryView === "outcome" ? (
+        {item.kind !== "task" && entryView === "outcome" ? (
           <OutcomeReadableOutputCard
             workItemId={item.id}
             onOpenSession={onOpenSession}
           />
         ) : null}
 
-        {entryView === "queue" ? (
+        {item.kind !== "task" && entryView === "queue" ? (
           <LinkedExecutionRunsCard
             workItemId={item.id}
             workspaceId={(item as { workspaceId?: string | null }).workspaceId ?? null}
             onOpenSession={onOpenSession}
             onOpenRun={onOpenRun}
           />
-        ) : null}
-
-        {/* Description */}
-        {item.description ? (
-          <View className="mb-6">
-            <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
-              Description
-            </Text>
-            <Text className="text-sm leading-5 text-foreground">
-              {item.description}
-            </Text>
-          </View>
         ) : null}
 
         {/* Artifacts */}
@@ -315,6 +316,14 @@ export function WorkItemPane({
         )}
       </ScrollView>
     </View>
+  );
+  if (item.kind !== "task") return brief;
+  return (
+    <TaskBuilderFlow key={item.id} workItemId={item.id} outcome={entryView === "outcome"}
+      sessionId={dispatchMutation.variables?.workItemId === item.id
+        ? dispatchMutation.data?.sessionId ?? item.agentStatus?.sessionId : item.agentStatus?.sessionId}
+      onOpenSession={onOpenSession} onOpenRun={onOpenRun}
+    >{brief}</TaskBuilderFlow>
   );
 }
 
