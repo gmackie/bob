@@ -114,12 +114,13 @@ export async function finishLlaveroLink(
   return true;
 }
 
-export async function verifyLlaveroLink(
+export async function withLlaveroLink<T>(
   config: LlaveroConfig,
   userId: string,
   workspaceId: string,
+  action: (token: string) => Promise<T>,
 ) {
-  if (!(await ownsBobWorkspace(userId, workspaceId))) return false;
+  if (!(await ownsBobWorkspace(userId, workspaceId))) return null;
   const id = linkId(config, userId, workspaceId);
   const claim = await db.transaction(async (tx) => {
     const [link] = await tx.select().from(llaveroMcpLink)
@@ -133,13 +134,23 @@ export async function verifyLlaveroLink(
     await tx.update(llaveroMcpLink).set({ expiresAt: null }).where(eq(llaveroMcpLink.id, id));
     return { link, pair, refresh: true };
   });
-  if (!claim) return false;
-  if (!claim.refresh) return checkLlaveroTools(config, claim.pair.access_token);
+  if (!claim) return null;
+  if (!claim.refresh) return action(claim.pair.access_token);
   const pair = await exchangeLlavero(config, claim.link.clientId, {
     refreshToken: claim.pair.refresh_token,
   });
   await saveTokens(config, claim.link, pair);
-  return checkLlaveroTools(config, pair.access_token);
+  return action(pair.access_token);
+}
+
+export async function verifyLlaveroLink(
+  config: LlaveroConfig,
+  userId: string,
+  workspaceId: string,
+) {
+  return withLlaveroLink(config, userId, workspaceId, (token) =>
+    checkLlaveroTools(config, token),
+  );
 }
 
 export async function disconnectLlavero(
