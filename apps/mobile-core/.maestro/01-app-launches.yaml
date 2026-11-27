@@ -1,0 +1,10 @@
+appId: io.gmac.gmacko.dev
+---
+# Preflight opens the dev-client URL before running this flow.
+- extendedWaitUntil:
+    visible: "Threads"
+    timeout: 120000
+- setOrientation: LANDSCAPE_LEFT
+- assertVisible: "Threads"
+- setOrientation: PORTRAIT
+- assertVisible: "Threads"

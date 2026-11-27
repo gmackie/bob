@@ -1071,12 +1071,18 @@ importers:
       '@tanstack/react-query':
         specifier: 5.108.0
         version: 5.108.0(@types/react@19.3.0)(react@19.3.1)
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
       expo:
         specifier: 58.0.26
         version: 58.0.26(0ec2d32f99c39d15e44109b652b2c901)
       expo-constants:
         specifier: 58.0.16
         version: 58.0.16(300707f30fa5d0275bacc1479a086297)
+      expo-dev-client:
+        specifier: 58.0.21
+        version: 58.0.21(be437ec74820d3ec6701f7a470ee4a8c)
       expo-notifications:
         specifier: 58.1.9
         version: 58.1.9(95edce18ea79072c7ccf174959e0d04a)
@@ -1123,12 +1129,21 @@ importers:
       '@tailwindcss/postcss':
         specifier: 4.3.5
         version: 4.3.5
+      '@types/react':
+        specifier: 19.3.0
+        version: 19.3.0
+      jsdom:
+        specifier: 31.0.1
+        version: 31.0.1(@noble/hashes@2.4.0)
       tailwindcss:
         specifier: 4.3.5
         version: 4.3.5
       typescript:
         specifier: 7.0.2
         version: 7.0.2
+      vitest:
+        specifier: 5.1.1
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@5.1.1)(jsdom@31.0.1(@noble/hashes@2.4.0))(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   apps/ooda:
     dependencies:

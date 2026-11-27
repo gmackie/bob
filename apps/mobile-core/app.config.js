@@ -32,6 +32,7 @@ module.exports = ({ config }) => ({
   ios: {
     bundleIdentifier: getBundleId(),
     supportsTablet: true,
+    requireFullScreen: false,
     infoPlist: {
       CFBundleDisplayName: getAppName(),
       ITSAppUsesNonExemptEncryption: false,
