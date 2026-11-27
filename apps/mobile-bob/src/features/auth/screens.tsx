@@ -1,12 +1,10 @@
 import { useCallback, useState } from "react";
-import { Platform, Pressable, Text, TextInput, View, Alert } from "react-native";
+import { Platform, Text, TextInput, View, Alert } from "react-native";
 
 import { z } from "zod";
 import { getAuthBaseUrl } from "~/config/env";
 
 import { Button, Card, Screen } from "~/components/ui";
-import { ONBOARDING_SLIDES } from "~/features/planning/onboarding-copy";
-import { setOnboardingComplete } from "~/lib/storage";
 import { authClient } from "~/utils/auth";
 import {
   dismissExistingAuthBrowser,
@@ -14,74 +12,7 @@ import {
 } from "~/utils/oauth";
 import { QrPairingScreen } from "./qr-scan";
 
-export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
-  const [currentSlide, setCurrentSlide] = useState(0);
-
-  const handleNext = useCallback(async () => {
-    if (currentSlide < ONBOARDING_SLIDES.length - 1) {
-      setCurrentSlide((value) => value + 1);
-      return;
-    }
-
-    await setOnboardingComplete();
-    onComplete();
-  }, [currentSlide, onComplete]);
-
-  const handleSkip = useCallback(async () => {
-    await setOnboardingComplete();
-    onComplete();
-  }, [onComplete]);
-
-  const slide = ONBOARDING_SLIDES[currentSlide];
-
-  return (
-    <Screen className="justify-between pt-16 pb-10">
-      <View className="flex-row justify-end">
-        {currentSlide < ONBOARDING_SLIDES.length - 1 ? (
-          <Pressable onPress={handleSkip} className="active:opacity-70">
-            <Text className="text-muted text-base">Skip</Text>
-          </Pressable>
-        ) : null}
-      </View>
-
-      <View className="flex-1 items-center justify-center px-4">
-        <View className="bg-primary/20 mb-8 h-20 w-20 items-center justify-center rounded-2xl">
-          <Text className="text-4xl">🏗️</Text>
-        </View>
-
-        <Text className="text-foreground mb-6 text-center text-3xl font-semibold tracking-tight">
-          {slide?.title}
-        </Text>
-
-        <View style={{ alignSelf: "stretch" }} className="gap-3">
-          {slide?.bullets.map((bullet) => (
-            <View key={bullet} className="flex-row items-start">
-              <View className="bg-primary mt-2 mr-3 h-1.5 w-1.5 rounded-full" />
-              <Text className="text-muted flex-1 text-base">{bullet}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      <View>
-        <View className="mb-6 flex-row justify-center space-x-2">
-          {ONBOARDING_SLIDES.map((item, index) => (
-            <View
-              key={item.title}
-              className={`h-1.5 rounded-full ${index === currentSlide ? "bg-primary w-6" : "bg-border w-1.5"}`}
-            />
-          ))}
-        </View>
-
-        <Button onPress={handleNext} variant="primary">
-          {currentSlide < ONBOARDING_SLIDES.length - 1
-            ? "Continue"
-            : "Continue to Sign In"}
-        </Button>
-      </View>
-    </Screen>
-  );
-}
+export { OnboardingScreen } from "./onboarding-screen";
 
 const reviewerTokenSchema = z.object({ token: z.string().min(1) });
 

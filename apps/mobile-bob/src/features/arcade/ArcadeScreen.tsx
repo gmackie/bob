@@ -2,11 +2,10 @@
 // The same edge session as the Attention screens (use-sdlc-edge), so opening the Arcade
 // does not open a second socket.
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Linking, Pressable, ScrollView, Text, View } from "react-native";
-import { useReducedMotion } from "react-native-reanimated";
-import { beatLine, beatTone, boardCounters, ciMeter, createBeatLog, desks as deskCards, floorScene, floorSummary, hud, liveCiPhases, projectBoard, shippedToday, WIDE_MIN_WIDTH } from "@bob/arcade";
+import { Linking, Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { beatLine, beatTone, boardProjectView, controlRoomFeed, ciMeter, createBeatLog, desks as deskCards, floorScene, floorSummary, hud, liveCiPhases, projectBoard, shippedToday, WIDE_MIN_WIDTH } from "@bob/arcade";
 import type { AttemptDetailLike, BoardRow, Desk } from "@bob/arcade";
-import { coordinatedIssueIds, issueAttention, issueCommands, rows, RELEASE_STAGE_PRESENTATION, STATE_PRESENTATION } from "@bob/sdlc-view";
+import { coordinatedIssueIds, inScope, issueAttention, issueCommands, rows, RELEASE_STAGE_PRESENTATION, STATE_PRESENTATION } from "@bob/sdlc-view";
 import type { CommandOption, Confirmation, EdgeView, Scope, TrackedIssue } from "@bob/sdlc-view";
 
 import { attentionEntries, bannerFor, firstQuestion, releaseReason } from "~/features/sdlc/attention-model";
@@ -14,10 +13,12 @@ import type { ActionContext, Banner } from "~/features/sdlc/commands-model";
 import { ActionButtons, ATTENTION_COLOR, OfflineBanner } from "~/features/sdlc/components";
 import { contentFor } from "~/features/sdlc/live-activity";
 import { useLiveActivity, useLiveActivityPreview, useNow, useSdlcEdge, useShipped, useWatchDesks } from "~/features/sdlc/use-sdlc-edge";
+import { useSystemReducedMotion } from "~/hooks/use-system-reduced-motion";
 import { colors } from "~/lib/colors";
 
 import type { LiveEffect } from "./arcade-model";
 import { EFFECT_TTL_MS, expire, step, stepAttempts, TONE_COLOR } from "./arcade-model";
+import { ControlRoom } from "./ControlRoom";
 import { BoardView } from "./BoardView";
 import { demoDeskDetail } from "./demo-feed";
 import { DesksView } from "./DesksView";
@@ -38,65 +39,73 @@ const SIDE_PANEL_MIN_WIDTH = 300 + WIDE_MIN_WIDTH;
 type Attempts = Readonly<Record<string, AttemptDetailLike | undefined>>;
 const NO_ATTEMPTS: Attempts = {};
 
-function HudStrip({ view, scope, demo, today, clock, projectRows }: { projectRows?: readonly BoardRow[]; view: EdgeView; scope: Scope; demo: boolean; today: number | null; clock: number }) {
+function HudStrip({
+  view,
+  scope,
+  today,
+  clock,
+  waiting,
+}: {
+  view: EdgeView;
+  scope: Scope;
+  today: number | null;
+  clock: number;
+  waiting: boolean;
+}) {
   const h = hud(view, scope, clock);
-  const cells: [string, number | string, string, boolean][] = projectRows ? boardCounters(projectRows).map(({ label, value, color }): [string, number, string, boolean] => [label, value, color, value > 0]) : [
-    ["AGENTS", h.agents, "#6fb4ff", h.agents > 0],
-    ["IN FLIGHT", h.inFlight, "#ffd27a", h.inFlight > 0],
-    ["CI", h.ci, "#7fd3e8", h.ci > 0],
-    ["NEEDS YOU", h.needsYou, h.needsYou ? colors.accent : STAGE.label, h.needsYou > 0],
-    // Sat too long where the system should have moved it on (BOB-101).
-    ["STALLED", h.stalled, h.stalled ? "#ff9f43" : STAGE.label, h.stalled > 0],
-    ["DEPLOYING", h.deploying, "#c09cff", h.deploying > 0],
-    ["SHIPPED", h.shipped, "#7dffb0", h.shipped > 0],
-    ["FAILED", h.failed, h.failed ? "#ff6b6b" : STAGE.label, h.failed > 0],
-    // Reached production since local midnight (BOB-95); a dash until the edge answers.
-    ["TODAY", today ?? "–", "#7dffb0", Boolean(today)],
+  const cells: [string, number | null, string][] = [
+    ["Agents", h.agents, "#b6d7ff"],
+    ["In CI", h.ci, "#a2e2d6"],
+    ["In flight", h.inFlight, "#ffd393"],
+    ["Needs you", h.needsYou, "#f5c879"],
+    ["Stalled", h.stalled, "#ffb581"],
+    ["Deploying", h.deploying, "#d8c3ff"],
+    ["Shipped", h.shipped, "#a6e6c6"],
+    ["Failed", h.failed, "#ffac99"],
+    ["Shipped today · all projects", today, "#a6e6c6"],
   ];
   return (
-    <View
-      accessible
-      accessibilityLabel={cells.map(([k, v]) => `${k.toLowerCase()} ${v}`).join(", ")}
-      style={{
-        flexDirection: "row",
-        flexWrap: "wrap",
-        alignItems: "center",
-        columnGap: 6,
-        rowGap: 6,
-        paddingHorizontal: 12,
-        paddingVertical: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: "#261e15",
-        backgroundColor: "#15110c",
-      }}
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={{ flexGrow: 0, backgroundColor: "#182021" }}
+      contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 8, gap: 16 }}
       testID="arcade-hud"
     >
-      {demo ? (
-        <View style={{ borderRadius: 4, backgroundColor: "#ffd27a", paddingHorizontal: 5, paddingVertical: 2 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: "900", letterSpacing: 1, color: "#120f0b" }}>DEMO FEED</Text>
-        </View>
-      ) : null}
-      {cells.map(([k, v, c, lit]) => (
+      {cells.map(([label, value, color]) => (
         <View
-          key={k}
-          style={{
-            flexDirection: "row",
-            alignItems: "baseline",
-            gap: 5,
-            borderRadius: 6,
-            borderWidth: 1,
-            borderColor: lit ? `${c}55` : "#292016",
-            backgroundColor: "#0c0907",
-            paddingHorizontal: 7,
-            paddingVertical: 3,
-          }}
+          key={label}
+          accessible
+          accessibilityLabel={`${label}, ${waiting || value === null ? "unavailable" : value}`}
         >
-          <Text style={{ fontFamily: MONO, fontSize: 9, letterSpacing: 1, color: STAGE.label }}>{k}</Text>
-          <Text style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: "900", color: c }}>{v}</Text>
+          <Text
+            style={{
+              fontSize: 18,
+              lineHeight: 22,
+              fontWeight: "800",
+              fontVariant: ["tabular-nums"],
+              color: value && !waiting ? color : "#bdc2b8",
+            }}
+          >
+            {waiting || value === null ? "–" : value}
+          </Text>
+          <Text style={{ fontSize: 11, color: "#c3c9bf" }}>{label}</Text>
         </View>
       ))}
-    </View>
+    </ScrollView>
   );
+}
+
+function useArcadeProject(view: EdgeView) {
+  const [choice, choose] = useState<{ row: BoardRow; epoch: string | null } | null>(null);
+  const project = choice?.epoch === view.epoch ? choice.row : null;
+  const floor = useMemo(() => boardProjectView(view, project), [view, project]);
+  const [scope, setScope] = useFloorScope(floor);
+  function setProject(row: BoardRow | null) {
+    choose(row ? { row, epoch: view.epoch } : null);
+    setScope({});
+  }
+  return { project, setProject, floor, scope, setScope };
 }
 
 function ItemPanel({ view, itemId, onClose, onOpenItem }: { view: EdgeView; itemId: string; onClose: () => void; onOpenItem?: (itemId: string) => void }) {
@@ -226,14 +235,14 @@ function NeedsYou({ view, onSelect }: { view: EdgeView; onSelect: (itemId: strin
 export function ArcadeScreen({ onOpenItem }: { onOpenItem?: (itemId: string) => void }) {
   const { state, retry, send } = useSdlcEdge();
   const now = useNow();
-  const [scope, setScope] = useFloorScope(state.view);
-  const ids = useDeskIds(state.view, Math.floor(now / 60_000) * 60_000, scope);
+  const { project, setProject, floor, scope, setScope } = useArcadeProject(state.view);
+  const ids = useDeskIds(floor, Math.floor(now / 60_000) * 60_000, scope);
   // Only desks inside the session's watch set get live detail, so only those are drawn.
   const watching = useWatchDesks(ids);
   const shipped = useShipped();
   const desks = useMemo(
-    () => deskCards(state.view, ids.filter((id) => watching.includes(id)), (id) => state.attempts[id], now),
-    [state.view, state.attempts, ids, watching, now],
+    () => deskCards(floor, ids.filter((id) => watching.includes(id)), (id) => state.attempts[id], now),
+    [floor, state.attempts, ids, watching, now],
   );
   const banner = bannerFor(state.view, state.connection, now, state.error);
   const actions = useMemo<IssueActions>(
@@ -245,7 +254,7 @@ export function ArcadeScreen({ onOpenItem }: { onOpenItem?: (itemId: string) => 
   );
   return (
     <ArcadeView
-      view={state.view}
+      view={state.view} floor={floor} project={project} onProject={setProject}
       banner={banner}
       now={now}
       desks={desks}
@@ -264,16 +273,16 @@ export function ArcadeScreen({ onOpenItem }: { onOpenItem?: (itemId: string) => 
 export function DemoArcadeScreen() {
   const view = useDemoEdge();
   const now = useNow(DEMO_TICK_MS);
-  const [scope, setScope] = useFloorScope(view);
-  const ids = useDeskIds(view, Math.floor(now / 60_000) * 60_000, scope);
+  const { project, setProject, floor, scope, setScope } = useArcadeProject(view);
+  const ids = useDeskIds(floor, Math.floor(now / 60_000) * 60_000, scope);
   const tick = Math.floor(now / DEMO_TICK_MS);
   // One scripted detail record per tick, fed to the desks and to the floor's attempt beats alike.
   const attempts = useMemo(() => Object.fromEntries(ids.map((id) => [id, demoDeskDetail(view.items[id]?.state, id, tick, now)])), [view, ids, tick, now]);
-  const desks = useMemo(() => deskCards(view, ids, (id) => attempts[id], now), [view, ids, attempts, now]);
+  const desks = useMemo(() => deskCards(floor, ids, (id) => attempts[id], now), [floor, ids, attempts, now]);
   const today = Object.values(view.items).filter((i) => i.state === "completed").length;
   return (
     <View style={{ flex: 1 }}>
-      <ArcadeView view={view} banner={null} now={now} desks={desks} today={today} attempts={attempts} scope={scope} onScope={setScope} demo />
+      <ArcadeView view={view} floor={floor} project={project} onProject={setProject} banner={null} now={now} desks={desks} today={today} attempts={attempts} scope={scope} onScope={setScope} demo />
       <DemoLiveActivityToggle view={view} />
     </View>
   );
@@ -309,6 +318,9 @@ export function TabletArcadePane({ demo = false }: { demo?: boolean }) {
 
 function ArcadeView({
   view,
+  floor,
+  project,
+  onProject,
   banner,
   now,
   desks,
@@ -322,6 +334,9 @@ function ArcadeView({
   demo = false,
 }: {
   view: EdgeView;
+  floor: EdgeView;
+  project: BoardRow | null;
+  onProject: (project: BoardRow | null) => void;
   banner: Banner | null;
   now: number;
   desks: Desk[];
@@ -335,15 +350,22 @@ function ArcadeView({
   actions?: IssueActions;
   demo?: boolean;
 }) {
-  const reduced = useReducedMotion();
+  const reduced = useSystemReducedMotion();
   // BOB-99: with Kanbanger issues on the edge the Arcade opens on the projects board; a
   // project opens its floor. Without issues (an older edge) it is the floor, as before.
   const hasIssues = Object.keys(view.issues).length > 0;
-  const [project, setProject] = useState<BoardRow | null>(null);
-  const showBoard = hasIssues && project === null;
+
+  const visibleIds = useMemo(() => {
+    if (!project && !scope.startupId && !scope.repoKey) return undefined;
+    return new Set(
+      rows(floor)
+        .filter((row) => inScope(row, scope))
+        .map((row) => row.item.itemId),
+    );
+  }, [floor, scope, project]);
 
   // Beats and effects. The first view is a baseline (sdlcBeats never celebrates it).
-  const log = useMemo(() => createBeatLog(80), []);
+  const log = useMemo(() => createBeatLog(80), [view.epoch]);
   const prevView = useRef<EdgeView | null>(null);
   const effectsRef = useRef<LiveEffect[]>([]);
   const [effects, setEffects] = useState<LiveEffect[]>([]);
@@ -352,29 +374,33 @@ function ArcadeView({
     prevView.current = view;
     if (!prev || prev === view) return;
     const t = Date.now();
-    const out = step(log, prev, view, effectsRef.current, t);
+    const out = step(log, prev, view, effectsRef.current, t, visibleIds);
     if (!out.beats.length) return;
     effectsRef.current = out.effects;
     setEffects(out.effects);
     playHaptic(out.haptic);
-  }, [view, log]);
+  }, [view, log, visibleIds]);
   // Attempt stream: new tail lines and CI phases for watched items, between transitions.
   const [typing, setTyping] = useState<Record<string, number>>({});
-  const prevAttempts = useRef<Attempts | null>(null);
-  const issues = useMemo(() => new Map(rows(view).map((r) => [r.item.itemId, r.issue.identifier ?? r.issue.issueId] as const)), [view]);
+  const prevAttempts = useRef<{ epoch: string | null; attempts: Attempts } | null>(null);
+  const issues = useMemo(
+    () => new Map(rows(view).map((r) => [r.item.itemId, r.issue.identifier ?? r.issue.issueId] as const)),
+    [view],
+  );
   useEffect(() => {
-    const prev = prevAttempts.current;
-    prevAttempts.current = attempts;
+    const last = prevAttempts.current;
+    const prev = last?.epoch === view.epoch ? last.attempts : null;
+    prevAttempts.current = { epoch: view.epoch, attempts };
     if (!prev || prev === attempts) return;
     const t = Date.now();
-    const out = stepAttempts(log, prev, attempts, (id) => issues.get(id), effectsRef.current, t);
+    const out = stepAttempts(log, prev, attempts, (id) => issues.get(id), effectsRef.current, t, visibleIds);
     if (!out.beats.length) return;
     effectsRef.current = out.effects;
     setEffects(out.effects);
     if (Object.keys(out.activity).length) setTyping((cur) => ({ ...cur, ...out.activity }));
     playHaptic(out.haptic);
     // A new view alone (same attempts) returns early above: issues is only read, never a trigger.
-  }, [attempts, issues, log]);
+  }, [attempts, issues, log, visibleIds, view.epoch]);
   const meters = useMemo(() => {
     const out: Record<string, ParcelMeter | null> = {};
     for (const [id, d] of Object.entries(attempts)) {
@@ -395,129 +421,232 @@ function ArcadeView({
   const subscribeLog = useCallback((listener: () => void) => log.subscribe(listener), [log]);
   const logVersion = useCallback(() => log.version(), [log]);
   useSyncExternalStore(subscribeLog, logVersion);
-  // Activity beats only move things; they never take a ticker line.
-  const ticker = log.recent(24).filter((b) => b.kind !== "agent.activity").slice(0, 4);
+  const feed = controlRoomFeed(log.recent(), Date.now(), visibleIds);
 
   const [box, setBox] = useState<{ width: number; height: number } | null>(null);
   const [screenWidth, setScreenWidth] = useState(0);
   // Ages and stalls move by the minute; laying out the floor every tick would re-render every parcel.
   const clock = Math.floor(now / 60_000) * 60_000;
-  const projectId = project?.kanbanger ? project.projectId : undefined;
   const scene = useMemo(
-    () => (box ? floorScene(view, box, { now: clock, scope, density: "auto", ...(projectId ? { projectId } : {}) }) : null),
-    [view, box, clock, scope, projectId],
+    () => (box ? floorScene(floor, box, { now: clock, scope, density: "auto" }) : null),
+    [floor, box, clock, scope],
   );
-  const board = useMemo(() => (hasIssues ? projectBoard(view, clock) : null), [view, hasIssues, clock]);
+  const board = useMemo(() => projectBoard(view, clock), [view, clock]);
+  const showBoard = !project && (hasIssues || board.rows.length > 1);
   const [selected, setSelected] = useState<string | null>(null);
   const select = useCallback((itemId: string) => setSelected((cur) => (cur === itemId ? null : itemId)), []);
   const side = screenWidth >= SIDE_PANEL_MIN_WIDTH;
   const waiting = view.epoch === null;
+  const { height: windowHeight } = useWindowDimensions();
+  const live = !waiting && !banner && !view.needsResync;
+  const status = demo
+    ? "Demo feed"
+    : banner?.kind === "auth-failed"
+      ? "Sign in required"
+      : banner?.kind === "coordinator-offline"
+        ? "Offline"
+        : banner?.kind === "reconnecting"
+          ? "Reconnecting"
+          : view.needsResync
+            ? "Resyncing"
+            : live
+              ? "Live feed"
+              : "Connecting";
 
-  const selectedIssue = selected ? view.issues[selected] : undefined;
+  const selectedIssue = selected ? floor.issues[selected] : undefined;
   const panel = selectedIssue ? (
-    <IssuePanel view={view} issue={selectedIssue} now={clock} actions={actions} onClose={() => setSelected(null)} />
-  ) : selected ? (
-    <ItemPanel view={view} itemId={selected} onClose={() => setSelected(null)} onOpenItem={onOpenItem} />
+    <IssuePanel
+      view={floor}
+      issue={selectedIssue}
+      now={clock}
+      actions={actions}
+      onClose={() => setSelected(null)}
+    />
+  ) : selected && floor.items[selected] ? (
+    <ItemPanel
+      view={floor}
+      itemId={selected}
+      onClose={() => setSelected(null)}
+      onOpenItem={
+        onOpenItem
+          ? (id) => {
+              setSelected(null);
+              onOpenItem(id);
+            }
+          : undefined
+      }
+    />
   ) : side ? (
-    <NeedsYou view={view} onSelect={select} />
+    <NeedsYou view={floor} onSelect={select} />
   ) : null;
 
-  return (
-    <View style={{ flex: 1, backgroundColor: STAGE.bg }} onLayout={(e) => setScreenWidth(e.nativeEvent.layout.width)} testID="arcade-screen">
-      {banner ? (
-        <View style={{ paddingHorizontal: 12, paddingTop: 8 }}>
+  const header = (
+    <View>
+      {banner && (
+        <View style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
           <OfflineBanner banner={banner} now={now} onRetry={onRetry} />
         </View>
-      ) : null}
-      <HudStrip {...(board ? { projectRows: project ? board.rows.filter((r) => r.projectId === project.projectId) : board.rows } : {})} view={view} scope={scope} demo={demo} today={today} clock={clock} />
-      {showBoard ? null : <ScopeChips view={view} scope={scope} onScope={onScope} />}
-      <View style={{ flex: 1, flexDirection: side ? "row" : "column" }}>
-        <View style={{ flex: 1 }}>
-          {project ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, paddingBottom: 4 }} testID="arcade-project-header">
-              <Pressable
-                onPress={() => { setProject(null); setSelected(null); }}
-                accessibilityRole="button"
-                accessibilityLabel="All projects"
-                hitSlop={8}
-                style={({ pressed }) => ({ borderRadius: 10, borderWidth: 1, borderColor: STAGE.dash, paddingHorizontal: 10, paddingVertical: 4, opacity: pressed ? 0.6 : 1 })}
-              >
-                <Text style={{ fontFamily: MONO, fontSize: 11, color: STAGE.labelLit }}>‹ ALL PROJECTS</Text>
-              </Pressable>
-              <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: 12, fontWeight: "700", color: "#e9dcc4" }}>
-                {project.name}
+      )}
+      <ControlRoom feed={feed} status={status} live={live} reduced={reduced} compact={windowHeight < 470} />
+      <HudStrip view={floor} scope={scope} today={today} clock={clock} waiting={waiting} />
+    </View>
+  );
+
+  const footer = (
+    <View style={{ paddingTop: 10, gap: 12 }}>
+      {!waiting && (
+        <DesksView
+          desks={desks}
+          width={screenWidth - (side ? 300 : 0)}
+          now={now}
+          reduced={reduced || !live}
+          selectedItemId={selected}
+          onPressDesk={select}
+        />
+      )}
+      <View style={{ paddingHorizontal: 16, paddingBottom: 14, gap: 6 }} testID="arcade-ticker">
+        <Text accessibilityRole="header" style={{ color: "#efe3cb", fontSize: 16, fontWeight: "700" }}>
+          Recent activity
+        </Text>
+        {feed.events.length ? (
+          feed.events.map((b) => (
+            <View key={b.id} style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+              <View
+                style={{ backgroundColor: TONE_COLOR[beatTone(b)], width: 4, height: 12, borderRadius: 2 }}
+              />
+              <Text numberOfLines={2} style={{ flex: 1, color: "#cccbc1", fontFamily: MONO, fontSize: 12 }}>
+                {beatLine(b)}
               </Text>
-              {scene && scene.backlog > 0 ? <Text style={{ fontFamily: MONO, fontSize: 10, color: STAGE.label }}>BACKLOG {scene.backlog}</Text> : null}
             </View>
-          ) : null}
-          <View
-            style={{ flex: 1, minHeight: 260 }}
-            onLayout={(e) => {
-              const { width, height } = e.nativeEvent.layout;
-              setBox((cur) => (cur?.width === width && cur.height === height ? cur : { width, height }));
-            }}
-            accessible={false}
-          >
-            {waiting ? (
-              <Text style={{ color: colors.muted, padding: 16 }}>Waiting for the first snapshot…</Text>
-            ) : showBoard && board ? (
-              <BoardView board={board} onOpenProject={(row) => { setSelected(null); setProject(row); }} />
-            ) : scene?.parcels.length === 0 && scene.overflow.length === 0 ? (
-              <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
-                <Text style={{ fontFamily: MONO, color: STAGE.labelLit, letterSpacing: 2 }}>FLOOR IDLE</Text>
-                <Text style={{ color: colors.muted, marginTop: 6, textAlign: "center" }}>
-                  {project ? "Nothing in flight in this project." : "No plan is running. Dispatch a plan and its issues roll onto the belt."}
-                </Text>
-              </View>
-            ) : scene ? (
-              <View accessibilityLabel={floorSummary(scene).join(". ")}>
-                <FloorView scene={scene} effects={effects} reduced={reduced} selectedItemId={selected} onPressParcel={select} typing={typing} meters={meters} />
-              </View>
-            ) : null}
-          </View>
-        </View>
-        {panel ? (
-          side ? (
-            <ScrollView style={{ width: 300, flexGrow: 0 }} contentContainerStyle={{ padding: 12 }}>{panel}</ScrollView>
-          ) : (
-            <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}>{panel}</View>
-          )
-        ) : null}
-      </View>
-      {waiting ? null : <DesksView desks={desks} width={screenWidth} now={now} reduced={reduced} selectedItemId={selected} onPressDesk={select} />}
-      <View
-        style={{
-          marginHorizontal: 12,
-          marginBottom: 10,
-          marginTop: 6,
-          minHeight: 68,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: "#261e15",
-          backgroundColor: "#0c0907",
-          paddingHorizontal: 10,
-          paddingVertical: 7,
-          gap: 3,
-        }}
-        accessibilityLabel="Recent floor events"
-        testID="arcade-ticker"
-      >
-        {ticker.length ? (
-          ticker.map((b, i) => {
-            const c = TONE_COLOR[beatTone(b)];
-            return (
-              <View key={b.id} style={{ flexDirection: "row", alignItems: "center", gap: 6, opacity: 1 - i * 0.2 }}>
-                <View style={{ width: 5.5, height: 5.5, borderRadius: 3, backgroundColor: c }} />
-                <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: 10.5, color: i === 0 ? "#e6d8bc" : STAGE.label }}>
-                  {beatLine(b)}
-                </Text>
-              </View>
-            );
-          })
+          ))
         ) : (
-          <Text style={{ fontFamily: MONO, fontSize: 10.5, color: "#5e4e3a" }}>Listening for live WebSocket beats…</Text>
+          <Text style={{ color: "#b6b4a8", fontSize: 13 }}>No recent floor events.</Text>
         )}
       </View>
+    </View>
+  );
+
+  return (
+    <View
+      testID="arcade-screen"
+      style={{ flex: 1, backgroundColor: STAGE.bg, flexDirection: side ? "row" : "column" }}
+      onLayout={(e) => setScreenWidth(e.nativeEvent.layout.width)}
+    >
+      <View style={{ flex: 1, minWidth: 0 }}>
+        {showBoard ? (
+          <BoardView
+            board={board}
+            header={header}
+            footer={footer}
+            onOpenProject={(row) => {
+              setSelected(null);
+              onProject(row);
+            }}
+          />
+        ) : (
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 12 }}>
+            {header}
+            {project && (
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 14 }}
+                testID="arcade-project-header"
+              >
+                <Pressable
+                  onPress={() => {
+                    onProject(null);
+                    setSelected(null);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="All projects"
+                  style={({ pressed }) => ({
+                    minHeight: 44,
+                    justifyContent: "center",
+                    opacity: pressed ? 0.6 : 1,
+                  })}
+                >
+                  <Text style={{ color: STAGE.labelLit, fontWeight: "700" }}>‹ Projects</Text>
+                </Pressable>
+                <Text
+                  numberOfLines={1}
+                  style={{ flex: 1, color: "#f3e7d1", fontSize: 16, fontWeight: "700" }}
+                >
+                  {project.name}
+                </Text>
+                {scene && scene.backlog > 0 && (
+                  <Text style={{ color: "#cbb797", fontSize: 12 }}>{scene.backlog} in backlog</Text>
+                )}
+              </View>
+            )}
+            <ScopeChips view={floor} scope={scope} onScope={onScope} />
+            <View
+              style={{ height: Math.min(490, Math.max(320, windowHeight * 0.52)) }}
+              onLayout={(e) => {
+                const { width, height } = e.nativeEvent.layout;
+                setBox((cur) => (cur?.width === width && cur?.height === height ? cur : { width, height }));
+              }}
+            >
+              {waiting ? (
+                <Text style={{ color: "#bfbcb3", padding: 16 }}>Waiting for the first snapshot…</Text>
+              ) : scene && !scene.parcels.length && !scene.overflow.length ? (
+                <View
+                  style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 6 }}
+                >
+                  <Text style={{ fontSize: 22, fontWeight: "700", color: STAGE.labelLit }}>Floor idle</Text>
+                  <Text style={{ color: "#bfbcb3", textAlign: "center" }}>
+                    {project
+                      ? "Nothing in flight in this project."
+                      : "Dispatch a plan to see its work on the floor."}
+                  </Text>
+                </View>
+              ) : (
+                scene && (
+                  <View accessibilityLabel={floorSummary(scene).join(". ")}>
+                    <FloorView
+                      scene={scene}
+                      effects={effects}
+                      reduced={reduced || !live}
+                      selectedItemId={selected}
+                      onPressParcel={select}
+                      typing={typing}
+                      meters={meters}
+                    />
+                  </View>
+                )
+              )}
+            </View>
+            {footer}
+          </ScrollView>
+        )}
+      </View>
+      {side && panel && (
+        <ScrollView style={{ width: 300, flexGrow: 0 }} contentContainerStyle={{ padding: 12 }}>
+          {panel}
+        </ScrollView>
+      )}
+      {!side && !!panel && (
+        <Modal transparent animationType={reduced ? "none" : "fade"} onRequestClose={() => setSelected(null)}>
+          <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "#0009" }}>
+            <Pressable
+              style={{ flex: 1 }}
+              onPress={() => setSelected(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss details"
+            />
+            <ScrollView
+              style={{
+                maxHeight: "75%",
+                flexGrow: 0,
+                backgroundColor: colors.card,
+                borderTopLeftRadius: 18,
+                borderTopRightRadius: 18,
+              }}
+              contentContainerStyle={{ padding: 12, paddingBottom: 34 }}
+            >
+              {panel}
+            </ScrollView>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }

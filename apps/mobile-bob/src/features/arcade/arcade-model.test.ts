@@ -26,6 +26,13 @@ describe("arcade step", () => {
     expect(out.haptic).toBe("error");
   });
 
+  it("only alerts for visible work and keeps the global history available when a project closes", () => {
+    const log = createBeatLog();
+    const next = reduce(base, delta(2, [{ itemId: "a", state: "waiting-input" }, { itemId: "b", state: "failed" }]));
+    expect(step(log, base, next, [], 100, new Set(["a"])).haptic).toBe("warning");
+    expect(log.recent().map(b => b.kind)).toEqual(["item.failed", "item.needs_human"]);
+  });
+
   it("does not replay beats or celebrate the first snapshot", () => {
     const log = createBeatLog();
     const next = reduce(base, delta(2, [{ itemId: "a", state: "validating" }]));
