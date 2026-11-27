@@ -30,8 +30,8 @@ export interface StepResult {
  * Folds raw beats into the screen: new beats into the log (deduped), their effects into
  * the live set, expired effects out, and the one haptic worth playing.
  */
-export function stepBeats(log: BeatLog, raw: readonly Beat[], effects: readonly LiveEffect[], now: number): StepResult {
-  const beats = log.push(raw);
+export function stepBeats(log: BeatLog, raw: readonly Beat[], effects: readonly LiveEffect[], now: number, itemIds?: ReadonlySet<string>): StepResult {
+  const beats = log.push(raw, now);
   const fresh = beats.flatMap((b) => {
     const e = effectFor(b);
     return e ? [{ ...e, born: now }] : [];
@@ -39,6 +39,7 @@ export function stepBeats(log: BeatLog, raw: readonly Beat[], effects: readonly 
   const live = [...effects.filter((e) => now - e.born < EFFECT_TTL_MS), ...fresh].slice(-MAX_EFFECTS);
   const haptic =
     fresh
+      .filter(e => !e.itemId || !itemIds || itemIds.has(e.itemId))
       .map((e) => e.haptic)
       .filter((h): h is Exclude<Haptic, null> => h !== null)
       .sort((a, b) => HAPTIC_RANK[a] - HAPTIC_RANK[b])[0] ?? null;
@@ -46,14 +47,14 @@ export function stepBeats(log: BeatLog, raw: readonly Beat[], effects: readonly 
 }
 
 /** Folds one new edge view into the screen (coordinator transitions, releases, milestones). */
-export const step = (log: BeatLog, prev: EdgeView, next: EdgeView, effects: readonly LiveEffect[], now: number): StepResult =>
-  stepBeats(log, sdlcBeats(prev, next, now), effects, now);
+export const step = (log: BeatLog, prev: EdgeView, next: EdgeView, effects: readonly LiveEffect[], now: number, itemIds?: ReadonlySet<string>): StepResult =>
+  stepBeats(log, sdlcBeats(prev, next, now), effects, now, itemIds);
 
 type Details = Readonly<Record<string, AttemptDetailLike | undefined>>;
 
 /** Folds new attempt detail (tail frames, CI) for watched items into the screen. */
-export const stepAttempts = (log: BeatLog, prev: Details, next: Details, issue: (itemId: string) => string | undefined, effects: readonly LiveEffect[], now: number): StepResult =>
-  stepBeats(log, attemptBeats(prev, next, issue), effects, now);
+export const stepAttempts = (log: BeatLog, prev: Details, next: Details, issue: (itemId: string) => string | undefined, effects: readonly LiveEffect[], now: number, itemIds?: ReadonlySet<string>): StepResult =>
+  stepBeats(log, attemptBeats(prev, next, issue), effects, now, itemIds);
 
 export const expire = (effects: readonly LiveEffect[], now: number) => effects.filter((e) => now - e.born < EFFECT_TTL_MS);
 

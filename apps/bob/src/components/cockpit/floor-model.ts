@@ -34,11 +34,21 @@ export type { CiMessage, EdgeView, Scope, TrackedIssue } from "@bob/sdlc-view";
 import type { Beat, Effect } from "@bob/arcade";
 import { inScope, rows } from "@bob/sdlc-view";
 import type { EdgeView, Scope } from "@bob/sdlc-view";
+import type { BurstKind } from "./spectacle";
 
 import { stationFor } from "@bob/arcade";
 
 export interface LiveEffect extends Effect {
   born: number;
+}
+
+export function floorCue(beat: Beat, visibleIds?: ReadonlySet<string>): BurstKind | null {
+  if (visibleIds && beat.subject.itemId && !visibleIds.has(beat.subject.itemId)) return null;
+  if (beat.kind === "ci.green") return "pr";
+  if (beat.kind === "item.failed" || (beat.kind === "ci.phase" && beat.data?.to === "failed")) return "failure";
+  if (beat.kind === "milestone" && beat.data?.milestone === "merged") return "merge";
+  if (beat.kind === "milestone" && beat.data?.milestone === "production-verified") return "deploy";
+  return null;
 }
 
 export const EFFECT_TTL_MS = 1_800;

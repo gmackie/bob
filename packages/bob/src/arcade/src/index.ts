@@ -9,3 +9,4 @@ export * from "./board";
 export * from "./attempt-beats";
 export * from "./scopes";
 export * from "./activity";
+export * from "./control-room";

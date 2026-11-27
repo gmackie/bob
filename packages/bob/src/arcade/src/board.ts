@@ -1,7 +1,7 @@
 import { coordinatedIssueIds, issueAttention, issueStation, rows } from "@bob/sdlc-view";
 import type { EdgeView, IssueStation, Row, TrackedIssue } from "@bob/sdlc-view";
 
-import { stationFor } from "./floor";
+import { PARCEL_TONE, stationFor } from "./floor";
 import type { StationId } from "./floor";
 
 /**
@@ -15,6 +15,15 @@ import type { StationId } from "./floor";
  */
 export type BoardLane = "queue" | "working" | "ci" | "review" | "deploy";
 export const BOARD_LANES: readonly BoardLane[] = ["queue", "working", "ci", "review", "deploy"];
+
+/** Labels and line colours on the project rack, ordered from intake to deployment. */
+export const BOARD_LANE_INK: Record<BoardLane, { label: string; color: string }> = {
+  queue: { label: "Queue", color: PARCEL_TONE.queued.fill },
+  working: { label: "Working", color: PARCEL_TONE.agents.fill },
+  ci: { label: "CI", color: PARCEL_TONE.ci.fill },
+  review: { label: "Review", color: PARCEL_TONE.review.fill },
+  deploy: { label: "Deploy", color: PARCEL_TONE.deploy.fill },
+};
 
 export interface BoardRow {
   /** The Kanbanger project id, or `repo:<repositoryId>` for items with no known project. */
@@ -101,6 +110,21 @@ export function projectBoard(view: EdgeView, now: number): Board {
     started: open.reduce((n, r) => n + r.active, 0),
     stale: open.reduce((n, r) => n + r.stale, 0),
     failed: open.reduce((n, r) => n + r.failed, 0),
+  };
+}
+
+/** The same membership as a board row, including unassigned items grouped by repository. */
+export function boardProjectView(view: EdgeView, project: Pick<BoardRow, "projectId" | "kanbanger"> | null): EdgeView {
+  if (!project) return view;
+  const issues = Object.values(view.issues ?? {});
+  const known = new Set(issues.map((issue) => issue.project?.id));
+  const members = rows(view).filter((row) => project.kanbanger
+    ? row.issue.projectId === project.projectId
+    : !known.has(row.issue.projectId) && `repo:${row.target.repository.repositoryId}` === project.projectId);
+  return {
+    ...view,
+    items: Object.fromEntries(members.map(({ item }) => [item.itemId, item])),
+    issues: Object.fromEntries(issues.filter((issue) => project.kanbanger && issue.project?.id === project.projectId).map((issue) => [issue.id, issue])),
   };
 }
 

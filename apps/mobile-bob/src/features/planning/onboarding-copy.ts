@@ -1,5 +1,6 @@
 export const ONBOARDING_SLIDES = [
   {
+    scene: "plan",
     title: "Capture the issue.\nScope the task.",
     bullets: [
       "Use work items to move from intake into execution",
@@ -7,6 +8,7 @@ export const ONBOARDING_SLIDES = [
     ],
   },
   {
+    scene: "work",
     title: "Open the task.\nWork with Bob.",
     bullets: [
       "Jump directly into the execution workspace from mobile",
@@ -14,6 +16,7 @@ export const ONBOARDING_SLIDES = [
     ],
   },
   {
+    scene: "ship",
     title: "Stay aligned\nfrom anywhere.",
     bullets: [
       "Review notifications, comments, and artifacts on the go",

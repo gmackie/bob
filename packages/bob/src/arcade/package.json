@@ -5,7 +5,8 @@
   "license": "MIT",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./art/*.png": "./art/*.png"
   },
   "scripts": {
     "clean": "git clean -xdf .cache .turbo node_modules",
