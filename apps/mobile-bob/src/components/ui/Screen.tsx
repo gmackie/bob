@@ -12,7 +12,12 @@ export function Screen({ children, className = "" }: ScreenProps) {
   return (
     <View
       className={`bg-background flex-1`}
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
+      style={{
+        paddingTop: insets.top,
+        paddingBottom: insets.bottom,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
+      }}
     >
       <View className={`flex-1 px-5 ${className}`}>{children}</View>
     </View>
