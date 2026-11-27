@@ -1,0 +1,53 @@
+appId: com.gmacko.bob.dev
+---
+# Preflight opens the development-client URL before this flow. Calling
+# launchApp here would return to Expo's server picker instead of the app.
+- extendedWaitUntil:
+    visible: "(This is the developer menu.*|Go home|Skip|Continue with GitHub)"
+    timeout: 120000
+- runFlow:
+    when:
+      visible: "This is the developer menu.*"
+    commands:
+      - tapOn: "Continue"
+      - extendedWaitUntil:
+          visible: "Go home"
+          timeout: 10000
+- runFlow:
+    when:
+      visible: "Go home"
+    commands:
+      # Disable Expo's floating tools button because it overlaps Bob's Skip
+      # action on a freshly reset simulator, then close the developer menu.
+      - swipe:
+          start: "50%,90%"
+          end: "50%,20%"
+          duration: 500
+      - extendedWaitUntil:
+          visible: "Tools button"
+          timeout: 10000
+      - runFlow:
+          when:
+            visible:
+              checked: true
+              rightOf: "Tools button"
+              below: "Fast [Rr]efresh"
+          commands:
+            - tapOn:
+                checked: true
+                rightOf: "Tools button"
+                below: "Fast [Rr]efresh"
+      - runFlow:
+          when:
+            platform: iOS
+          commands:
+            - tapOn:
+                point: "91%,13%"
+      - runFlow:
+          when:
+            platform: Android
+          commands:
+            - tapOn: "Close"
+- extendedWaitUntil:
+    visible: "(Skip|Continue with GitHub)"
+    timeout: 30000

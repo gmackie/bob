@@ -1,115 +1,132 @@
-// The projects board (BOB-99): the Arcade's opening view once the edge carries Kanbanger
-// issues. One row per project: a glowing segmented bar of its open work by lane, with the
-// stale part last and orange, and the stale count on the right. Tapping opens that floor.
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { BOARD_LANES, boardRowSummary, PARCEL_TONE } from "@bob/arcade";
-import type { Board, BoardLane, BoardRow } from "@bob/arcade";
+import { useState, type ReactElement } from "react";
+import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { BOARD_LANES, boardRowSummary, BOARD_LANE_INK } from "@bob/arcade";
+import type { Board, BoardRow } from "@bob/arcade";
 
-import { STAGE } from "./FloorView";
-
-const MONO = "Menlo";
-export const STALE_COLOR = "#ff9f43";
-const LANE_FILL: Record<BoardLane, string> = {
-  queue: PARCEL_TONE.queued.fill,
-  working: PARCEL_TONE.agents.fill,
-  ci: PARCEL_TONE.ci.fill,
-  review: PARCEL_TONE.review.fill,
-  deploy: PARCEL_TONE.deploy.fill,
-};
-const LANE_LABEL: Record<BoardLane, string> = { queue: "todo", working: "doing", ci: "CI", review: "review", deploy: "deploy" };
-
-/**
- * Bar segments for a row: queue, then the fresh part of each active lane, then stale. Stale
- * is a subset of the active lanes, so it is taken off them in proportion.
- */
-export function barSegments(row: BoardRow): { key: string; value: number; color: string }[] {
-  const fresh = Math.max(0, row.active - row.stale);
-  const scale = row.active > 0 ? fresh / row.active : 0;
-  const segments: { key: string; value: number; color: string }[] = BOARD_LANES.map((lane) => ({ key: lane, value: lane === "queue" ? row.lanes.queue : row.lanes[lane] * scale, color: LANE_FILL[lane] }));
-  segments.push({ key: "stale", value: row.stale, color: STALE_COLOR });
-  return segments.filter((s) => s.value > 0);
-}
-
-function Row({ row, max, onPress }: { row: BoardRow; max: number; onPress: (row: BoardRow) => void }) {
-  const total = row.lanes.queue + row.active;
+const mono = Platform.select({ ios: "Menlo", default: "monospace" });
+function ProjectCard({ row, open }: { row: BoardRow; open: (row: BoardRow) => void }) {
   return (
     <Pressable
-      onPress={() => onPress(row)}
+      onPress={() => open(row)}
       accessibilityRole="button"
       accessibilityLabel={boardRowSummary(row)}
       testID={`arcade-board-row-${row.projectId}`}
-      style={({ pressed }) => ({
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 10,
-        paddingVertical: 10,
-        paddingHorizontal: 10,
-        marginBottom: 6,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: "#282017",
-        backgroundColor: "#17120d",
-        opacity: pressed ? 0.65 : 1,
-      })}
+      style={({ pressed }) => [s.card, pressed && s.pressed]}
     >
-      <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: row.active > 0 ? "#6fb4ff" : "#5e4e3a" }} />
-      <Text numberOfLines={1} style={{ width: 92, fontFamily: MONO, fontSize: 11, fontWeight: "700", color: "#efe3cd" }}>
-        {row.name}
-      </Text>
-      <View
-        style={{
-          flex: 1,
-          height: 13,
-          borderRadius: 7,
-          borderWidth: 1,
-          borderColor: "#2d241a",
-          overflow: "hidden",
-          backgroundColor: "#0b0907",
-          padding: 1.5,
-          flexDirection: "row",
-        }}
-      >
-        <View style={{ width: `${(total / max) * 100}%`, flexDirection: "row", gap: 1, borderRadius: 5, overflow: "hidden" }}>
-          {barSegments(row).map((s) => (
-            <View key={s.key} style={{ flex: s.value, backgroundColor: s.color }} />
-          ))}
-        </View>
+      <View style={s.top}>
+        <Text numberOfLines={2} style={s.name}>
+          {row.name}
+        </Text>
+        <Text style={s.arrow} accessibilityElementsHidden>
+          ↗
+        </Text>
       </View>
-      <Text style={{ width: 28, textAlign: "right", fontFamily: MONO, fontSize: 11, fontWeight: "800", color: row.stale ? STALE_COLOR : STAGE.label }}>{row.stale}</Text>
+      <View style={s.lanes}>
+        {BOARD_LANES.map((lane) => {
+          const count = row.lanes[lane];
+          const { label, color } = BOARD_LANE_INK[lane];
+          return (
+            <View key={lane} style={s.lane}>
+              <View style={[s.track, { backgroundColor: count ? color : "#36403d" }]} />
+              <Text style={[s.number, { color: count ? "#fff2d9" : "#8e9993" }]}>{count}</Text>
+              <Text numberOfLines={1} adjustsFontSizeToFit style={s.laneName}>
+                {label}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+      {!!(row.failed || row.stale || row.backlog) && (
+        <View style={s.details}>
+          {row.failed > 0 && <Text style={[s.detail, { color: "#ffa18e" }]}>{row.failed} failed</Text>}
+          {row.stale > 0 && <Text style={[s.detail, { color: "#f5bb77" }]}>{row.stale} stale</Text>}
+          {row.backlog > 0 && <Text style={s.detail}>{row.backlog} in backlog</Text>}
+        </View>
+      )}
     </Pressable>
   );
 }
 
-export function BoardView({ board, onOpenProject }: { board: Board; onOpenProject: (row: BoardRow) => void }) {
-  const max = Math.max(1, ...board.rows.map((r) => r.lanes.queue + r.active));
+export function BoardView({
+  board,
+  onOpenProject,
+  header,
+  footer,
+}: {
+  board: Board;
+  onOpenProject: (row: BoardRow) => void;
+  header: ReactElement;
+  footer: ReactElement;
+}) {
+  const [width, setWidth] = useState(0);
+  const columns = width >= 1040 ? 3 : width >= 620 ? 2 : 1;
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 16 }} testID="arcade-board">
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8 }}>
-        <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: "700", letterSpacing: 1.2, color: STAGE.label }}>
-          CONNECTED PROJECTS · <Text style={{ color: STAGE.labelLit, fontWeight: "900" }}>{board.started}</Text> STARTED
-          {board.failed ? <Text style={{ color: PARCEL_TONE.failed.fill }}>{`  ·  ${board.failed} RED`}</Text> : null}
-        </Text>
-        <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: "700", letterSpacing: 1.2, color: STAGE.label }}>
-          STALE <Text style={{ color: STALE_COLOR, fontWeight: "900" }}>{board.stale}</Text>
-        </Text>
-      </View>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", columnGap: 8, rowGap: 4, paddingBottom: 10 }} accessible={false}>
-        {BOARD_LANES.map((lane) => (
-          <View key={lane} style={{ flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 5, backgroundColor: "#1a140e", paddingHorizontal: 6, paddingVertical: 2 }}>
-            <View style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: LANE_FILL[lane] }} />
-            <Text style={{ fontFamily: MONO, fontSize: 9, color: STAGE.label }}>{LANE_LABEL[lane]}</Text>
+    <View style={s.board} onLayout={(e) => setWidth(e.nativeEvent.layout.width)} testID="arcade-board">
+      <FlatList
+        key={columns}
+        data={board.rows}
+        numColumns={columns}
+        keyExtractor={(row) => row.projectId}
+        columnWrapperStyle={columns > 1 ? s.row : undefined}
+        contentContainerStyle={s.list}
+        ListHeaderComponent={
+          <View>
+            {header}
+            <View style={s.heading}>
+              <Text accessibilityRole="header" style={s.headingText}>
+                Connected projects
+              </Text>
+              <Text style={s.totals}>{board.started} started</Text>
+            </View>
           </View>
-        ))}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 5, backgroundColor: "#1a140e", paddingHorizontal: 6, paddingVertical: 2 }}>
-          <View style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: STALE_COLOR }} />
-          <Text style={{ fontFamily: MONO, fontSize: 9, color: STAGE.label }}>untouched 7d+</Text>
-        </View>
-      </View>
-      {board.rows.length === 0 ? (
-        <Text style={{ color: STAGE.label, paddingVertical: 24, textAlign: "center" }}>No open work in any project.</Text>
-      ) : (
-        board.rows.map((row) => <Row key={row.projectId} row={row} max={max} onPress={onOpenProject} />)
-      )}
-    </ScrollView>
+        }
+        ListFooterComponent={footer}
+        ListEmptyComponent={<Text style={s.empty}>No open work in any project.</Text>}
+        renderItem={({ item }) => <ProjectCard row={item} open={onOpenProject} />}
+      />
+    </View>
   );
 }
+
+const s = StyleSheet.create({
+  board: { flex: 1 },
+  list: { paddingBottom: 16, gap: 9 },
+  row: { gap: 0 },
+  heading: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 8,
+    marginHorizontal: 14,
+    marginTop: 14,
+    paddingBottom: 3,
+    flexWrap: "wrap",
+  },
+  headingText: { color: "#f5e8cd", fontSize: 20, fontWeight: "800", letterSpacing: -0.6 },
+  totals: { fontFamily: mono, fontSize: 11, color: "#c2b397" },
+  card: {
+    flex: 1,
+    marginHorizontal: 9,
+    minWidth: 0,
+    borderRadius: 13,
+    backgroundColor: "#1d2423",
+    borderWidth: 1,
+    borderColor: "#3b4540",
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 12,
+    gap: 9,
+  },
+  pressed: { backgroundColor: "#2c3833", borderColor: "#bcab82" },
+  top: { flexDirection: "row", alignItems: "center", gap: 7 },
+  name: { flex: 1, color: "#fff0d5", fontSize: 17, fontWeight: "700" },
+  arrow: { color: "#b6cfbe", fontSize: 17 },
+  lanes: { flexDirection: "row", gap: 5 },
+  lane: { flex: 1, minWidth: 0 },
+  track: { height: 3, borderRadius: 2, marginBottom: 4 },
+  number: { fontSize: 16, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  laneName: { color: "#c0c9bf", fontSize: 10, fontWeight: "500" },
+  details: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  detail: { color: "#c0c9bf", fontFamily: mono, fontSize: 10 },
+  empty: { color: "#c0c9bf", paddingVertical: 20 },
+});

@@ -1,0 +1,9 @@
+appId: com.gmacko.bob.dev
+---
+# Start in a fresh installation opened by Preflight.
+- runFlow: ../helpers/wait-for-bob.yaml
+- runFlow: ../helpers/onboarding-tour.yaml
+- tapOn: "Continue to Sign In"
+- extendedWaitUntil:
+    visible: "Continue with GitHub"
+    timeout: 30000

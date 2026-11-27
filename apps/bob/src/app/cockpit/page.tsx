@@ -63,32 +63,37 @@ function CockpitInner() {
   const stale = (staleSeconds ?? 0) > 60 || connectionState === "disconnected";
 
   return (
-    <div className="relative flex h-screen flex-col">
+    <div className="relative flex min-h-screen flex-col">
       <style>{`@keyframes cockpit-enter { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }`}</style>
       {motion.level === "minimal" && (
         <style>{`.cockpit-content *, .cockpit-content { animation: none !important; transition: none !important; }`}</style>
       )}
-      <SpectacleLayer level={motion.level} sessions={status.sessions} feeds={feeds} burstQueueRef={burstQueueRef} />
-      <div className="cockpit-content relative z-10 flex min-h-0 flex-1 flex-col">
+      <SpectacleLayer
+        level={motion.level}
+        sessions={status.sessions}
+        feeds={feeds}
+        burstQueueRef={burstQueueRef}
+      />
+      <div className="cockpit-content relative z-10 flex min-w-0 flex-1 flex-col">
         {stale && (
           <div className="bg-amber-500/90 px-6 py-1 text-center font-mono text-xs text-black">
-            data may be stale — {connectionState === "disconnected" ? "gateway disconnected, retrying" : `last update ${staleSeconds}s ago`}
+            data may be stale —{" "}
+            {connectionState === "disconnected"
+              ? "gateway disconnected, retrying"
+              : `last update ${staleSeconds}s ago`}
           </div>
         )}
-        <HeaderStrip
-          status={status}
-          ops={ops}
-          soundEnabled={sound.enabled}
-          onToggleSound={sound.toggle}
-          onToggleMode={() => setMode((m) => (m === "wall" ? "ops" : "wall"))}
-          mode={mode}
-          motionLevel={motion.level}
-          onCycleMotion={motion.cycle}
-        />
-        <div className="grid min-h-0 flex-1 grid-cols-[1fr_2fr_1.2fr] gap-4 p-4">
-          <QueueLanes status={status} ops={ops} />
-          <AgentStage sessions={status.sessions} feeds={feeds} feedVersion={feedVersion} ops={ops} />
-          <PrPipelines status={status} ops={ops} />
+        <div className="mb-3 overflow-x-auto">
+          <HeaderStrip
+            status={status}
+            ops={ops}
+            soundEnabled={sound.enabled}
+            onToggleSound={sound.toggle}
+            onToggleMode={() => setMode((m) => (m === "wall" ? "ops" : "wall"))}
+            mode={mode}
+            motionLevel={motion.level}
+            onCycleMotion={motion.cycle}
+          />
         </div>
         <FloorPanel
           onCue={(kind) => {
@@ -96,7 +101,14 @@ function CockpitInner() {
             burstQueueRef.current.push(kind);
           }}
         />
-        <Timeline24h status={status} />
+        <div className="grid min-h-72 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1.2fr)] gap-4 p-4">
+          <QueueLanes status={status} ops={ops} />
+          <AgentStage sessions={status.sessions} feeds={feeds} feedVersion={feedVersion} ops={ops} />
+          <PrPipelines status={status} ops={ops} />
+        </div>
+        <div className="overflow-x-auto">
+          <Timeline24h status={status} />
+        </div>
       </div>
     </div>
   );

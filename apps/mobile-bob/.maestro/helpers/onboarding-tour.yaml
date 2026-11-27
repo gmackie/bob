@@ -1,0 +1,14 @@
+appId: com.gmacko.bob.dev
+---
+- assertVisible: "Use work items to move from intake into execution"
+- assertVisible: "Keep planning, comments, and artifacts in one place"
+- takeScreenshot: screenshots/01-onboarding-bullets
+- tapOn: "Continue"
+- assertVisible: "Jump directly into the execution workspace from mobile"
+- assertVisible: "Track blocked, review-ready, and verification states"
+- takeScreenshot: screenshots/02-onboarding-work
+- tapOn: "Continue"
+- assertVisible: "Review notifications, comments, and artifacts on the go"
+- assertVisible: "Keep execution moving without the old dashboard sprawl"
+- assertVisible: "Continue to Sign In"
+- takeScreenshot: screenshots/03-onboarding-follow
