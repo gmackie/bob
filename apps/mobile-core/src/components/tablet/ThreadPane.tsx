@@ -1,123 +1,104 @@
-import { useState, useRef } from "react";
+import { useRef, useState } from "react";
 import {
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   Text,
   TextInput,
   View,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
-import type { Message } from "@gmacko/core/contracts";
+import {
+  skipToken,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import type { Message, Thread } from "@gmacko/core/contracts";
+import { rpc } from "~/utils/api";
 import { Button } from "../ui/Button";
-import { Badge } from "../ui/Badge";
 import { colors } from "~/lib/colors";
 
-interface ThreadPaneProps {
-  threadTitle: string;
-  branchName: string;
-  messages: Message[];
-  onSend: (content: string) => void;
-  onSynthesize?: () => void;
-  isLoading?: boolean;
-}
-
-export function ThreadPane({
-  threadTitle,
-  branchName,
-  messages,
-  onSend,
-  onSynthesize,
-  isLoading,
-}: ThreadPaneProps) {
-  const [input, setInput] = useState("");
-  const flatListRef = useRef<FlatList>(null);
-
-  const handleSend = () => {
-    if (!input.trim()) return;
-    onSend(input.trim());
-    setInput("");
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+export function ThreadPane({ thread }: { thread: Thread }) {
+  const [draft, setDraft] = useState("");
+  const list = useRef<FlatList<Message>>(null);
+  const qc = useQueryClient();
+  const branchId = thread.activeBranchId;
+  const messages = useQuery({
+    queryKey: ["messages", thread.id, branchId],
+    queryFn: branchId
+      ? () => rpc.messages.listByBranch(thread.id, branchId)
+      : skipToken,
+  });
+  const chat = useMutation({
+    mutationFn: rpc.agent.chat,
+    onSuccess: async (_, sent) => {
+      setDraft((current) => (current.trim() === sent.content ? "" : current));
+      await qc.invalidateQueries({
+        queryKey: ["messages", sent.threadId, sent.branchId],
+      });
+      list.current?.scrollToEnd({ animated: true });
+    },
+  });
+  const send = () => {
+    if (branchId && draft.trim() && !chat.isPending)
+      chat.mutate({ threadId: thread.id, branchId, content: draft.trim() });
   };
-
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-background"
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* Header */}
-      <View className="px-4 py-3 border-b border-border flex-row items-center">
-        <View className="flex-1">
-          <Text
-            className="text-lg font-semibold"
-            style={{ color: colors.foreground }}
-            numberOfLines={1}
-          >
-            {threadTitle}
-          </Text>
-          <Badge variant="accent" className="self-start mt-1">
-            {branchName}
-          </Badge>
-        </View>
-        {onSynthesize && (
-          <Button onPress={onSynthesize} variant="secondary" size="sm">
-            Write up
-          </Button>
-        )}
-      </View>
-
-      {/* Messages */}
       <FlatList
-        ref={flatListRef}
-        data={messages}
+        ref={list}
+        data={messages.data ?? []}
         keyExtractor={(m) => m.id}
-        contentContainerStyle={{ padding: 16, gap: 12 }}
+        contentContainerStyle={{ padding: 12, gap: 10 }}
         renderItem={({ item }) => (
           <View
-            className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-              item.role === "user"
-                ? "self-end bg-primary"
-                : "self-start bg-card-elevated"
-            }`}
+            className={`rounded-xl px-3 py-2 ${item.role === "user" ? "self-end bg-card-elevated" : "self-start bg-card"}`}
           >
             <Text
-              className="text-sm"
-              style={{
-                color:
-                  item.role === "user"
-                    ? colors.primaryForeground
-                    : colors.foreground,
-              }}
+              className="text-xs font-semibold"
+              style={{ color: colors.accent }}
             >
-              {item.content}
+              {item.role}
             </Text>
+            <Text style={{ color: colors.foreground }}>{item.content}</Text>
           </View>
         )}
         ListEmptyComponent={
-          <View className="items-center py-20">
-            <Text style={{ color: colors.muted }}>Start exploring</Text>
-          </View>
+          <Text style={{ color: colors.muted }}>
+            {!branchId
+              ? "This thread has no active branch."
+              : messages.isPending
+                ? "Loading messages…"
+                : messages.isError
+                  ? "Could not load messages."
+                  : "Start a conversation."}
+          </Text>
         }
       />
-
-      {/* Composer */}
-      <View className="px-4 py-3 border-t border-border flex-row items-end gap-2">
+      <View className="px-4 py-2 border-t border-border">
         <TextInput
-          value={input}
-          onChangeText={setInput}
-          placeholder="Type a message..."
-          placeholderTextColor={colors.muted}
+          value={draft}
+          onChangeText={setDraft}
+          accessibilityLabel="Thread message"
           multiline
-          className="flex-1 bg-card rounded-xl px-4 py-3 text-sm border border-border"
-          style={{ color: colors.foreground, maxHeight: 120 }}
-          onSubmitEditing={handleSend}
-          blurOnSubmit={false}
+          placeholder="Type a message…"
+          placeholderTextColor={colors.muted}
+          className="bg-card rounded-xl px-3 py-2 mb-2"
+          style={{ color: colors.foreground, minHeight: 44, maxHeight: 120 }}
         />
+        {chat.isError && (
+          <Text accessibilityRole="alert" style={{ color: colors.error }}>
+            Message could not be sent. Try again.
+          </Text>
+        )}
         <Button
-          onPress={handleSend}
-          size="sm"
-          disabled={!input.trim() || isLoading}
+          onPress={send}
+          disabled={!branchId || !draft.trim() || chat.isPending}
         >
-          Send
+          {chat.isPending ? "Sending…" : "Send"}
         </Button>
       </View>
     </KeyboardAvoidingView>

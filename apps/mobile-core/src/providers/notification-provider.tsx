@@ -3,19 +3,12 @@ import * as Notifications from "expo-notifications";
 import { useQuery } from "@tanstack/react-query";
 import { rpc } from "~/utils/api";
 
-interface ExplorationSummaryWire {
-  id: string;
-  topic: string;
-  status: "running" | "paused" | "completed" | "awaiting_input";
-  lastCheckIn?: { id: string; summary: string };
-}
-
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const notifiedCheckIns = useRef(new Set<string>());
 
   const { data: explorations } = useQuery({
     queryKey: ["explorations"],
-    queryFn: () => rpc.exploration.list() as Promise<ExplorationSummaryWire[]>,
+    queryFn: rpc.exploration.list,
     refetchInterval: 20_000,
   });
 
@@ -34,7 +27,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           content: {
             title: "Agent check-in",
             body: `Exploration "${exp.topic}": ${exp.lastCheckIn.summary}`,
-            data: { explorationId: exp.id },
+            data: { threadId: exp.threadId, explorationId: exp.id },
           },
           trigger: null, // immediate
         });
