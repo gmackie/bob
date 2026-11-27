@@ -1,4 +1,4 @@
-import { expect, it, vi } from "vitest";
+import { assert, expect, it, vi } from "vitest";
 
 const native = vi.hoisted(() => ({
   addEventListener: vi.fn(),
@@ -16,7 +16,9 @@ it("uses live changes ahead of a stale initial read and unsubscribes on leaving 
   native.isReduceMotionEnabled.mockReturnValue(initial);
   const changed = vi.fn();
   const stop = observeReducedMotion(changed);
-  const [event, notify] = native.addEventListener.mock.calls[0]!;
+  const [subscription] = native.addEventListener.mock.calls;
+  assert.isDefined(subscription, "Expected a native Reduce Motion subscription");
+  const [event, notify] = subscription;
   expect(event).toBe("reduceMotionChanged");
   notify(true);
   resolveInitial(false);
