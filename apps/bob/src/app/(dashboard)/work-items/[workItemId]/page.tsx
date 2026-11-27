@@ -5,6 +5,7 @@ import { getSession } from "~/auth/server";
 import { db } from "@bob/db/client";
 import { BIZPULSE_CREDENTIAL_SETUP } from "@bob/api/handlers/workItems";
 import { makeCredentialSetup } from "~/server/bizpulse/credential-setup";
+import { llaveroConfig } from "~/server/llavero/client";
 import { WorkflowPageClient } from "./workflow-page-client";
 import { createPlanningClient } from "~/lib/planning/server";
 import {
@@ -48,6 +49,11 @@ export default async function WorkItemPage({
       userId: session.user.id,
       workspaceId: detail.workItem.workspaceId,
     }, resolvedId).catch(() => null);
+    const rotation = setup?.request.rotation;
+    const llavero = llaveroConfig();
+    const rotationUrl = rotation && llavero
+      ? `${llavero.origin}/rotations?${new URLSearchParams({ org: rotation.org, policy: rotation.policyId })}`
+      : null;
     return (
       <main className="mx-auto max-w-2xl space-y-4 p-6">
         <h1 className="text-2xl font-semibold">Credential setup review</h1>
@@ -58,6 +64,12 @@ export default async function WorkItemPage({
           <>
             <p>BizPulse plan <code>{setup.request.planId}</code></p>
             <p>Environment <strong>{setup.request.environment}</strong></p>
+            {rotation && rotationUrl && (
+              <p>
+                <a className="underline" href={rotationUrl}>Llavero policy {rotation.org}/{rotation.policyId}</a>
+                {" "}<code>{rotation.digest}</code>
+              </p>
+            )}
             <ul className="list-disc pl-6">
               {setup.request.destinations.map(({ app, stage, key }, index) => (
                 <li key={index}><code>{app}/{stage}/{key}</code></li>
@@ -65,7 +77,9 @@ export default async function WorkItemPage({
             </ul>
             {setup.canDispatch ? (
               <form method="post" action={`/api/bizpulse/credential-setup/${resolvedId}/dispatch`}>
-                <button className="rounded border px-3 py-1" type="submit">Approve and start setup</button>
+                <button className="rounded border px-3 py-1" type="submit">
+                  {setup.request.rotation ? "Approve and request rotation" : "Approve and start setup"}
+                </button>
               </form>
             ) : (
               <p role="status">{setup.dispatched ? "Dispatch requested. Refresh the setup status in BizPulse." : "The BizPulse plan needs current approval."}</p>

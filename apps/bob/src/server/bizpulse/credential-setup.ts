@@ -9,6 +9,7 @@ import { z } from "zod/v4";
 
 import { McpToolError } from "../mcp/errors";
 import type { OAuthGrant } from "../mcp/types";
+import { assertRotationDestinations, readRotation, requestRotation, rotationReference } from "../llavero/rotation";
 import { bizpulseConfig, useClient as withBizPulseClient } from "./client";
 import { bizPulseAccess } from "./link";
 
@@ -27,6 +28,7 @@ export const credentialSetupRequest = z.strictObject({
   startupId: uuid,
   environment: stage,
   destinations: z.array(destination).min(1).max(30),
+  rotation: rotationReference.optional(),
 });
 export const credentialSetupStatus = z.strictObject({
   operationKey,
@@ -35,6 +37,7 @@ export const credentialSetupStatus = z.strictObject({
 const storedRequest = z.object({
   request: credentialSetupRequest,
   digest: z.string().regex(/^[a-f0-9]{64}$/),
+  rotationRequestedAt: z.number().int().nonnegative().optional(),
 });
 
 type Request = z.infer<typeof credentialSetupRequest>;
@@ -112,12 +115,28 @@ function requestDescription(request: Request) {
     .map(({ app, stage, key }) => `- ${app}/${stage}/${key}`)
     .join("\n");
   const [, workspaceId] = request.operationKey.split(":");
+  if (request.rotation) {
+    return [
+      `Follow approved credential rotation for BizPulse workspace ${workspaceId}, startup ${request.startupId}.`,
+      `Bob requested Llavero policy ${request.rotation.org}/${request.rotation.policyId} at digest ${request.rotation.digest}.`,
+      `BizPulse plan ${request.planId}. Environment ${request.environment}.`,
+      coordinates,
+      "Guide the owner through approval and start in Llavero. Use the Bob status reported in BizPulse for the matching run. A delivery acceptance does not verify runtime uptake. Record only references and evidence.",
+    ].join("\n\n");
+  }
   return [
     `Start approved credential setup for BizPulse workspace ${workspaceId}, startup ${request.startupId}.`,
     `Plan ${request.planId}. Environment ${request.environment}.`,
     coordinates,
     "Use the linked BizPulse and Llavero MCP tools. Recheck the exact plan and required provider approvals before execution. Send the owner to protected intake when needed. Keep credentials out of prompts, work-item data, and tool output. Record only references and delivery evidence.",
   ].join("\n\n");
+}
+
+async function readPinnedRotation(actor: Actor, request: Request) {
+  if (!request.rotation) return null;
+  const status = await readRotation(actor, request.rotation);
+  assertRotationDestinations(status, request.rotation, request.destinations);
+  return status;
 }
 
 export function makeCredentialSetup(db: Db) {
@@ -158,7 +177,7 @@ export function makeCredentialSetup(db: Db) {
     const run = approved?.dispatchedAt
       ? await db.query.taskRuns.findFirst({
           where: and(eq(taskRuns.workItemId, workItemId), eq(taskRuns.userId, actor.userId)),
-          columns: { id: true, status: true },
+          columns: { id: true, sessionId: true, status: true },
           orderBy: (row, { desc }) => [desc(row.createdAt)],
         })
       : undefined;
@@ -174,7 +193,40 @@ export function makeCredentialSetup(db: Db) {
         approved?.dispatchedAt ? "waiting" :
         !isApproved(plan) ? "approve_credentials" : "approve_dispatch",
     };
-    return run ? { ...result, runId: run.id } : result;
+    if (setup.request.rotation && approved?.dispatchedAt && plan.digest === setup.digest) {
+      const pin = setup.request.rotation;
+      const state = await readRotation(actor, pin);
+      const rotationApproved = state.approvedDigest === pin.digest && state.status === "approved";
+      const matching = state.run?.approvedDigest === pin.digest &&
+        state.run.requestedAt === setup.rotationRequestedAt ? state.run : null;
+      result.credentialApproval = rotationApproved || matching ? "approved" : "required";
+      if (matching?.state === "retired") result.ownerAction = "complete";
+      else if (matching) {
+        result.ownerAction = ["reconciliation-required", "halted", "owner-required"].includes(matching.state)
+          ? "reconcile" : "waiting";
+      } else if (state.resolvedDigest === pin.digest &&
+        state.runRequestedAt !== null && state.runRequestedAt === setup.rotationRequestedAt) {
+        result.ownerAction = rotationApproved ? "start_rotation" : "approve_rotation";
+      } else result.ownerAction = "reconcile";
+      return {
+        ...result,
+        rotation: { ...pin, requestedAt: setup.rotationRequestedAt, run: matching },
+        runId: run?.id,
+        runStatus: run?.status,
+        sessionId: run?.sessionId ?? undefined,
+      };
+    }
+    const snapshot = setup.request.rotation
+      ? { ...result, rotation: { ...setup.request.rotation, run: null } }
+      : result;
+    return run
+      ? {
+          ...snapshot,
+          runId: run.id,
+          runStatus: run.status,
+          sessionId: run.sessionId ?? undefined,
+        }
+      : snapshot;
   }
 
   return {
@@ -188,6 +240,7 @@ export function makeCredentialSetup(db: Db) {
       const plan = await readPlan(actor, input);
       if (!isApproved(plan))
         throw new McpToolError("Approve the exact BizPulse setup plan first");
+      await readPinnedRotation(actor, input);
       await db.insert(workItems).values({
         workspaceId: actor.workspaceId,
         ownerUserId: actor.userId,
@@ -221,6 +274,18 @@ export function makeCredentialSetup(db: Db) {
       const plan = await readPlan(actor, setup.request);
       if (!isApproved(plan) || plan.digest !== setup.digest)
         throw new McpToolError("Approve the current BizPulse plan before dispatch");
+      if (setup.request.rotation) {
+        if (await approval(actor, workItemId))
+          throw new McpToolError("Dispatch was already requested");
+        await readPinnedRotation(actor, setup.request);
+        const rotationRequestedAt = await requestRotation(actor, setup.request.rotation);
+        await db.update(workItems).set({
+          sourceMetadata: {
+            ...setup.row.sourceMetadata,
+            credentialSetup: { request: setup.request, digest: setup.digest, rotationRequestedAt },
+          },
+        }).where(eq(workItems.id, workItemId));
+      }
       const [claim] = await db.insert(mcpDispatchApprovals).values({
         workItemId,
         workspaceId: actor.workspaceId,

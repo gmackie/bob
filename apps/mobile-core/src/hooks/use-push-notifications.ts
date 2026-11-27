@@ -14,7 +14,7 @@ Notifications.setNotificationHandler({
 
 export function usePushNotifications() {
   const router = useRouter();
-  const responseListener = useRef<EventSubscription>();
+  const responseListener = useRef<EventSubscription | null>(null);
 
   useEffect(() => {
     // Request permissions
@@ -22,8 +22,16 @@ export function usePushNotifications() {
 
     // Handle notification taps — navigate to explore screen
     responseListener.current =
-      Notifications.addNotificationResponseReceivedListener((_response) => {
-        router.push("/explore");
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const threadId = response.notification.request.content.data?.threadId;
+        if (typeof threadId === "string" && threadId) {
+          router.push({
+            pathname: "/thread/[id]",
+            params: { id: threadId, section: "explorations" },
+          });
+        } else {
+          router.push("/explore");
+        }
       });
 
     return () => {
